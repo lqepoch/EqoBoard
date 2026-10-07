@@ -23,6 +23,8 @@ ${EQO_PUBLIC_ORIGIN}/api/auth/callback/eqo-oidc
 
 `EQO_PUBLIC_ORIGIN` 与 `NEXTAUTH_URL` 必须是浏览器访问的同一 origin（协议、主机、端口都相同）。非 loopback 环境必须 HTTPS。OIDC profile 需提供 `sub`；权限来自经过 issuer 验证的 `roles` claim，只有以下角色会被接受：
 
+OpenBB research runtime 还必须设置 `EQO_TERMINAL_PUBLIC_ORIGIN`，指向主终端的精确 origin，并与 research runtime 的 `EQO_PUBLIC_ORIGIN` 使用不同 hostname。Cookie 的 host-only 隔离不区分端口，因此 `terminal.example:443` 与 `terminal.example:8443` 不能作为两个安全边界；缺少该配置或 hostname 相同时 research readiness 返回 503。实际 OpenBB 部署必须使用独立 research hostname，且研究服务不得持有终端 Gateway signer 或 Node API key。
+
 | OIDC role | 授权范围 |
 |---|---|
 | `eqoboard-market-reader` | 行情读取/订阅/流、研究读取、workspace 读取 |

@@ -36,7 +36,7 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 
 旧 Vite UI 已删除。
 
-主终端浏览器只访问 OpenTerminal BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。OpenBB 是可选研究工作台，部署时必须使用独立 research origin 和 research-mode Next BFF；它只持有独立 research signer，经过用户 OIDC 会话与 `market:read` role 校验后签发最长 60 秒的 `market:read` 子 token。research runtime 不配置终端 BFF signer 或 Node API key，且只放行认证、健康检查、OpenBB manifests 和三条只读行情路径。它与主终端隔离，因此关闭研究服务不影响 OpenTerminal、Gateway 或订单 preview。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
+主终端浏览器只访问 OpenTerminal BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。OpenBB 是可选研究工作台，部署时必须使用不同 hostname 的独立 research origin 和 research-mode Next BFF；端口不同不足以隔离 host-only cookies，`EQO_TERMINAL_PUBLIC_ORIGIN` 未配置或与研究 hostname 相同时 readiness 拒绝启动。research BFF 只持有独立 research signer，经过用户 OIDC 会话与 `market:read` role 校验后签发最长 60 秒的 `market:read` 子 token。research runtime 不配置终端 BFF signer 或 Node API key，且只放行认证、健康检查、OpenBB manifests 和三条只读行情路径。它与主终端隔离，因此关闭研究服务不影响 OpenTerminal、Gateway 或订单 preview。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
 
 ## Rust 数据接口
 
