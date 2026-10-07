@@ -11,8 +11,8 @@ Browser ── OIDC cookie ─►│ BFF / Workspace / Widgets  │
                                         │ server-side proxy
                                         ▼
 Alpaca SIP ──────┐           ┌───────────────────────────┐
-Alpaca OPRA ─────┼──────────►│ Rust Tokio/Axum Gateway  │◄──── OpenBB Workspace
-                 │           │ source/time/auth/stream   │      widgets/apps
+Alpaca OPRA ─────┼──────────►│ Rust Tokio/Axum Gateway  │◄──── isolated research BFF
+                 │           │ source/time/auth/stream   │      OpenBB manifests/data
                  │           └─────────────┬─────────────┘
                  │                         │
                  │              preview / audit / route
@@ -36,7 +36,7 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 
 旧 Vite UI 已删除。
 
-浏览器只访问 Next BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。research Node 仅持有独立 research signer，只能为通过用户会话验证的市场读取请求签发 `market:read` 子 token。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
+主终端浏览器只访问 OpenTerminal BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。OpenBB 是可选研究工作台，部署时必须使用独立 research origin 和 research-mode Next BFF；它只持有独立 research signer，经过用户 OIDC 会话与 `market:read` role 校验后签发最长 60 秒的 `market:read` 子 token。research runtime 不配置终端 BFF signer 或 Node API key，且只放行认证、健康检查、OpenBB manifests 和三条只读行情路径。它与主终端隔离，因此关闭研究服务不影响 OpenTerminal、Gateway 或订单 preview。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
 
 ## Rust 数据接口
 
@@ -52,8 +52,9 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 - `POST /api/v1/orders/preview`
 - `POST /api/v1/orders/submit`
 
-OpenBB：`/widgets.json`、`/apps.json`、`/openbb/stocks`、`/openbb/options`、`/openbb/bars`。
-OpenBB 研究行情 handler 要求带 `market:read` scope 的可验证短时委托主体；`/widgets.json` 和 `/apps.json` 只返回兼容 schema metadata，不授予行情访问能力。OpenBB Workspace 的 OIDC 登录/服务委托联调属于后续 #13，当前不接受静态 bearer token，也不通过放宽 Gateway 鉴权来兼容。
+OpenBB Gateway 接口：`/widgets.json`、`/apps.json`、`/openbb/v1/stocks`、`/openbb/v1/bars`、`/openbb/v1/options`。隔离 research BFF 对外提供 `/api/openbb/widgets.json`、`/api/openbb/apps.json` 以及 `/api/openbb/openbb/v1/{stocks,bars,options}`。重复的 `openbb` path segment 来自 pinned Workspace `createURLString(endpoint, backendUrl)` 规则：source URL 是 `/api/openbb`，manifest endpoint 保持 `openbb/v1/...`；BFF 只把这些精确 allowlist 路径映射回 Gateway。manifest metadata 不授予行情访问能力；行情响应中的 source、feed、as-of 和 `truncated` 字段不由 BFF 伪造或删除。
+
+目前的研究模式浏览器套件运行 production Next build 与 OIDC/Gateway mocks，验证独立 cookie、短时 market-only 委托、路径限制、错误和响应透传。它是 BFF/API 组件测试，不会启动或加载 pinned OpenBB Lite，因此不能作为 OpenBB Web 集成验收或 SIP/OPRA 行情来源证明。OpenBB Lite upstream build、独立 Compose service 和真实 Lite 浏览器 E2E 仍待完成。
 
 ## 数据原则
 

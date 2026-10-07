@@ -91,7 +91,7 @@ U.S. equity/ETF price, change, volume, history and earnings price-move fields re
 
 Option IV and Greeks come from Alpaca REST snapshot vendor/model fields, not OPRA itself. Until Alpaca supplies a separate model timestamp, the UI reports `model as-of unknown`; Gateway response time and quote/trade event time are not treated as model time. Research providers retain their own source and observation dates.
 
-The Gateway retains OpenBB-compatible `widgets.json`, `apps.json`, and research endpoints, but the OpenBB Workspace UI is not embedded in this OpenTerminal screen. Its authenticated Workspace/Lite entry remains a separate #13 integration task; these OpenTerminal browser fixtures do not claim an OpenBB session or Rust protocol integration.
+The Gateway retains OpenBB-compatible `widgets.json`, `apps.json`, and research endpoints. An isolated research-mode Next BFF now validates the OIDC user session and delegates only `market:read` to the Gateway. Its production-build browser tests verify the BFF/API component with mock OIDC and market services; they do not start pinned OpenBB Lite or prove its browser-side connection. The Lite service, OpenTerminal Research entry, and real Lite browser E2E remain pending.
 
 See [`../../docs/MARKET_SOURCES.md`](../../docs/MARKET_SOURCES.md) for the field-by-field source, as-of, coverage and failure contract. In particular, metadata timestamps may be unavailable, FRED/ECB dates are observation dates, and a connected browser is not proof that an upstream feed is ready.
 
