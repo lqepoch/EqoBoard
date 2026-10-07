@@ -1,5 +1,5 @@
 {
-  "last_verified": "2026-10-07",
+  "last_verified": "2026-10-08",
   "sources": [
     {
       "name": "OpenTerminal",
@@ -43,8 +43,9 @@
         }
       ],
       "build_gate": {
-        "status": "blocked",
-        "required_findings_to_clear": [
+        "status": "local-buildable",
+        "required_findings_to_clear": [],
+        "baseline_upstream_findings": [
           "commercial-grid-and-chart-packages",
           "commercial-enterprise-code-remains",
           "embedded-openbb-pro-enterprise-key",
@@ -56,11 +57,63 @@
           "license-notice-not-copied-into-image"
         ],
         "evidence": null,
+        "runtime_acceptance": "not-verified",
+        "browser_e2e": "not-run",
+        "deployment": "not-approved",
         "image": null,
         "image_digest": null,
         "image_sbom": null
       },
-      "build_recipe": null
+      "build_recipe": {
+        "path": "tools/openbb/community/Dockerfile",
+        "sha256": "efc91f79ceb8a94b2b43a6a600d43b6dd96e8fedd47d6dfdf86c829e629dcc1f",
+        "variant": "lite-community",
+        "source_patch": {
+          "runner": {
+            "path": "tools/openbb/community/apply_patch.py",
+            "sha256": "dbed49593c85bb0ce39ba0040a13dc600bb7d653a08feb35100618499b6c02ac"
+          },
+          "files": [
+            {
+              "path": "tools/openbb/community/patches/community.patch",
+              "sha256": "d9513633b8a28f8c9369b9696a6455b425206da776f7baed4e1dbbe3dd4b6cb4"
+            }
+          ]
+        },
+        "support_files": [
+          {
+            "path": "tools/openbb/community/Dockerfile",
+            "sha256": "efc91f79ceb8a94b2b43a6a600d43b6dd96e8fedd47d6dfdf86c829e629dcc1f"
+          },
+          {
+            "path": "tools/openbb/community/apply_patch.py",
+            "sha256": "dbed49593c85bb0ce39ba0040a13dc600bb7d653a08feb35100618499b6c02ac"
+          },
+          {
+            "path": "tools/openbb/community/patches/community.patch",
+            "sha256": "d9513633b8a28f8c9369b9696a6455b425206da776f7baed4e1dbbe3dd4b6cb4"
+          },
+          {
+            "path": "tools/openbb/community/patches/community.patch.json",
+            "sha256": "bc148dda1bd690a9135754f476f209778499ee40196dabeb90aca6906f1bfe00"
+          }
+        ],
+        "dependency_lock": {
+          "frontend": "terminalpro/bun.lock (frozen install)",
+          "backend": "backend-api/backend/poetry.lock (poetry check --lock; no lock regeneration fallback)"
+        },
+        "dependency_change_rationale": [
+          "AG Grid Community is pinned to 36.2.0 to match the EqoBoard OpenBB Community target; this release depends on ag-charts-types 14.2.0.",
+          "AG Charts Community, React, and types are pinned to 14.2.0 because retaining upstream 12.1.1 creates duplicate incompatible chart type versions and TypeScript failures in AgChartFromTable and OmniWidget.",
+          "The pinned Debian Bookworm image provides SQLite 3.40, which lacks SQLite concat(); the Community patch uses SQLAlchemy string expressions for SQLite/PostgreSQL and retains MySQL concat semantics, with a backend regression test run before Cython compilation."
+        ],
+        "build_limitations": [
+          "Debian apt package bytes are not pinned to a repository snapshot",
+          "pip bootstrap packages are version-pinned but not hash-pinned",
+          "frontend webfont download is performed by the upstream build without a content hash lock",
+          "local Docker Compose builds do not create a registry digest or immutable release artifact"
+        ]
+      }
     }
   ]
 }
