@@ -1,0 +1,35 @@
+name: One-time Rust formatter (trusted feature branch only)
+
+on:
+  push:
+    branches: [feat/initial-market-terminal]
+    paths:
+      - '.github/workflows/format-feature.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.repository == 'lqepoch/EqoBoard' && github.ref == 'refs/heads/feat/initial-market-terminal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format all Rust source
+        run: cargo fmt --all
+      - name: Commit rustfmt changes, if any
+        run: |
+          if ! git diff --quiet -- crates apps/gateway; then
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git config user.name 'github-actions[bot]'
+            git add crates apps/gateway
+            git commit -m 'style: apply rustfmt workspace-wide'
+            git push origin HEAD:feat/initial-market-terminal
+          fi

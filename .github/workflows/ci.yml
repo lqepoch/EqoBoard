@@ -24,12 +24,12 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Formatting
-        run: cargo fmt --all -- --check
       - name: Clippy all targets
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Unit / integration tests (no credentials)
         run: cargo test --workspace
+      - name: Formatting
+        run: cargo fmt --all -- --check
 
   web:
     name: Web typed checks / tests / production build
