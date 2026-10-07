@@ -1,29 +1,43 @@
 # 上游组件复用与版本治理
 
-## 已集成的内容（以 2026-10-07 代码为准）
+## OpenTerminal
 
-**OpenTerminal**：确实复用仓库源码。将 Widget registry/Zustand persist、全局代码联动、可拖拽 Workspace、快捷键、Command Palette 适配到 EqoBoard React/Vite 和 react-grid-layout v2。源码来自 ErTasselli/OpenTerminal，固定 commit aed097c680cd8ec1c391ae06966babe7d6d91fc6，MIT，附带原 LICENSE。改造位置 apps/web/src/upstream/openterminal。与上游代码有差异，并未完整复制其 Next.js 前端或免费行情源。
+EqoBoard 运行 OpenTerminal 原生 Next.js Workspace，而非维护平行终端实现。
 
-**AG Grid Community**：期权链仍直接使用 AG Grid 36.2.0（apps/web/src/components/OptionChain.tsx），含双向 Call/Put、增量交易异步 applyTransactionAsync、行复用、动态选中；独立 Rust 服务端负责 SIP/OPRA 和券商委托。
+- 上游：`ErTasselli/OpenTerminal`
+- 固定提交：`aed097c680cd8ec1c391ae06966babe7d6d91fc6`
+- 许可证：MIT
+- 下游：`apps/openterminal`
+- 许可证副本：`third_party/OpenTerminal-LICENSE.txt`
 
-**OpenBB Workspace**：使用其官方 widgets.json / apps.json Custom Backend 协议，由 EqoBoard Rust Gateway 提供只读行情接口。可在自托管 OpenBB Lite 内当第二个数据分析界面使用。此仓没有复制整套 OpenBB Workspace 或运行其容器，请按 integrations/openbb/README.md 单独部署。
+保留 Workspace、Zustand store、Command Palette、Charts、Watchlist、Screener、Heatmap、Calendar、Macro、SEC/FINRA/News 等成熟模块。EqoBoard 差异限定在 Alpaca adapter、AG Grid Option Chain、IV Skew、OPRA Tape、Vertical Spread 和 server-side proxy。
 
-## OpenBB 2026-10-01 上游治理变化
+上游同步流程：固定新 SHA → 比较差异 → 检查许可证/依赖 → 同步通用模块 → 保留 EqoBoard adapter → server test + TypeScript + Next build → 更新 lock 文件。
 
-OpenBB 2026-10-01 已宣布开源整个 Workspace，并归档 OpenBB-finance/workspace 主仓库。上游现为 Apache-2.0；OpenBQ 与 FINOS 将参与后续治理，工程版本、维护主体和发行供应链存在演进风险。EqoBoard 主交易终端依赖更小的 OpenTerminal 移植实现，OpenBB 为非关键、可切换的数据分析界面，防止单一交接期项目成为交易系统运行前提。
+## AG Grid Community
 
-上游 OpenBB NOTICE 明确其 TradingView Advanced Charts 的专有库没有以 Apache-2.0 授权，并未随源码分发。EqoBoard 使用独立 Apache-2.0 Lightweight Charts 5.x。
+- 版本：36.2.0
+- 许可证：MIT
+- 使用位置：`apps/openterminal/web/components/widgets/OptionsWidget.tsx`
+- 用途：双边 Option Chain、虚拟化、排序/resize、`applyTransactionAsync` 增量更新。
 
-## 安全与可维护性
+## OpenBB Workspace
 
-仓库采用 third_party/upstreams.lock.json 锁定上游提交及许可证。每次同步必须先检查 License、NOTICE、供应链漏洞、升级变更日志、API/行为差异与适配测试；更新只能通过 PR、CI，并由独立维护者审核涉及认证、交易和分发的数据路径。
+EqoBoard 继续使用主线已实现的官方 Custom Backend 协议：
 
-OpenTerminal 原工程依赖免费公共站点及回退链；EqoBoard 主行情禁止 Yahoo/IEX/indicative 回退。Alpaca Plus 现有组织 Key 2026-10-07 在线 SIP/OPRA 检查均返回 403（账号授权问题），系统保持 fail-closed。
+- `integrations/openbb/widgets.json`
+- `integrations/openbb/apps.json`
+- Rust `/openbb/v1/*`
 
-## 官方来源
+OpenBB 在 2026-10-01 进入开源与治理迁移阶段；该接口层保持可替换，Rust 数据模型和交易链不依赖 Workspace 内部实现。TradingView Advanced Charts 等受限资产不进入 EqoBoard。
 
-- OpenTerminal: https://github.com/ErTasselli/OpenTerminal
-- OpenBB Workspace: https://github.com/OpenBB-finance/workspace
-- OpenBB Lite: https://github.com/OpenBB-finance/workspace/tree/main/lite
-- OpenBB Custom Backend: https://docs.openbb.co/workspace/developers/data-integration
-- AG Grid: https://www.ag-grid.com/react-data-grid/
+## 数据治理
+
+OpenTerminal research server 的免费公开 Provider 只用于研究补充。股票/期权交易视图固定经 Rust 请求 Alpaca SIP/OPRA。当前组织 Alpaca Secrets 于 2026-10-07 实测实时 SIP/OPRA 均返回 403，应用保持显式错误。
+
+官方来源：
+- https://github.com/ErTasselli/OpenTerminal
+- https://github.com/OpenBB-finance/workspace
+- https://docs.openbb.co/workspace/developers/data-integration
+- https://www.ag-grid.com/react-data-grid/
+- https://docs.alpaca.markets/us/reference/stockbarsingle-1

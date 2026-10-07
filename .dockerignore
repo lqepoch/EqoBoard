@@ -5,6 +5,9 @@
 !.env.example
 **/node_modules
 **/dist
+**/.next
+**/*.tsbuildinfo
+**/coverage
 target
 audit
 *.log

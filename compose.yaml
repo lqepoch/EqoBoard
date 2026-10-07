@@ -7,8 +7,11 @@ services:
       - .env
     environment:
       EQO_BIND: "0.0.0.0:8080"
-      EQO_ACCESS_TOKEN: ${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}
+      EQO_ACCESS_TOKEN: "${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}"
+      EQO_STOCK_FEED: "sip"
+      EQO_OPTION_FEED: "opra"
       EQO_EXECUTION_MODE: "disabled"
+      EQO_OPENBB_ALLOWED_ORIGIN: "${EQO_OPENBB_ALLOWED_ORIGIN:-}"
     security_opt:
       - no-new-privileges:true
     read_only: true
@@ -18,5 +21,52 @@ services:
       - eqoboard-audit:/var/lib/eqoboard
     restart: unless-stopped
 
+  terminal:
+    build:
+      context: .
+      dockerfile: apps/openterminal/Dockerfile
+      target: terminal
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      EQO_RUST_URL: http://eqoboard:8080
+      EQO_ACCESS_TOKEN: "${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}"
+      API_URL: http://research:4000
+      API_KEY: "${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}"
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - eqoboard
+      - research
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - openterminal-next-cache:/srv/web/.next/cache
+    restart: unless-stopped
+
+  research:
+    build:
+      context: .
+      dockerfile: apps/openterminal/Dockerfile
+      target: research
+    environment:
+      API_HOST: "0.0.0.0"
+      API_PORT: "4000"
+      API_KEY: "${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}"
+      DATA_DIR: /var/lib/openterminal
+      WEB_ORIGIN: http://localhost:3000
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - openterminal-data:/var/lib/openterminal
+    restart: unless-stopped
+
 volumes:
   eqoboard-audit:
+  openterminal-next-cache:
+  openterminal-data:

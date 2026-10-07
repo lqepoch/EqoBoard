@@ -6,14 +6,16 @@
       "repository": "ErTasselli/OpenTerminal",
       "commit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
       "license": "MIT",
-      "integration": "adapted and vendored code",
+      "integration": "native vendored Next.js workspace + EqoBoard adapters",
       "upstream_paths": [
-        "web/store/terminal.ts",
         "web/components/Workspace.tsx",
         "web/components/CommandPalette.tsx",
-        "web/lib/symbol.ts"
+        "web/components/widgets",
+        "web/store/terminal.ts",
+        "web/lib",
+        "server/src"
       ],
-      "downstream_prefix": "apps/web/src/upstream/openterminal",
+      "downstream_prefix": "apps/openterminal",
       "license_file": "third_party/OpenTerminal-LICENSE.txt"
     },
     {
@@ -30,8 +32,8 @@
       "package": "ag-grid-community",
       "version": "36.2.0",
       "license": "MIT",
-      "integration": "real option chain grid",
-      "downstream_path": "apps/web/src/components/OptionChain.tsx"
+      "integration": "native OpenTerminal OPRA option chain grid",
+      "downstream_path": "apps/openterminal/web/components/widgets/OptionsWidget.tsx"
     }
   ]
 }

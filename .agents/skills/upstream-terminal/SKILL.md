@@ -1,12 +1,12 @@
 ---
 name: upstream-terminal
-description: 维护 EqoBoard 引入的 MIT OpenTerminal Widget Store、拖拽 Workspace、Ticker 联动和命令面板，避免重造前端组件。
+description: 同步和扩展 EqoBoard 固定版本的原生 OpenTerminal Workspace、widgets、charts 与 research providers，控制下游差异。
 ---
-# OpenTerminal 复用 Skill
+# OpenTerminal Upstream Skill
 
-1. 核对 third_party/upstreams.lock.json：指定上游 ErTasselli/OpenTerminal commit 与 MIT LICENSE，适配文件保留来源和改造声明。
-2. 同步前对比上游 web/store/terminal.ts、web/components/Workspace.tsx、web/components/CommandPalette.tsx；改造适应 react-grid-layout v2，尽量保留上游语义和单一 widget registry。
-3. Widget 添加/删除/布局保存/恢复/linked/unlinked/个股锁定/快捷键都由 OpenTerminal 移植层管理，页面组件独立渲染，不复制第二套 store。
-4. 浏览器任何 Widget 禁用第三方免费行情 URL；数据只能使用 Alpaca via Rust，失败时显示来源/时间戳/错误。
-5. TypeScript typecheck + Vitest + Vite build + RGL drag/persist/unlink UI 测试是验收门槛。
-6. 期权链复用 AG Grid Community，股票图复用 Lightweight Charts，BrokerAdapter 不写入 upstream UI。
+1. 读取 `third_party/upstreams.lock.json` 的固定 SHA 与 MIT LICENSE。
+2. 通用 Workspace、Command Palette、Chart、Watchlist、Screener、研究 Provider 优先同步上游；避免构建第二套前端。
+3. EqoBoard 差异集中在 `web/lib/eqo-market.ts`、`web/app/api/eqo`、AG Grid Option Chain、IV Skew、OPRA Tape、Vertical Spread。
+4. 核心股票/期权数据只能经 Rust Gateway；第三方研究 Provider 不参与核心行情回退。
+5. 上游升级必须运行：server build/tests、web TypeScript、Next build、Rust CI、许可证/lock diff。
+6. AG Grid Community 与 Lightweight Charts 等依赖按 lockfile 固定，版本升级通过单独 PR。
