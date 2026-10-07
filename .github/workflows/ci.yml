@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   rust:
-    name: Rust domain / market data / gateway / execution
+    name: Rust data / gateway / execution
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -24,40 +24,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Clippy all targets
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Unit / integration tests (no credentials)
-        run: cargo test --workspace
-      - name: Formatting
-        run: cargo fmt --all -- --check
-
-  web:
-    name: Web typed checks / tests / production build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: apps/web
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
-      - name: Install pinned dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Unit tests
-        run: npm run test
-      - name: Build
-        run: npm run build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: eqoboard-web-dist
-          path: apps/web/dist
-          retention-days: 7
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - run: cargo fmt --all -- --check
 
   market-contracts:
     name: Offline market-data contract tests
@@ -65,5 +34,29 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - name: Verify SIP/OPRA smoke error handling without credentials
-        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+  openterminal:
+    name: OpenTerminal / AG Grid / Next.js
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/openterminal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/openterminal/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build -w server
+      - run: npm run test -w server
+      - run: npx tsc --noEmit -p web/tsconfig.json
+      - run: npm run build -w web
+      - name: Validate compose contract
+        working-directory: .
+        env:
+          EQO_ACCESS_TOKEN: ci-only-token
+        run: docker compose config --quiet
