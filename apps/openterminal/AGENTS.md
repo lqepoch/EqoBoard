@@ -2,7 +2,7 @@
 
 该目录源于 OpenTerminal MIT 上游。通用功能优先保留上游实现。
 
-- 上游基线见 `docs/THIRD_PARTY.md`。
+- 上游基线见 `docs/UPSTREAM_SOURCES.md`。
 - 股票/期权价格、K线、Option Chain 只能通过 `web/lib/eqo-market.ts` → Rust Gateway。
 - FRED/SEC/FINRA/新闻等补充研究 Provider 可沿用上游 server。
 - EqoBoard 自有 widget 放在 `web/components/widgets`，优先复用当前依赖，避免再引入同类 UI 框架。
