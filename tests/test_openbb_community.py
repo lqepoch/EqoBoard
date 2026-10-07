@@ -36,7 +36,40 @@ class OpenBBCommunityPatchTests(unittest.TestCase):
         paths = {change["path"].as_posix() for change in RUNNER.parse_patch(PATCH_PATH.read_bytes())}
         self.assertEqual(paths, set(manifest["preimages"]))
         self.assertEqual(paths, set(manifest["postimages"]))
-        self.assertEqual(len(paths), 44)
+        self.assertEqual(len(paths), 45)
+
+    def test_patch_removes_unshipped_upstream_udf_script(self) -> None:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        changes = RUNNER.parse_patch(PATCH_PATH.read_bytes())
+        index_patch = next(
+            change
+            for change in changes
+            if change["path"].as_posix() == "terminalpro/index.html"
+        )
+        script = '  <script src="/assets/js/datafeeds/udf/dist/bundle.js"></script>\n'
+        self.assertEqual(
+            manifest["preimages"]["terminalpro/index.html"],
+            "8e0ff4c8f3a527f6b7fd88b61789462826e284846cb05cce99f2168278d1559a",
+        )
+        hunk = index_patch["hunks"][0]
+        self.assertEqual(hunk["old"].count(script), 1)
+        self.assertNotIn(script, hunk["new"])
+        fixture = RUNNER.apply_hunks(
+            hunk["old"],
+            [{**hunk, "old_start": 1}],
+            "terminalpro/index.html",
+        )
+        self.assertIn(
+            '  <script type="module" src="/src/main.tsx"></script>\n', fixture
+        )
+        self.assertIn(
+            '  <!--<script defer src="https://pyscript.net/latest/pyscript.js"></script>-->\n',
+            fixture,
+        )
+        self.assertEqual(
+            manifest["postimages"]["terminalpro/index.html"],
+            "e037d3f25575eb39731e235a3a76e8ba73ae1e46547c9396b8fb01020c413220",
+        )
 
     def test_patch_does_not_publish_upstream_enterprise_license_key(self) -> None:
         patch = PATCH_PATH.read_text(encoding="utf-8")
