@@ -8,47 +8,69 @@
 -   Password: ${OPENBB_ADMIN_PASSWORD}
 --- a/terminalpro/bun.lock
 +++ b/terminalpro/bun.lock
-@@ -75 +74,0 @@
+@@ -74,6 +74,4 @@
+-        "ag-charts-community": "12.1.1",
 -        "ag-charts-enterprise": "12.1.1",
-@@ -77,3 +76,2 @@
+-        "ag-charts-react": "12.1.1",
 -        "ag-grid-community": "34.1.1",
 -        "ag-grid-enterprise": "34.1.1",
 -        "ag-grid-react": "34.1.1",
++        "ag-charts-community": "14.2.0",
++        "ag-charts-react": "14.2.0",
 +        "ag-grid-community": "36.2.0",
 +        "ag-grid-react": "36.2.0",
 @@ -94,2 +91,0 @@
 -        "highcharts": "^11.4.8",
 -        "highcharts-react-official": "^3.2.1",
-@@ -1663,2 +1658,0 @@
+@@ -1659,17 +1655,15 @@
+-    "ag-charts-community": ["ag-charts-community@12.1.1", "", { "dependencies": { "ag-charts-core": "12.1.1", "ag-charts-locale": "12.1.1", "ag-charts-types": "12.1.1" } }, "sha512-5RfYXwqUr4yR1KIQAPvCsF9uaNRV6Ghs6Bj9tMn5bHL0xf1EOncEpkzXZjIXpM4yGxYk8UJKRTI3mByPjYRe8A=="],
+-
+-    "ag-charts-core": ["ag-charts-core@12.1.1", "", { "dependencies": { "ag-charts-types": "12.1.1" } }, "sha512-Kp/fXAtNmHWWo4MTHfYN1O4O5F3wWF5ZhLcjbfrdBcx3rBdbQGw46K/FcclK8Wyer3tmITBG9EZQFO/CDeu4vA=="],
+-
 -    "ag-charts-enterprise": ["ag-charts-enterprise@12.1.1", "", { "dependencies": { "ag-charts-community": "12.1.1", "ag-charts-core": "12.1.1" } }, "sha512-kcifzWM1JA+gmXKUcHrFb5P23MAnY+3lyBo9MVziZh0RMH/fHa7wEjgPHyim7/71Lbz9DmJbaYaPwXpLp/4f9Q=="],
 -
-@@ -1671,5 +1665,5 @@
+-    "ag-charts-locale": ["ag-charts-locale@12.1.1", "", {}, "sha512-kpmtZvC12idQcNPnM3BIALmFUXvbb2TtCZtTuXqWdmtT7ykgnQCWWFczLOcM4EsgfnaudATI952JLAeQ/C2wwQ=="],
+-
+-    "ag-charts-react": ["ag-charts-react@12.1.1", "", { "dependencies": { "ag-charts-community": "12.1.1" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0" } }, "sha512-FaFFXdICK1CVfIzCkIZN3L44ME9H6ddDAFWGcHGviA2PtfSz6WiT8fgYLIFvn7l6Qx9IcWMfqFpJ3OTf+DV8tw=="],
+-
+-    "ag-charts-types": ["ag-charts-types@12.1.1", "", {}, "sha512-VbAOfp1E7+Z/TBufJOIjUYdx70kQRDg49WoluiVKVSB0r0el/uvxARp9xjzx4ByBq9+Xq/V23tJVsRj1MS2A/g=="],
+-
 -    "ag-grid-community": ["ag-grid-community@34.1.1", "", { "dependencies": { "ag-charts-types": "12.1.1" } }, "sha512-ODVvGoMTkyGvMT8b5lzvum5r93bG6CKdJdNrk6u/aYS7oqZ5rUEXJJHC8n8Zq+o76KhFiXMBQrU39xuhz8i+Tg=="],
 -
 -    "ag-grid-enterprise": ["ag-grid-enterprise@34.1.1", "", { "dependencies": { "ag-grid-community": "34.1.1" }, "optionalDependencies": { "ag-charts-community": "12.1.1", "ag-charts-enterprise": "12.1.1" } }, "sha512-r/HPmKM7rU+EnMYjzUUnp7Zlq+C77chUCdcT9oTS4eYPbjS/TF4bZO8laL4Nx/eAnwN5G5tyltIqUnSHpJmqKw=="],
 -
 -    "ag-grid-react": ["ag-grid-react@34.1.1", "", { "dependencies": { "ag-grid-community": "34.1.1", "prop-types": "^15.8.1" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-ZffTltCJe5+yzC57LVTMFpjZiYUzFiX8+G4NNfM1MfiLV6cMl5kCEE6w3Afc0nSt8b1JCAZOiX6K0+VXqjIfYQ=="],
++    "ag-charts-community": ["ag-charts-community@14.2.0", "", { "dependencies": { "ag-charts-core": "14.2.0", "ag-charts-locale": "14.2.0", "ag-charts-types": "14.2.0" } }, "sha512-AQ9u5jJGjCGWY19XMehZFhC5db6e9J5DGCurSGjm1h9MUkfTQfj9KMDHLhTQqdNhVvTXI7J4OB8ZNbWMh3TJug=="],
++
++    "ag-charts-core": ["ag-charts-core@14.2.0", "", { "dependencies": { "ag-charts-types": "14.2.0" } }, "sha512-te4u0sFYMNuzfZMU/uh3nVEctIFpsAfLFBJIJtlMqBKI8otYdB3y4M5Ax8KAAg888X6G1lDaBW8FoNGzX3caSg=="],
++
++    "ag-charts-locale": ["ag-charts-locale@14.2.0", "", {}, "sha512-zoG9yxh193FKc7jvx9FFp8oWUTcYIzHJLNmq1+54KCIe0us9Ay5odkp31y7WJX5gDtty8hKq+uyOEBPXtE9GHw=="],
++
++    "ag-charts-react": ["ag-charts-react@14.2.0", "", { "dependencies": { "ag-charts-community": "14.2.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0" } }, "sha512-AdhcRhyW6N7YuYCwnNfCe4ozbcsrMsMGK00VjeaFRNDZTU9PjbSSu0BKyZJFbCPgE0FhrTgDN2fBN0BKQsIx1w=="],
++
++    "ag-charts-types": ["ag-charts-types@14.2.0", "", {}, "sha512-4pDV6/4zbzPN7t607Gr1o6DO9RhmPafQGr+hIpTJBaerbaMoC+WOO3v/wkxFbvCNrHKOexEKSfNTH7PaAR4UzA=="],
++
 +    "ag-grid-community": ["ag-grid-community@36.2.0", "", { "dependencies": { "ag-charts-types": "14.2.0", "ag-stack": "36.2.0" } }, "sha512-tK0Toj7t0fV/OMLPnDc0xlYKAqDbnCT3iJodYSn2TJ541caU8jPdYwWhMdW+AP2+pUNwFiJVgc04eJNfvBPsWw=="],
 +
 +    "ag-grid-react": ["ag-grid-react@36.2.0", "", { "dependencies": { "ag-grid-community": "36.2.0", "prop-types": "^15.8.1" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-7dsaR4Ga8/bJAOov7XJqxsDc1JAjUU5Bmh9+s4U9+/TKIdSsaVo53SuZb2yEFSB1elv3eh6aZP8a1fqGZehXwA=="],
 +
 +    "ag-stack": ["ag-stack@36.2.0", "", {}, "sha512-f3XT2htFs9dUPcHni2z9ak69QNta5ODEpooHuuNvbjN98JkokpEqRQ9YLQHQJFdCcgi9Ybs/j3zkkvmNRamIPg=="],
-@@ -2551,4 +2544,0 @@
+@@ -2550,4 +2543,0 @@
+-
 -    "highcharts": ["highcharts@11.4.8", "", {}, "sha512-5Tke9LuzZszC4osaFisxLIcw7xgNGz4Sy3Jc9pRMV+ydm6sYqsPYdU8ELOgpzGNrbrRNDRBtveoR5xS3SzneEA=="],
 -
 -    "highcharts-react-official": ["highcharts-react-official@3.2.2", "", { "peerDependencies": { "highcharts": ">=6.0.0", "react": ">=16.8.0" } }, "sha512-2kkWOB6RpdR26fmAJkrtJFG9xWFUDGKWyat88tW3fa/3l/Jc7D5ZfwTng2MZsdiKIH32AFy0Pr75udUe7uN6LA=="],
--
-@@ -4391,0 +4382,2 @@
-+
-+    "ag-grid-community/ag-charts-types": ["ag-charts-types@14.2.0", "", {}, "sha512-4pDV6/4zbzPN7t607Gr1o6DO9RhmPafQGr+hIpTJBaerbaMoC+WOO3v/wkxFbvCNrHKOexEKSfNTH7PaAR4UzA=="],
 --- a/terminalpro/package.json
 +++ b/terminalpro/package.json
-@@ -93 +92,0 @@
+@@ -92,6 +92,4 @@
+-    "ag-charts-community": "12.1.1",
 -    "ag-charts-enterprise": "12.1.1",
-@@ -95,3 +94,2 @@
+-    "ag-charts-react": "12.1.1",
 -    "ag-grid-community": "34.1.1",
 -    "ag-grid-enterprise": "34.1.1",
 -    "ag-grid-react": "34.1.1",
++    "ag-charts-community": "14.2.0",
++    "ag-charts-react": "14.2.0",
 +    "ag-grid-community": "36.2.0",
 +    "ag-grid-react": "36.2.0",
 @@ -112,2 +109,0 @@
@@ -120,10 +142,598 @@
 @@ -1945 +1943,0 @@
 -              "chart-highcharts",
 --- a/terminalpro/src/components/General/Table/AgChartFromTable.tsx
-+++ b/terminalpro/src/components/General/Table/AgChartFromTable.tsx
-@@ -5 +5 @@
++++ /dev/null
+@@ -1,590 +0,0 @@
+-import type {
+-  AgChartOptions,
+-  AgLineSeriesOptions,
+-  AgRangeAreaSeriesOptions,
 -} from "ag-charts-enterprise";
-+} from "ag-charts-community";
+-import { AgCharts } from "ag-charts-react";
+-import type {
+-  ChartRangeSelectionChangedEvent,
+-  ChartRef,
+-  ColDef,
+-  CreateRangeChartParams,
+-  FirstDataRenderedEvent,
+-} from "ag-grid-community";
+-import { AgGridReact } from "ag-grid-react";
+-import clsx from "clsx";
+-import dayjs from "dayjs";
+-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+-import { downloadData } from "~/components/Charting/utils";
+-import DraggableCard, { SetLoadingOnResize } from "~/components/DraggableCard";
+-import type { NavBarProps } from "~/components/DraggableCard/NavBar";
+-import Tooltip from "~/components/Tooltip";
+-import { useWidgetContext } from "~/components/Widget.context";
+-import ForecastingNixtlaPopup, {
+-  type SeriesData,
+-} from "~/components/Widgets/AI/NixtlaPopup";
+-import { getConfig } from "~/lib/runtimeConfig";
+-import { useShallowThemeStore } from "~/lib/state/theme";
+-import { cn, formatNumberMagnitude } from "~/lib/utils";
+-import Icon from "../../Icon";
+-import { isDateorYearField } from "./AgGridUtils";
+-import { ChartViewButton } from "./Chart/AgChartView";
+-import useChartOptions, { getTotalSeries } from "./Chart/hooks/useChartOptions";
+-import { createItemStyler, useAgThemes } from "./Chart/themes";
+-import { Table } from "./hooks";
+-
+-const servicesNixtlaFF = getConfig().services.nixtla;
+-
+-/// Fixes CellComp crashing widget
+-function cleanColumnDefs(columnDefs: ColDef[]) {
+-  return columnDefs.map((col) => {
+-    const { cellRenderer, ...rest } = col;
+-    return rest;
+-  });
+-}
+-
+-export function AgChartFromTable() {
+-  const { widget, updateWidget } = useWidgetContext();
+-  const theme = useShallowThemeStore((s) => s.theme);
+-
+-  const [state, setState] = useState({
+-    rowData: widget.storage.rowData,
+-    columnDefs: cleanColumnDefs(widget.storage.columnDefs as ColDef[]),
+-    columns: widget.storage.columns,
+-  });
+-  const [chartRef, setChartRef] = useState<ChartRef>(null);
+-  const ref = useRef<HTMLDivElement>(null);
+-  const agRef = useRef<AgGridReact>(null);
+-
+-  const stateKey = `${widget.storage.transpose ? "transposed_CellRange" : "cellRange"}`;
+-  const stateKeyRef = useRef(stateKey);
+-
+-  const { themePalette, agTheme, chartThemes, customChartThemes } = useAgThemes(theme);
+-
+-  useEffect(() => {
+-    stateKeyRef.current = stateKey;
+-  }, [stateKey]);
+-
+-  const chartViewEnabled = widget.storage?.chartView?.enabled ?? true;
+-
+-  const isForecast =
+-    widget?.storage?.forecast && widget?.storage?.forecastSeriesData?.length > 0;
+-  const { chartThemeOverrides } = useChartOptions();
+-  // Read via ref so this effect doesn't refire every render when chartThemeOverrides
+-  // gets a new reference — that was clobbering user edits in the Customize panel.
+-  const chartThemeOverridesRef = useRef(chartThemeOverrides);
+-  chartThemeOverridesRef.current = chartThemeOverrides;
+-
+-  const { rowData, columnDefs, columns } =
+-    widget.storage.transpose && widget.storage.transposedT
+-      ? widget.storage.transposedT
+-      : widget.storage;
+-
+-  useEffect(() => {
+-    if (!chartViewEnabled) return;
+-
+-    chartThemeOverridesRef.current.bar.series.itemStyler = createItemStyler(
+-      themePalette,
+-      () => widget.storage.chartBarFillEnabled,
+-    );
+-
+-    if (chartRef && agRef.current?.api) {
+-      agRef.current.api.updateChart({
+-        chartId: chartRef.chartId,
+-        type: "rangeChartUpdate",
+-        chartThemeOverrides: chartThemeOverridesRef.current,
+-      });
+-    }
+-  }, [chartRef, chartViewEnabled, themePalette, widget.storage.chartBarFillEnabled]);
+-
+-  const onFirstDataRendered = (params: FirstDataRenderedEvent) => {
+-    if (isForecast) return;
+-
+-    const { chartType } = widget.storage.chartModel;
+-    const cellRange = widget.storage?.[stateKeyRef.current];
+-
+-    const cellRangeColumns = !!cellRange?.columns;
+-
+-    const createRangeChartParams = {
+-      chartType: chartType ?? "groupedColumn",
+-      chartContainer: ref.current,
+-      suppressChartRanges: true,
+-      cellRange: {
+-        columns: columns,
+-      },
+-      chartThemeOverrides,
+-    } as CreateRangeChartParams;
+-
+-    if (!widget.storage.transposedT) {
+-      createRangeChartParams.switchCategorySeries = widget.storage.transpose;
+-    }
+-
+-    createRangeChartParams.cellRange = cellRangeColumns
+-      ? cellRange
+-      : createRangeChartParams.cellRange;
+-
+-    const colDefs = cleanColumnDefs(columnDefs);
+-    params.api.updateGridOptions({ rowData, columnDefs: colDefs });
+-    const chartRef = params.api.createRangeChart(createRangeChartParams);
+-    const zoomButtons = chartRef?.chartElement?.getElementsByClassName(
+-      "ag-charts-toolbar ag-charts-toolbar--horizontal ag-charts-zoom-buttons__toolbar--hidden",
+-    )?.[0] as HTMLDivElement;
+-    if (zoomButtons?.style) zoomButtons.style.transform = "translateY(54px)";
+-
+-    setChartRef(chartRef);
+-  };
+-
+-  const onChartRangeSelectionChanged = useCallback(
+-    (params: ChartRangeSelectionChangedEvent) => {
+-      const { cellRange } = params;
+-      if (!cellRange) return;
+-
+-      updateWidget(
+-        (prev) => ({
+-          ...prev,
+-          storage: {
+-            ...prev.storage,
+-            [stateKeyRef.current]: cellRange,
+-          },
+-        }),
+-        true,
+-      );
+-    },
+-    [stateKeyRef],
+-  );
+-
+-  const series = useMemo(() => {
+-    if (!isForecast) return [];
+-
+-    const forecastSeriesData: SeriesData[] = widget.storage.forecastSeriesData;
+-
+-    return forecastSeriesData?.map((series) => {
+-      if (series.type === "line" || series.type === "area") {
+-        return {
+-          type: series.type,
+-          xKey: series.xKey,
+-          yKey: series.yKey,
+-          data: Object.entries(series.data).map(([key, value]) => ({
+-            [series.xKey]: key,
+-            [series.yKey]: value,
+-          })),
+-          stroke: series.color ?? "#5090DC",
+-          marker: {
+-            fill: series.color ?? "#5090DC",
+-            size: 3,
+-          },
+-          tooltip: {
+-            enabled: true,
+-            renderer: (params) => {
+-              return {
+-                content: `<b>${params.datum[params.xKey]}:</b>  ${params.datum[
+-                  params.yKey
+-                ]?.toLocaleString()}`,
+-              };
+-            },
+-          },
+-        } as AgLineSeriesOptions;
+-      }
+-      if (series.type === "rangeArea")
+-        return {
+-          type: "range-area",
+-          xKey: series.xKey,
+-          yLowKey: series.yLowKey,
+-          yHighKey: series.yHighKey,
+-          data: Object.entries(series.data).map(([key, value]) => ({
+-            Date: key,
+-            [series.yLowKey]: value[series.yLowKey],
+-            [series.yHighKey]: value[series.yHighKey],
+-          })),
+-        } as AgRangeAreaSeriesOptions;
+-    });
+-  }, [isForecast, widget.storage.forecastSeriesData]);
+-
+-  const seriesData = useMemo(() => {
+-    const combinedData = series
+-      .flatMap((series) => series.data)
+-      .reduce((acc, curr) => {
+-        const date = curr.Date;
+-        if (acc[date]) {
+-          Object.keys(curr).forEach((key) => {
+-            if (key !== "Date") {
+-              acc[date][key] = (acc[date][key] || 0) + curr[key];
+-            }
+-          });
+-        } else {
+-          acc[date] = { ...curr };
+-        }
+-        return acc;
+-      }, {});
+-    return Object.values(combinedData);
+-  }, [series]);
+-
+-  const chartMemo = useMemo(() => {
+-    if (!isForecast) return null;
+-
+-    const chartOptions = {
+-      theme: customChartThemes[chartThemes[0]],
+-      data: seriesData,
+-      series,
+-      axes: [
+-        {
+-          type: "category",
+-          position: "bottom",
+-          label: {
+-            avoidCollisions: true,
+-            fontSize: 11,
+-            autoRotate: true,
+-            formatter: (params) => {
+-              if (
+-                dayjs(params.value).startOf("day").format("MMM DD\n YYYY") ===
+-                "Invalid Date"
+-              ) {
+-                return `${params.value}`.split(" ").reduce((acc, word, i) => {
+-                  if (i % 2 === 0 && `${acc} ${word}`.length < 20) {
+-                    return `${acc} ${word}`;
+-                  }
+-                  return `${acc} ${word}\n`;
+-                });
+-              }
+-              if (params.value.length <= 6) {
+-                return params.value;
+-              }
+-              return dayjs(params.value).startOf("day").format("MMM DD\n YYYY");
+-            },
+-          },
+-        },
+-        {
+-          type: "number",
+-          position: "left",
+-          label: {
+-            fontSize: 11,
+-            autoRotate: false,
+-            avoidCollisions: true,
+-            formatter: (params) => formatNumberMagnitude(params.value, 2),
+-          },
+-        },
+-      ],
+-      legend: {
+-        enabled: true,
+-        position: "top",
+-        maxHeight: 50,
+-        maxWidth: 500,
+-        spacing: 20,
+-        item: {
+-          paddingX: 10,
+-          paddingY: 3,
+-          marker: {
+-            shape: "square",
+-            size: 11,
+-          },
+-        },
+-      },
+-    } as AgChartOptions;
+-
+-    return <AgCharts className="h-full w-full" options={chartOptions} />;
+-  }, [isForecast, seriesData, theme, customChartThemes, chartThemes]);
+-
+-  const gridMemo = useMemo(() => {
+-    if (isForecast) return null;
+-
+-    return (
+-      <AgGridReact
+-        className="ag-grid h-0 w-0 max-h-0"
+-        theme={agTheme}
+-        ref={(el) => (agRef.current = el)}
+-        getChartToolbarItems={(_) => []}
+-        popupParent={ref.current}
+-        enableCharts={true}
+-        chartThemeOverrides={chartThemeOverrides}
+-        onChartOptionsChanged={(params) => {
+-          const { chartType, chartOptions } = params;
+-          const chartModel = params.api
+-            .getChartModels()
+-            .find((model) => model.chartId === params.chartId);
+-
+-          const totalSeries = getTotalSeries(params, chartModel?.cellRange);
+-
+-          updateWidget((prev) => ({
+-            ...prev,
+-            storage: {
+-              ...prev.storage,
+-              totalSeries,
+-              chartType,
+-              chartModel: {
+-                ...prev.storage.chartModel,
+-                chartType,
+-              },
+-              chartOptions,
+-            },
+-          }));
+-        }}
+-        rowData={state?.rowData}
+-        columnDefs={state?.columnDefs}
+-        onFirstDataRendered={onFirstDataRendered}
+-        onChartRangeSelectionChanged={onChartRangeSelectionChanged}
+-        customChartThemes={customChartThemes}
+-        chartThemes={chartThemes}
+-      />
+-    );
+-    // maybe add storage here later if something breaks :D
+-  }, [
+-    state,
+-    theme,
+-    ref.current,
+-    isForecast,
+-    updateWidget,
+-    agRef,
+-    chartThemes,
+-    customChartThemes,
+-    agTheme,
+-  ]);
+-
+-  const dateField = state.columnDefs?.find(
+-    (column) => column?.cellDataType === "date" || isDateorYearField(column?.field),
+-  )?.field;
+-
+-  const timeseries = widget.storage.transpose
+-    ? state.rowData[0]?.Index
+-    : state.columnDefs?.find((column) => column?.chartDataType === "series")?.field;
+-
+-  const filteredData = useMemo(() => {
+-    if (!widget.storage.transpose)
+-      return rowData.map((row) => {
+-        return {
+-          Date: row[dateField],
+-          [timeseries]: row[timeseries],
+-        };
+-      });
+-
+-    const transformedArray = [];
+-
+-    for (const row of state.rowData as any[]) {
+-      for (const key of Object.keys(row)) {
+-        if (key === "Index") continue;
+-        transformedArray.push({
+-          Date: key,
+-          [row.Index]: row[key],
+-        });
+-      }
+-    }
+-
+-    return transformedArray;
+-  }, [rowData, state.rowData, dateField, timeseries]);
+-
+-  const hasOnlyOneTimeSeries = widget.storage.transpose
+-    ? state.rowData.length === 1
+-    : state.columns.length === 2;
+-
+-  const enableNixtla =
+-    widget.storage.chartModel.chartType === "line" && hasOnlyOneTimeSeries;
+-
+-  const [nixtlaPopup, setNixtlaPopup] = useState(false);
+-
+-  const exportFns = useMemo(() => {
+-    if (!chartViewEnabled) {
+-      return {
+-        csvFunction: (title = "report") => {
+-          downloadData(rowData, title, "csv", false);
+-        },
+-        excelFunction: (title = "report") => {
+-          downloadData(rowData, title, "excel", false);
+-        },
+-      } as NavBarProps["exportFns"];
+-    }
+-    if (!isForecast)
+-      return {
+-        csvFunction: (title = "report") => {
+-          agRef.current?.api.exportDataAsCsv({
+-            fileName: `${title}.csv`,
+-          });
+-        },
+-        excelFunction: (title = "report") => {
+-          agRef.current?.api.exportDataAsExcel({
+-            fileName: `${title}.xlsx`,
+-          });
+-        },
+-        pngFunction: (title = "report") => {
+-          agRef.current?.api.downloadChart({
+-            fileName: `${title}.png`,
+-            fileFormat: "png",
+-            chartId: chartRef.chartId,
+-          });
+-        },
+-      } as NavBarProps["exportFns"];
+-    return {
+-      csvFunction: (title = "report") => {
+-        downloadData(seriesData, title, "csv", false);
+-      },
+-      excelFunction: (title = "report") => {
+-        downloadData(seriesData, title, "excel", false);
+-      },
+-    } as NavBarProps["exportFns"];
+-  }, [chartViewEnabled, seriesData, isForecast, agRef?.current, rowData]);
+-
+-  return (
+-    <Table>
+-      <DraggableCard
+-        extraClassName={cn("overflow-hidden -mt-2", {
+-          "chart-wrapper h-[93%]": chartViewEnabled,
+-        })}
+-        showEllipsisMenu={true}
+-        exportFns={exportFns}
+-        aiEnabled={true}
+-        aiData={rowData}
+-        extraNavbarElements={
+-          <>
+-            <ChartViewButton />
+-            {servicesNixtlaFF && chartViewEnabled && (isForecast || enableNixtla) && (
+-              <Tooltip
+-                message={
+-                  enableNixtla
+-                    ? "Forecasting with TimeGEN-1 (Nixtla)"
+-                    : "Nixtla is only available for Line charts with one time series"
+-                }
+-              >
+-                <button
+-                  disabled={!(isForecast || enableNixtla)}
+-                  onClick={() => setNixtlaPopup(true)}
+-                  className={cn(
+-                    "obb-small-navbar-btn flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
+-                    {
+-                      "pulse-box-shadow bg-brand-main! text-white":
+-                        widget.storage.forecast,
+-                    },
+-                  )}
+-                >
+-                  <Icon id="nixtla-icon" className="w-3.5 mt-0.5" />
+-                </button>
+-              </Tooltip>
+-            )}
+-          </>
+-        }
+-        settings={{
+-          showMetadata: true,
+-          showDuplicate: true,
+-          showExport: true,
+-          showMove: true,
+-          showCopyToClipboard: true,
+-        }}
+-        extraSettings={
+-          chartViewEnabled
+-            ? [
+-                {
+-                  icon: "noto-letter-t",
+-                  id: "transpose-data",
+-                  label: "Transpose data",
+-                  onClick: () => {
+-                    const transpose = !widget?.storage?.transpose;
+-                    updateWidget((prev) => ({
+-                      ...prev,
+-                      storage: {
+-                        ...prev.storage,
+-                        transpose,
+-                      },
+-                    }));
+-
+-                    const isOldSchema = !!widget.storage?.transposedT;
+-
+-                    let cellRange = widget.storage?.cellRange;
+-                    if (isOldSchema) {
+-                      const data = transpose
+-                        ? widget.storage.transposedT
+-                        : widget.storage;
+-
+-                      data.columnDefs = cleanColumnDefs(data.columnDefs);
+-                      const { rowData, columnDefs, columns } = data;
+-
+-                      cellRange =
+-                        widget.storage?.[
+-                          transpose ? "transposed_CellRange" : "cellRange"
+-                        ];
+-
+-                      setState({ rowData, columnDefs, columns });
+-                      agRef.current.api.updateGridOptions({ rowData, columnDefs });
+-                    }
+-
+-                    const cellRangeColumns = !!cellRange?.columns;
+-
+-                    agRef.current.api.updateChart({
+-                      chartId: chartRef.chartId,
+-                      type: "rangeChartUpdate",
+-                      cellRange: cellRangeColumns ? cellRange : { columns },
+-                      switchCategorySeries: isOldSchema ? undefined : transpose,
+-                    });
+-                  },
+-                },
+-                {
+-                  icon: "cog-icon",
+-                  id: "open-chart-settings",
+-                  label: "Chart settings",
+-                  hide: isForecast,
+-                  onClick: () => {
+-                    const agChartMenuCss = (
+-                      ref?.current?.getElementsByClassName(
+-                        "ag-chart-docked-container",
+-                      )?.[0] as HTMLElement
+-                    )?.style.cssText;
+-
+-                    const params = { chartId: chartRef.chartId };
+-
+-                    if (!agChartMenuCss || agChartMenuCss?.includes("min-width: 0px")) {
+-                      agRef.current.api.openChartToolPanel(params);
+-                    } else {
+-                      agRef.current.api.closeChartToolPanel(params);
+-                    }
+-                  },
+-                },
+-              ]
+-            : []
+-        }
+-      >
+-        {chartViewEnabled ? (
+-          <SetLoadingOnResize>
+-            {isForecast ? (
+-              chartMemo
+-            ) : (
+-              <>
+-                {gridMemo}
+-                <div
+-                  ref={ref}
+-                  className={clsx("chart-wrapper-body h-full w-full", {
+-                    "ag-theme-alpine": theme === "light",
+-                    "ag-theme-alpine-dark": theme === "dark",
+-                  })}
+-                />
+-              </>
+-            )}
+-          </SetLoadingOnResize>
+-        ) : (
+-          <div className="h-[calc(100%-5px)] min-h-[100px]">
+-            <AgGridReact
+-              className="ag-grid h-full w-full"
+-              theme={agTheme}
+-              rowData={rowData}
+-              columnDefs={cleanColumnDefs(columnDefs as ColDef[])}
+-            />
+-          </div>
+-        )}
+-      </DraggableCard>
+-      <ForecastingNixtlaPopup
+-        open={nixtlaPopup}
+-        onClose={() => setNixtlaPopup(false)}
+-        data={filteredData}
+-        timeseries={timeseries}
+-        forecast={widget.storage.forecast}
+-        onForecast={(seriesData) => {
+-          updateWidget((prev) => ({
+-            ...prev,
+-            storage: {
+-              ...prev.storage,
+-              forecast: !!seriesData,
+-              forecastSeriesData: seriesData ?? [],
+-            },
+-          }));
+-        }}
+-      />
+-    </Table>
+-  );
+-}
+-
+-export default memo(AgChartFromTable);
 --- a/terminalpro/src/components/General/Table/AgGrid.tsx
 +++ b/terminalpro/src/components/General/Table/AgGrid.tsx
 @@ -7 +6,0 @@
@@ -134,7 +744,7 @@
 -import { getOpenBBChartTheme } from "./Chart/themes";
 @@ -52 +50,0 @@
 -import { clearCellSelection } from "./utils";
-@@ -60,0 +59,81 @@
+@@ -60,0 +59,82 @@
 +
 +const COMMUNITY_ONLY_UNSUPPORTED_GRID_OPTIONS = new Set([
 +  "cellSelection",
@@ -210,32 +820,37 @@
 +
 +/** Remove Enterprise-only options while retaining Community sorting, filtering, and row rendering. */
 +export function adaptCommunityGridProps<T extends Record<string, unknown>>(props: T): T {
-+  const options = stripCommunityUnsupportedGridOptions(props);
-+  if (options.gridOptions) {
-+    options.gridOptions = stripCommunityUnsupportedGridOptions(options.gridOptions);
++  const options = stripCommunityUnsupportedGridOptions(props) as Record<string, unknown>;
++  const gridOptions = options.gridOptions;
++  if (gridOptions && typeof gridOptions === "object") {
++    options.gridOptions = stripCommunityUnsupportedGridOptions(gridOptions);
 +  }
-+  return options;
++  return options as T;
 +}
-@@ -245,0 +325,5 @@
+@@ -132 +212,2 @@
+-      const tooltipText = headerTooltip ?? props?.displayName;
++      const tooltipText =
++        typeof headerTooltip === "string" ? headerTooltip : props?.displayName;
+@@ -245,0 +327,5 @@
 +          if (getConfig().ui.isLite) {
 +            clearTimeout(clickTimeout.current);
 +            clickTimeout.current = null;
 +            return;
 +          }
-@@ -732 +816 @@
+@@ -732 +818 @@
 -    cellSelection: true,
 +    rowModelType: "clientSide",
-@@ -734 +817,0 @@
+@@ -734 +819,0 @@
 -    enableCharts: true,
-@@ -739 +821,0 @@
+@@ -739 +823,0 @@
 -    getMainMenuItems: getMainMenuItems,
-@@ -742,2 +823,0 @@
+@@ -742,2 +825,0 @@
 -    getChartToolbarItems: (_) => [],
 -    columnMenu: "legacy",
-@@ -751,0 +832,2 @@
+@@ -751,0 +834,2 @@
 +      floatingFilter: true,
 +      suppressHeaderMenuButton: true,
-@@ -764,26 +845,0 @@
+@@ -764,26 +847,0 @@
 -    onCellClicked: (params) => {
 -      clearCellSelection(params);
 -    },
@@ -415,9 +1030,29 @@
 +  agGrid.api.clearCellSelection?.();
 --- a/terminalpro/src/components/ThemeSettings/ChartSettings.tsx
 +++ b/terminalpro/src/components/ThemeSettings/ChartSettings.tsx
-@@ -5 +5 @@
+@@ -1,0 +2 @@
++  AgCartesianChartOptions,
+@@ -5 +6 @@
 -} from "ag-charts-enterprise";
 +} from "ag-charts-community";
+@@ -611 +612 @@
+-    const options: AgChartOptions = {
++    const options: AgCartesianChartOptions = {
+@@ -615,10 +616,4 @@
+-      axes: [
+-        {
+-          type: "category",
+-          position: "bottom",
+-        },
+-        {
+-          type: "number",
+-          position: "left",
+-        },
+-      ],
++      axes: {
++        x: { type: "category" },
++        y: { type: "number" },
++      },
 --- a/terminalpro/src/components/ThemeSettings/TableSettings.tsx
 +++ b/terminalpro/src/components/ThemeSettings/TableSettings.tsx
 @@ -11 +11 @@
@@ -444,6 +1079,9 @@
 -    defaultToolPanel: "",
 -  },
 +  sideBar: false,
+@@ -277 +265 @@
+-      ) as ThemeDefaultParams;
++      ) as unknown as ThemeDefaultParams;
 --- a/terminalpro/src/components/Widgets/AI/NixtlaPopup.tsx
 +++ b/terminalpro/src/components/Widgets/AI/NixtlaPopup.tsx
 @@ -2 +2 @@
@@ -561,33 +1199,55 @@
 -}
 --- a/terminalpro/src/components/Widgets/index.ts
 +++ b/terminalpro/src/components/Widgets/index.ts
-@@ -14,2 +13,0 @@
+@@ -11 +10,0 @@
+-const AgChartFromTableFC = lazy(() => import("../General/Table/AgChartFromTable"));
+@@ -14,2 +12,0 @@
 -const AgGridSSRMFC = lazy(() => import("../General/Table/AgGridSSRM"));
 -const AgGridSSRMAdvancedFC = lazy(() => import("../General/Table/AgGridSSRMAdvanced"));
-@@ -18 +15,0 @@
+@@ -18 +14,0 @@
 -const ChartHighchartsFC = lazy(() => import("./charting/ChartHighcharts"));
-@@ -19,0 +17 @@
+@@ -19,0 +16 @@
 +const CommunityUnavailableWidgetFC = lazy(() => import("./CommunityUnavailableWidget"));
-@@ -106,2 +103,0 @@
+@@ -104 +100,0 @@
+-  ag_grid_sql: "AgGridSQL",
+@@ -106,2 +101,0 @@
 -  ssrm_table: "AgGridSSRM",
 -  ssrm_advanced: "AgGridSSRMAdvanced",
-@@ -134 +130,3 @@
+@@ -131,0 +126 @@
++  ag_grid_sql: "CommunityUnavailableWidget",
+@@ -134 +129,3 @@
 -  "chart-highcharts": "ChartHighcharts",
 +  ssrm_table: "CommunityUnavailableWidget",
 +  ssrm_advanced: "CommunityUnavailableWidget",
 +  "chart-highcharts": "CommunityUnavailableWidget",
-@@ -196,2 +193,0 @@
+@@ -156 +153 @@
+-  ag_chart_from_table: "AgChartFromTable",
++  ag_chart_from_table: "CommunityUnavailableWidget",
+@@ -193 +189,0 @@
+-  AgChartFromTable: AgChartFromTableFC,
+@@ -196,2 +191,0 @@
 -  AgGridSSRM: AgGridSSRMFC,
 -  AgGridSSRMAdvanced: AgGridSSRMAdvancedFC,
-@@ -200 +195,0 @@
+@@ -200 +193,0 @@
 -  ChartHighcharts: ChartHighchartsFC,
-@@ -201,0 +197 @@
+@@ -201,0 +195 @@
 +  CommunityUnavailableWidget: CommunityUnavailableWidgetFC,
 --- a/terminalpro/src/components/types.d.ts
 +++ b/terminalpro/src/components/types.d.ts
 @@ -7 +7 @@
 -} from "ag-grid-enterprise";
 +} from "ag-grid-community";
+--- a/terminalpro/src/lib/runtimeConfigSchema.ts
++++ b/terminalpro/src/lib/runtimeConfigSchema.ts
+@@ -215 +215 @@
+-    const groupSchema = shape[group as keyof typeof shape] as unknown as z.AnyZodObject;
++    const groupSchema = shape[group as keyof typeof shape] as unknown as z.ZodObject;
+@@ -266 +266 @@
+-        ? (shape[group as keyof typeof shape] as unknown as z.AnyZodObject)
++        ? (shape[group as keyof typeof shape] as unknown as z.ZodObject)
+@@ -280 +280 @@
+-    const groupSchema = shape[group as keyof typeof shape] as unknown as z.AnyZodObject;
++    const groupSchema = shape[group as keyof typeof shape] as unknown as z.ZodObject;
 --- a/terminalpro/src/lib/state/copilot.ts
 +++ b/terminalpro/src/lib/state/copilot.ts
 @@ -1 +1 @@
@@ -771,6 +1431,27 @@
 -    expect(JSON.parse(card.getAttribute("data-ai-data") ?? "null")).toEqual(records);
 -  });
 -});
+--- /dev/null
++++ b/terminalpro/tests/unit/components/Widgets/communityRegistry.test.ts
+@@ -0,0 +1,18 @@
++import { describe, expect, it } from "vitest";
++import Widgets, { getWidgetComponent, isAgGridWidget } from "~/components/Widgets";
++
++describe("OpenBB Lite Community widget registry", () => {
++  it.each([
++    "ag_grid_sql",
++    "ag_chart_from_table",
++    "ssrm_table",
++    "ssrm_advanced",
++    "chart-highcharts",
++  ] as const)(
++    "%s resolves to an explicit unavailable widget outside AG Grid",
++    (widgetId) => {
++      expect(getWidgetComponent(widgetId)).toBe(Widgets.CommunityUnavailableWidget);
++      expect(isAgGridWidget(widgetId)).toBe(false);
++    },
++  );
++});
 --- a/terminalpro/tests/unit/routes/developer_onboarding/DeveloperOnboardingHomepage.test.tsx
 +++ b/terminalpro/tests/unit/routes/developer_onboarding/DeveloperOnboardingHomepage.test.tsx
 @@ -100,6 +99,0 @@
@@ -780,6 +1461,16 @@
 -}));
 -
 -// Mock any other components that might use Highcharts
+--- a/terminalpro/tsconfig.json
++++ b/terminalpro/tsconfig.json
+@@ -22 +22 @@
+-    "ignoreDeprecations": "6.0",
++    "ignoreDeprecations": "5.0",
+--- a/terminalpro/tsconfig.node.json
++++ b/terminalpro/tsconfig.node.json
+@@ -6 +6 @@
+-    "ignoreDeprecations": "6.0",
++    "ignoreDeprecations": "5.0",
 --- a/terminalpro/vite.config.ts
 +++ b/terminalpro/vite.config.ts
 @@ -248 +247,0 @@
