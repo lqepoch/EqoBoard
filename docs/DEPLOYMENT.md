@@ -48,11 +48,13 @@ These commands build the locked source locally. The full-identity Compose tag
 selects the source and recipe; it does not guarantee immutable image bytes.
 For an approved published image, set `EQO_OPENBB_LITE_RELEASE_IMAGE` to
 `eqoboard/openbb-workspace-lite@sha256:<64-hex-digest>` and run
-`tools/openbb/openbb-release-compose.sh up`. The wrapper pulls that exact
-repository digest, confirms Docker reports it, and uses a Compose overlay that
-removes the local build section. This repository has not published a release
-image, so the opt-in release command must not be given a tag or an unverified
-digest.
+`tools/openbb/openbb-release-compose.sh up`. The wrapper validates the full
+repository digest, exports only its 64-character digest to the release-only
+overlay, pulls the exact reference, and confirms Docker reports it before
+starting Compose without a build section. Invoke the overlay through this
+wrapper so a mutable tag cannot replace the digest-pinned image. This repository
+has not published a release image, so the opt-in release command must not be
+given a tag or an unverified digest.
 
 停止 profile 服务时，主 Terminal、Rust Gateway 和既有 research Node 服务继续运行：
 

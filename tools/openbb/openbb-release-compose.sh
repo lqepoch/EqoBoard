@@ -33,7 +33,8 @@ if [[ $# -gt 0 ]]; then shift; fi
 if [[ $# -eq 0 ]]; then set -- --detach --wait; fi
 
 compose=(docker compose --profile openbb -f "${ROOT_DIR}/compose.yaml" -f "${ROOT_DIR}/compose.openbb.release.yaml")
-export EQO_OPENBB_LITE_RELEASE_IMAGE="${IMAGE}"
+EQO_OPENBB_LITE_RELEASE_DIGEST="${IMAGE##*@sha256:}"
+export EQO_OPENBB_LITE_RELEASE_DIGEST
 "${compose[@]}" pull openbb-lite
 reported_digests="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${IMAGE}")"
 if ! grep -Fxq "${IMAGE}" <<<"${reported_digests}"; then
