@@ -1,0 +1,90 @@
+# Optional private native OpenBB Workspace Lite. The default services in
+# compose.yaml remain unchanged when this profile is disabled.
+services:
+  openbb-lite:
+    profiles: [openbb]
+    build:
+      context: .
+      dockerfile: tools/openbb/community/Dockerfile
+    image: eqoboard/openbb-workspace-lite:be00e95019a55d57af146919ee46b7e1a4859226-cfc03fb056e7c60226186f332d2dc7bf7eb6d30acd3de342fc7b7bb5efc77d47
+    environment:
+      OPENBB_ADMIN_EMAIL: ${OPENBB_ADMIN_EMAIL:-}
+      OPENBB_ADMIN_PASSWORD: ${OPENBB_ADMIN_PASSWORD:-}
+      AI_COPILOT_ENABLED: "false"
+      MCP_DEFAULT_SERVER_ENABLED: "false"
+      DATA_ALLOW_HTML_JS_EXECUTION: "false"
+      FRONTENDURL: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}
+      PROURL: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}
+      SELFURL: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}/api
+    expose: ["3000"]
+    volumes:
+      - openbb-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  openbb-research-bff:
+    profiles: [openbb]
+    image: eqoboard-openterminal-runtime:local
+    command: ["npm", "run", "start", "--workspace", "web"]
+    environment:
+      EQO_BFF_MODE: research
+      EQO_RUST_URL: http://eqoboard:8080
+      EQO_PUBLIC_ORIGIN: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}
+      NEXTAUTH_URL: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}
+      EQO_TERMINAL_PUBLIC_ORIGIN: ${EQO_PUBLIC_ORIGIN:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${EQO_OPENBB_NEXTAUTH_SECRET:-}
+      EQO_RESEARCH_JWT_SECRET: ${EQO_RESEARCH_JWT_SECRET:-}
+      EQO_SESSION_TTL_SECONDS: ${EQO_OPENBB_SESSION_TTL_SECONDS:-3600}
+      EQO_OIDC_ISSUER: ${EQO_OPENBB_OIDC_ISSUER:-}
+      EQO_OIDC_CLIENT_ID: ${EQO_OPENBB_OIDC_CLIENT_ID:-}
+      EQO_OIDC_CLIENT_SECRET: ${EQO_OPENBB_OIDC_CLIENT_SECRET:-}
+      NEXT_TELEMETRY_DISABLED: "1"
+    expose: ["3000"]
+    depends_on:
+      eqoboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - openbb-next-cache:/srv/web/.next/cache
+    restart: unless-stopped
+
+  openbb-research-ingress:
+    profiles: [openbb]
+    image: nginx:1.29.4-alpine@sha256:4870c12cd2ca986de501a804b4f506ad3875a0b1874940ba0a2c7f763f1855b2
+    ports:
+      - "127.0.0.1:${EQO_OPENBB_HOST_PORT:-8088}:8080"
+    volumes:
+      - ./apps/openterminal/openbb-research-ingress.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      openbb-lite:
+        condition: service_healthy
+      openbb-research-bff:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/_ingress/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 3s
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run, /tmp]
+    restart: unless-stopped
+
+volumes:
+  openbb-data:
+  openbb-next-cache:

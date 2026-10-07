@@ -1,0 +1,7 @@
+# Opt-in release deployment overlay. Use only with the digest-verifying wrapper;
+# the default compose.openbb.yaml profile remains source-buildable for local use.
+services:
+  openbb-lite:
+    build: !reset null
+    image: eqoboard/openbb-workspace-lite@sha256:${EQO_OPENBB_LITE_RELEASE_DIGEST:?set the verified 64-character OpenBB release digest through the release wrapper}
+    pull_policy: always

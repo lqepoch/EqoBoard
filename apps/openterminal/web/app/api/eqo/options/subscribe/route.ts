@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authorizeBffRequest, readBoundedJson } from "@/lib/eqo-auth";
+import { authorizeBffRequest, handleBffOptions, readBoundedJson, researchModeRouteUnavailable } from "@/lib/eqo-auth";
 
 export const runtime = "nodejs";
 
+export async function GET() {
+  const unavailable = researchModeRouteUnavailable();
+  if (unavailable) return unavailable;
+  return NextResponse.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "POST" } });
+}
+
 export async function POST(req: NextRequest) {
+  const unavailable = researchModeRouteUnavailable();
+  if (unavailable) return unavailable;
   const auth = await authorizeBffRequest(req, "market:subscribe", "eqoboard-gateway");
   if (!auth.ok) return auth.response;
   const parsed = await readBoundedJson(req);
@@ -43,4 +51,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "market_subscription_unavailable" }, { status: 502 });
   }
+}
+
+export function OPTIONS() {
+  return handleBffOptions("GET, HEAD, OPTIONS, POST");
 }

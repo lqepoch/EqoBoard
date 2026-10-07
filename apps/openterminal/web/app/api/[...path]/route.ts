@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getResearchServiceKey } from "@/lib/api-key";
-import { authorizeBffRequest, readBoundedJson } from "@/lib/eqo-auth";
+import { authorizeBffRequest, handleBffOptions, readBoundedJson } from "@/lib/eqo-auth";
 import { eqoChain, eqoHistory, eqoQuotes, eqoStatus, EqoUpstreamError, usesSIPEquitySymbol } from "@/lib/eqo-market";
 import { readLimitedResponse } from "@/lib/http-response";
 import type { ActionScope } from "@/lib/permissions";
@@ -166,6 +166,9 @@ function researchPolicy(method: Method, path: string[]): ProxyPolicy | null {
 
 async function proxy(request: NextRequest, path: string[]): Promise<NextResponse> {
   const method = request.method.toUpperCase() as Method;
+  if (process.env.EQO_BFF_MODE === "research" && (method !== "GET" || path[0] === "portfolios")) {
+    return NextResponse.json({ error: "route_not_available" }, { status: 404, headers: { "Cache-Control": "no-store" } });
+  }
   if (method === "GET" && path.length === 1 && path[0] === "quotes") {
     return quoteProxy(request);
   }
@@ -257,4 +260,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 export async function PATCH(request: NextRequest, context: RouteContext) {
   return proxy(request, (await context.params).path);
+}
+
+export function OPTIONS() {
+  return handleBffOptions("DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT");
 }

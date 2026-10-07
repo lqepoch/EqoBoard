@@ -18,10 +18,30 @@ dc() {
   env \
     -u ALPACA_KEY -u ALPACA_SECRET \
     -u EQO_GATEWAY_JWT_SECRET -u EQO_RESEARCH_JWT_SECRET \
+    -u EQO_GATEWAY_HOST_PORT -u EQO_TERMINAL_HOST_PORT \
     -u EQO_RESEARCH_API_KEY -u EQO_OIDC_CLIENT_SECRET -u NEXTAUTH_SECRET \
     -u EQO_PUBLIC_ORIGIN -u NEXTAUTH_URL -u EQO_SESSION_TTL_SECONDS \
     -u EQO_OIDC_ISSUER -u EQO_OIDC_CLIENT_ID \
+    -u E2E_OIDC_HOST_PORT -u E2E_GATEWAY_HOST_PORT -u E2E_RESEARCH_HOST_PORT \
+    -u E2E_OIDC_PORT -u E2E_GATEWAY_PORT -u E2E_RESEARCH_PORT -u E2E_SESSION_TTL_SECONDS \
+    -u E2E_WEB_ORIGIN -u E2E_OIDC_ORIGIN \
     docker compose "${compose_args[@]}" "$@"
+}
+
+# Host-side Playwright and mock processes get only this explicit runtime
+# allowlist. Never let a developer shell's broker/OIDC/service credentials flow
+# into test runners or the local mock webServer child processes.
+run_host_e2e() {
+  env -i \
+    PATH="$PATH" \
+    HOME="${HOME:-/tmp}" \
+    TMPDIR="${TMPDIR:-/tmp}" \
+    LANG="${LANG:-C.UTF-8}" \
+    LC_ALL="${LC_ALL:-C.UTF-8}" \
+    TZ="${TZ:-UTC}" \
+    CI="${CI:-}" \
+    npm_config_userconfig=/dev/null \
+    "$@"
 }
 
 cleanup() {
@@ -135,11 +155,41 @@ printf '%s\n' 'Running real browser tests against the production Next container 
 cd "$repo_root/apps/openterminal"
 playwright_args=(--config playwright.compose.config.ts)
 if [[ -n ${E2E_GREP:-} ]]; then playwright_args+=(--grep "$E2E_GREP"); fi
-E2E_WEB_ORIGIN="http://127.0.0.1:$terminal_host_port" \
-E2E_OIDC_ORIGIN="http://127.0.0.1:$oidc_host_port" \
-E2E_PRODUCTION=1 \
+run_host_e2e \
+  "E2E_WEB_ORIGIN=http://127.0.0.1:$terminal_host_port" \
+  "E2E_OIDC_ORIGIN=http://127.0.0.1:$oidc_host_port" \
+  E2E_PRODUCTION=1 \
   npm run test:e2e -w web -- "${playwright_args[@]}"
 
 printf '%s\n' 'Running development-only preview-race and typed UNKNOWN browser checks against the real Next BFF and offline mocks.'
-env -u E2E_PRODUCTION -u E2E_REAL_GATEWAY E2E_SESSION_TTL_SECONDS=120 \
+dev_ports_output="$(env -i PATH="$PATH" HOME="${HOME:-/tmp}" node -e '
+  const net = require("node:net");
+  const servers = Array.from({ length: 4 }, () => net.createServer());
+  Promise.all(servers.map((server) => new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  }))).then(async () => {
+    for (const server of servers) console.log(server.address().port);
+    await Promise.all(servers.map((server) => new Promise((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()),
+    )));
+  }).catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+')"
+mapfile -t dev_ports <<< "$dev_ports_output"
+test "${#dev_ports[@]}" -eq 4
+dev_web_port=${dev_ports[0]}
+dev_oidc_port=${dev_ports[1]}
+dev_gateway_port=${dev_ports[2]}
+dev_research_port=${dev_ports[3]}
+run_host_e2e \
+  "E2E_WEB_PORT=$dev_web_port" \
+  "E2E_OIDC_PORT=$dev_oidc_port" \
+  "E2E_GATEWAY_PORT=$dev_gateway_port" \
+  "E2E_RESEARCH_PORT=$dev_research_port" \
+  "E2E_WEB_ORIGIN=http://127.0.0.1:$dev_web_port" \
+  "E2E_OIDC_ORIGIN=http://127.0.0.1:$dev_oidc_port" \
+  E2E_SESSION_TTL_SECONDS=120 \
   npm run test:e2e -w web -- --grep 'late preview|typed UNKNOWN|preview expiry'

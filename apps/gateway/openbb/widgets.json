@@ -1,7 +1,7 @@
 {
   "eqo_sip_watchlist": {
     "name": "EqoBoard SIP Stock Quotes",
-    "description": "US equities SIP quote snapshots from Alpaca Plus; source and as-of timestamp preserved. Fails explicitly if SIP access is unavailable.",
+    "description": "US equity SIP snapshots through the EqoBoard Gateway. HTTP polling every 5 seconds; this table is not a Live Grid. Source identity, field-specific market times, feed, and snapshot completeness are returned per row. SIP denial remains an explicit error.",
     "endpoint": "openbb/v1/stocks",
     "category": "EqoBoard",
     "subCategory": "Stocks",
@@ -54,26 +54,60 @@
             "cellDataType": "number"
           },
           {
-            "field": "updated_at",
-            "headerName": "As of"
+            "field": "market_as_of",
+            "headerName": "Last as of"
+          },
+          {
+            "field": "last_basis",
+            "headerName": "Last basis"
+          },
+          {
+            "field": "trade_at",
+            "headerName": "Trade as of"
+          },
+          {
+            "field": "quote_at",
+            "headerName": "Quote as of"
+          },
+          {
+            "field": "source_label",
+            "headerName": "Source"
           },
           {
             "field": "feed",
             "headerName": "Feed"
+          },
+          {
+            "field": "complete",
+            "headerName": "Complete",
+            "cellDataType": "boolean"
+          },
+          {
+            "field": "pages_fetched",
+            "headerName": "Pages fetched",
+            "cellDataType": "number"
+          },
+          {
+            "field": "has_more",
+            "headerName": "More pages",
+            "cellDataType": "boolean"
+          },
+          {
+            "field": "truncated",
+            "headerName": "Truncated",
+            "cellDataType": "boolean"
           }
         ]
       },
       "dataKey": "eqoSipStocks"
     },
-    "source": [
-      "Alpaca SIP"
-    ],
+    "source": ["EqoBoard Rust Gateway"],
     "refetchInterval": 5000,
     "staleTime": 1000
   },
   "eqo_opra_contracts": {
     "name": "EqoBoard OPRA Option Chain",
-    "description": "Alpaca Plus OPRA contract snapshots with IV and Greeks; null metrics remain missing. Date is in New York market calendar.",
+    "description": "OPRA contract snapshots with IV and Greeks; quote, trade, and model times remain separate and missing model time stays blank. HTTP polling every 15 seconds; this table is not a Live Grid. Truncation and source identity are explicit per row.",
     "endpoint": "openbb/v1/options",
     "category": "EqoBoard",
     "subCategory": "Options",
@@ -96,9 +130,9 @@
         "paramName": "expiration",
         "type": "date",
         "label": "Expiry",
-        "value": "2026-10-09",
+        "value": "$currentDate+1w",
         "show": true,
-        "description": "EqoBoard parameter"
+        "description": "Dynamic default one week from the current date; choose the listed contract expiration"
       }
     ],
     "data": {
@@ -153,30 +187,65 @@
             "cellDataType": "number"
           },
           {
-            "field": "updated_at",
-            "headerName": "As of"
+            "field": "market_as_of",
+            "headerName": "Market as of"
+          },
+          {
+            "field": "quote_at",
+            "headerName": "Quote as of"
+          },
+          {
+            "field": "trade_at",
+            "headerName": "Trade as of"
+          },
+          {
+            "field": "model_as_of",
+            "headerName": "Model as of"
+          },
+          {
+            "field": "source_label",
+            "headerName": "Source"
           },
           {
             "field": "feed",
             "headerName": "Feed"
           },
           {
+            "field": "pages_fetched",
+            "headerName": "Pages fetched",
+            "cellDataType": "number"
+          },
+          {
+            "field": "has_more",
+            "headerName": "More pages",
+            "cellDataType": "boolean"
+          },
+          {
             "field": "truncated",
-            "headerName": "Incomplete"
+            "headerName": "Truncated",
+            "cellDataType": "boolean"
+          },
+          {
+            "field": "complete",
+            "headerName": "Complete",
+            "cellDataType": "boolean"
+          },
+          {
+            "field": "requested_limit",
+            "headerName": "Contract limit",
+            "cellDataType": "number"
           }
         ]
       },
       "dataKey": "eqoOpraChain"
     },
-    "source": [
-      "Alpaca OPRA"
-    ],
+    "source": ["EqoBoard Rust Gateway"],
     "refetchInterval": 15000,
     "staleTime": 5000
   },
   "eqo_sip_bars": {
     "name": "EqoBoard SIP OHLCV",
-    "description": "Alpaca SIP historical bars, exact market timestamp; requested timeframe and window must fit the current page bound.",
+    "description": "SIP historical OHLCV bars through the EqoBoard Gateway. HTTP polling every 30 seconds; this table is not a Live Grid. Each bar keeps its market timestamp and the response marks page count, remaining upstream pages, and truncation.",
     "endpoint": "openbb/v1/bars",
     "category": "EqoBoard",
     "subCategory": "Stocks",
@@ -228,6 +297,10 @@
             "headerName": "Time"
           },
           {
+            "field": "market_as_of",
+            "headerName": "Market as of"
+          },
+          {
             "field": "open",
             "headerName": "Open",
             "cellDataType": "number"
@@ -255,14 +328,36 @@
           {
             "field": "feed",
             "headerName": "Feed"
+          },
+          {
+            "field": "source_label",
+            "headerName": "Source"
+          },
+          {
+            "field": "pages_fetched",
+            "headerName": "Pages fetched",
+            "cellDataType": "number"
+          },
+          {
+            "field": "has_more",
+            "headerName": "More pages",
+            "cellDataType": "boolean"
+          },
+          {
+            "field": "truncated",
+            "headerName": "Truncated",
+            "cellDataType": "boolean"
+          },
+          {
+            "field": "complete",
+            "headerName": "Complete",
+            "cellDataType": "boolean"
           }
         ]
       },
       "dataKey": "eqoSipBars"
     },
-    "source": [
-      "Alpaca SIP"
-    ],
+    "source": ["EqoBoard Rust Gateway"],
     "refetchInterval": 30000,
     "staleTime": 15000
   }

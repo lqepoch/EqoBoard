@@ -11,8 +11,8 @@ Browser ── OIDC cookie ─►│ BFF / Workspace / Widgets  │
                                         │ server-side proxy
                                         ▼
 Alpaca SIP ──────┐           ┌───────────────────────────┐
-Alpaca OPRA ─────┼──────────►│ Rust Tokio/Axum Gateway  │◄──── OpenBB Workspace
-                 │           │ source/time/auth/stream   │      widgets/apps
+Alpaca OPRA ─────┼──────────►│ Rust Tokio/Axum Gateway  │◄──── isolated research BFF
+                 │           │ source/time/auth/stream   │      OpenBB manifests/data
                  │           └─────────────┬─────────────┘
                  │                         │
                  │              preview / audit / route
@@ -36,7 +36,9 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 
 旧 Vite UI 已删除。
 
-浏览器只访问 Next BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。research Node 仅持有独立 research signer，只能为通过用户会话验证的市场读取请求签发 `market:read` 子 token。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
+OpenTerminal 可通过可选 `EQO_RESEARCH_PUBLIC_ORIGIN` 在原生 Sidebar 和 Command Palette 暴露 OpenBB Research 外链。它只接受纯 HTTPS origin（本地开发可用精确 loopback HTTP），hostname 必须不同于 `EQO_PUBLIC_ORIGIN`；链接在新标签打开，不共享 OpenTerminal OIDC 会话或凭据。未设置或非法时入口隐藏，主终端不依赖 OpenBB 服务启动。
+
+主终端与 OpenBB 浏览器都只通过各自的 Next BFF 访问受保护 API。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。OpenBB 使用独立 hostname 与 research-mode Next BFF；不同端口不足以隔离 host-only cookies，`EQO_TERMINAL_PUBLIC_ORIGIN` 缺失或与 research hostname 相同时 readiness 拒绝启动。Research BFF 只持有独立 research signer，验证其 OIDC 用户 session 与 `market:read` role 后签发最长 60 秒的 `market:read` 子 token。`/api/research/auth-check` 供 ingress 内部 `auth_request` 检查会话和角色，返回 204/401/403 且不签 token；公网 ingress 必须隐藏该路径。Research BFF/Lite 不配置终端 Gateway signer、Node API key 或 Alpaca market keys；只有 Rust Gateway 持有行情凭据。关闭可选 Research 服务不影响 OpenTerminal、Gateway 或 Node research 主服务。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
 
 ## Rust 数据接口
 
@@ -52,8 +54,13 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 - `POST /api/v1/orders/preview`
 - `POST /api/v1/orders/submit`
 
-OpenBB：`/widgets.json`、`/apps.json`、`/openbb/stocks`、`/openbb/options`、`/openbb/bars`。
-OpenBB 研究行情 handler 要求带 `market:read` scope 的可验证短时委托主体；`/widgets.json` 和 `/apps.json` 只返回兼容 schema metadata，不授予行情访问能力。OpenBB Workspace 的 OIDC 登录/服务委托联调属于后续 #13，当前不接受静态 bearer token，也不通过放宽 Gateway 鉴权来兼容。
+OpenBB Gateway 接口为 `/widgets.json`、`/apps.json`、`/openbb/v1/stocks`、`/openbb/v1/bars`、`/openbb/v1/options`。三类数据路由返回 Workspace table 使用的 flat row arrays，每行包含 `source` / `source_mode` / `source_label`、实际请求 `feed`、市场字段的 `market_as_of`、页数及 `has_more` / `truncated`。股票 row 另含请求覆盖与 snapshot/price/time completeness；bars 的 `market_as_of` 等于 bar 时间；期权 quote、trade、model 时间分离，没有专用模型时间时 `model_as_of` 保持 null。只有使用内置 `https://data.alpaca.markets` 时才声明 Alpaca；任意 `EQO_MARKET_DATA_BASE_URL` 覆盖均显示来源 unknown。
+
+Gateway 有界消费 bars/options continuation token；缺失/null 表示终止，非空字符串表示续页，其他值使请求失败。无法解析的 OCC 符号、到期日与请求不一致及错误 OHLCV 行也会使请求失败，不静默丢弃或填零。页预算耗尽且仍有后续页但没有行情行时返回带来源和分页状态的 502；完整空结果仍返回 `200 []`，不追加占位行。OpenBB 普通 table 的 `refetchInterval` 只是 HTTP polling，不构成 Live Grid。
+
+隔离 research BFF 对外提供 `/api/openbb/widgets.json`、`/api/openbb/apps.json` 及 `/api/openbb/openbb/v1/{stocks,bars,options}`。重复的 `openbb` path segment 来自 pinned Workspace `createURLString(endpoint, backendUrl)` 规则：custom source URL 是 `/api/openbb`，manifest endpoint 保持 `openbb/v1/...`。BFF 只映射这三条只读路径，要求隔离 hostname 上的 OIDC/NextAuth session 和 market-reader role，再使用 research signer 签发最长 60 秒、`kid=research`、`iss=openterminal-research`、`aud=eqoboard-gateway`、单一 `market:read` scope 的 token。manifest metadata 不授予行情访问能力；source、feed、as-of 和 truncation 来自 Gateway。
+
+Research BFF 不配置主终端 Gateway signer、Node API key 或 Alpaca key/secret。Research BFF Playwright suite 覆盖生产 Next 与 mock OIDC/Gateway 的 API 组件边界；独立 OpenBB Playwright suite 才启动固定 Lite、真实 Rust Gateway 和受控 SIP/OPRA 协议 mock。attempt-22 无 skip 默认 Compose build/up、native Lite 三 Widget、停服独立性、Gateway offline/restart 与错误镜像恢复矩阵已通过。测试 mock 的 Gateway 行 `source=unknown`，不作为真实 Alpaca 行情来源或 entitlement 证明。
 
 ## 数据原则
 

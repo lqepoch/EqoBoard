@@ -1,0 +1,1642 @@
+--- a/backend-api/backend/api/crud.py
++++ b/backend-api/backend/api/crud.py
+@@ -35,0 +36 @@
++from api.sql_expressions import user_display_name
+@@ -533 +534 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -814 +815 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -848 +849 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -907 +908 @@
+-                func.concat(User.first_name, " ", User.last_name),
++                user_display_name(User.first_name, User.last_name),
+@@ -1529 +1530 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -1562 +1563 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+--- /dev/null
++++ b/backend-api/backend/api/sql_expressions.py
+@@ -0,0 +1,11 @@
++"""SQL expressions shared by backend queries that target multiple dialects."""
++
++from sqlalchemy import literal
++from sqlalchemy.sql.elements import ColumnElement
++
++
++def user_display_name(
++    first_name: ColumnElement[str], last_name: ColumnElement[str]
++) -> ColumnElement[str]:
++    """Concatenate non-null user name columns using dialect-native syntax."""
++    return first_name + literal(" ") + last_name
+--- a/backend-api/backend/routers/pro/helpers.py
++++ b/backend-api/backend/routers/pro/helpers.py
+@@ -16,0 +17 @@
++from api.sql_expressions import user_display_name
+@@ -1637 +1638 @@
+-                    func.concat(models.User.first_name, " ", models.User.last_name),
++                    user_display_name(models.User.first_name, models.User.last_name),
+--- /dev/null
++++ b/backend-api/backend/tests/test_sqlite_string_concat.py
+@@ -0,0 +1,110 @@
++"""Regression coverage for the pinned Lite SQLite and string expression dialects."""
++
++import sqlite3
++import unittest
++
++from sqlalchemy import (
++    Column,
++    Integer,
++    MetaData,
++    String,
++    Table,
++    and_,
++    case,
++    create_engine,
++    func,
++    literal,
++    select,
++)
++from sqlalchemy.dialects import mysql, postgresql, sqlite
++from sqlalchemy.exc import OperationalError
++
++from api.sql_expressions import user_display_name
++
++
++class UserDisplayNameExpressionTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.engine = create_engine("sqlite://")
++        self.users = Table(
++            "users",
++            MetaData(),
++            Column("id", Integer, primary_key=True),
++            Column("first_name", String),
++            Column("last_name", String),
++            Column("email", String, nullable=False),
++        )
++        self.users.create(self.engine)
++
++    def tearDown(self) -> None:
++        self.engine.dispose()
++
++    def test_sqlite_expression_preserves_name_and_email_fallback(self) -> None:
++        display_name = case(
++            (
++                and_(
++                    self.users.c.first_name.is_not(None),
++                    self.users.c.last_name.is_not(None),
++                ),
++                user_display_name(
++                    self.users.c.first_name, self.users.c.last_name
++                ),
++            ),
++            else_=self.users.c.email,
++        )
++        statement = select(self.users.c.id, display_name.label("created_by")).order_by(
++            self.users.c.id
++        )
++        with self.engine.begin() as connection:
++            connection.execute(
++                self.users.insert(),
++                [
++                    {
++                        "id": 1,
++                        "first_name": "Ada",
++                        "last_name": "Lovelace",
++                        "email": "ada@example.test",
++                    },
++                    {
++                        "id": 2,
++                        "first_name": None,
++                        "last_name": "Lovelace",
++                        "email": "fallback@example.test",
++                    },
++                ],
++            )
++            result = connection.execute(statement).all()
++
++        self.assertEqual(
++            [(row.id, row.created_by) for row in result],
++            [(1, "Ada Lovelace"), (2, "fallback@example.test")],
++        )
++
++    def test_expression_compiles_for_sqlite_postgresql_and_mysql(self) -> None:
++        statement = select(
++            user_display_name(self.users.c.first_name, self.users.c.last_name)
++        )
++        compiled = {
++            "sqlite": str(statement.compile(dialect=sqlite.dialect())),
++            "postgresql": str(statement.compile(dialect=postgresql.dialect())),
++            "mysql": str(statement.compile(dialect=mysql.dialect())),
++        }
++        self.assertIn("||", compiled["sqlite"])
++        self.assertIn("||", compiled["postgresql"])
++        self.assertIn("concat(", compiled["mysql"].lower())
++
++    def test_locked_sqlite_exposes_original_concat_incompatibility(self) -> None:
++        if sqlite3.sqlite_version_info >= (3, 44, 0):
++            self.skipTest("SQLite now provides concat(); pinned Lite is older")
++        with self.engine.connect() as connection:
++            with self.assertRaises(OperationalError):
++                connection.scalar(
++                    select(
++                        func.concat(
++                            literal("Ada"), literal(" "), literal("Lovelace")
++                        )
++                    )
++                )
++
++
++if __name__ == "__main__":
++    unittest.main()
+--- a/lite/entrypoint.sh
++++ b/lite/entrypoint.sh
+@@ -121,0 +122 @@
++chmod 600 "$SECRETS_FILE"
+@@ -171,0 +173 @@
++chmod 600 /opt/code/scripts/cfgs/config.toml
+@@ -198 +199,0 @@
+-   Password: ${OPENBB_ADMIN_PASSWORD}
+--- a/terminalpro/bun.lock
++++ b/terminalpro/bun.lock
+@@ -74,6 +74,4 @@
+-        "ag-charts-community": "12.1.1",
+-        "ag-charts-enterprise": "12.1.1",
+-        "ag-charts-react": "12.1.1",
+-        "ag-grid-community": "34.1.1",
+-        "ag-grid-enterprise": "34.1.1",
+-        "ag-grid-react": "34.1.1",
++        "ag-charts-community": "14.2.0",
++        "ag-charts-react": "14.2.0",
++        "ag-grid-community": "36.2.0",
++        "ag-grid-react": "36.2.0",
+@@ -94,2 +91,0 @@
+-        "highcharts": "^11.4.8",
+-        "highcharts-react-official": "^3.2.1",
+@@ -1659,17 +1655,15 @@
+-    "ag-charts-community": ["ag-charts-community@12.1.1", "", { "dependencies": { "ag-charts-core": "12.1.1", "ag-charts-locale": "12.1.1", "ag-charts-types": "12.1.1" } }, "sha512-5RfYXwqUr4yR1KIQAPvCsF9uaNRV6Ghs6Bj9tMn5bHL0xf1EOncEpkzXZjIXpM4yGxYk8UJKRTI3mByPjYRe8A=="],
+-
+-    "ag-charts-core": ["ag-charts-core@12.1.1", "", { "dependencies": { "ag-charts-types": "12.1.1" } }, "sha512-Kp/fXAtNmHWWo4MTHfYN1O4O5F3wWF5ZhLcjbfrdBcx3rBdbQGw46K/FcclK8Wyer3tmITBG9EZQFO/CDeu4vA=="],
+-
+-    "ag-charts-enterprise": ["ag-charts-enterprise@12.1.1", "", { "dependencies": { "ag-charts-community": "12.1.1", "ag-charts-core": "12.1.1" } }, "sha512-kcifzWM1JA+gmXKUcHrFb5P23MAnY+3lyBo9MVziZh0RMH/fHa7wEjgPHyim7/71Lbz9DmJbaYaPwXpLp/4f9Q=="],
+-
+-    "ag-charts-locale": ["ag-charts-locale@12.1.1", "", {}, "sha512-kpmtZvC12idQcNPnM3BIALmFUXvbb2TtCZtTuXqWdmtT7ykgnQCWWFczLOcM4EsgfnaudATI952JLAeQ/C2wwQ=="],
+-
+-    "ag-charts-react": ["ag-charts-react@12.1.1", "", { "dependencies": { "ag-charts-community": "12.1.1" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0" } }, "sha512-FaFFXdICK1CVfIzCkIZN3L44ME9H6ddDAFWGcHGviA2PtfSz6WiT8fgYLIFvn7l6Qx9IcWMfqFpJ3OTf+DV8tw=="],
+-
+-    "ag-charts-types": ["ag-charts-types@12.1.1", "", {}, "sha512-VbAOfp1E7+Z/TBufJOIjUYdx70kQRDg49WoluiVKVSB0r0el/uvxARp9xjzx4ByBq9+Xq/V23tJVsRj1MS2A/g=="],
+-
+-    "ag-grid-community": ["ag-grid-community@34.1.1", "", { "dependencies": { "ag-charts-types": "12.1.1" } }, "sha512-ODVvGoMTkyGvMT8b5lzvum5r93bG6CKdJdNrk6u/aYS7oqZ5rUEXJJHC8n8Zq+o76KhFiXMBQrU39xuhz8i+Tg=="],
+-
+-    "ag-grid-enterprise": ["ag-grid-enterprise@34.1.1", "", { "dependencies": { "ag-grid-community": "34.1.1" }, "optionalDependencies": { "ag-charts-community": "12.1.1", "ag-charts-enterprise": "12.1.1" } }, "sha512-r/HPmKM7rU+EnMYjzUUnp7Zlq+C77chUCdcT9oTS4eYPbjS/TF4bZO8laL4Nx/eAnwN5G5tyltIqUnSHpJmqKw=="],
+-
+-    "ag-grid-react": ["ag-grid-react@34.1.1", "", { "dependencies": { "ag-grid-community": "34.1.1", "prop-types": "^15.8.1" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-ZffTltCJe5+yzC57LVTMFpjZiYUzFiX8+G4NNfM1MfiLV6cMl5kCEE6w3Afc0nSt8b1JCAZOiX6K0+VXqjIfYQ=="],
++    "ag-charts-community": ["ag-charts-community@14.2.0", "", { "dependencies": { "ag-charts-core": "14.2.0", "ag-charts-locale": "14.2.0", "ag-charts-types": "14.2.0" } }, "sha512-AQ9u5jJGjCGWY19XMehZFhC5db6e9J5DGCurSGjm1h9MUkfTQfj9KMDHLhTQqdNhVvTXI7J4OB8ZNbWMh3TJug=="],
++
++    "ag-charts-core": ["ag-charts-core@14.2.0", "", { "dependencies": { "ag-charts-types": "14.2.0" } }, "sha512-te4u0sFYMNuzfZMU/uh3nVEctIFpsAfLFBJIJtlMqBKI8otYdB3y4M5Ax8KAAg888X6G1lDaBW8FoNGzX3caSg=="],
++
++    "ag-charts-locale": ["ag-charts-locale@14.2.0", "", {}, "sha512-zoG9yxh193FKc7jvx9FFp8oWUTcYIzHJLNmq1+54KCIe0us9Ay5odkp31y7WJX5gDtty8hKq+uyOEBPXtE9GHw=="],
++
++    "ag-charts-react": ["ag-charts-react@14.2.0", "", { "dependencies": { "ag-charts-community": "14.2.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0" } }, "sha512-AdhcRhyW6N7YuYCwnNfCe4ozbcsrMsMGK00VjeaFRNDZTU9PjbSSu0BKyZJFbCPgE0FhrTgDN2fBN0BKQsIx1w=="],
++
++    "ag-charts-types": ["ag-charts-types@14.2.0", "", {}, "sha512-4pDV6/4zbzPN7t607Gr1o6DO9RhmPafQGr+hIpTJBaerbaMoC+WOO3v/wkxFbvCNrHKOexEKSfNTH7PaAR4UzA=="],
++
++    "ag-grid-community": ["ag-grid-community@36.2.0", "", { "dependencies": { "ag-charts-types": "14.2.0", "ag-stack": "36.2.0" } }, "sha512-tK0Toj7t0fV/OMLPnDc0xlYKAqDbnCT3iJodYSn2TJ541caU8jPdYwWhMdW+AP2+pUNwFiJVgc04eJNfvBPsWw=="],
++
++    "ag-grid-react": ["ag-grid-react@36.2.0", "", { "dependencies": { "ag-grid-community": "36.2.0", "prop-types": "^15.8.1" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-7dsaR4Ga8/bJAOov7XJqxsDc1JAjUU5Bmh9+s4U9+/TKIdSsaVo53SuZb2yEFSB1elv3eh6aZP8a1fqGZehXwA=="],
++
++    "ag-stack": ["ag-stack@36.2.0", "", {}, "sha512-f3XT2htFs9dUPcHni2z9ak69QNta5ODEpooHuuNvbjN98JkokpEqRQ9YLQHQJFdCcgi9Ybs/j3zkkvmNRamIPg=="],
+@@ -2550,4 +2543,0 @@
+-
+-    "highcharts": ["highcharts@11.4.8", "", {}, "sha512-5Tke9LuzZszC4osaFisxLIcw7xgNGz4Sy3Jc9pRMV+ydm6sYqsPYdU8ELOgpzGNrbrRNDRBtveoR5xS3SzneEA=="],
+-
+-    "highcharts-react-official": ["highcharts-react-official@3.2.2", "", { "peerDependencies": { "highcharts": ">=6.0.0", "react": ">=16.8.0" } }, "sha512-2kkWOB6RpdR26fmAJkrtJFG9xWFUDGKWyat88tW3fa/3l/Jc7D5ZfwTng2MZsdiKIH32AFy0Pr75udUe7uN6LA=="],
+--- a/terminalpro/package.json
++++ b/terminalpro/package.json
+@@ -92,6 +92,4 @@
+-    "ag-charts-community": "12.1.1",
+-    "ag-charts-enterprise": "12.1.1",
+-    "ag-charts-react": "12.1.1",
+-    "ag-grid-community": "34.1.1",
+-    "ag-grid-enterprise": "34.1.1",
+-    "ag-grid-react": "34.1.1",
++    "ag-charts-community": "14.2.0",
++    "ag-charts-react": "14.2.0",
++    "ag-grid-community": "36.2.0",
++    "ag-grid-react": "36.2.0",
+@@ -112,2 +109,0 @@
+-    "highcharts": "^11.4.8",
+-    "highcharts-react-official": "^3.2.1",
+--- a/terminalpro/src/components/AI/hooks/createWidgetUtils.ts
++++ b/terminalpro/src/components/AI/hooks/createWidgetUtils.ts
+@@ -1 +1 @@
+-import type { ChartType } from "ag-grid-enterprise";
++import type { ChartType } from "ag-grid-community";
+--- a/terminalpro/src/components/DataConnectors/WidgetsBuilder/UIConfiguration.tsx
++++ b/terminalpro/src/components/DataConnectors/WidgetsBuilder/UIConfiguration.tsx
+@@ -887,12 +887,4 @@
+-  const { enableCharts, showAll, chartViewEnabled, chartType } = useWidgetConfigContext(
+-    (s) => ({
+-      enableCharts: s.config.enableCharts,
+-      showAll: s.config.showAll,
+-      chartViewEnabled: s.config.chartViewEnabled,
+-      chartType: s.config.chartType,
+-    }),
+-  );
+-
+-  const handleWidgetConfigChange = useWidgetConfigContext(
+-    (s) => s.handleWidgetConfigChange,
+-  );
++  const { showAll, handleWidgetConfigChange } = useWidgetConfigContext((s) => ({
++    showAll: s.config.showAll,
++    handleWidgetConfigChange: s.handleWidgetConfigChange,
++  }));
+@@ -904,7 +895,0 @@
+-      <Checkbox
+-        id="enable-charts"
+-        label="Enable Charts"
+-        checked={enableCharts}
+-        onCheckedChange={handleWidgetConfigChange("enableCharts")}
+-      />
+-
+@@ -917,16 +901,0 @@
+-
+-      <Checkbox
+-        id="chart-view-enabled"
+-        label="Chart View Enabled by Default"
+-        checked={chartViewEnabled}
+-        onCheckedChange={handleWidgetConfigChange("chartViewEnabled")}
+-      />
+-
+-      {chartViewEnabled && (
+-        <Select
+-          label="Default Chart Type"
+-          value={chartType}
+-          onChange={handleWidgetConfigChange("chartType")}
+-          options={CHART_TYPES}
+-        />
+-      )}
+--- a/terminalpro/src/components/DataConnectors/WidgetsBuilder/consts.ts
++++ b/terminalpro/src/components/DataConnectors/WidgetsBuilder/consts.ts
+@@ -139 +138,0 @@
+-  { label: "Highcharts Chart", value: "chart-highcharts" },
+@@ -141,3 +140,2 @@
+-  { label: "SSRM Advanced", value: "ssrm_advanced" },
+-];
+-const SNOWFLAKE_TYPES = [{ label: "SSRM Advanced", value: "ssrm_advanced" as const }];
++];
++const SNOWFLAKE_TYPES = [];
+--- a/terminalpro/src/components/DataConnectors/WidgetsBuilder/widget-schema.json
++++ b/terminalpro/src/components/DataConnectors/WidgetsBuilder/widget-schema.json
+@@ -1913 +1912,0 @@
+-              "chart-highcharts",
+@@ -1945 +1943,0 @@
+-              "chart-highcharts",
+--- a/terminalpro/src/components/General/Table/AgChartFromTable.tsx
++++ /dev/null
+@@ -1,590 +0,0 @@
+-import type {
+-  AgChartOptions,
+-  AgLineSeriesOptions,
+-  AgRangeAreaSeriesOptions,
+-} from "ag-charts-enterprise";
+-import { AgCharts } from "ag-charts-react";
+-import type {
+-  ChartRangeSelectionChangedEvent,
+-  ChartRef,
+-  ColDef,
+-  CreateRangeChartParams,
+-  FirstDataRenderedEvent,
+-} from "ag-grid-community";
+-import { AgGridReact } from "ag-grid-react";
+-import clsx from "clsx";
+-import dayjs from "dayjs";
+-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+-import { downloadData } from "~/components/Charting/utils";
+-import DraggableCard, { SetLoadingOnResize } from "~/components/DraggableCard";
+-import type { NavBarProps } from "~/components/DraggableCard/NavBar";
+-import Tooltip from "~/components/Tooltip";
+-import { useWidgetContext } from "~/components/Widget.context";
+-import ForecastingNixtlaPopup, {
+-  type SeriesData,
+-} from "~/components/Widgets/AI/NixtlaPopup";
+-import { getConfig } from "~/lib/runtimeConfig";
+-import { useShallowThemeStore } from "~/lib/state/theme";
+-import { cn, formatNumberMagnitude } from "~/lib/utils";
+-import Icon from "../../Icon";
+-import { isDateorYearField } from "./AgGridUtils";
+-import { ChartViewButton } from "./Chart/AgChartView";
+-import useChartOptions, { getTotalSeries } from "./Chart/hooks/useChartOptions";
+-import { createItemStyler, useAgThemes } from "./Chart/themes";
+-import { Table } from "./hooks";
+-
+-const servicesNixtlaFF = getConfig().services.nixtla;
+-
+-/// Fixes CellComp crashing widget
+-function cleanColumnDefs(columnDefs: ColDef[]) {
+-  return columnDefs.map((col) => {
+-    const { cellRenderer, ...rest } = col;
+-    return rest;
+-  });
+-}
+-
+-export function AgChartFromTable() {
+-  const { widget, updateWidget } = useWidgetContext();
+-  const theme = useShallowThemeStore((s) => s.theme);
+-
+-  const [state, setState] = useState({
+-    rowData: widget.storage.rowData,
+-    columnDefs: cleanColumnDefs(widget.storage.columnDefs as ColDef[]),
+-    columns: widget.storage.columns,
+-  });
+-  const [chartRef, setChartRef] = useState<ChartRef>(null);
+-  const ref = useRef<HTMLDivElement>(null);
+-  const agRef = useRef<AgGridReact>(null);
+-
+-  const stateKey = `${widget.storage.transpose ? "transposed_CellRange" : "cellRange"}`;
+-  const stateKeyRef = useRef(stateKey);
+-
+-  const { themePalette, agTheme, chartThemes, customChartThemes } = useAgThemes(theme);
+-
+-  useEffect(() => {
+-    stateKeyRef.current = stateKey;
+-  }, [stateKey]);
+-
+-  const chartViewEnabled = widget.storage?.chartView?.enabled ?? true;
+-
+-  const isForecast =
+-    widget?.storage?.forecast && widget?.storage?.forecastSeriesData?.length > 0;
+-  const { chartThemeOverrides } = useChartOptions();
+-  // Read via ref so this effect doesn't refire every render when chartThemeOverrides
+-  // gets a new reference — that was clobbering user edits in the Customize panel.
+-  const chartThemeOverridesRef = useRef(chartThemeOverrides);
+-  chartThemeOverridesRef.current = chartThemeOverrides;
+-
+-  const { rowData, columnDefs, columns } =
+-    widget.storage.transpose && widget.storage.transposedT
+-      ? widget.storage.transposedT
+-      : widget.storage;
+-
+-  useEffect(() => {
+-    if (!chartViewEnabled) return;
+-
+-    chartThemeOverridesRef.current.bar.series.itemStyler = createItemStyler(
+-      themePalette,
+-      () => widget.storage.chartBarFillEnabled,
+-    );
+-
+-    if (chartRef && agRef.current?.api) {
+-      agRef.current.api.updateChart({
+-        chartId: chartRef.chartId,
+-        type: "rangeChartUpdate",
+-        chartThemeOverrides: chartThemeOverridesRef.current,
+-      });
+-    }
+-  }, [chartRef, chartViewEnabled, themePalette, widget.storage.chartBarFillEnabled]);
+-
+-  const onFirstDataRendered = (params: FirstDataRenderedEvent) => {
+-    if (isForecast) return;
+-
+-    const { chartType } = widget.storage.chartModel;
+-    const cellRange = widget.storage?.[stateKeyRef.current];
+-
+-    const cellRangeColumns = !!cellRange?.columns;
+-
+-    const createRangeChartParams = {
+-      chartType: chartType ?? "groupedColumn",
+-      chartContainer: ref.current,
+-      suppressChartRanges: true,
+-      cellRange: {
+-        columns: columns,
+-      },
+-      chartThemeOverrides,
+-    } as CreateRangeChartParams;
+-
+-    if (!widget.storage.transposedT) {
+-      createRangeChartParams.switchCategorySeries = widget.storage.transpose;
+-    }
+-
+-    createRangeChartParams.cellRange = cellRangeColumns
+-      ? cellRange
+-      : createRangeChartParams.cellRange;
+-
+-    const colDefs = cleanColumnDefs(columnDefs);
+-    params.api.updateGridOptions({ rowData, columnDefs: colDefs });
+-    const chartRef = params.api.createRangeChart(createRangeChartParams);
+-    const zoomButtons = chartRef?.chartElement?.getElementsByClassName(
+-      "ag-charts-toolbar ag-charts-toolbar--horizontal ag-charts-zoom-buttons__toolbar--hidden",
+-    )?.[0] as HTMLDivElement;
+-    if (zoomButtons?.style) zoomButtons.style.transform = "translateY(54px)";
+-
+-    setChartRef(chartRef);
+-  };
+-
+-  const onChartRangeSelectionChanged = useCallback(
+-    (params: ChartRangeSelectionChangedEvent) => {
+-      const { cellRange } = params;
+-      if (!cellRange) return;
+-
+-      updateWidget(
+-        (prev) => ({
+-          ...prev,
+-          storage: {
+-            ...prev.storage,
+-            [stateKeyRef.current]: cellRange,
+-          },
+-        }),
+-        true,
+-      );
+-    },
+-    [stateKeyRef],
+-  );
+-
+-  const series = useMemo(() => {
+-    if (!isForecast) return [];
+-
+-    const forecastSeriesData: SeriesData[] = widget.storage.forecastSeriesData;
+-
+-    return forecastSeriesData?.map((series) => {
+-      if (series.type === "line" || series.type === "area") {
+-        return {
+-          type: series.type,
+-          xKey: series.xKey,
+-          yKey: series.yKey,
+-          data: Object.entries(series.data).map(([key, value]) => ({
+-            [series.xKey]: key,
+-            [series.yKey]: value,
+-          })),
+-          stroke: series.color ?? "#5090DC",
+-          marker: {
+-            fill: series.color ?? "#5090DC",
+-            size: 3,
+-          },
+-          tooltip: {
+-            enabled: true,
+-            renderer: (params) => {
+-              return {
+-                content: `<b>${params.datum[params.xKey]}:</b>  ${params.datum[
+-                  params.yKey
+-                ]?.toLocaleString()}`,
+-              };
+-            },
+-          },
+-        } as AgLineSeriesOptions;
+-      }
+-      if (series.type === "rangeArea")
+-        return {
+-          type: "range-area",
+-          xKey: series.xKey,
+-          yLowKey: series.yLowKey,
+-          yHighKey: series.yHighKey,
+-          data: Object.entries(series.data).map(([key, value]) => ({
+-            Date: key,
+-            [series.yLowKey]: value[series.yLowKey],
+-            [series.yHighKey]: value[series.yHighKey],
+-          })),
+-        } as AgRangeAreaSeriesOptions;
+-    });
+-  }, [isForecast, widget.storage.forecastSeriesData]);
+-
+-  const seriesData = useMemo(() => {
+-    const combinedData = series
+-      .flatMap((series) => series.data)
+-      .reduce((acc, curr) => {
+-        const date = curr.Date;
+-        if (acc[date]) {
+-          Object.keys(curr).forEach((key) => {
+-            if (key !== "Date") {
+-              acc[date][key] = (acc[date][key] || 0) + curr[key];
+-            }
+-          });
+-        } else {
+-          acc[date] = { ...curr };
+-        }
+-        return acc;
+-      }, {});
+-    return Object.values(combinedData);
+-  }, [series]);
+-
+-  const chartMemo = useMemo(() => {
+-    if (!isForecast) return null;
+-
+-    const chartOptions = {
+-      theme: customChartThemes[chartThemes[0]],
+-      data: seriesData,
+-      series,
+-      axes: [
+-        {
+-          type: "category",
+-          position: "bottom",
+-          label: {
+-            avoidCollisions: true,
+-            fontSize: 11,
+-            autoRotate: true,
+-            formatter: (params) => {
+-              if (
+-                dayjs(params.value).startOf("day").format("MMM DD\n YYYY") ===
+-                "Invalid Date"
+-              ) {
+-                return `${params.value}`.split(" ").reduce((acc, word, i) => {
+-                  if (i % 2 === 0 && `${acc} ${word}`.length < 20) {
+-                    return `${acc} ${word}`;
+-                  }
+-                  return `${acc} ${word}\n`;
+-                });
+-              }
+-              if (params.value.length <= 6) {
+-                return params.value;
+-              }
+-              return dayjs(params.value).startOf("day").format("MMM DD\n YYYY");
+-            },
+-          },
+-        },
+-        {
+-          type: "number",
+-          position: "left",
+-          label: {
+-            fontSize: 11,
+-            autoRotate: false,
+-            avoidCollisions: true,
+-            formatter: (params) => formatNumberMagnitude(params.value, 2),
+-          },
+-        },
+-      ],
+-      legend: {
+-        enabled: true,
+-        position: "top",
+-        maxHeight: 50,
+-        maxWidth: 500,
+-        spacing: 20,
+-        item: {
+-          paddingX: 10,
+-          paddingY: 3,
+-          marker: {
+-            shape: "square",
+-            size: 11,
+-          },
+-        },
+-      },
+-    } as AgChartOptions;
+-
+-    return <AgCharts className="h-full w-full" options={chartOptions} />;
+-  }, [isForecast, seriesData, theme, customChartThemes, chartThemes]);
+-
+-  const gridMemo = useMemo(() => {
+-    if (isForecast) return null;
+-
+-    return (
+-      <AgGridReact
+-        className="ag-grid h-0 w-0 max-h-0"
+-        theme={agTheme}
+-        ref={(el) => (agRef.current = el)}
+-        getChartToolbarItems={(_) => []}
+-        popupParent={ref.current}
+-        enableCharts={true}
+-        chartThemeOverrides={chartThemeOverrides}
+-        onChartOptionsChanged={(params) => {
+-          const { chartType, chartOptions } = params;
+-          const chartModel = params.api
+-            .getChartModels()
+-            .find((model) => model.chartId === params.chartId);
+-
+-          const totalSeries = getTotalSeries(params, chartModel?.cellRange);
+-
+-          updateWidget((prev) => ({
+-            ...prev,
+-            storage: {
+-              ...prev.storage,
+-              totalSeries,
+-              chartType,
+-              chartModel: {
+-                ...prev.storage.chartModel,
+-                chartType,
+-              },
+-              chartOptions,
+-            },
+-          }));
+-        }}
+-        rowData={state?.rowData}
+-        columnDefs={state?.columnDefs}
+-        onFirstDataRendered={onFirstDataRendered}
+-        onChartRangeSelectionChanged={onChartRangeSelectionChanged}
+-        customChartThemes={customChartThemes}
+-        chartThemes={chartThemes}
+-      />
+-    );
+-    // maybe add storage here later if something breaks :D
+-  }, [
+-    state,
+-    theme,
+-    ref.current,
+-    isForecast,
+-    updateWidget,
+-    agRef,
+-    chartThemes,
+-    customChartThemes,
+-    agTheme,
+-  ]);
+-
+-  const dateField = state.columnDefs?.find(
+-    (column) => column?.cellDataType === "date" || isDateorYearField(column?.field),
+-  )?.field;
+-
+-  const timeseries = widget.storage.transpose
+-    ? state.rowData[0]?.Index
+-    : state.columnDefs?.find((column) => column?.chartDataType === "series")?.field;
+-
+-  const filteredData = useMemo(() => {
+-    if (!widget.storage.transpose)
+-      return rowData.map((row) => {
+-        return {
+-          Date: row[dateField],
+-          [timeseries]: row[timeseries],
+-        };
+-      });
+-
+-    const transformedArray = [];
+-
+-    for (const row of state.rowData as any[]) {
+-      for (const key of Object.keys(row)) {
+-        if (key === "Index") continue;
+-        transformedArray.push({
+-          Date: key,
+-          [row.Index]: row[key],
+-        });
+-      }
+-    }
+-
+-    return transformedArray;
+-  }, [rowData, state.rowData, dateField, timeseries]);
+-
+-  const hasOnlyOneTimeSeries = widget.storage.transpose
+-    ? state.rowData.length === 1
+-    : state.columns.length === 2;
+-
+-  const enableNixtla =
+-    widget.storage.chartModel.chartType === "line" && hasOnlyOneTimeSeries;
+-
+-  const [nixtlaPopup, setNixtlaPopup] = useState(false);
+-
+-  const exportFns = useMemo(() => {
+-    if (!chartViewEnabled) {
+-      return {
+-        csvFunction: (title = "report") => {
+-          downloadData(rowData, title, "csv", false);
+-        },
+-        excelFunction: (title = "report") => {
+-          downloadData(rowData, title, "excel", false);
+-        },
+-      } as NavBarProps["exportFns"];
+-    }
+-    if (!isForecast)
+-      return {
+-        csvFunction: (title = "report") => {
+-          agRef.current?.api.exportDataAsCsv({
+-            fileName: `${title}.csv`,
+-          });
+-        },
+-        excelFunction: (title = "report") => {
+-          agRef.current?.api.exportDataAsExcel({
+-            fileName: `${title}.xlsx`,
+-          });
+-        },
+-        pngFunction: (title = "report") => {
+-          agRef.current?.api.downloadChart({
+-            fileName: `${title}.png`,
+-            fileFormat: "png",
+-            chartId: chartRef.chartId,
+-          });
+-        },
+-      } as NavBarProps["exportFns"];
+-    return {
+-      csvFunction: (title = "report") => {
+-        downloadData(seriesData, title, "csv", false);
+-      },
+-      excelFunction: (title = "report") => {
+-        downloadData(seriesData, title, "excel", false);
+-      },
+-    } as NavBarProps["exportFns"];
+-  }, [chartViewEnabled, seriesData, isForecast, agRef?.current, rowData]);
+-
+-  return (
+-    <Table>
+-      <DraggableCard
+-        extraClassName={cn("overflow-hidden -mt-2", {
+-          "chart-wrapper h-[93%]": chartViewEnabled,
+-        })}
+-        showEllipsisMenu={true}
+-        exportFns={exportFns}
+-        aiEnabled={true}
+-        aiData={rowData}
+-        extraNavbarElements={
+-          <>
+-            <ChartViewButton />
+-            {servicesNixtlaFF && chartViewEnabled && (isForecast || enableNixtla) && (
+-              <Tooltip
+-                message={
+-                  enableNixtla
+-                    ? "Forecasting with TimeGEN-1 (Nixtla)"
+-                    : "Nixtla is only available for Line charts with one time series"
+-                }
+-              >
+-                <button
+-                  disabled={!(isForecast || enableNixtla)}
+-                  onClick={() => setNixtlaPopup(true)}
+-                  className={cn(
+-                    "obb-small-navbar-btn flex items-center justify-center disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
+-                    {
+-                      "pulse-box-shadow bg-brand-main! text-white":
+-                        widget.storage.forecast,
+-                    },
+-                  )}
+-                >
+-                  <Icon id="nixtla-icon" className="w-3.5 mt-0.5" />
+-                </button>
+-              </Tooltip>
+-            )}
+-          </>
+-        }
+-        settings={{
+-          showMetadata: true,
+-          showDuplicate: true,
+-          showExport: true,
+-          showMove: true,
+-          showCopyToClipboard: true,
+-        }}
+-        extraSettings={
+-          chartViewEnabled
+-            ? [
+-                {
+-                  icon: "noto-letter-t",
+-                  id: "transpose-data",
+-                  label: "Transpose data",
+-                  onClick: () => {
+-                    const transpose = !widget?.storage?.transpose;
+-                    updateWidget((prev) => ({
+-                      ...prev,
+-                      storage: {
+-                        ...prev.storage,
+-                        transpose,
+-                      },
+-                    }));
+-
+-                    const isOldSchema = !!widget.storage?.transposedT;
+-
+-                    let cellRange = widget.storage?.cellRange;
+-                    if (isOldSchema) {
+-                      const data = transpose
+-                        ? widget.storage.transposedT
+-                        : widget.storage;
+-
+-                      data.columnDefs = cleanColumnDefs(data.columnDefs);
+-                      const { rowData, columnDefs, columns } = data;
+-
+-                      cellRange =
+-                        widget.storage?.[
+-                          transpose ? "transposed_CellRange" : "cellRange"
+-                        ];
+-
+-                      setState({ rowData, columnDefs, columns });
+-                      agRef.current.api.updateGridOptions({ rowData, columnDefs });
+-                    }
+-
+-                    const cellRangeColumns = !!cellRange?.columns;
+-
+-                    agRef.current.api.updateChart({
+-                      chartId: chartRef.chartId,
+-                      type: "rangeChartUpdate",
+-                      cellRange: cellRangeColumns ? cellRange : { columns },
+-                      switchCategorySeries: isOldSchema ? undefined : transpose,
+-                    });
+-                  },
+-                },
+-                {
+-                  icon: "cog-icon",
+-                  id: "open-chart-settings",
+-                  label: "Chart settings",
+-                  hide: isForecast,
+-                  onClick: () => {
+-                    const agChartMenuCss = (
+-                      ref?.current?.getElementsByClassName(
+-                        "ag-chart-docked-container",
+-                      )?.[0] as HTMLElement
+-                    )?.style.cssText;
+-
+-                    const params = { chartId: chartRef.chartId };
+-
+-                    if (!agChartMenuCss || agChartMenuCss?.includes("min-width: 0px")) {
+-                      agRef.current.api.openChartToolPanel(params);
+-                    } else {
+-                      agRef.current.api.closeChartToolPanel(params);
+-                    }
+-                  },
+-                },
+-              ]
+-            : []
+-        }
+-      >
+-        {chartViewEnabled ? (
+-          <SetLoadingOnResize>
+-            {isForecast ? (
+-              chartMemo
+-            ) : (
+-              <>
+-                {gridMemo}
+-                <div
+-                  ref={ref}
+-                  className={clsx("chart-wrapper-body h-full w-full", {
+-                    "ag-theme-alpine": theme === "light",
+-                    "ag-theme-alpine-dark": theme === "dark",
+-                  })}
+-                />
+-              </>
+-            )}
+-          </SetLoadingOnResize>
+-        ) : (
+-          <div className="h-[calc(100%-5px)] min-h-[100px]">
+-            <AgGridReact
+-              className="ag-grid h-full w-full"
+-              theme={agTheme}
+-              rowData={rowData}
+-              columnDefs={cleanColumnDefs(columnDefs as ColDef[])}
+-            />
+-          </div>
+-        )}
+-      </DraggableCard>
+-      <ForecastingNixtlaPopup
+-        open={nixtlaPopup}
+-        onClose={() => setNixtlaPopup(false)}
+-        data={filteredData}
+-        timeseries={timeseries}
+-        forecast={widget.storage.forecast}
+-        onForecast={(seriesData) => {
+-          updateWidget((prev) => ({
+-            ...prev,
+-            storage: {
+-              ...prev.storage,
+-              forecast: !!seriesData,
+-              forecastSeriesData: seriesData ?? [],
+-            },
+-          }));
+-        }}
+-      />
+-    </Table>
+-  );
+-}
+-
+-export default memo(AgChartFromTable);
+--- a/terminalpro/src/components/General/Table/AgGrid.tsx
++++ b/terminalpro/src/components/General/Table/AgGrid.tsx
+@@ -7 +6,0 @@
+-import "ag-grid-enterprise";
+@@ -29,0 +29 @@
++import { getConfig } from "~/lib/runtimeConfig";
+@@ -45 +44,0 @@
+-import { getOpenBBChartTheme } from "./Chart/themes";
+@@ -52 +50,0 @@
+-import { clearCellSelection } from "./utils";
+@@ -60,0 +59,82 @@
++
++const COMMUNITY_ONLY_UNSUPPORTED_GRID_OPTIONS = new Set([
++  "cellSelection",
++  "createChartContainer",
++  "customChartThemes",
++  "enableAdvancedFilter",
++  "enableCharts",
++  "enableFillHandle",
++  "enableRangeSelection",
++  "getChartMenuItems",
++  "getChartToolbarItems",
++  "getContextMenuItems",
++  "getMainMenuItems",
++  "masterDetail",
++  "onChartCreated",
++  "onChartDestroyed",
++  "onChartOptionsChanged",
++  "onChartRangeSelectionChanged",
++  "pivotMode",
++  "pivotPanelShow",
++  "postProcessPopup",
++  "rowGroupPanelShow",
++  "sideBar",
++  "statusBar",
++]);
++
++const COMMUNITY_ONLY_UNSUPPORTED_COLUMN_OPTIONS = new Set([
++  "aggFunc",
++  "allowedAggFuncs",
++  "chartDataType",
++  "enablePivot",
++  "enableRowGroup",
++  "enableValue",
++  "pivot",
++  "pivotIndex",
++  "rowGroup",
++  "rowGroupIndex",
++]);
++
++function stripCommunityUnsupportedColumnOptions<T>(value: T): T {
++  if (Array.isArray(value)) {
++    return value.map(stripCommunityUnsupportedColumnOptions) as T;
++  }
++  if (!value || typeof value !== "object") return value;
++
++  const column = { ...(value as Record<string, unknown>) };
++  for (const key of COMMUNITY_ONLY_UNSUPPORTED_COLUMN_OPTIONS) delete column[key];
++  if (typeof column.filter === "string" && /^(agSetColumnFilter|agMultiColumnFilter|agGroupColumnFilter)$/.test(column.filter)) {
++    column.filter = true;
++  }
++  if (column.children) {
++    column.children = stripCommunityUnsupportedColumnOptions(column.children);
++  }
++  return column as T;
++}
++
++function stripCommunityUnsupportedGridOptions<T>(value: T): T {
++  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
++
++  const options = { ...(value as Record<string, unknown>) };
++  for (const key of COMMUNITY_ONLY_UNSUPPORTED_GRID_OPTIONS) delete options[key];
++  if (options.rowModelType === "serverSide") {
++    throw new Error("AG Grid Server Side Row Model is unavailable in OpenBB Workspace Lite Community.");
++  }
++  if (options.defaultColDef) {
++    options.defaultColDef = stripCommunityUnsupportedColumnOptions(options.defaultColDef);
++  }
++  if (options.columnDefs) {
++    options.columnDefs = stripCommunityUnsupportedColumnOptions(options.columnDefs);
++  }
++  return options as T;
++}
++
++/** Remove Enterprise-only options while retaining Community sorting, filtering, and row rendering. */
++export function adaptCommunityGridProps<T extends Record<string, unknown>>(props: T): T {
++  const options = stripCommunityUnsupportedGridOptions(props) as Record<string, unknown>;
++  const gridOptions = options.gridOptions;
++  if (gridOptions && typeof gridOptions === "object") {
++    options.gridOptions = stripCommunityUnsupportedGridOptions(gridOptions);
++  }
++  return options as T;
++}
+@@ -132 +212,2 @@
+-      const tooltipText = headerTooltip ?? props?.displayName;
++      const tooltipText =
++        typeof headerTooltip === "string" ? headerTooltip : props?.displayName;
+@@ -245,0 +327,5 @@
++          if (getConfig().ui.isLite) {
++            clearTimeout(clickTimeout.current);
++            clickTimeout.current = null;
++            return;
++          }
+@@ -732 +818 @@
+-    cellSelection: true,
++    rowModelType: "clientSide",
+@@ -734 +819,0 @@
+-    enableCharts: true,
+@@ -739 +823,0 @@
+-    getMainMenuItems: getMainMenuItems,
+@@ -742,2 +825,0 @@
+-    getChartToolbarItems: (_) => [],
+-    columnMenu: "legacy",
+@@ -751,0 +834,2 @@
++      floatingFilter: true,
++      suppressHeaderMenuButton: true,
+@@ -764,26 +847,0 @@
+-    onCellClicked: (params) => {
+-      clearCellSelection(params);
+-    },
+-    onCellDoubleClicked: (params) => {
+-      if (params?.node) {
+-        const allColumns = params.api
+-          .getAllDisplayedColumns()
+-          // @ts-expect-error - colId property exists but not in types
+-          .map((col) => col.colId);
+-        params.api.addCellRange({
+-          rowStartIndex: params.node.rowIndex,
+-          rowEndIndex: params.node.rowIndex,
+-          columns: allColumns,
+-        });
+-      }
+-    },
+-    postProcessPopup: (params) => {
+-      // check callback is for menu
+-      if (params.type !== "columnMenu") {
+-        return;
+-      }
+-    },
+-    customChartThemes: {
+-      "openbb-dark": getOpenBBChartTheme("dark"),
+-      "openbb-light": getOpenBBChartTheme("light"),
+-    },
+--- a/terminalpro/src/components/General/Table/AgGridSSRM.tsx
++++ b/terminalpro/src/components/General/Table/AgGridSSRM.tsx
+@@ -9 +9 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/AgGridTable.tsx
++++ b/terminalpro/src/components/General/Table/AgGridTable.tsx
+@@ -15,4 +14,0 @@
+-import { ChartViewButton, ChartViewElement } from "./Chart/AgChartView";
+-import useChartOptions, {
+-  useChartToolPanelAction,
+-} from "./Chart/hooks/useChartOptions";
+@@ -232 +228,2 @@
+-  const chartView = widget.storage?.chartView?.enabled;
++  // Grid-integrated charts are an Enterprise feature; standalone community charts remain available.
++  const chartView = false;
+@@ -246,4 +243 @@
+-      const enableChart =
+-        widget?.external ?? widgetFromJSON?.data?.table?.enableCharts ?? false;
+-
+-      return getContextMenuItems(params, { enableChart, widgetId: widget?.id });
++      return getContextMenuItems(params, { enableChart: false, widgetId: widget?.id });
+@@ -251 +245 @@
+-    [widget?.external, widgetFromJSON?.data?.table?.enableCharts],
++    [widget?.id],
+@@ -259,6 +253 @@
+-  const agChartViewProps = useChartOptions();
+-  const ChartToolPanelActions = useChartToolPanelAction();
+-
+-  const extraSettings = useMemo(() => {
+-    return [quickActions, ...(chartView ? ChartToolPanelActions : [])];
+-  }, [chartView, quickActions, ChartToolPanelActions]);
++  const extraSettings = useMemo(() => [quickActions], [quickActions]);
+@@ -327,5 +315,0 @@
+-      extraNavbarElements={
+-        (!!widget?.storage?.chartView ||
+-          widget?.external ||
+-          widgetFromJSON?.data?.table?.enableCharts) && <ChartViewButton />
+-      }
+@@ -336 +319,0 @@
+-      {chartView && <ChartViewElement />}
+@@ -350 +332,0 @@
+-          {...agChartViewProps}
+--- a/terminalpro/src/components/General/Table/Chart/themes.tsx
++++ b/terminalpro/src/components/General/Table/Chart/themes.tsx
+@@ -11 +11 @@
+-} from "ag-charts-enterprise";
++} from "ag-charts-community";
+@@ -20 +20 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/Chart/utils.tsx
++++ b/terminalpro/src/components/General/Table/Chart/utils.tsx
+@@ -17 +16,0 @@
+-import { AgChartsEnterpriseModule } from "ag-charts-enterprise";
+@@ -25 +23,0 @@
+-import { AllEnterpriseModule, ModuleRegistry } from "ag-grid-enterprise";
+@@ -37 +34,0 @@
+-ModuleRegistry.registerModules([AllEnterpriseModule.with(AgChartsEnterpriseModule)]);
+--- a/terminalpro/src/components/General/Table/SubMenus/FormulasToolPanel.tsx
++++ b/terminalpro/src/components/General/Table/SubMenus/FormulasToolPanel.tsx
+@@ -5 +5 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/types.d.ts
++++ b/terminalpro/src/components/General/Table/hooks/types.d.ts
+@@ -1 +1 @@
+-import type { AgChartThemeOverrides } from "ag-charts-enterprise";
++import type { AgChartThemeOverrides } from "ag-charts-community";
+@@ -21 +21 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useCellOnClickHandler.ts
++++ b/terminalpro/src/components/General/Table/hooks/useCellOnClickHandler.ts
+@@ -1 +1 @@
+-import type { CellClickedEvent } from "ag-grid-enterprise";
++import type { CellClickedEvent } from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useCopilotFilteredData.tsx
++++ b/terminalpro/src/components/General/Table/hooks/useCopilotFilteredData.tsx
+@@ -6 +6 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useCreateChart.ts
++++ b/terminalpro/src/components/General/Table/hooks/useCreateChart.ts
+@@ -1,2 +1 @@
+-import type { ChartRef, ColDef, IRowNode, RowNode } from "ag-grid-enterprise";
+-import "ag-grid-enterprise";
++import type { ChartRef, ColDef, IRowNode, RowNode } from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useTableContext.tsx
++++ b/terminalpro/src/components/General/Table/hooks/useTableContext.tsx
+@@ -1 +1 @@
+-import type { AgChartThemeOverrides } from "ag-charts-enterprise";
++import type { AgChartThemeOverrides } from "ag-charts-community";
+@@ -28,0 +29 @@
++import { adaptCommunityGridProps } from "../AgGrid";
+@@ -33,0 +35 @@
++import { getConfig } from "~/lib/runtimeConfig";
+@@ -200,0 +203 @@
++  const communityLite = getConfig().ui.isLite;
+@@ -253 +256 @@
+-    if (!(gridState?.gridReady && widget?.storage?.chartView)) return;
++    if (communityLite || !(gridState?.gridReady && widget?.storage?.chartView)) return;
+@@ -428 +431 @@
+-      gridRef.current.api.clearCellSelection();
++      gridRef.current.api.clearCellSelection?.();
+@@ -543 +546 @@
+-    if (!enableStats) newGridOptions.statusBar = undefined;
++    if (getConfig().ui.isLite || !enableStats) newGridOptions.statusBar = undefined;
+@@ -570 +573 @@
+-    if (!enableStats) newGridOptions.statusBar = undefined;
++    if (getConfig().ui.isLite || !enableStats) newGridOptions.statusBar = undefined;
+@@ -578,0 +582 @@
++    const gridProps = getConfig().ui.isLite ? adaptCommunityGridProps(rest) : rest;
+@@ -634 +638 @@
+-          createChartContainer={createChartContainer}
++          createChartContainer={getConfig().ui.isLite ? undefined : createChartContainer}
+@@ -648,3 +652,3 @@
+-          {...rest}
+-          popupParent={rest?.popupParent ?? document.body}
+-          gridOptions={rest?.gridOptions}
++          {...gridProps}
++          popupParent={gridProps?.popupParent ?? document.body}
++          gridOptions={gridProps?.gridOptions}
+@@ -680 +683,0 @@
+-        onChartRangeSelectionChanged,
+@@ -682 +684,0 @@
+-        onChartDestroyed,
+@@ -684 +685,0 @@
+-        createChartContainer,
+@@ -772,0 +774,2 @@
++  if (getConfig().ui.isLite) return undefined;
++
+--- a/terminalpro/src/components/General/Table/hooks/useUpdateColumnState.ts
++++ b/terminalpro/src/components/General/Table/hooks/useUpdateColumnState.ts
+@@ -16 +15,0 @@
+-import "ag-grid-enterprise";
+@@ -19 +17,0 @@
+-import "ag-grid-enterprise";
+--- a/terminalpro/src/components/General/Table/hooks/utils.ts
++++ b/terminalpro/src/components/General/Table/hooks/utils.ts
+@@ -1 +1 @@
+-import type { ColumnState, GridState } from "ag-grid-enterprise";
++import type { ColumnState, GridState } from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/utils.tsx
++++ b/terminalpro/src/components/General/Table/utils.tsx
+@@ -2 +2 @@
+-import type { IHeaderParams } from "ag-grid-enterprise";
++import type { IHeaderParams } from "ag-grid-community";
+@@ -352 +352 @@
+-  agGrid.api.clearCellSelection();
++  agGrid.api.clearCellSelection?.();
+--- a/terminalpro/src/components/ThemeSettings/ChartSettings.tsx
++++ b/terminalpro/src/components/ThemeSettings/ChartSettings.tsx
+@@ -1,0 +2 @@
++  AgCartesianChartOptions,
+@@ -5 +6 @@
+-} from "ag-charts-enterprise";
++} from "ag-charts-community";
+@@ -611 +612 @@
+-    const options: AgChartOptions = {
++    const options: AgCartesianChartOptions = {
+@@ -615,10 +616,4 @@
+-      axes: [
+-        {
+-          type: "category",
+-          position: "bottom",
+-        },
+-        {
+-          type: "number",
+-          position: "left",
+-        },
+-      ],
++      axes: {
++        x: { type: "category" },
++        y: { type: "number" },
++      },
+--- a/terminalpro/src/components/ThemeSettings/TableSettings.tsx
++++ b/terminalpro/src/components/ThemeSettings/TableSettings.tsx
+@@ -11 +11 @@
+-import { AllEnterpriseModule } from "ag-grid-enterprise";
++import { AllCommunityModule } from "ag-grid-community";
+@@ -39 +39 @@
+-ModuleRegistry.registerModules([AllEnterpriseModule]);
++ModuleRegistry.registerModules([AllCommunityModule]);
+@@ -140 +140 @@
+-  enableCharts: true,
++  enableCharts: false,
+@@ -142,13 +142 @@
+-  sideBar: {
+-    toolPanels: [
+-      {
+-        id: "columns",
+-        labelDefault: "Columns",
+-        labelKey: "columns",
+-        iconKey: "columns",
+-        toolPanel: "agColumnsToolPanel",
+-      },
+-    ],
+-    // delete this or set to null to not show it by default
+-    defaultToolPanel: "",
+-  },
++  sideBar: false,
+@@ -277 +265 @@
+-      ) as ThemeDefaultParams;
++      ) as unknown as ThemeDefaultParams;
+--- a/terminalpro/src/components/Widgets/AI/NixtlaPopup.tsx
++++ b/terminalpro/src/components/Widgets/AI/NixtlaPopup.tsx
+@@ -2 +2 @@
+-import type { ChartType } from "ag-grid-enterprise";
++import type { ChartType } from "ag-grid-community";
+--- /dev/null
++++ b/terminalpro/src/components/Widgets/CommunityUnavailableWidget.tsx
+@@ -0,0 +1,19 @@
++import { useWidgetContext } from "~/components/Widget.context";
++
++export default function CommunityUnavailableWidget() {
++  const { widget } = useWidgetContext();
++  const widgetId = widget?.widgetId ?? "This widget";
++
++  return (
++    <div
++      role="status"
++      data-testid="community-widget-unavailable"
++      className="flex h-full min-h-24 flex-col justify-center gap-2 p-4 text-sm text-light-500 dark:text-light-400"
++    >
++      <strong className="text-light-700 dark:text-light-200">
++        {widgetId} is unavailable in OpenBB Workspace Lite Community.
++      </strong>
++      <p>This widget requires an Enterprise or separately licensed chart module.</p>
++    </div>
++  );
++}
+--- a/terminalpro/src/components/Widgets/Equity/ComparisonAnalysis/constants.tsx
++++ b/terminalpro/src/components/Widgets/Equity/ComparisonAnalysis/constants.tsx
+@@ -1 +1 @@
+-import type { ColDef } from "ag-grid-enterprise";
++import type { ColDef } from "ag-grid-community";
+--- a/terminalpro/src/components/Widgets/charting/ChartHighcharts.tsx
++++ /dev/null
+@@ -1,80 +0,0 @@
+-import Highcharts from "highcharts/highcharts";
+-import HighchartsGantt from "highcharts/highcharts-gantt";
+-import HighchartsMaps from "highcharts/highmaps";
+-import HighchartsStocks from "highcharts/highstock";
+-import HighchartsReact from "highcharts-react-official";
+-import { useMemo } from "react";
+-import DraggableCard, { SetLoadingOnResize } from "~/components/DraggableCard";
+-import { useWidgetParamsPositions } from "~/components/General/Table/NavBar/QueryParams";
+-import { useWidgetContext } from "~/components/Widget.context";
+-import { useRawDataToggle } from "~/components/Widgets/charting/useRawDataToggle";
+-import { useJsonData } from "~/lib/api";
+-import { useShallowThemeStore } from "~/lib/state/theme";
+-
+-type ConstructorType = "stockChart" | "mapChart" | "chart" | "ganttChart";
+-
+-const constructorTypes: Record<ConstructorType, any> = {
+-  stockChart: HighchartsStocks,
+-  mapChart: HighchartsMaps,
+-  chart: Highcharts,
+-  ganttChart: HighchartsGantt,
+-};
+-
+-export default function ChartHighcharts() {
+-  const { widget } = useWidgetContext();
+-  const theme = useShallowThemeStore((s) => s.theme);
+-
+-  const options = useMemo(() => {
+-    const newParams = Object.fromEntries(
+-      Object.entries({
+-        ...(widget?.endpoint?.query ?? {}),
+-        ...(widget?.storage?.params ?? {}),
+-      }).filter(([_key, value]) => value !== "" && value !== undefined),
+-    );
+-    newParams.theme = theme;
+-    return {
+-      url: widget.endpoint?.url,
+-      endpointHeaders: widget.endpoint?.headers ?? {},
+-      method: widget.endpoint?.method ?? "GET",
+-      params: newParams,
+-    };
+-  }, [widget?.endpoint, widget?.storage?.params, theme]);
+-
+-  const { showTable, toggle, tableNode, rawData, rawLoading, rawError } =
+-    useRawDataToggle({ baseOptions: options });
+-
+-  const { data, isLoading, error, dataUpdatedAt } = useJsonData(options, {
+-    enabled: !showTable,
+-    staleTime: widget?.staleTime ?? 1000 * 60 * 15,
+-  });
+-
+-  const { renderRow0Params, renderBelowNavbarRows } = useWidgetParamsPositions();
+-
+-  return (
+-    <DraggableCard
+-      aiEnabled={true}
+-      aiData={showTable ? rawData : data}
+-      lastUpdated={dataUpdatedAt}
+-      //failingUrl={state.failingUrl}
+-      elementRightNextToTitle={renderRow0Params}
+-      elementBelowNavbar={renderBelowNavbarRows}
+-      extraNavbarElements={toggle}
+-      loading={showTable ? rawLoading : isLoading}
+-      error={showTable ? rawError || !rawData : error || !data}
+-      errorMessage={widget?.external ? error?.message : "No results found"}
+-    >
+-      <SetLoadingOnResize>
+-        {showTable
+-          ? tableNode
+-          : !isLoading &&
+-            data?.userOptions && (
+-              <HighchartsReact
+-                highcharts={constructorTypes[data?.constructorType ?? "chart"]}
+-                constructorType={data?.constructorType ?? "chart"}
+-                options={data?.userOptions}
+-              />
+-            )}
+-      </SetLoadingOnResize>
+-    </DraggableCard>
+-  );
+-}
+--- a/terminalpro/src/components/Widgets/index.ts
++++ b/terminalpro/src/components/Widgets/index.ts
+@@ -11 +10,0 @@
+-const AgChartFromTableFC = lazy(() => import("../General/Table/AgChartFromTable"));
+@@ -14,2 +12,0 @@
+-const AgGridSSRMFC = lazy(() => import("../General/Table/AgGridSSRM"));
+-const AgGridSSRMAdvancedFC = lazy(() => import("../General/Table/AgGridSSRMAdvanced"));
+@@ -18 +14,0 @@
+-const ChartHighchartsFC = lazy(() => import("./charting/ChartHighcharts"));
+@@ -19,0 +16 @@
++const CommunityUnavailableWidgetFC = lazy(() => import("./CommunityUnavailableWidget"));
+@@ -104 +100,0 @@
+-  ag_grid_sql: "AgGridSQL",
+@@ -106,2 +101,0 @@
+-  ssrm_table: "AgGridSSRM",
+-  ssrm_advanced: "AgGridSSRMAdvanced",
+@@ -131,0 +126 @@
++  ag_grid_sql: "CommunityUnavailableWidget",
+@@ -134 +129,3 @@
+-  "chart-highcharts": "ChartHighcharts",
++  ssrm_table: "CommunityUnavailableWidget",
++  ssrm_advanced: "CommunityUnavailableWidget",
++  "chart-highcharts": "CommunityUnavailableWidget",
+@@ -156 +153 @@
+-  ag_chart_from_table: "AgChartFromTable",
++  ag_chart_from_table: "CommunityUnavailableWidget",
+@@ -193 +189,0 @@
+-  AgChartFromTable: AgChartFromTableFC,
+@@ -196,2 +191,0 @@
+-  AgGridSSRM: AgGridSSRMFC,
+-  AgGridSSRMAdvanced: AgGridSSRMAdvancedFC,
+@@ -200 +193,0 @@
+-  ChartHighcharts: ChartHighchartsFC,
+@@ -201,0 +195 @@
++  CommunityUnavailableWidget: CommunityUnavailableWidgetFC,
+--- a/terminalpro/src/components/types.d.ts
++++ b/terminalpro/src/components/types.d.ts
+@@ -7 +7 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/lib/runtimeConfigSchema.ts
++++ b/terminalpro/src/lib/runtimeConfigSchema.ts
+@@ -215 +215 @@
+-    const groupSchema = shape[group as keyof typeof shape] as unknown as z.AnyZodObject;
++    const groupSchema = shape[group as keyof typeof shape] as unknown as z.ZodObject;
+@@ -266 +266 @@
+-        ? (shape[group as keyof typeof shape] as unknown as z.AnyZodObject)
++        ? (shape[group as keyof typeof shape] as unknown as z.ZodObject)
+@@ -280 +280 @@
+-    const groupSchema = shape[group as keyof typeof shape] as unknown as z.AnyZodObject;
++    const groupSchema = shape[group as keyof typeof shape] as unknown as z.ZodObject;
+--- a/terminalpro/src/lib/state/copilot.ts
++++ b/terminalpro/src/lib/state/copilot.ts
+@@ -1 +1 @@
+-import type { ChartType } from "ag-grid-enterprise";
++import type { ChartType } from "ag-grid-community";
+--- a/terminalpro/src/lib/state/tableChartThemes.ts
++++ b/terminalpro/src/lib/state/tableChartThemes.ts
+@@ -1 +1 @@
+-import type { AgChartThemeName } from "ag-charts-enterprise";
++import type { AgChartThemeName } from "ag-charts-community";
+@@ -8 +8 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/main.tsx
++++ b/terminalpro/src/main.tsx
+@@ -3 +2,0 @@
+-import { AgChartsEnterpriseModule } from "ag-charts-enterprise";
+@@ -5,2 +4 @@
+-  AllEnterpriseModule,
+-  LicenseManager,
++  AllCommunityModule,
+@@ -8 +6 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+@@ -109 +107 @@
+-ModuleRegistry.registerModules([AllEnterpriseModule.with(AgChartsEnterpriseModule)]);
++ModuleRegistry.registerModules([AllCommunityModule]);
+--- a/terminalpro/tests/unit/components/Widgets/ChartHighcharts.test.tsx
++++ /dev/null
+@@ -1,153 +0,0 @@
+-import { screen } from "@testing-library/react";
+-import { beforeEach, describe, expect, it, vi } from "vitest";
+-import ChartHighcharts from "~/components/Widgets/charting/ChartHighcharts";
+-import { useJsonData } from "~/lib/api";
+-import { renderWidget } from "./WidgetTestWrapper";
+-
+-vi.mock("~/lib/api", () => ({
+-  useJsonData: vi.fn(),
+-}));
+-
+-vi.mock("~/components/DraggableCard", () => ({
+-  default: ({
+-    children,
+-    loading,
+-    error,
+-    errorMessage,
+-    aiData,
+-    extraNavbarElements,
+-  }: any) => (
+-    <div
+-      data-testid="draggable-card"
+-      data-ai-data={aiData ? JSON.stringify(aiData) : ""}
+-    >
+-      {extraNavbarElements}
+-      {loading && <span>Loading...</span>}
+-      {error && <span>Error: {errorMessage}</span>}
+-      {children}
+-    </div>
+-  ),
+-  SetLoadingOnResize: ({ children }: any) => <>{children}</>,
+-}));
+-
+-vi.mock("~/components/General/Table/NavBar/QueryParams", () => ({
+-  useWidgetParamsPositions: () => ({
+-    renderRow0Params: null,
+-    renderBelowNavbarRows: null,
+-  }),
+-}));
+-
+-vi.mock("~/lib/state/theme", () => ({
+-  useShallowThemeStore: vi.fn((selector: any) => selector({ theme: "dark" })),
+-}));
+-
+-vi.mock("highcharts-react-official", () => ({
+-  default: (props: any) => (
+-    <div
+-      data-testid="_highcharts"
+-      data-constructor={props.constructorType}
+-      data-options={JSON.stringify(props.options)}
+-    />
+-  ),
+-}));
+-
+-vi.mock("highcharts/highcharts", () => ({ default: {} }));
+-vi.mock("highcharts/highcharts-gantt", () => ({ default: {} }));
+-vi.mock("highcharts/highmaps", () => ({ default: {} }));
+-vi.mock("highcharts/highstock", () => ({ default: {} }));
+-
+-vi.mock("~/components/General/Table/hooks", () => ({
+-  Table: ({ children }: any) => <div data-testid="_raw-table">{children}</div>,
+-  AgGridProvider: ({ rowData }: any) => (
+-    <div data-testid="_ag-grid" data-rows={JSON.stringify(rowData)} />
+-  ),
+-}));
+-
+-vi.mock("~/components/General/Table/AgGridUtils", () => ({
+-  getColumnDefs: vi.fn(() => []),
+-  isDate: (_value: any) => false,
+-}));
+-
+-const widgetOverrides = {
+-  endpoint: { url: "https://example.com/chart", query: { symbol: "AAPL" } },
+-};
+-
+-const chartData = {
+-  constructorType: "chart",
+-  userOptions: { series: [{ data: [1, 2, 3] }] },
+-};
+-
+-describe("ChartHighcharts", () => {
+-  beforeEach(() => {
+-    vi.clearAllMocks();
+-  });
+-
+-  it("renders the Highcharts chart from fetched options", () => {
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: chartData,
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, { widgetOverrides });
+-    expect(screen.getByTestId("_highcharts")).toBeInTheDocument();
+-  });
+-
+-  it("does not render a raw-data toggle when the widget has no raw flag", () => {
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: chartData,
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, { widgetOverrides });
+-    expect(document.getElementById("raw-data-toggle-button")).not.toBeInTheDocument();
+-    expect(screen.queryByTestId("_raw-table")).not.toBeInTheDocument();
+-  });
+-
+-  it("renders a raw-data toggle and keeps the chart when raw flag is set", () => {
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: chartData,
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, {
+-      widgetOverrides: { ...widgetOverrides, raw: true },
+-    });
+-
+-    expect(document.getElementById("raw-data-toggle-button")).toBeInTheDocument();
+-    expect(screen.getByTestId("_highcharts")).toBeInTheDocument();
+-    expect(screen.queryByTestId("_raw-table")).not.toBeInTheDocument();
+-  });
+-
+-  it("switches to a data table when rawDataView is enabled", () => {
+-    const records = [{ tokenSymbol: "ETH", tvl: 50 }];
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: { results: records },
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, {
+-      widgetOverrides: {
+-        ...widgetOverrides,
+-        raw: true,
+-        storage: { rawDataView: true },
+-      },
+-    });
+-
+-    expect(screen.getByTestId("_raw-table")).toBeInTheDocument();
+-    expect(screen.queryByTestId("_highcharts")).not.toBeInTheDocument();
+-
+-    const grid = screen.getByTestId("_ag-grid");
+-    expect(JSON.parse(grid.getAttribute("data-rows") ?? "[]")).toEqual(records);
+-
+-    const card = screen.getByTestId("draggable-card");
+-    expect(JSON.parse(card.getAttribute("data-ai-data") ?? "null")).toEqual(records);
+-  });
+-});
+--- /dev/null
++++ b/terminalpro/tests/unit/components/Widgets/communityRegistry.test.ts
+@@ -0,0 +1,18 @@
++import { describe, expect, it } from "vitest";
++import Widgets, { getWidgetComponent, isAgGridWidget } from "~/components/Widgets";
++
++describe("OpenBB Lite Community widget registry", () => {
++  it.each([
++    "ag_grid_sql",
++    "ag_chart_from_table",
++    "ssrm_table",
++    "ssrm_advanced",
++    "chart-highcharts",
++  ] as const)(
++    "%s resolves to an explicit unavailable widget outside AG Grid",
++    (widgetId) => {
++      expect(getWidgetComponent(widgetId)).toBe(Widgets.CommunityUnavailableWidget);
++      expect(isAgGridWidget(widgetId)).toBe(false);
++    },
++  );
++});
+--- a/terminalpro/tests/unit/routes/developer_onboarding/DeveloperOnboardingHomepage.test.tsx
++++ b/terminalpro/tests/unit/routes/developer_onboarding/DeveloperOnboardingHomepage.test.tsx
+@@ -100,6 +99,0 @@
+-// Mock the entire ChartHighcharts component
+-vi.mock("~/components/Widgets/charting/ChartHighcharts", () => ({
+-  default: vi.fn().mockImplementation(() => null),
+-}));
+-
+-// Mock any other components that might use Highcharts
+--- a/terminalpro/tsconfig.json
++++ b/terminalpro/tsconfig.json
+@@ -22 +22 @@
+-    "ignoreDeprecations": "6.0",
++    "ignoreDeprecations": "5.0",
+--- a/terminalpro/tsconfig.node.json
++++ b/terminalpro/tsconfig.node.json
+@@ -6 +6 @@
+-    "ignoreDeprecations": "6.0",
++    "ignoreDeprecations": "5.0",
+--- a/terminalpro/vite.config.ts
++++ b/terminalpro/vite.config.ts
+@@ -248 +247,0 @@
+-            if (pkg.startsWith("highcharts")) return "vendor-highcharts";
+--- a/terminalpro/index.html
++++ b/terminalpro/index.html
+@@ -31,6 +31,5 @@
+ <body class="bg-white dark:bg-dark-900 text-light-900 dark:text-white md:overflow-hidden">
+   <div id="root"></div>
+   <script type="module" src="/src/main.tsx"></script>
+-  <script src="/assets/js/datafeeds/udf/dist/bundle.js"></script>
+   <!--<script defer src="https://pyscript.net/latest/pyscript.js"></script>-->
+ </body>

@@ -32,7 +32,7 @@ jobs:
   market-contracts:
     name: Offline market-data contract tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -40,7 +40,99 @@ jobs:
           python-version: 3.12.15
       - name: Verify Python toolchain
         run: test "$(python --version)" = 'Python 3.12.15'
+      - name: Generate pinned OpenTerminal upstream file audit
+        run: python3 tools/upstream_diff.py >> "$GITHUB_STEP_SUMMARY"
       - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Fetch and verify pinned OpenBB source archive and licenses
+        run: |
+          bash tools/openbb/fetch-upstream.sh
+          bash tools/openbb/verify-upstream.sh
+      - name: Generate pinned OpenBB source SPDX SBOM
+        run: bash tools/openbb/source-sbom.sh
+      - name: Generate pinned OpenBB patched-source SPDX SBOM
+        id: openbb-patched-source
+        run: |
+          bash tools/openbb/patched-source-sbom.sh > build/openbb/patched-source-sbom-report.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("build/openbb/patched-source-sbom-report.json").read_text(encoding="utf-8"))
+          path = Path(report["output"]).resolve().relative_to(Path.cwd()).as_posix()
+          print(f"path={path}")
+          PY
+      - name: Generate OpenBB upstream drift report
+        run: bash tools/openbb/upstream-diff.sh
+      - name: Upload OpenBB source-only SBOM
+        id: openbb-source-sbom
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-source-sbom-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/openbb/workspace-source-be00e95019a55d57af146919ee46b7e1a4859226.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+      - name: Upload OpenBB patched-source SPDX SBOM
+        id: openbb-patched-source-sbom
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-patched-source-sbom-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.openbb-patched-source.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+      - name: Upload OpenBB upstream drift report
+        id: openbb-upstream-diff
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-upstream-diff-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/openbb/workspace-diff-be00e95019a55d57af146919ee46b7e1a4859226.json
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+      - name: Record source SBOM artifact and file digests
+        env:
+          ARTIFACT_DIGEST: ${{ steps.openbb-source-sbom.outputs.artifact-digest }}
+          SBOM_PATH: build/openbb/workspace-source-be00e95019a55d57af146919ee46b7e1a4859226.spdx.json
+          DIFF_ARTIFACT_DIGEST: ${{ steps.openbb-upstream-diff.outputs.artifact-digest }}
+          DIFF_PATH: build/openbb/workspace-diff-be00e95019a55d57af146919ee46b7e1a4859226.json
+          PATCHED_SBOM_ARTIFACT_DIGEST: ${{ steps.openbb-patched-source-sbom.outputs.artifact-digest }}
+          PATCHED_SBOM_PATH: ${{ steps.openbb-patched-source.outputs.path }}
+          PATCHED_SBOM_REPORT: build/openbb/patched-source-sbom-report.json
+        run: |
+          test -n "$ARTIFACT_DIGEST"
+          test -n "$DIFF_ARTIFACT_DIGEST"
+          test -n "$PATCHED_SBOM_ARTIFACT_DIGEST"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["DIFF_PATH"]).read_text(encoding="utf-8"))
+          patched_sbom = json.loads(Path(os.environ["PATCHED_SBOM_REPORT"]).read_text(encoding="utf-8"))
+          counts = report["counts"]
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as stream:
+              stream.write("### OpenBB pinned upstream drift (source patch; not an image SBOM)\n\n")
+              stream.write(f"Upstream: `{report['upstream']['commit']}` / archive SHA-256 `{report['upstream']['source_archive_sha256']}`\n\n")
+              stream.write(f"Recipe SHA-256: `{report['recipe']['sha256']}`; patched tree SHA-256 `{report['patched_tree_sha256']}`\n\n")
+              stream.write("| Exact upstream | Modified upstream | EqoBoard-only | Deleted upstream | Remaining build findings |\n")
+              stream.write("| ---: | ---: | ---: | ---: | ---: |\n")
+              stream.write(f"| {counts['exact_upstream_files']} | {counts['modified_upstream_files']} | {counts['eqoboard_only_files']} | {counts['deleted_upstream_files']} | {len(report['remaining_build_findings'])} |\n\n")
+              stream.write(f"Drift artifact digest: `{os.environ['DIFF_ARTIFACT_DIGEST']}`; report file SHA-256: `{hashlib.sha256(Path(os.environ['DIFF_PATH']).read_bytes()).hexdigest()}`\n\n")
+              stream.write("The report compares the SHA-256-verified source archive with the source tree produced by hash-pinned patch support files. It is not an image inventory or proof of browser integration.\n")
+              stream.write("### OpenBB community-patched source SBOM (not an image SBOM)\n\n")
+              stream.write(f"Patched tree SHA-256: `{patched_sbom['source_tree_sha256']}`; normalized package identities: {patched_sbom['normalized_package_identity_count']}\n\n")
+              stream.write(f"Artifact digest: `{os.environ['PATCHED_SBOM_ARTIFACT_DIGEST']}`; SBOM file SHA-256: `{hashlib.sha256(Path(os.environ['PATCHED_SBOM_PATH']).read_bytes()).hexdigest()}`\n\n")
+              stream.write("The runtime image contains a compiled Vite bundle without Bun/npm metadata. This source SBOM records the locked frontend dependency graph, not the runtime image inventory.\n\n")
+          PY
+          {
+            echo '### OpenBB source SBOM (not an image SBOM)'
+            echo
+            echo "Artifact archive SHA-256: \`$ARTIFACT_DIGEST\`"
+            echo "SBOM file SHA-256: \`$(sha256sum "$SBOM_PATH" | cut -d ' ' -f 1)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   openterminal:
     name: OpenTerminal / AG Grid / Next.js
@@ -64,6 +156,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build -w server
       - run: npm run test -w server
+      - name: Test client cancellation during BFF authorization
+        run: node --test web/lib/client-abort.test.mjs
       - run: npx tsc --noEmit -p web/tsconfig.json
       - run: npm run build -w web
       - name: Install browser for end-to-end checks
@@ -76,3 +170,23 @@ jobs:
       - name: Build and exercise production containers with offline mocks
         working-directory: .
         run: bash tools/container-e2e.sh
+      - name: Build and exercise the controlled native OpenBB Lite profile
+        working-directory: .
+        env:
+          OPENBB_E2E_ARTIFACT_DIR: ${{ runner.temp }}/eqoboard-openbb-runtime-e2e
+        run: bash tools/openbb-lite-e2e.sh
+      - name: Upload native OpenBB browser and runtime evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-native-runtime-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/eqoboard-openbb-runtime-e2e/
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/openbb-lite-compose-image.docker.tar
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/openbb-lite-compose-image.oci.tar
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/native-user-storage-state.json
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/trace.zip
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/*.webm
+          if-no-files-found: warn
+          retention-days: 30
+          overwrite: false

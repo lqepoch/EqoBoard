@@ -17,13 +17,13 @@ async function expectNoDownstream(request: Parameters<typeof resetDownstream>[0]
   expect(result.research.authorized).toBe(0);
 }
 
-async function postChunkedJson(cookie: string, body: string, finish: boolean) {
+async function postChunkedJson(cookie: string, body: string, finish: boolean, path = "/api/portfolios") {
   const origin = new URL(WEB_ORIGIN);
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
     const client = httpRequest({
       hostname: origin.hostname,
       port: Number(origin.port || (origin.protocol === "https:" ? 443 : 80)),
-      path: "/api/portfolios",
+      path,
       method: "POST",
       headers: {
         cookie,
@@ -291,6 +291,10 @@ test("generic BFF writes reject cross-origin, unsupported media, oversized strea
   const stalledStream = await postChunkedJson(cookie, "{", false);
   expect(stalledStream.status).toBe(408);
   expect(JSON.parse(stalledStream.body).error).toBe("request_body_timeout");
+
+  const stalledAuthBody = await postChunkedJson(cookie, "{", false, "/api/auth/signin/eqo-oidc");
+  expect(stalledAuthBody.status).toBe(408);
+  expect(JSON.parse(stalledAuthBody.body).error).toBe("request_body_timeout");
   await expectNoDownstream(request);
 });
 

@@ -1,2 +1,4 @@
 # 网关 Agent
 负责 HTTP/WS、权限校验、消息扇出、订阅租约、审计与启动配置。loopback 是默认监听；non-loopback 必须配置独立且可验证的 `EQO_GATEWAY_JWT_SECRET` 与 `EQO_RESEARCH_JWT_SECRET`，Gateway 按受信签名、固定 issuer/audience、`idp_iss` + `sub` 和 allowlist scope 验证主体，不能信任身份头或已退役的静态 `EQO_ACCESS_TOKEN`。WS ticket 仍限时且一次性；不在日志记录凭据；同步失败不盲重试。主要依据 .agents/skills/gateway-operations/SKILL.md。新增 API 同时更新 docs/ARCHITECTURE.md 和对应 Web Types。
+
+OpenBB 只读行映射位于 `src/openbb.rs`，数据请求仍经 `eqo-alpaca-data`。只能在默认 Alpaca 数据源地址被使用时标记 `source_mode=alpaca`；`EQO_MARKET_DATA_BASE_URL` 的任何自定义地址均为 `unknown`。OpenBB rows 使用来源字段自己的市场时间，绝不使用 Gateway 请求时间补齐。bars/options 分页必须有限额并把 `pages_fetched`、`has_more`、`truncated` 显式返回；若页预算耗尽、仍有后续页但没有任何行情行，OpenBB flat-array endpoint 必须返回带来源/feed/分页字段的明确截断错误；完整空结果仍返回 `200 []`，不得伪造占位行。上游 `next_page_token` 仅允许缺失/null（终止）或非空字符串（续页），空字符串和其他类型都必须失败关闭。期权快照 OCC 符号无法解析或与精确请求到期日不一致时必须失败关闭；错误行不得静默丢弃或把缺失 OHLCV 填零。普通 table 的 `refetchInterval` 是 HTTP polling，不得称作 Live Grid。

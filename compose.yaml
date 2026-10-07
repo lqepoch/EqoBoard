@@ -1,5 +1,8 @@
 # OpenTerminal is the browser entry point. Rust Gateway remains the sole
 # stock/option authority; research and market credentials never reach browsers.
+include:
+  - compose.openbb.yaml
+
 services:
   eqoboard:
     build: .
@@ -44,6 +47,7 @@ services:
       API_URL: http://research:4000
       NEXT_TELEMETRY_DISABLED: "1"
       EQO_PUBLIC_ORIGIN: ${EQO_PUBLIC_ORIGIN:-http://localhost:3000}
+      EQO_RESEARCH_PUBLIC_ORIGIN: ${EQO_RESEARCH_PUBLIC_ORIGIN:-}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
       EQO_SESSION_TTL_SECONDS: ${EQO_SESSION_TTL_SECONDS:-3600}

@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { allowlistedRoles } from "@/lib/permissions";
+import { validatePublicResearchOrigin } from "@/lib/research-origin";
 
 type OidcProfile = Record<string, unknown> & {
   sub: string;
@@ -47,6 +48,38 @@ export function publicAppOrigin(): string | null {
   }
 }
 
+function hasSeparateResearchHostname(): boolean {
+  const researchRaw = process.env.EQO_PUBLIC_ORIGIN;
+  const terminalRaw = process.env.EQO_TERMINAL_PUBLIC_ORIGIN;
+  if (!researchRaw || !terminalRaw) return false;
+
+  try {
+    const research = new URL(researchRaw);
+    const terminal = new URL(terminalRaw);
+    const isAllowedOrigin = (url: URL, raw: string) => {
+      const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+      return url.origin === raw && !url.username && !url.password && !url.search && !url.hash &&
+        (url.protocol === "https:" || (url.protocol === "http:" && loopback));
+    };
+
+    // Cookies are scoped to a hostname, not a port. A second port on the same
+    // hostname would still receive host-only Terminal cookies.
+    return isAllowedOrigin(research, researchRaw) &&
+      isAllowedOrigin(terminal, terminalRaw) &&
+      research.hostname !== terminal.hostname;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Optional public OpenBB Workspace origin. It is navigation-only: the browser
+ * starts its own OpenBB session and never receives Gateway or BFF credentials.
+ */
+export function publicResearchOrigin(): string | null {
+  return validatePublicResearchOrigin(process.env.EQO_RESEARCH_PUBLIC_ORIGIN, publicAppOrigin());
+}
+
 export function isOidcConfigured(): boolean {
   return Boolean(
     validIssuer(process.env.EQO_OIDC_ISSUER) &&
@@ -71,6 +104,48 @@ export function isAuthRuntimeConfigured(): boolean {
     validHmacSecret(researchSecret) &&
     new Set(signingSecrets).size === signingSecrets.length &&
     Boolean(process.env.EQO_RESEARCH_API_KEY && process.env.EQO_RESEARCH_API_KEY.length >= 32);
+}
+
+/**
+ * The isolated OpenBB BFF can sign only Gateway research tokens. It must not
+ * receive the terminal BFF key, the Node research API's static service key,
+ * or any provider market credentials.
+ */
+export function isResearchAuthRuntimeConfigured(): boolean {
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+  const researchSecret = process.env.EQO_RESEARCH_JWT_SECRET;
+  return process.env.EQO_BFF_MODE === "research" &&
+    isOidcConfigured() &&
+    hasSeparateResearchHostname() &&
+    validHmacSecret(researchSecret) &&
+    researchSecret !== nextAuthSecret &&
+    !process.env.EQO_GATEWAY_JWT_SECRET &&
+    !process.env.EQO_RESEARCH_API_KEY &&
+    !process.env.ALPACA_KEY &&
+    !process.env.ALPACA_SECRET;
+}
+
+export function isCurrentRuntimeReady(): boolean {
+  return process.env.EQO_BFF_MODE === "research"
+    ? isResearchAuthRuntimeConfigured()
+    : isAuthRuntimeConfigured();
+}
+
+function researchCookies(): NonNullable<NextAuthOptions["cookies"]> | undefined {
+  if (process.env.EQO_BFF_MODE !== "research") return undefined;
+  const secure = publicAppOrigin()?.startsWith("https://") ?? false;
+  const prefix = "eqo-research-";
+  const hostPrefix = secure ? "__Host-" : "";
+  const options = { httpOnly: true, sameSite: "lax" as const, path: "/", secure };
+  const flowOptions = { ...options, maxAge: 15 * 60 };
+  return {
+    sessionToken: { name: `${hostPrefix}${prefix}session-token`, options },
+    callbackUrl: { name: `${hostPrefix}${prefix}callback-url`, options: flowOptions },
+    csrfToken: { name: `${hostPrefix}${prefix}csrf-token`, options },
+    pkceCodeVerifier: { name: `${hostPrefix}${prefix}pkce-code-verifier`, options: flowOptions },
+    state: { name: `${hostPrefix}${prefix}state`, options: flowOptions },
+    nonce: { name: `${hostPrefix}${prefix}nonce`, options: flowOptions },
+  };
 }
 
 const issuer = validIssuer(process.env.EQO_OIDC_ISSUER);
@@ -106,6 +181,7 @@ const oidcProvider: OAuthConfig<OidcProfile> | null = issuer &&
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: oidcProvider ? [oidcProvider] : [],
+  cookies: researchCookies(),
   session: {
     strategy: "jwt",
     maxAge: sessionLifetimeSeconds ?? 60 * 60,

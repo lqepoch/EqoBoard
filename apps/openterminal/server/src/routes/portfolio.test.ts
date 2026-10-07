@@ -1,10 +1,31 @@
 import express from "express";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { db } from "../db.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { requirePortfolioScope, type VerifiedPrincipal } from "../auth.js";
-import { createPortfolioRouter } from "./portfolio.js";
+
+let dataDir = "";
+let previousDataDir: string | undefined;
+let db!: (typeof import("../db.js"))["db"];
+let createPortfolioRouter!: typeof import("./portfolio.js")["createPortfolioRouter"];
+
+beforeAll(async () => {
+  previousDataDir = process.env.DATA_DIR;
+  dataDir = mkdtempSync(join(tmpdir(), "openterminal-portfolio-test-"));
+  process.env.DATA_DIR = dataDir;
+  ({ db } = await import("../db.js"));
+  ({ createPortfolioRouter } = await import("./portfolio.js"));
+});
+
+afterAll(() => {
+  db?.close();
+  if (dataDir) rmSync(dataDir, { recursive: true, force: true });
+  if (previousDataDir === undefined) delete process.env.DATA_DIR;
+  else process.env.DATA_DIR = previousDataDir;
+});
 
 function startPortfolioServer(options: { ownerLimit: number; serviceLimit: number }) {
   const app = express();
