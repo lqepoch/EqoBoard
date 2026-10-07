@@ -1,4 +1,6 @@
+import type { MarketSnapshotWatermark } from "./api";
 import { usesSIPEquitySymbol } from "../../server/src/providers/market-symbol.ts";
+import { splitSnapshotWatermarks } from "../../server/src/providers/snapshot-watermarks.ts";
 export { usesSIPEquitySymbol };
 
 /**
@@ -14,21 +16,44 @@ type Snapshot = {
   symbol: string; last: number | null; previous_close: number | null;
   change_percent: number | null; open?: number | null; high?: number | null;
   low?: number | null; bid: number | null; ask: number | null;
-  volume: number | null; updated_at: string | null; feed: string;
+  volume: number | null; feed: string;
+  quote_at?: string | null; trade_at?: string | null; daily_bar_at?: string | null;
+  previous_daily_bar_at?: string | null; last_as_of?: string | null;
+  last_basis?: "trade" | "daily_bar" | "unknown" | null;
+  /** Compatibility field; never treated as the timestamp for non-trade fields. */
+  updated_at?: string | null;
+};
+export type SnapshotWatermark = MarketSnapshotWatermark;
+type GatewaySnapshotWatermark = {
+  feed?: "stocks" | "options";
+  connection_epoch: number;
+  request_start_sequence?: number | null;
+  local_sequence: number;
 };
 type BarsResponse = { feed: string; bars: Array<{
   time: string; open: number; high: number; low: number; close: number; volume: number
-}> };
-type Option = {
+}>; watermark?: GatewaySnapshotWatermark };
+export type EqoHistory = { bars: Array<{time:number;open:number;high:number;low:number;close:number;volume:number}>;
+  source:string;asOf:string|null;watermark?:GatewaySnapshotWatermark|null };
+type RawOption = {
   symbol: string; right: "call" | "put"; strike: number; bid: number | null;
   ask: number | null; last: number | null; iv: number | null;
   delta: number | null; gamma: number | null; theta: number | null;
   vega: number | null; bid_size: number | null; ask_size: number | null;
-  updated_at: string | null
+  quote_at?: string | null; trade_at?: string | null; model_as_of?: string | null;
+  /** Compatibility field; this may mix quote and trade time and is not used for freshness. */
+  updated_at?: string | null
+};
+type Option = RawOption & {
+  greeksSource: "Alpaca REST option snapshot model";
+  greeksAsOf: string | null;
 };
 export type EqoChain = {
   symbol: string; underlyingPrice: number | null; selectedDate: string;
   source: string; asOf: string; truncated: boolean;
+  /** Legacy mixed-time barrier; retained for older clients, never used for LIVE state. */
+  watermark?: SnapshotWatermark | null;
+  watermarks: SnapshotWatermark[];
   calls: Option[]; puts: Option[];
 };
 
@@ -54,6 +79,9 @@ function requireFeed(feed: string, expected: "sip" | "opra"): void {
 }
 async function getRust<T>(path: string, authorization: string): Promise<T> {
   const host = process.env.EQO_RUST_URL ?? "http://127.0.0.1:8080";
+  if (!authorization || authorization.trim() !== authorization || /\s/.test(authorization)) {
+    throw new EqoUpstreamError(401, "A verified market:read identity is required");
+  }
   // Server-managed deployment configuration; never accept a URL from a client.
   const headers: Record<string,string> = { Authorization: `Bearer ${authorization}` };
   const response = await fetch(host.replace(/\/+$/, "")+path, {
@@ -86,7 +114,7 @@ export async function eqoStatus(authorization: string) {
 export async function eqoQuotes(input: string, authorization: string) {
   const symbols = [...new Set(input.split(",").map(validateTicker))];
   if (!symbols.length||symbols.length>50) throw new EqoUpstreamError(400,"Expected 1..50 stock symbols");
-  const data=await getRust<{feed:string;snapshots:Snapshot[]}>(
+  const data=await getRust<{feed:string;snapshots:Snapshot[];watermark?:GatewaySnapshotWatermark}>(
     "/api/v1/stocks/snapshots?symbols="+encodeURIComponent(symbols.join(",")), authorization);
   requireFeed(data.feed,"sip");
   return data.snapshots.map(s=>({
@@ -95,7 +123,18 @@ export async function eqoQuotes(input: string, authorization: string) {
     previousClose:s.previous_close,bid:s.bid,ask:s.ask,volume:s.volume,
     avgVolume:null,marketCap:null,pe:null,eps:null,dividendYield:null,
     week52High:null,week52Low:null,beta:null,sharesOutstanding:null,
-    currency:"USD",exchange:null,marketState:null,source:"Alpaca SIP",asOf:s.updated_at
+    currency:"USD",exchange:null,marketState:null,source:"Alpaca SIP",asOf:s.last_as_of??null,
+    quoteAt:s.quote_at??null,tradeAt:s.trade_at??null,
+    dailyBarAt:s.daily_bar_at??null,previousDailyBarAt:s.previous_daily_bar_at??null,
+    lastAsOf:s.last_as_of??null,lastBasis:s.last_basis??"unknown",
+    // Old gateway payloads expose only updated_at, which is trade-only and
+    // cannot safely establish which source produced `last`; keep it visible
+    // as tradeAt but do not use it to mark either channel LIVE.
+    ...(s.trade_at===undefined&&s.updated_at?{tradeAt:s.updated_at}:{}),
+    watermarks:splitSnapshotWatermarks("stocks",data.watermark??null,[{
+      symbol:s.symbol,quote_at:s.quote_at??null,
+      trade_at:s.trade_at??(s.last_basis==="trade"?s.updated_at:null)
+    }]),
   }));
 }
 export async function eqoHistory(symbol: string, range: string, authorization: string) {
@@ -111,12 +150,13 @@ export async function eqoHistory(symbol: string, range: string, authorization: s
     time:Math.floor(Date.parse(b.time)/1000),
     open:b.open,high:b.high,low:b.low,close:b.close,volume:b.volume
   })).filter(b=>Number.isFinite(b.time)).sort((a,b)=>a.time-b.time);
-  if (range==="YTD") {
+  const filtered=range==="YTD" ? (()=>{
     const year=new Date().toLocaleDateString("en-US",{timeZone:"America/New_York",year:"numeric"});
     const start=Date.parse(year+"-01-01T00:00:00Z")/1000;
     return bars.filter(b=>b.time>=start);
-  }
-  return bars;
+  })() : bars;
+  return {bars:filtered,source:"Alpaca SIP",asOf:filtered.length?new Date(filtered[filtered.length-1].time*1000).toISOString():null,
+    watermark:data.watermark??null} satisfies EqoHistory;
 }
 export async function eqoChain(symbol: string, expiry: string | undefined, authorization: string): Promise<EqoChain> {
   const sym=validateTicker(symbol);
@@ -126,13 +166,18 @@ export async function eqoChain(symbol: string, expiry: string | undefined, autho
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date+"T12:00:00Z")))
     throw new EqoUpstreamError(400,"Invalid option expiry");
   const query=new URLSearchParams({underlying:sym,expiration:date});
-  const raw=await getRust<{feed:string;as_of:string;truncated:boolean;contracts:Option[]}>(
+  const raw=await getRust<{feed:string;as_of:string;truncated:boolean;contracts:RawOption[];watermark?:GatewaySnapshotWatermark}>(
     "/api/v1/options/chain?"+query.toString(), authorization);
   requireFeed(raw.feed,"opra");
+  const underlying = (await eqoQuotes(sym, authorization)).find((quote) => quote.symbol === sym);
+  const watermarks=splitSnapshotWatermarks("options",raw.watermark??null,raw.contracts);
   return {
-    symbol:sym,underlyingPrice:null,selectedDate:date,source:"Alpaca OPRA",
+    symbol:sym,underlyingPrice:underlying?.price ?? null,selectedDate:date,source:"Alpaca OPRA",
     asOf:raw.as_of,truncated:raw.truncated,
-    calls:raw.contracts.filter(c=>c.right==="call"),
-    puts:raw.contracts.filter(c=>c.right==="put")
+    // Do not derive a quote or trade barrier from the legacy mixed updated_at.
+    watermarks,
+    watermark:watermarks[0]??null,
+    calls:raw.contracts.filter(c=>c.right==="call").map(c=>({...c,greeksSource:"Alpaca REST option snapshot model" as const,greeksAsOf:c.model_as_of??null})),
+    puts:raw.contracts.filter(c=>c.right==="put").map(c=>({...c,greeksSource:"Alpaca REST option snapshot model" as const,greeksAsOf:c.model_as_of??null}))
   };
 }
