@@ -1,5 +1,8 @@
 # OpenTerminal is the browser entry point. Rust Gateway remains the sole
 # stock/option authority; research and market credentials never reach browsers.
+include:
+  - compose.openbb.yaml
+
 services:
   eqoboard:
     build: .

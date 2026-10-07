@@ -40,14 +40,14 @@ profile 的 Lite 登录仍是上游原生邮箱/密码登录，OIDC 只控制是
 本机启动命令：
 
 ```bash
-docker compose -f compose.yaml -f compose.openbb.yaml --profile openbb build
-docker compose -f compose.yaml -f compose.openbb.yaml --profile openbb up --wait
+docker compose --profile openbb build
+docker compose --profile openbb up --build --wait
 ```
 
 停止 profile 服务时，主 Terminal、Rust Gateway 和既有 research Node 服务继续运行：
 
 ```bash
-docker compose -f compose.yaml -f compose.openbb.yaml --profile openbb stop openbb-research-ingress openbb-research-bff openbb-lite
+docker compose --profile openbb stop openbb-research-ingress openbb-research-bff openbb-lite
 ```
 
 Compose 的本地 image tag 只用于选择构建 recipe，不能当作不可变 artifact digest。正式部署/回滚必须记录实际 OCI manifest digest 和可恢复镜像归档或 registry RepoDigest；Profile 的浏览器、路由与停止/重启验收状态以本任务后续记录的实测结果为准。

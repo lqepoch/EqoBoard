@@ -13,6 +13,9 @@ services:
       AI_COPILOT_ENABLED: "false"
       MCP_DEFAULT_SERVER_ENABLED: "false"
       DATA_ALLOW_HTML_JS_EXECUTION: "false"
+      FRONTENDURL: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}
+      PROURL: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}
+      SELFURL: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}/api
     expose: ["3000"]
     volumes:
       - openbb-data:/data
