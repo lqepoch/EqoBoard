@@ -67,3 +67,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify SIP/OPRA smoke error handling without credentials
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+  openterminal:
+    name: Native OpenTerminal / AG Grid / Next.js
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: apps/openterminal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/openterminal/package-lock.json
+      - name: Install pinned OpenTerminal dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build supplemental research server
+        run: npm run build -w server
+      - name: Test upstream research service
+        run: npm run test -w server
+      - name: Typecheck native terminal
+        run: npx tsc --noEmit -p web/tsconfig.json
+      - name: Build native Next.js terminal
+        run: npm run build -w web
