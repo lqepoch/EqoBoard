@@ -76,6 +76,15 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   expect(anonymousAuthCheck.status()).toBe(401);
   expect(await anonymousAuthCheck.json()).toEqual({ error: "authentication_required" });
 
+  const csrfResponse = await page.context().request.get(`${WEB_ORIGIN}/api/auth/csrf`);
+  expect(csrfResponse.status()).toBe(200);
+  const { csrfToken } = await csrfResponse.json();
+  const formSignOut = await page.context().request.post(`${WEB_ORIGIN}/api/auth/signout`, {
+    form: { csrfToken, callbackUrl: `${WEB_ORIGIN}/api/healthz`, json: "true" },
+  });
+  expect(formSignOut.status()).toBe(200);
+  expect(await formSignOut.json()).toMatchObject({ url: `${WEB_ORIGIN}/api/healthz` });
+
   for (const path of [
     "/", "/login", "/api/eqo/orders/preview", "/api/portfolios", "/api/quotes",
     "/api/auth/not-a-nextauth-endpoint", "/_next/static/chunks/app.js",
@@ -96,9 +105,21 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   ]) {
     expect((await request.post(`${WEB_ORIGIN}${path}`, { data: { symbol: "QQQ" } })).status(), path).toBe(404);
   }
+  for (const path of [
+    "/api/portfolios",
+    "/api/ai/chat",
+    "/api/eqo/orders/preview",
+    "/api/eqo/stocks/subscribe",
+    "/api/eqo/options/subscribe",
+    "/api/auth/not-a-nextauth-endpoint",
+  ]) {
+    expect((await request.head(`${WEB_ORIGIN}${path}`)).status(), `HEAD ${path}`).toBe(404);
+    expect((await request.fetch(`${WEB_ORIGIN}${path}`, { method: "OPTIONS" })).status(), `OPTIONS ${path}`).toBe(404);
+  }
   expect((await request.get(`${WEB_ORIGIN}/api/portfolios`)).status()).toBe(404);
   expect((await request.get(`${WEB_ORIGIN}/api/eqo/stocks/subscribe`)).status()).toBe(404);
   expect((await request.get(`${WEB_ORIGIN}/api/eqo/options/subscribe`)).status()).toBe(404);
+  expect((await request.post(`${WEB_ORIGIN}/api/auth/not-a-nextauth-endpoint`, { data: { token: "ignored" } })).status()).toBe(404);
 
   const sameHostnameReadiness = await request.get(`${SAME_HOSTNAME_WEB_ORIGIN}/api/readyz`);
   expect(sameHostnameReadiness.status()).toBe(503);

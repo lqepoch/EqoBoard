@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getResearchServiceKey } from "@/lib/api-key";
-import { authorizeBffRequest, readBoundedJson } from "@/lib/eqo-auth";
+import { authorizeBffRequest, handleBffOptions, readBoundedJson } from "@/lib/eqo-auth";
 import { eqoChain, eqoHistory, eqoQuotes, eqoStatus, EqoUpstreamError, usesSIPEquitySymbol } from "@/lib/eqo-market";
 import { readLimitedResponse } from "@/lib/http-response";
 import type { ActionScope } from "@/lib/permissions";
@@ -260,4 +260,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 export async function PATCH(request: NextRequest, context: RouteContext) {
   return proxy(request, (await context.params).path);
+}
+
+export function OPTIONS() {
+  return handleBffOptions("DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT");
 }
