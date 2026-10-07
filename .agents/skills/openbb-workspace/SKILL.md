@@ -9,12 +9,14 @@ description: 维护 EqoBoard 的 OpenBB Workspace custom backend、widgets.json�
 - `/widgets.json` 与 `/apps.json` 必须返回规范 JSON。
 - Widget endpoint 返回 flat JSON array；AgGrid 配置使用官方 `columnsDefs` 字段。
 - 每条 OpenBB market row 必须返回真实来源身份、feed、该市场值自己的 `market_as_of`、分页/截断和 completeness 字段。只在固定 Alpaca API 地址可确认时返回 `source_mode=alpaca`；任意自定义 `EQO_MARKET_DATA_BASE_URL` 保持 `unknown`。缺失的 quote/trade/model 时间保持 null，不得填 Gateway 请求时间。
-- bars/options 的 provider `next_page_token` 必须按有界页数消费，并返回 `pages_fetched`、`has_more`、`truncated`。空结果保持空数组，不伪造表格行来携带状态。
-- 只接受上游 `next_page_token` 缺失/null（终止）或非空字符串（续页）；空字符串及其他 JSON 类型视为无效响应，不能误报分页完整。期权快照中的 OCC 符号必须能解析且到期日必须匹配精确请求参数，否则整个请求失败关闭，不得静默过滤后报告完整。
-- 若 bars/options 页预算耗尽、仍有后续页而 flat rows 为空，端点应返回明确的 502 截断错误对象，带 `source`、`feed`、`pages_fetched`、`has_more`、`truncated`；完整空结果必须仍返回 `200 []`，不能添加占位行情行。
-- `refetchInterval` 代表普通 HTTP polling；它不构成 Live Grid 或 WebSocket 实时证据。只有实现并验证官方 `wsEndpoint` 协议、认证与来源边界后才能声明 Live Grid。
+- bars/options 的 provider `next_page_token` 必须按有界页数消费并返回 `pages_fetched`、`has_more`、`truncated`。只接受缺失/null（终止）或非空字符串（续页）；空字符串及其他 JSON 类型无效。期权 OCC 符号必须可解析且到期日匹配请求，否则整个请求失败关闭。空结果保持空数组，不伪造表格行。
+- 若 bars/options 页预算耗尽、仍有后续页而 flat rows 为空，端点返回明确的 502 截断错误；完整空结果仍返回 `200 []`。
+- `refetchInterval` 代表普通 HTTP polling，不构成 Live Grid 或 WebSocket 实时证据。只有实现并验证官方 `wsEndpoint` 协议、认证与来源边界后才能声明 Live Grid。
 - 日期默认值必须使用 Workspace 支持的动态日期修饰符或留空，禁止在固定 manifest 中写入会过期的合约日期。
-- Backend 连接必须通过 Authorization header 携带短时、受信 issuer/audience 与 `market:read` scope 约束的 Gateway 委托 JWT；静态 `EQO_ACCESS_TOKEN` 已退役，不能为 OpenBB 放宽 Gateway 验证。OpenBB Workspace 的 OIDC 登录到 Gateway 委托链路尚未完成真实联调，属于 #13 后续验收；在联调前不能宣称 OpenBB 可访问受保护市场数据。市场密钥不进入 Workspace。
+- OpenBB Lite 使用独立 research origin 和隔离的 Next research BFF。用户先通过现有 OIDC/NextAuth session 登录，服务端再用独立 research signer 签发最长 60 秒、`kid=research`、`iss=openterminal-research`、`aud=eqoboard-gateway`、单一 `market:read` scope 的委托 JWT。research runtime 不配置终端 Gateway signer、Node API key 或市场密钥。
+- OpenBB custom source URL 为同源 `/api/openbb`。Pinned Workspace endpoint `openbb/v1/stocks` 等会拼接为 `/api/openbb/openbb/v1/...`；BFF 只映射这三条只读路径，并保留 Gateway 的错误、feed、时间戳和 truncated 元数据。不得从 manifest 描述推断实际 source。
+- Gateway 委托通过 Authorization header 携带；静态 `EQO_ACCESS_TOKEN` 已退役，不能放宽 Gateway 验证。市场密钥不进入 Workspace。
+- `npm run test:e2e:research --workspace web` 验证 production Next research BFF/API，但不会运行 OpenBB Lite；不能将它标记为真实 Lite 浏览器 E2E 或 “OpenBB Web integrated”。
 - SIP/OPRA endpoint 必须显式检查 feed；失败返回错误，不切换数据源。
 - OpenBB 处于 OpenBQ/FINOS 治理迁移阶段，接口兼容层保持薄，业务模型不得绑定 Workspace 内部实现。
 - 新增 live_grid 前验证 WebSocket 的认证、Origin 和市场数据再分发边界。
