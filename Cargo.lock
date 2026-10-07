@@ -427,6 +427,7 @@ dependencies = [
 name = "eqo-gateway"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "chrono",
  "dotenvy",

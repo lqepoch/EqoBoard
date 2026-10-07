@@ -86,6 +86,23 @@ pub struct PreviewResult {
     pub intent: OrderIntent,
 }
 
+/// The verified identity that created a preview. Both values are issuer-scoped:
+/// OIDC subjects are not globally unique without their issuer.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PreviewOwner {
+    pub identity_issuer: String,
+    pub subject: String,
+}
+
+impl PreviewOwner {
+    pub fn new(identity_issuer: String, subject: String) -> Self {
+        Self {
+            identity_issuer,
+            subject,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum OrderError {
     #[error("only Paper execution is supported")]
@@ -98,6 +115,8 @@ pub enum OrderError {
     RiskLimit,
     #[error("preview expired or already consumed")]
     Expired,
+    #[error("preview does not belong to the authenticated identity")]
+    NotOwner,
     #[error("broker adapter is not configured")]
     MissingAdapter,
     #[error("broker rejected the order")]
@@ -404,13 +423,16 @@ fn valid_stock_symbol(s: &str) -> bool {
 }
 
 /// Single-use server-side preview store; intent cannot be edited between preview and confirmation.
+type PreviewEntry = (Instant, PreviewOwner, OrderIntent);
+
 #[derive(Clone, Default)]
 pub struct PreviewStore {
-    inner: Arc<Mutex<HashMap<Uuid, (Instant, OrderIntent)>>>,
+    inner: Arc<Mutex<HashMap<Uuid, PreviewEntry>>>,
 }
 impl PreviewStore {
     pub async fn create(
         &self,
+        owner: PreviewOwner,
         intent: OrderIntent,
         policy: RiskPolicy,
     ) -> Result<PreviewResult, OrderError> {
@@ -418,13 +440,17 @@ impl PreviewStore {
         let id = Uuid::new_v4();
         let expires_at = (Utc::now() + ChronoDuration::seconds(60)).to_rfc3339();
         let mut locked = self.inner.lock().await;
-        locked.retain(|_, (valid_until, _)| *valid_until > Instant::now());
+        locked.retain(|_, (valid_until, _, _)| *valid_until > Instant::now());
         if locked.len() >= 1000 {
             return Err(OrderError::RiskLimit);
         }
         locked.insert(
             id,
-            (Instant::now() + Duration::from_secs(60), intent.clone()),
+            (
+                Instant::now() + Duration::from_secs(60),
+                owner,
+                intent.clone(),
+            ),
         );
         Ok(PreviewResult {
             preview_id: id,
@@ -434,17 +460,34 @@ impl PreviewStore {
             intent,
         })
     }
-    pub async fn consume(&self, id: Uuid) -> Result<OrderIntent, OrderError> {
-        let item = self
-            .inner
-            .lock()
-            .await
-            .remove(&id)
-            .ok_or(OrderError::Expired)?;
-        if item.0 <= Instant::now() {
+    pub async fn authorize(&self, id: Uuid, owner: &PreviewOwner) -> Result<(), OrderError> {
+        let mut locked = self.inner.lock().await;
+        let Some((valid_until, preview_owner, _)) = locked.get(&id) else {
+            return Err(OrderError::Expired);
+        };
+        if *valid_until <= Instant::now() {
+            locked.remove(&id);
             return Err(OrderError::Expired);
         }
-        Ok(item.1)
+        if preview_owner != owner {
+            return Err(OrderError::NotOwner);
+        }
+        Ok(())
+    }
+    pub async fn consume(&self, id: Uuid, owner: &PreviewOwner) -> Result<OrderIntent, OrderError> {
+        let mut locked = self.inner.lock().await;
+        let Some((valid_until, preview_owner, _)) = locked.get(&id) else {
+            return Err(OrderError::Expired);
+        };
+        if *valid_until <= Instant::now() {
+            locked.remove(&id);
+            return Err(OrderError::Expired);
+        }
+        if preview_owner != owner {
+            return Err(OrderError::NotOwner);
+        }
+        let (_, _, intent) = locked.remove(&id).ok_or(OrderError::Expired)?;
+        Ok(intent)
     }
 }
 
@@ -471,10 +514,17 @@ impl HttpBrokerAdapter {
     fn from_env(name: &str) -> Option<Self> {
         let prefix = format!("EQO_ADAPTER_{}", name.to_uppercase());
         let raw = std::env::var(format!("{prefix}_URL")).ok()?;
+        let token = std::env::var(format!("{prefix}_TOKEN"))
+            .ok()
+            .filter(|value| !value.is_empty());
+        Self::from_url(&raw, token, Duration::from_secs(8))
+    }
+
+    fn from_url(raw: &str, token: Option<String>, timeout: Duration) -> Option<Self> {
         if raw.trim().is_empty() {
             return None;
         }
-        let parsed = Url::parse(&raw).ok()?;
+        let parsed = Url::parse(raw).ok()?;
         let local = matches!(parsed.host_str(), Some("localhost" | "127.0.0.1" | "::1"));
         if !((local && parsed.scheme() == "http") || parsed.scheme() == "https")
             || parsed.username() != ""
@@ -485,15 +535,21 @@ impl HttpBrokerAdapter {
             return None;
         }
         Some(Self {
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(8))
-                .build()
-                .ok()?,
+            client: reqwest::Client::builder().timeout(timeout).build().ok()?,
             base: raw.trim_end_matches('/').to_string(),
-            token: std::env::var(format!("{prefix}_TOKEN"))
-                .ok()
-                .filter(|v| !v.is_empty()),
+            token,
         })
+    }
+}
+
+fn validate_adapter_ack(id: Uuid, ack: AdapterAck) -> Result<AdapterAck, OrderError> {
+    if ack.client_order_id != id.to_string() {
+        return Err(OrderError::UnknownState);
+    }
+    match ack.status.as_str() {
+        "accepted" => Ok(ack),
+        "rejected" => Err(OrderError::Rejected),
+        _ => Err(OrderError::UnknownState),
     }
 }
 
@@ -512,7 +568,7 @@ impl BrokerAdapter for HttpBrokerAdapter {
             req = req.bearer_auth(token);
         }
         let response = req.send().await.map_err(|_| OrderError::UnknownState)?;
-        if response.status().is_client_error() {
+        if response.status() == reqwest::StatusCode::UNPROCESSABLE_ENTITY {
             return Err(OrderError::Rejected);
         }
         if !response.status().is_success() {
@@ -522,10 +578,7 @@ impl BrokerAdapter for HttpBrokerAdapter {
             .json()
             .await
             .map_err(|_| OrderError::UnknownState)?;
-        if ack.client_order_id != id.to_string() {
-            return Err(OrderError::UnknownState);
-        }
-        Ok(ack)
+        validate_adapter_ack(id, ack)
     }
 }
 
@@ -541,6 +594,9 @@ impl BrokerRouter {
                 adapters.insert(broker, Arc::new(adapter));
             }
         }
+        Self::from_adapters(adapters)
+    }
+    pub fn from_adapters(adapters: HashMap<Broker, Arc<dyn BrokerAdapter>>) -> Self {
         Self {
             adapters: Arc::new(adapters),
         }
@@ -553,19 +609,84 @@ impl BrokerRouter {
             .collect()
     }
     pub async fn submit(&self, id: Uuid, intent: &OrderIntent) -> Result<AdapterAck, OrderError> {
-        self.adapters
+        let ack = self
+            .adapters
             .get(&intent.broker)
             .ok_or(OrderError::MissingAdapter)?
             .submit(id, intent)
-            .await
+            .await?;
+        validate_adapter_ack(id, ack)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+        task::JoinHandle,
+    };
+
     fn test_day() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 10, 7).unwrap()
+    }
+
+    async fn loopback_adapter_fixture(
+        status: u16,
+        delay: Duration,
+        timeout: Duration,
+        ack_status: Option<&str>,
+        matching_id: bool,
+    ) -> (Result<AdapterAck, OrderError>, String) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let id = Uuid::new_v4();
+        let response_id = if matching_id {
+            id.to_string()
+        } else {
+            "different-order-id".to_string()
+        };
+        let ack_status = ack_status.map(str::to_string);
+        let server: JoinHandle<Vec<u8>> = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut received = Vec::new();
+            let mut chunk = [0_u8; 2048];
+            loop {
+                let count = stream.read(&mut chunk).await.unwrap();
+                if count == 0 {
+                    break;
+                }
+                received.extend_from_slice(&chunk[..count]);
+                if received.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            tokio::time::sleep(delay).await;
+            let body = ack_status
+                .map(|ack_status| {
+                    serde_json::json!({
+                        "client_order_id": response_id,
+                        "status": ack_status,
+                        "broker_order_id": null,
+                        "as_of": null
+                    })
+                    .to_string()
+                })
+                .unwrap_or_else(|| r#"{"error":"offline fixture"}"#.to_string());
+            let reason = if status == 200 { "OK" } else { "Fixture" };
+            let response = format!(
+                "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+            received
+        });
+        let adapter =
+            HttpBrokerAdapter::from_url(&format!("http://{address}"), None, timeout).unwrap();
+        let result = adapter.submit(id, &vertical()).await;
+        let request = server.await.unwrap();
+        (result, String::from_utf8_lossy(&request).to_string())
     }
 
     fn option_symbol(expiration: NaiveDate, right: Right, strike_millis: i64) -> String {
@@ -816,6 +937,10 @@ mod tests {
             max_qty: 3,
             max_loss: 250.0,
         };
+        let owner = PreviewOwner::new("https://identity.example".into(), "owner-a".into());
+        let other_subject = PreviewOwner::new("https://identity.example".into(), "owner-b".into());
+        let other_issuer =
+            PreviewOwner::new("https://another-identity.example".into(), "owner-a".into());
         let preview_order = vertical_for(
             Utc::now().date_naive() + ChronoDuration::days(2),
             Right::Put,
@@ -824,11 +949,115 @@ mod tests {
             NetEffect::Debit,
             false,
         );
-        let preview = store.create(preview_order, policy).await.unwrap();
-        assert!(store.consume(preview.preview_id).await.is_ok());
+        let preview = store
+            .create(owner.clone(), preview_order, policy)
+            .await
+            .unwrap();
         assert!(matches!(
-            store.consume(preview.preview_id).await,
+            store.consume(preview.preview_id, &other_subject).await,
+            Err(OrderError::NotOwner)
+        ));
+        assert!(matches!(
+            store.authorize(preview.preview_id, &other_issuer).await,
+            Err(OrderError::NotOwner)
+        ));
+        assert!(store.consume(preview.preview_id, &owner).await.is_ok());
+        assert!(matches!(
+            store.consume(preview.preview_id, &owner).await,
             Err(OrderError::Expired)
         ));
+    }
+
+    #[tokio::test]
+    async fn uncertain_http_statuses_keep_the_order_outcome_unknown() {
+        for status in [408, 409, 429, 500, 503] {
+            let id = Uuid::new_v4();
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0_u8; 8192];
+                let count = stream.read(&mut request).await.unwrap();
+                let response = format!(
+                    "HTTP/1.1 {status} Fixture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+                String::from_utf8_lossy(&request[..count]).to_string()
+            });
+            let adapter = HttpBrokerAdapter::from_url(
+                &format!("http://{address}"),
+                None,
+                Duration::from_secs(1),
+            )
+            .unwrap();
+            assert!(matches!(
+                adapter.submit(id, &vertical()).await,
+                Err(OrderError::UnknownState)
+            ));
+            let request = server.await.unwrap();
+            assert!(request
+                .to_ascii_lowercase()
+                .contains(&format!("x-idempotency-key: {id}")));
+        }
+    }
+
+    #[tokio::test]
+    async fn only_unprocessable_entity_is_a_definite_http_rejection() {
+        let (result, _) =
+            loopback_adapter_fixture(422, Duration::ZERO, Duration::from_secs(1), None, true).await;
+        assert!(matches!(result, Err(OrderError::Rejected)));
+    }
+
+    #[tokio::test]
+    async fn loopback_adapter_timeout_is_unknown() {
+        let (result, request) = loopback_adapter_fixture(
+            200,
+            Duration::from_millis(100),
+            Duration::from_millis(20),
+            Some("accepted"),
+            true,
+        )
+        .await;
+        assert!(matches!(result, Err(OrderError::UnknownState)));
+        assert!(request.to_ascii_lowercase().contains("x-idempotency-key:"));
+    }
+
+    #[tokio::test]
+    async fn loopback_adapter_requires_a_matching_id_and_known_ack_state() {
+        let (accepted, _) = loopback_adapter_fixture(
+            200,
+            Duration::ZERO,
+            Duration::from_secs(1),
+            Some("accepted"),
+            true,
+        )
+        .await;
+        assert!(accepted.is_ok());
+
+        let (rejected, _) = loopback_adapter_fixture(
+            200,
+            Duration::ZERO,
+            Duration::from_secs(1),
+            Some("rejected"),
+            true,
+        )
+        .await;
+        assert!(matches!(rejected, Err(OrderError::Rejected)));
+
+        for (ack_status, matching_id) in [
+            (Some("working"), true),
+            (Some("accepted"), false),
+            (None, true),
+        ] {
+            let (uncertain, _) = loopback_adapter_fixture(
+                200,
+                Duration::ZERO,
+                Duration::from_secs(1),
+                ack_status,
+                matching_id,
+            )
+            .await;
+            assert!(matches!(uncertain, Err(OrderError::UnknownState)));
+        }
     }
 }
