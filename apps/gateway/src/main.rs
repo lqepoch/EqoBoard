@@ -33,6 +33,8 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 #[derive(Clone)]
+type ConsumerLeases = HashMap<Uuid, (Instant, HashSet<String>)>;
+
 struct AppState {
     data: Option<AlpacaData>,
     stock_feed: String,
@@ -42,7 +44,7 @@ struct AppState {
     stock_symbols: Vec<String>,
     max_option_subscriptions: usize,
     option_tx: watch::Sender<Vec<String>>,
-    leases: Arc<Mutex<HashMap<Uuid, (Instant, HashSet<String>)>>>,
+    leases: Arc<Mutex<ConsumerLeases>>,
     broadcasts: broadcast::Sender<MarketEvent>,
     tickets: Arc<Mutex<HashMap<Uuid, Instant>>>,
     previews: PreviewStore,

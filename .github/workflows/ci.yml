@@ -2,7 +2,7 @@ name: EqoBoard CI
 
 on:
   push:
-    branches: [main, feat/initial-market-terminal]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   rust:
