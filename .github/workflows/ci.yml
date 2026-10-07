@@ -40,6 +40,8 @@ jobs:
           python-version: 3.12.15
       - name: Verify Python toolchain
         run: test "$(python --version)" = 'Python 3.12.15'
+      - name: Generate pinned OpenTerminal upstream file audit
+        run: python3 tools/upstream_diff.py >> "$GITHUB_STEP_SUMMARY"
       - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Fetch and verify pinned OpenBB source archive and licenses
         run: |

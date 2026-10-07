@@ -5,7 +5,7 @@ description: 在 EqoBoard 中同步和扩展 OpenTerminal，优先复用原生 W
 # OpenTerminal Upstream Skill
 
 1. 读取 `docs/THIRD_PARTY.md` 的 pinned SHA。
-2. 比较上游新 SHA 与当前基线，按 Workspace、widgets、server providers、security 分组审查。
+2. 在仓库根运行 `python3 tools/upstream_diff.py`，用已锁定的 Git SHA 获取并验证上游树，逐文件审查 exact、modified、EqoBoard-only 和 deleted 清单；CI 将报告写入 Step Summary。未登记差异必须补充审计说明后再升级。
 3. 通用功能同步上游；EqoBoard 差异保持在数据适配、AG Grid Option Chain、IV/OPRA/Vertical 等少数文件。
 4. 不恢复被删除的平行 Vite 终端。
 5. OpenBB Research 只作为可选原生 Sidebar/Command Palette 外链；读取服务端验证的 `EQO_RESEARCH_PUBLIC_ORIGIN`，新标签使用 `noopener noreferrer`。不得嵌入 Vite UI、iframe 或把该入口描述为已集成 OpenBB OIDC/Gateway 委托认证。
