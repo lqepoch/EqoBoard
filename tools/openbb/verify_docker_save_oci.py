@@ -63,7 +63,16 @@ def verify_archive(archive_path: str, image_tag: str, inspect_path: str) -> dict
         raise ValueError("Docker image inspect must contain exactly one image")
     inspect = inspect_rows[0]
     image_id = inspect["Id"]
-    platform = f'{inspect["Os"]}/{inspect["Architecture"]}'
+    inspect_os = inspect.get("Os")
+    inspect_architecture = inspect.get("Architecture")
+    if (
+        not isinstance(inspect_os, str)
+        or not inspect_os
+        or not isinstance(inspect_architecture, str)
+        or not inspect_architecture
+    ):
+        raise ValueError("Docker image inspect is missing its OS or architecture")
+    platform = f"{inspect_os}/{inspect_architecture}"
 
     with tarfile.open(archive_path, "r") as archive:
         names = set(archive.getnames())
@@ -89,6 +98,8 @@ def verify_archive(archive_path: str, image_tag: str, inspect_path: str) -> dict
                 raise ValueError("unsupported OCI image layout version")
             root_index_bytes = _member_bytes(archive, "index.json")
             root_index = json.loads(root_index_bytes)
+            if not isinstance(root_index, dict):
+                raise ValueError("OCI root index must be an object")
             root_index_digest = _digest(root_index_bytes)
             root_descriptors = root_index.get("manifests", [])
             if not isinstance(root_descriptors, list):
@@ -96,13 +107,21 @@ def verify_archive(archive_path: str, image_tag: str, inspect_path: str) -> dict
 
             observed_sizes: dict[str, int] = {}
             verified_digests: set[str] = set()
-            expanded: set[tuple[str, str]] = set()
-            app_manifests: list[dict[str, Any]] = []
-            index_descriptors: list[dict[str, Any]] = []
+            expanded_indexes: set[tuple[tuple[str, str], ...]] = set()
+            target_manifests: list[dict[str, Any]] = []
 
             def visit_descriptor(descriptor: dict[str, Any], path: tuple[dict[str, Any], ...]) -> None:
+                if not isinstance(descriptor, dict):
+                    raise ValueError("OCI index child must be a descriptor object")
                 digest = descriptor.get("digest", "")
                 media_type = descriptor.get("mediaType", "")
+                if not isinstance(media_type, str) or not media_type:
+                    raise ValueError("OCI descriptor is missing its media type")
+                if not (
+                    media_type.endswith("image.index.v1+json")
+                    or media_type.endswith("image.manifest.v1+json")
+                ):
+                    raise ValueError(f"unsupported OCI descriptor media type: {media_type}")
                 # Validate every descriptor occurrence, including duplicates, before
                 # using the expansion cache. A duplicate cannot smuggle a false size.
                 blob = _verify_descriptor(
@@ -110,16 +129,21 @@ def verify_archive(archive_path: str, image_tag: str, inspect_path: str) -> dict
                     descriptor,
                     observed_sizes,
                     verified_digests,
-                    include_bytes=(digest, media_type) not in expanded,
+                    include_bytes=True,
                 )
-                visit_key = (digest, media_type)
-                if visit_key in expanded:
-                    return
-                expanded.add(visit_key)
 
                 if media_type.endswith("image.index.v1+json"):
-                    index_descriptors.append(descriptor)
+                    index_path = tuple(
+                        (item["digest"], json.dumps(item.get("platform"), sort_keys=True))
+                        for item in path
+                        if item.get("mediaType", "").endswith("image.index.v1+json")
+                    )
+                    if index_path in expanded_indexes:
+                        return
+                    expanded_indexes.add(index_path)
                     nested = json.loads(blob or b"")
+                    if not isinstance(nested, dict):
+                        raise ValueError(f"OCI nested index must be an object: {digest}")
                     children = nested.get("manifests", [])
                     if not isinstance(children, list):
                         raise ValueError(f"OCI nested index manifests must be a list: {digest}")
@@ -129,28 +153,37 @@ def verify_archive(archive_path: str, image_tag: str, inspect_path: str) -> dict
 
                 if media_type.endswith("image.manifest.v1+json"):
                     manifest = json.loads(blob or b"")
+                    if not isinstance(manifest, dict):
+                        raise ValueError(f"OCI image manifest must be an object: {digest}")
                     config = manifest.get("config")
                     layers = manifest.get("layers", [])
                     if not isinstance(config, dict) or not isinstance(layers, list):
                         raise ValueError(f"OCI image manifest is missing config or layer descriptors: {digest}")
+                    oci_config_digest = config.get("digest")
                     _verify_descriptor(archive, config, observed_sizes, verified_digests, include_bytes=False)
+                    layer_digests: list[str] = []
                     for layer in layers:
+                        if not isinstance(layer, dict):
+                            raise ValueError(f"OCI image layer must be a descriptor object: {digest}")
                         _verify_descriptor(archive, layer, observed_sizes, verified_digests, include_bytes=False)
-                    platform_descriptor = next(
-                        (item.get("platform") for item in reversed(path) if item.get("platform")),
-                        {},
-                    )
-                    platform_value = f'{platform_descriptor.get("os", "")}/{platform_descriptor.get("architecture", "")}'
-                    if platform_value == platform:
+                        layer_digests.append(layer.get("digest", ""))
+
+                    # The Docker-save config and ordered layer digests identify the
+                    # image being inspected. Platform metadata from unrelated
+                    # manifests (including BuildKit attestations) cannot select it.
+                    if oci_config_digest == config_digest and layer_digests == [
+                        item["digest"] for item in docker_layers
+                    ]:
                         index_chain = [
                             item["digest"]
                             for item in path
                             if item.get("mediaType", "").endswith("image.index.v1+json")
                         ]
-                        app_manifests.append({
+                        target_manifests.append({
                             "descriptor": descriptor,
                             "manifest": manifest,
                             "index_chain": index_chain,
+                            "path": path,
                         })
                     return
 
@@ -158,18 +191,65 @@ def verify_archive(archive_path: str, image_tag: str, inspect_path: str) -> dict
 
             for descriptor in root_descriptors:
                 visit_descriptor(descriptor, (descriptor,))
-            if len(app_manifests) != 1:
-                raise ValueError(f"expected one OCI application manifest for {platform}, found {len(app_manifests)}")
+            if len(target_manifests) != 1:
+                raise ValueError(
+                    "expected one OCI application manifest matching the Docker-save config and ordered layers, "
+                    f"found {len(target_manifests)}"
+                )
 
-            app = app_manifests[0]
+            app = target_manifests[0]
             app_descriptor = app["descriptor"]
             app_manifest = app["manifest"]
             app_config = app_manifest["config"]
             app_layers = app_manifest["layers"]
-            if app_config["digest"] != config_digest:
-                raise ValueError("OCI application config does not match Docker-save config")
-            if [item["digest"] for item in app_layers] != [item["digest"] for item in docker_layers]:
-                raise ValueError("OCI application layers do not match Docker-save layers")
+            app_config_bytes = _member_bytes(
+                archive,
+                "blobs/sha256/" + app_config["digest"].removeprefix("sha256:"),
+            )
+            try:
+                app_config_document = json.loads(app_config_bytes)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"OCI target image config is not valid JSON: {app_config['digest']}") from exc
+            if not isinstance(app_config_document, dict):
+                raise ValueError(f"OCI target image config is not an object: {app_config['digest']}")
+            config_os = app_config_document.get("os")
+            config_architecture = app_config_document.get("architecture")
+            if (
+                not isinstance(config_os, str)
+                or not config_os
+                or not isinstance(config_architecture, str)
+                or not config_architecture
+            ):
+                raise ValueError(f"OCI target image config is missing OS or architecture: {app_config['digest']}")
+            config_platform = f"{config_os}/{config_architecture}"
+            if config_platform != platform:
+                raise ValueError(
+                    f"OCI target image config platform {config_platform} does not match Docker inspect {platform}"
+                )
+
+            declared_platforms: set[str] = set()
+            for ancestor in app["path"]:
+                platform_descriptor = ancestor.get("platform")
+                if platform_descriptor is None:
+                    continue
+                if not isinstance(platform_descriptor, dict):
+                    raise ValueError("OCI target descriptor platform is not an object")
+                os_name = platform_descriptor.get("os")
+                architecture = platform_descriptor.get("architecture")
+                if (
+                    not isinstance(os_name, str)
+                    or not os_name
+                    or not isinstance(architecture, str)
+                    or not architecture
+                ):
+                    raise ValueError("OCI target descriptor has an incomplete platform claim")
+                declared_platforms.add(f"{os_name}/{architecture}")
+            if len(declared_platforms) > 1:
+                raise ValueError("OCI target index chain contains conflicting platform claims")
+            if declared_platforms and declared_platforms != {config_platform}:
+                raise ValueError(
+                    "OCI target descriptor platform does not match Docker-save config and Docker inspect"
+                )
 
             release_descriptors = set(app["index_chain"]) | {app_descriptor["digest"], root_index_digest}
             if image_id == root_index_digest:
@@ -200,6 +280,8 @@ def verify_archive(archive_path: str, image_tag: str, inspect_path: str) -> dict
                 observed_index = root_index_digest
             if observed_index is None and len(target_indexes) == 1:
                 observed_index = target_indexes[0]
+            if observed_index is None and not target_indexes:
+                observed_index = root_index_digest
 
             oci_evidence = {
                 "layout_index_sha256": root_index_digest,
