@@ -47,9 +47,12 @@ struct AppState {
     execution_enabled: bool,
     token: Option<String>,
     stock_symbols: Vec<String>,
+    max_stock_subscriptions: usize,
+    stock_tx: watch::Sender<Vec<String>>,
+    stock_leases: Arc<Mutex<ConsumerLeases>>,
     max_option_subscriptions: usize,
     option_tx: watch::Sender<Vec<String>>,
-    leases: Arc<Mutex<ConsumerLeases>>,
+    option_leases: Arc<Mutex<ConsumerLeases>>,
     broadcasts: broadcast::Sender<MarketEvent>,
     tickets: Arc<Mutex<HashMap<Uuid, Instant>>>,
     previews: PreviewStore,
@@ -126,6 +129,8 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
         "market_data_provider":"alpaca",
         "execution_mode":if state.execution_enabled {"paper"} else {"disabled"},
         "configured_adapters":state.brokers.configured(),
+        "max_stock_subscriptions":state.max_stock_subscriptions,
+        "active_stock_subscriptions":state.stock_tx.borrow().len(),
         "max_option_subscriptions":state.max_option_subscriptions,
         "active_option_subscriptions":state.option_tx.borrow().len(),
         "stock_symbols":state.stock_symbols,
@@ -402,13 +407,59 @@ async fn openbb_bars(State(state): State<AppState>, Query(query): Query<BarsQuer
 }
 
 #[derive(Deserialize)]
-struct SubscribeOptions {
+struct SubscribeSymbols {
     consumer_id: Uuid,
     symbols: Vec<String>,
 }
+async fn stock_subscribe(
+    State(state): State<AppState>,
+    Json(body): Json<SubscribeSymbols>,
+) -> Response {
+    if body.symbols.len() > state.max_stock_subscriptions {
+        return fail(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "subscription_limit",
+            "too many stock symbols",
+        );
+    }
+    let mut wanted = HashSet::new();
+    for symbol in body.symbols {
+        let normalized = symbol.trim().to_uppercase();
+        if !safe_symbol(&normalized) {
+            return fail(StatusCode::BAD_REQUEST, "invalid_symbol", "invalid stock symbol");
+        }
+        wanted.insert(normalized);
+    }
+    let mut leases = state.stock_leases.lock().await;
+    leases.retain(|_, (until, _)| *until > Instant::now());
+    leases.insert(
+        body.consumer_id,
+        (Instant::now() + Duration::from_secs(90), wanted),
+    );
+    let mut combined: HashSet<String> = state.stock_symbols.iter().cloned().collect();
+    combined.extend(leases.values().flat_map(|(_, set)| set.iter().cloned()));
+    if combined.len() > state.max_stock_subscriptions {
+        leases.remove(&body.consumer_id);
+        return fail(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "subscription_limit",
+            "global SIP stream capacity exceeded",
+        );
+    }
+    let mut sorted: Vec<String> = combined.into_iter().collect();
+    sorted.sort();
+    state.stock_tx.send_replace(sorted.clone());
+    Json(json!({
+        "active":sorted.len(),
+        "max":state.max_stock_subscriptions,
+        "expires_in_seconds":90
+    }))
+    .into_response()
+}
+
 async fn option_subscribe(
     State(state): State<AppState>,
-    Json(body): Json<SubscribeOptions>,
+    Json(body): Json<SubscribeSymbols>,
 ) -> Response {
     if body.symbols.len() > state.max_option_subscriptions {
         return fail(
@@ -428,7 +479,7 @@ async fn option_subscribe(
         }
         wanted.insert(symbol);
     }
-    let mut leases = state.leases.lock().await;
+    let mut leases = state.option_leases.lock().await;
     leases.retain(|_, (until, _)| *until > Instant::now());
     leases.insert(
         body.consumer_id,
@@ -760,6 +811,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     let (stock_tx, stock_rx) = watch::channel(stocks.clone());
     let (option_tx, option_rx) = watch::channel(Vec::<String>::new());
+    let max_stock_subscriptions = std::env::var("EQO_MAX_STOCK_SUBSCRIPTIONS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(100)
+        .max(stocks.len())
+        .min(1000);
     let (broadcasts, _) = broadcast::channel(4096);
     let risk = RiskPolicy::from_env();
     let state = AppState {
@@ -769,13 +826,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         execution_enabled: mode == "paper",
         token,
         stock_symbols: stocks,
+        max_stock_subscriptions,
+        stock_tx: stock_tx.clone(),
+        stock_leases: Arc::default(),
         max_option_subscriptions: std::env::var("EQO_MAX_OPTION_SUBSCRIPTIONS")
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
             .unwrap_or(500)
             .clamp(1, 1000),
         option_tx,
-        leases: Arc::default(),
+        option_leases: Arc::default(),
         broadcasts: broadcasts.clone(),
         tickets: Arc::default(),
         previews: PreviewStore::default(),
@@ -802,6 +862,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/stocks/snapshots", get(stock_snapshots))
         .route("/api/v1/stocks/bars", get(stock_bars))
         .route("/api/v1/options/chain", get(option_chain))
+        .route("/api/v1/subscriptions/stocks", post(stock_subscribe))
         .route("/api/v1/subscriptions/options", post(option_subscribe))
         .route("/api/v1/auth/ws-ticket", post(create_ticket))
         .route("/api/v1/orders/preview", post(order_preview))
@@ -843,7 +904,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!(addr=%addr,"EqoBoard listening");
     axum::serve(listener, app).await?;
-    drop(stock_tx);
     Ok(())
 }
 
