@@ -140,6 +140,12 @@ function rowsFor(response: CapturedResponse | undefined, route: string) {
   return response!.body as Record<string, unknown>[];
 }
 
+function isValidRfc3339Timestamp(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value));
+}
+
 async function latestAsOfValues(captured: ReturnType<typeof captureJsonResponses>, route: string, since: number) {
   const response = await captured.latestSettled(
     (item) => item.path.startsWith(route) && item.status === 200,
@@ -148,7 +154,7 @@ async function latestAsOfValues(captured: ReturnType<typeof captureJsonResponses
   if (!response || !Array.isArray(response.body)) return [];
   return (response.body as Record<string, unknown>[])
     .map((row) => row.market_as_of)
-    .filter((value): value is string => typeof value === "string");
+    .filter(isValidRfc3339Timestamp);
 }
 
 function barsPollSignatures(responses: CapturedResponse[]) {
@@ -156,7 +162,7 @@ function barsPollSignatures(responses: CapturedResponse[]) {
     if (!response.path.startsWith("/api/openbb/openbb/v1/bars") || response.status !== 200 || !Array.isArray(response.body)) return [];
     const times = (response.body as Record<string, unknown>[])
       .map((row) => row.market_as_of)
-      .filter((value): value is string => typeof value === "string");
+      .filter(isValidRfc3339Timestamp);
     return times.length > 0 ? [times.join("|")] : [];
   });
 }
@@ -178,7 +184,7 @@ async function revealGridColumns(page: Page, widget: Locator, columnIds: string[
       if (!horizontalViewport) return { missingViewport: true, missingHeader: false, delta: null, tooWide: false, scrollLeft: 0, maxScroll: 0 };
       const viewportRect = horizontalViewport.getBoundingClientRect();
       const headers = targets.map((target) =>
-        Array.from(root.querySelectorAll<HTMLElement>(".ag-header-cell"))
+        Array.from(root.querySelectorAll<HTMLElement>('.ag-header-cell[role="columnheader"]'))
           .find((header) => header.getAttribute("col-id") === target) ?? null,
       );
       const scrollLeft = horizontalViewport.scrollLeft;
@@ -401,13 +407,13 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   const bars = rowsFor(initialMarketResponses[1], marketRoutes[1]);
   const options = rowsFor(initialMarketResponses[2], marketRoutes[2]);
   expect(stocks[0]).toMatchObject({ symbol: "QQQ", source: "unknown", source_mode: "unknown", source_label: "source unknown", feed: "sip", complete: true, truncated: false });
-  expect(stocks[0].market_as_of).toEqual(expect.any(String));
-  expect(stocks[0].quote_at).toEqual(expect.any(String));
-  expect(stocks[0].trade_at).toEqual(expect.any(String));
+  expect(isValidRfc3339Timestamp(stocks[0].market_as_of)).toBe(true);
+  expect(isValidRfc3339Timestamp(stocks[0].quote_at)).toBe(true);
+  expect(isValidRfc3339Timestamp(stocks[0].trade_at)).toBe(true);
   expect(bars[0]).toMatchObject({ symbol: "QQQ", source: "unknown", source_mode: "unknown", source_label: "source unknown", feed: "sip", complete: true, truncated: false });
-  expect(bars[0].market_as_of).toEqual(expect.any(String));
+  expect(isValidRfc3339Timestamp(bars[0].market_as_of)).toBe(true);
   expect(options[0]).toMatchObject({ underlying: "QQQ", source: "unknown", source_mode: "unknown", source_label: "source unknown", feed: "opra", complete: true, truncated: false });
-  expect(options[0].market_as_of).toEqual(expect.any(String));
+  expect(isValidRfc3339Timestamp(options[0].market_as_of)).toBe(true);
 
   const callMetrics = await (await request.get(`${MOCK_ORIGIN}/__test/metrics`, { headers: { "x-e2e-control": CONTROL_TOKEN } })).json();
   const dataCalls = callMetrics.calls.filter((call: { path: string }) => !call.path.startsWith("/__test/"));
@@ -479,7 +485,7 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   for (const { widget, feed } of nativeWidgets) {
     for (const [columnId, expected] of [["source_label", "source unknown"], ["feed", feed]] as const) {
       await revealGridColumns(page, widget, [columnId]);
-      await expect(widget.locator(`.ag-header-cell[col-id="${columnId}"]`)).toBeVisible();
+      await expect(widget.locator(`.ag-header-cell[role="columnheader"][col-id="${columnId}"]`)).toBeVisible();
       await expect(widget.locator(`.ag-cell[col-id="${columnId}"]`).filter({ visible: true }).first()).toHaveText(expected);
     }
   }
@@ -489,7 +495,7 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   for (const { widget } of nativeWidgets) {
     for (const [columnId, expected] of [["truncated", "false"], ["complete", "true"]] as const) {
       await revealGridColumns(page, widget, [columnId]);
-      await expect(widget.locator(`.ag-header-cell[col-id="${columnId}"]`)).toBeVisible();
+      await expect(widget.locator(`.ag-header-cell[role="columnheader"][col-id="${columnId}"]`)).toBeVisible();
       const booleanCell = widget.locator(`.ag-cell[col-id="${columnId}"]`).filter({ visible: true }).first();
       const checkbox = booleanCell.locator('input[type="checkbox"]');
       await expect(checkbox).toBeVisible();

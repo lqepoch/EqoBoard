@@ -70,19 +70,29 @@ assert_health() {
 
 cleanup() {
   local status=$?
-  local down_status cleanup_failed=0 remaining_containers remaining_volumes remaining_networks restored_image_id restore_status raw_logs
+  local down_status cleanup_failed=0 remaining_containers remaining_volumes remaining_networks restored_image_id restore_status raw_logs compose_log_path compose_logs_status sanitizer_status raw_logs_remove_status
   set +e
   if [[ ${status} -ne 0 ]]; then
     compose_e2e ps --all >"${ARTIFACT_DIR}/compose-failure-ps.txt" 2>&1
-    raw_logs="$(mktemp /tmp/eqoboard-openbb-compose-logs.XXXXXX)"
-    compose_e2e logs --no-color --tail=300 >"${raw_logs}" 2>&1
-    node "${ROOT_DIR}/tools/openbb-sanitize-e2e-logs.mjs" "${raw_logs}" "${ARTIFACT_DIR}/compose-failure-logs.txt" "${ENV_FILE}"
-    rm -f "${raw_logs}"
+    compose_log_path="${ARTIFACT_DIR}/compose-failure-logs.txt"
   else
-    raw_logs="$(mktemp /tmp/eqoboard-openbb-compose-logs.XXXXXX)"
-    compose_e2e logs --no-color --tail=300 >"${raw_logs}" 2>&1
-    node "${ROOT_DIR}/tools/openbb-sanitize-e2e-logs.mjs" "${raw_logs}" "${ARTIFACT_DIR}/compose-final-logs.txt" "${ENV_FILE}"
-    rm -f "${raw_logs}"
+    compose_log_path="${ARTIFACT_DIR}/compose-final-logs.txt"
+  fi
+  raw_logs="$(mktemp /tmp/eqoboard-openbb-compose-logs.XXXXXX)"
+  compose_e2e logs --no-color --tail=300 >"${raw_logs}" 2>&1
+  compose_logs_status=$?
+  node "${ROOT_DIR}/tools/openbb-sanitize-e2e-logs.mjs" "${raw_logs}" "${compose_log_path}" "${ENV_FILE}"
+  sanitizer_status=$?
+  if [[ ${compose_logs_status} -ne 0 || ${sanitizer_status} -ne 0 ]]; then
+    cleanup_failed=1
+    printf 'compose_logs_exit=%s\ncompose_log_sanitizer_exit=%s\n' \
+      "${compose_logs_status}" "${sanitizer_status}" >>"${ARTIFACT_DIR}/cleanup-residuals.txt"
+  fi
+  rm -f "${raw_logs}"
+  raw_logs_remove_status=$?
+  if [[ ${raw_logs_remove_status} -ne 0 || -e "${raw_logs}" ]]; then
+    cleanup_failed=1
+    printf 'raw compose log temporary file could not be removed\n' >>"${ARTIFACT_DIR}/cleanup-residuals.txt"
   fi
   compose_e2e down --volumes --remove-orphans >>"${RUN_LOG}" 2>&1
   down_status=$?
@@ -292,7 +302,7 @@ EQO_RESEARCH_PUBLIC_ORIGIN=${RESEARCH_ORIGIN}
 EQO_TERMINAL_PUBLIC_ORIGIN=${MAIN_ORIGIN}
 E2E_LITE_IMAGE_TAG=${LITE_IMAGE}
 NEXTAUTH_SECRET=${MAIN_NEXTAUTH_SECRET}
-EQO_SESSION_TTL_SECONDS=300
+EQO_SESSION_TTL_SECONDS=900
 EQO_OIDC_ISSUER=http://127.0.0.1:${MAIN_OIDC_PORT}
 EQO_OIDC_CLIENT_ID=eqo-terminal-e2e
 EQO_OIDC_CLIENT_SECRET=${MAIN_OIDC_SECRET}
@@ -300,7 +310,7 @@ EQO_GATEWAY_JWT_SECRET=${GATEWAY_JWT_SECRET}
 EQO_RESEARCH_JWT_SECRET=${RESEARCH_JWT_SECRET}
 EQO_RESEARCH_API_KEY=${RESEARCH_API_KEY}
 EQO_OPENBB_NEXTAUTH_SECRET=${RESEARCH_NEXTAUTH_SECRET}
-EQO_OPENBB_SESSION_TTL_SECONDS=300
+EQO_OPENBB_SESSION_TTL_SECONDS=900
 EQO_OPENBB_OIDC_ISSUER=http://127.0.0.1:${RESEARCH_OIDC_PORT}
 EQO_OPENBB_OIDC_CLIENT_ID=eqo-openbb-e2e
 EQO_OPENBB_OIDC_CLIENT_SECRET=${RESEARCH_OIDC_SECRET}
@@ -316,6 +326,7 @@ E2E_MAIN_OIDC_CONTROL_TOKEN=${MAIN_OIDC_CONTROL_TOKEN}
 E2E_RESEARCH_OIDC_CONTROL_TOKEN=${RESEARCH_OIDC_CONTROL_TOKEN}
 E2E_MAIN_OIDC_CLIENT_SECRET=${MAIN_OIDC_SECRET}
 E2E_RESEARCH_OIDC_CLIENT_SECRET=${RESEARCH_OIDC_SECRET}
+E2E_OIDC_TOKEN_TTL_SECONDS=900
 EOF
 chmod 600 "${ENV_FILE}"
 
@@ -480,7 +491,42 @@ docker image tag "${BROKEN_UPGRADE_IMAGE_ID}" "${LITE_IMAGE}"
 compose_e2e --profile openbb up --detach --no-build --no-deps --force-recreate openbb-lite
 
 broken_status=""
-for _ in $(seq 1 30); do
+broken_health_wait_seconds="$(compose_e2e --profile openbb config --format json | node -e '
+  let input="";
+  process.stdin.on("data",(chunk)=>input+=chunk).on("end",()=>{
+    try {
+      const config=JSON.parse(input);
+      const health=config.services?.["openbb-lite"]?.healthcheck;
+      if(!health || !Number.isSafeInteger(health.retries) || health.retries < 1) throw new Error("OpenBB healthcheck is missing retries");
+      const duration=(value)=>{
+        if(typeof value!=="string" || value.length===0) throw new Error("OpenBB healthcheck duration is missing");
+        const token=/([0-9]+)(ns|us|µs|ms|s|m|h)/gy;
+        const scale={ns:1e-9,us:1e-6,"µs":1e-6,ms:1e-3,s:1,m:60,h:3600};
+        let offset=0,total=0,match;
+        while(offset<value.length){
+          token.lastIndex=offset;
+          match=token.exec(value);
+          if(!match) throw new Error("unsupported OpenBB healthcheck duration");
+          total+=Number(match[1])*scale[match[2]];
+          offset=token.lastIndex;
+        }
+        return total;
+      };
+      const start=duration(health.start_period||"0s");
+      const interval=duration(health.interval);
+      const timeout=duration(health.timeout||"0s");
+      const budget=Math.ceil(start+interval*health.retries+timeout+interval*3);
+      if(!Number.isSafeInteger(budget) || budget<1 || budget>600) throw new Error("OpenBB healthcheck wait budget is outside its bounded range");
+      process.stdout.write(String(budget));
+    }catch(error){console.error(error.message);process.exitCode=1}
+  });
+')"
+if [[ ! "${broken_health_wait_seconds}" =~ ^[0-9]+$ ]]; then
+  printf 'Could not derive a bounded healthcheck wait from the OpenBB Compose profile\n' >&2
+  exit 1
+fi
+log_phase "Waiting up to ${broken_health_wait_seconds}s, derived from the actual OpenBB Lite healthcheck settings, for the broken image to become unhealthy"
+for _ in $(seq 1 $(((broken_health_wait_seconds + 1) / 2))); do
   broken_id="$(compose_e2e ps --all -q openbb-lite)"
   broken_status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${broken_id}" 2>/dev/null || true)"
   [[ "${broken_status}" == unhealthy ]] && break

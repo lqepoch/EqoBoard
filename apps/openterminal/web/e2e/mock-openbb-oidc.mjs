@@ -7,6 +7,10 @@ const issuer = process.env.E2E_OIDC_ISSUER ?? `http://127.0.0.1:${port}`;
 const clientId = process.env.E2E_OIDC_CLIENT_ID ?? "eqo-openbb-e2e";
 const clientSecret = process.env.E2E_OIDC_CLIENT_SECRET ?? "";
 const allowedCallback = process.env.E2E_OIDC_CALLBACK ?? "http://127.0.0.1:8088/api/auth/callback/eqo-oidc";
+const tokenTtlSeconds = Number(process.env.E2E_OIDC_TOKEN_TTL_SECONDS ?? 300);
+if (!Number.isSafeInteger(tokenTtlSeconds) || tokenTtlSeconds < 30 || tokenTtlSeconds > 3600) {
+  throw new Error("E2E_OIDC_TOKEN_TTL_SECONDS must be an integer between 30 and 3600");
+}
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const publicJwk = publicKey.export({ format: "jwk" });
 publicJwk.kid = `e2e-${clientId}`;
@@ -47,7 +51,7 @@ function signIdToken({ nonce }) {
     aud: clientId,
     sub: "openbb-subject-e2e",
     iat: now,
-    exp: now + 300,
+    exp: now + tokenTtlSeconds,
     nonce,
     name: "OpenBB E2E Reader",
     email: "openbb-reader@example.com",
@@ -157,7 +161,7 @@ const server = createServer(async (req, res) => {
     return json(res, 200, {
       access_token: "openbb-e2e-idp-access-token-only",
       token_type: "Bearer",
-      expires_in: 300,
+      expires_in: tokenTtlSeconds,
       id_token: signIdToken({ nonce: saved.nonce }),
     });
   }

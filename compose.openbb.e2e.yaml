@@ -54,6 +54,7 @@ services:
       E2E_OIDC_CONTROL_TOKEN: ${E2E_MAIN_OIDC_CONTROL_TOKEN:-}
       E2E_OIDC_CLIENT_ID: eqo-terminal-e2e
       E2E_OIDC_CLIENT_SECRET: ${E2E_MAIN_OIDC_CLIENT_SECRET:-}
+      E2E_OIDC_TOKEN_TTL_SECONDS: ${E2E_OIDC_TOKEN_TTL_SECONDS:-900}
       E2E_OIDC_CALLBACK: http://localhost:${EQO_TERMINAL_HOST_PORT:-3000}/api/auth/callback/eqo-oidc
     volumes:
       - ./apps/openterminal/web/e2e/mock-openbb-oidc.mjs:/e2e/mock-openbb-oidc.mjs:ro
@@ -79,6 +80,7 @@ services:
       E2E_OIDC_CONTROL_TOKEN: ${E2E_RESEARCH_OIDC_CONTROL_TOKEN:-}
       E2E_OIDC_CLIENT_ID: eqo-openbb-e2e
       E2E_OIDC_CLIENT_SECRET: ${E2E_RESEARCH_OIDC_CLIENT_SECRET:-}
+      E2E_OIDC_TOKEN_TTL_SECONDS: ${E2E_OIDC_TOKEN_TTL_SECONDS:-900}
       E2E_OIDC_CALLBACK: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}/api/auth/callback/eqo-oidc
     volumes:
       - ./apps/openterminal/web/e2e/mock-openbb-oidc.mjs:/e2e/mock-openbb-oidc.mjs:ro
