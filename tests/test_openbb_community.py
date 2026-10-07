@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -67,6 +68,18 @@ class OpenBBCommunityPatchTests(unittest.TestCase):
         patch = b"--- a/terminalpro/../../outside\n+++ b/terminalpro/../../outside\n@@ -1 +1 @@\n-old\n+new\n"
         with self.assertRaises(RUNNER.PatchError):
             RUNNER.parse_patch(patch)
+
+    def test_new_files_are_owner_only_and_existing_modes_are_preserved(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="openbb-community-mode-") as temp:
+            existing = Path(temp) / "upstream.ts"
+            existing.write_text("pinned\n", encoding="utf-8")
+            existing.chmod(0o640)
+            new = Path(temp) / "community.ts"
+
+            self.assertEqual(RUNNER.destination_mode(existing), 0o640)
+            self.assertEqual(
+                RUNNER.destination_mode(new), stat.S_IRUSR | stat.S_IWUSR
+            )
 
     def test_runner_rejects_unpinned_source_root(self) -> None:
         with tempfile.TemporaryDirectory(prefix="openbb-community-unpinned-") as temp:

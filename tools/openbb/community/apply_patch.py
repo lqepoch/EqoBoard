@@ -28,6 +28,12 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def destination_mode(target: Path) -> int:
+    if target.exists():
+        return stat.S_IMODE(target.stat().st_mode)
+    return stat.S_IRUSR | stat.S_IWUSR
+
+
 def safe_relative_path(value: str) -> PurePosixPath:
     path = PurePosixPath(value)
     if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
@@ -285,7 +291,7 @@ def apply(source: Path, patches: list[Path]) -> int:
                 target.unlink()
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o644
+        mode = destination_mode(target)
         fd, temp_name = tempfile.mkstemp(prefix=".openbb-community-", dir=target.parent)
         try:
             with os.fdopen(fd, "wb") as stream:
