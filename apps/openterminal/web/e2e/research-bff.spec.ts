@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 
 const WEB_ORIGIN = "http://127.0.0.1:3320";
 const OIDC_ORIGIN = "http://127.0.0.1:4320";
+const SAME_HOSTNAME_WEB_ORIGIN = "http://127.0.0.1:3321";
 
 async function postJson(request: APIRequestContext, url: string, data: unknown) {
   const response = await request.post(url, { data });
@@ -55,6 +56,21 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   const health = await request.get(`${WEB_ORIGIN}/api/healthz`);
   expect(await health.json()).toMatchObject({ status: "ok", service: "eqoboard-research-bff" });
 
+  await page.context().addCookies([{
+    name: "next-auth.session-token",
+    value: "terminal-session-must-not-cross-hostnames",
+    url: "http://localhost:3000",
+    httpOnly: true,
+    sameSite: "Lax",
+  }]);
+  let researchCookieHeader = "";
+  await page.route(`${WEB_ORIGIN}/api/healthz`, async (route) => {
+    researchCookieHeader = (await route.request().allHeaders()).cookie ?? "";
+    await route.continue();
+  });
+  await page.goto(`${WEB_ORIGIN}/api/healthz`);
+  expect(researchCookieHeader).not.toContain("terminal-session-must-not-cross-hostnames");
+
   for (const path of [
     "/", "/login", "/api/eqo/orders/preview", "/api/portfolios", "/api/quotes",
     "/api/auth/not-a-nextauth-endpoint", "/_next/static/chunks/app.js",
@@ -64,6 +80,10 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   }
   expect((await request.get(`${WEB_ORIGIN}/%61pi/eqo/orders/preview`)).status()).toBe(404);
   expect((await request.post(`${WEB_ORIGIN}/api/openbb/openbb/v1/options`, { data: {} })).status()).toBe(404);
+
+  const sameHostnameReadiness = await request.get(`${SAME_HOSTNAME_WEB_ORIGIN}/api/readyz`);
+  expect(sameHostnameReadiness.status()).toBe(503);
+  expect(await sameHostnameReadiness.json()).toMatchObject({ ready: false, runtime_mode: "research" });
 
   const manifests = await request.get(`${WEB_ORIGIN}/api/openbb/widgets.json`);
   expect(manifests.status()).toBe(200);

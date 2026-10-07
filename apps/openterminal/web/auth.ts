@@ -47,6 +47,30 @@ export function publicAppOrigin(): string | null {
   }
 }
 
+function hasSeparateResearchHostname(): boolean {
+  const researchRaw = process.env.EQO_PUBLIC_ORIGIN;
+  const terminalRaw = process.env.EQO_TERMINAL_PUBLIC_ORIGIN;
+  if (!researchRaw || !terminalRaw) return false;
+
+  try {
+    const research = new URL(researchRaw);
+    const terminal = new URL(terminalRaw);
+    const isAllowedOrigin = (url: URL, raw: string) => {
+      const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+      return url.origin === raw && !url.username && !url.password && !url.search && !url.hash &&
+        (url.protocol === "https:" || (url.protocol === "http:" && loopback));
+    };
+
+    // Cookies are scoped to a hostname, not a port. A second port on the same
+    // hostname would still receive host-only Terminal cookies.
+    return isAllowedOrigin(research, researchRaw) &&
+      isAllowedOrigin(terminal, terminalRaw) &&
+      research.hostname !== terminal.hostname;
+  } catch {
+    return false;
+  }
+}
+
 export function isOidcConfigured(): boolean {
   return Boolean(
     validIssuer(process.env.EQO_OIDC_ISSUER) &&
@@ -82,6 +106,7 @@ export function isResearchAuthRuntimeConfigured(): boolean {
   const researchSecret = process.env.EQO_RESEARCH_JWT_SECRET;
   return process.env.EQO_BFF_MODE === "research" &&
     isOidcConfigured() &&
+    hasSeparateResearchHostname() &&
     validHmacSecret(researchSecret) &&
     researchSecret !== nextAuthSecret &&
     !process.env.EQO_GATEWAY_JWT_SECRET &&

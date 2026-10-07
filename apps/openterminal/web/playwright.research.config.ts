@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const oidcUrl = "http://127.0.0.1:4320";
 const webUrl = "http://127.0.0.1:3320";
+const sameHostnameWebUrl = "http://127.0.0.1:3321";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -42,6 +43,29 @@ export default defineConfig({
         EQO_BFF_MODE: "research",
         EQO_SESSION_TTL_SECONDS: "300",
         EQO_PUBLIC_ORIGIN: webUrl,
+        EQO_TERMINAL_PUBLIC_ORIGIN: "http://localhost:3000",
+        EQO_OIDC_ISSUER: oidcUrl,
+        EQO_OIDC_CLIENT_ID: "eqo-test",
+        EQO_OIDC_CLIENT_SECRET: "test-secret",
+        EQO_GATEWAY_JWT_SECRET: "",
+        EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
+        EQO_RESEARCH_API_KEY: "",
+        EQO_RUST_URL: "http://127.0.0.1:4321",
+      },
+    },
+    {
+      command: "npm run start -- --hostname 127.0.0.1 --port 3321",
+      url: `${sameHostnameWebUrl}/api/healthz`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        NEXT_TELEMETRY_DISABLED: "1",
+        NEXTAUTH_URL: sameHostnameWebUrl,
+        NEXTAUTH_SECRET: "isolated-research-nextauth-secret-with-more-than-32-bytes",
+        EQO_BFF_MODE: "research",
+        EQO_SESSION_TTL_SECONDS: "300",
+        EQO_PUBLIC_ORIGIN: sameHostnameWebUrl,
+        EQO_TERMINAL_PUBLIC_ORIGIN: webUrl,
         EQO_OIDC_ISSUER: oidcUrl,
         EQO_OIDC_CLIENT_ID: "eqo-test",
         EQO_OIDC_CLIENT_SECRET: "test-secret",
