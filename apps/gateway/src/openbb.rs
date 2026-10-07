@@ -34,6 +34,41 @@ impl MarketSource {
 }
 
 #[derive(Debug, Serialize)]
+pub(super) struct EmptyTruncatedPageError {
+    error: &'static str,
+    detail: String,
+    source: &'static str,
+    source_mode: &'static str,
+    source_label: &'static str,
+    feed: String,
+    pages_fetched: usize,
+    has_more: bool,
+    truncated: bool,
+}
+
+pub(super) fn empty_truncated_page_error(
+    source_mode: &str,
+    feed: &str,
+    pages_fetched: usize,
+    has_more: bool,
+) -> EmptyTruncatedPageError {
+    let source = MarketSource::new(source_mode, feed);
+    EmptyTruncatedPageError {
+        error: "market_data_truncated",
+        detail: format!(
+            "OpenBB market response is truncated after {pages_fetched} pages with no rows; has_more={has_more}."
+        ),
+        source: source.source,
+        source_mode: source.source_mode,
+        source_label: source.source_label,
+        feed: feed.to_owned(),
+        pages_fetched,
+        has_more,
+        truncated: true,
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub(super) struct StockRow {
     symbol: String,
     last: Option<f64>,
