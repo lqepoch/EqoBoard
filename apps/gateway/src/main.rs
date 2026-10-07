@@ -445,7 +445,11 @@ async fn stock_subscribe(
     for symbol in body.symbols {
         let normalized = symbol.trim().to_uppercase();
         if !safe_symbol(&normalized) {
-            return fail(StatusCode::BAD_REQUEST, "invalid_symbol", "invalid stock symbol");
+            return fail(
+                StatusCode::BAD_REQUEST,
+                "invalid_symbol",
+                "invalid stock symbol",
+            );
         }
         wanted.insert(normalized);
     }
@@ -528,7 +532,9 @@ async fn prune_leases(state: AppState) {
             let before = leases.len();
             leases.retain(|_, (until, _)| *until > Instant::now());
             if before != leases.len() {
-                state.option_tx.send_replace(option_subscription_union(&leases));
+                state
+                    .option_tx
+                    .send_replace(option_subscription_union(&leases));
             }
         }
 
