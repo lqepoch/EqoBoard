@@ -13,8 +13,10 @@ const SENSITIVE_PREFIXES = [
   'apps/gateway/',
   'apps/openterminal/server/',
   'apps/openterminal/web/app/api/',
-  'apps/openterminal/web/lib/api-key.ts',
-  'apps/openterminal/web/lib/api.ts',
+  'apps/openterminal/web/lib/',
+  'apps/openterminal/web/auth.ts',
+  'apps/openterminal/web/next-auth.d.ts',
+  'apps/openterminal/web/middleware.',
   'apps/openterminal/web/next.config.',
   'crates/alpaca-data/',
   'crates/domain/',
@@ -156,12 +158,12 @@ function latestStatusesByContext(statuses) {
   return { valid: true, statuses: [...latest.values()].map(({ status }) => status) };
 }
 
-function validateReviewPolicy({ reviews, permissions, authorLogin, headSha, sensitive }) {
+function validateReviewPolicy({ reviews, permissions, authorLogin, headSha, sensitive, requiredApprovalCount = 0 }) {
   const reasons = [];
   const result = latestSubmittedReviews(reviews);
   if (!result.valid) return ['review-history-invalid'];
   const author = normalizeLogin(authorLogin);
-  let hasValidApproval = false;
+  const validApprovals = new Set();
 
   for (const [reviewer, item] of result.latest.entries()) {
     const { review } = item;
@@ -181,12 +183,49 @@ function validateReviewPolicy({ reviews, permissions, authorLogin, headSha, sens
       continue;
     }
     if (state === 'APPROVED' && review.commit_id === headSha) {
-      hasValidApproval = true;
+      validApprovals.add(reviewer);
     }
   }
 
-  if (sensitive && !hasValidApproval) reasons.push('sensitive-change-needs-independent-current-head-approval');
+  const requiredApprovals = Math.max(0, requiredApprovalCount, sensitive ? 1 : 0);
+  if (validApprovals.size < requiredApprovals) {
+    reasons.push('required-current-head-approvals-not-met');
+    if (sensitive && validApprovals.size === 0) reasons.push('sensitive-change-needs-independent-current-head-approval');
+  }
   return reasons;
+}
+
+const PULL_REQUEST_RULE_PARAMETERS = new Set([
+  'allowed_merge_methods',
+  'dismiss_stale_reviews_on_push',
+  'dismissal_restriction',
+  'require_code_owner_review',
+  'require_last_push_approval',
+  'required_approving_review_count',
+  'required_review_thread_resolution',
+  'required_reviewers',
+]);
+
+function rulesetRequiredApprovals(rules) {
+  if (!Array.isArray(rules)) return { valid: false, count: 0, reason: 'branch-rules-response-invalid' };
+  let count = 0;
+  for (const rule of rules) {
+    if (!rule || typeof rule.type !== 'string') return { valid: false, count: 0, reason: 'branch-rule-invalid' };
+    if (rule.type !== 'pull_request') continue;
+    const parameters = rule.parameters;
+    if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
+      return { valid: false, count: 0, reason: 'pull-request-rule-parameters-invalid' };
+    }
+    if (Object.keys(parameters).some((key) => !PULL_REQUEST_RULE_PARAMETERS.has(key))) {
+      return { valid: false, count: 0, reason: 'pull-request-rule-parameters-unknown' };
+    }
+    const required = parameters.required_approving_review_count;
+    if (!Number.isSafeInteger(required) || required < 0) {
+      return { valid: false, count: 0, reason: 'pull-request-required-approval-count-invalid' };
+    }
+    count = Math.max(count, required);
+  }
+  return { valid: true, count };
 }
 
 function rulesetRequiredChecks(rules) {
@@ -409,6 +448,8 @@ function evaluatePolicySnapshot(input) {
 
   const files = classifyChangedFiles(input.files);
   if (!files.valid) reasons.push(files.reason);
+  const approvalRule = rulesetRequiredApprovals(input.rules);
+  if (!approvalRule.valid) reasons.push(approvalRule.reason);
   const checkPlan = mergeRequiredChecks(input.manifestChecks, input.rules, input.guardChecks || []);
   if (!checkPlan.valid) reasons.push(checkPlan.reason);
   if (checkPlan.valid) {
@@ -431,6 +472,7 @@ function evaluatePolicySnapshot(input) {
     authorLogin,
     headSha: input.pr?.head?.sha,
     sensitive: files.sensitive,
+    requiredApprovalCount: approvalRule.valid ? approvalRule.count : 0,
   }));
 
   return {
@@ -455,6 +497,7 @@ module.exports = {
   mergeRequiredChecks,
   permissionFor,
   rulesetRequiredChecks,
+  rulesetRequiredApprovals,
   validateRequiredChecks,
   validateCheckProvider,
   validateReviewPolicy,

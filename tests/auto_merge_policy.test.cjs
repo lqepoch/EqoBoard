@@ -265,6 +265,12 @@ function makeContext(eventName = 'workflow_run', run = makeRun()) {
 test('sensitivity covers identity, trading, gateway, config, compose, workflow, skills and both rename names', () => {
   const paths = [
     'apps/openterminal/web/app/api/eqo/orders/route.ts',
+    'apps/openterminal/web/lib/eqo-auth.ts',
+    'apps/openterminal/web/lib/permissions.ts',
+    'apps/openterminal/web/lib/signing-secret.ts',
+    'apps/openterminal/web/auth.ts',
+    'apps/openterminal/web/next-auth.d.ts',
+    'apps/openterminal/web/middleware.ts',
     'apps/openterminal/server/src/auth.ts',
     'crates/domain/src/lib.rs',
     'crates/execution/src/lib.rs',
@@ -285,7 +291,93 @@ test('sensitivity covers identity, trading, gateway, config, compose, workflow, 
   assert.equal(result.sensitive, true);
   assert.equal(classifyChangedFiles([{ filename: 'docs/new.md', previous_filename: '.github/workflows/old.yml', status: 'renamed' }]).sensitive, true);
   assert.equal(classifyChangedFiles([{ filename: 'docs/new.md', previous_filename: 'docs/old.md', status: 'renamed' }]).sensitive, false);
+  for (const previous_filename of [
+    'apps/openterminal/web/lib/eqo-auth.ts',
+    'apps/openterminal/web/lib/permissions.ts',
+    'apps/openterminal/web/lib/signing-secret.ts',
+    'apps/openterminal/web/auth.ts',
+    'apps/openterminal/web/next-auth.d.ts',
+    'apps/openterminal/web/middleware.ts',
+  ]) {
+    assert.equal(classifyChangedFiles([{ filename: 'docs/moved.md', previous_filename, status: 'renamed' }]).sensitive, true, previous_filename);
+  }
   assert.equal(classifyChangedFiles([{ filename: 'docs/new.md', status: 'renamed' }]).valid, false);
+});
+
+test('active pull-request ruleset approval count applies to every PR and unknown parameters fail closed', async (t) => {
+  await t.test('ordinary PR with ruleset approval count one cannot merge without approval', async () => {
+    const pr = makePr();
+    const run = makeRun(pr);
+    const rules = [{ type: 'pull_request', parameters: {
+      allowed_merge_methods: ['squash'],
+      dismiss_stale_reviews_on_push: true,
+      dismissal_restriction: { enabled: false, allowed_actors: [] },
+      require_code_owner_review: false,
+      require_last_push_approval: false,
+      required_approving_review_count: 1,
+      required_review_thread_resolution: true,
+      required_reviewers: [],
+    } }];
+    const mock = createGithubMock({ pr, run, rules, files: [{ filename: 'README.md', status: 'modified' }], reviews: [] });
+    const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+    assert.equal(result.state, 'blocked');
+    assert.equal(mock.state.mergeCalls.length, 0);
+    assert.ok(result.reasons.includes('required-current-head-approvals-not-met'));
+  });
+
+  await t.test('ruleset approval count two requires two independent current-head approvals', () => {
+    const rules = [{ type: 'pull_request', parameters: { required_approving_review_count: 2 } }];
+    const oneApproval = makePolicyInput({
+      rules,
+      reviews: [makeReview()],
+      permissions: {
+        'lq-epoch': { permission: 'admin' },
+        'independent-reviewer': { permission: 'write' },
+      },
+    });
+    assert.ok(evaluatePolicySnapshot(oneApproval).reasons.includes('required-current-head-approvals-not-met'));
+
+    const twoApprovals = makePolicyInput({
+      rules,
+      reviews: [
+        makeReview('APPROVED', { id: 1, user: { login: 'independent-reviewer', type: 'User' } }),
+        makeReview('APPROVED', { id: 2, user: { login: 'second-reviewer', type: 'User' } }),
+      ],
+      permissions: {
+        'lq-epoch': { permission: 'admin' },
+        'independent-reviewer': { permission: 'write' },
+        'second-reviewer': { permission: 'maintain' },
+      },
+    });
+    assert.equal(evaluatePolicySnapshot(twoApprovals).eligible, true);
+  });
+
+  await t.test('unknown pull-request rule parameter from the GitHub API blocks before merge', async () => {
+    const pr = makePr();
+    const run = makeRun(pr);
+    const mock = createGithubMock({
+      pr,
+      run,
+      rules: [{ type: 'pull_request', parameters: {
+        required_approving_review_count: 0,
+        require_extra_approval_for_unattributed_changes: false,
+      } }],
+      files: [{ filename: 'README.md', status: 'modified' }],
+    });
+    const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+    assert.equal(result.state, 'blocked');
+    assert.equal(mock.state.mergeCalls.length, 0);
+    assert.ok(result.reasons.includes('pull-request-rule-parameters-unknown'));
+  });
+
+  await t.test('missing or malformed required approval count rejects the policy snapshot', () => {
+    for (const parameters of [{}, { required_approving_review_count: '1' }, { required_approving_review_count: -1 }]) {
+      const result = evaluatePolicySnapshot(makePolicyInput({
+        rules: [{ type: 'pull_request', parameters }],
+      }));
+      assert.ok(result.reasons.includes('pull-request-required-approval-count-invalid'));
+    }
+  });
 });
 
 test('legacy counterexamples all become sensitive and cannot merge without a valid current-head human approval', async (t) => {
