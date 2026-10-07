@@ -36,7 +36,9 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 
 旧 Vite UI 已删除。
 
-主终端浏览器只访问 OpenTerminal BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。OpenBB 是可选研究工作台，部署时必须使用不同 hostname 的独立 research origin 和 research-mode Next BFF；端口不同不足以隔离 host-only cookies，`EQO_TERMINAL_PUBLIC_ORIGIN` 未配置或与研究 hostname 相同时 readiness 拒绝启动。research BFF 只持有独立 research signer，经过用户 OIDC 会话与 `market:read` role 校验后签发最长 60 秒的 `market:read` 子 token。`/api/research/auth-check` 供内部 ingress 检查 OIDC 会话和 `market:read` role，返回 204/401/403 而不签 token；公网 ingress 不能暴露该路由。research runtime 不配置终端 BFF signer、Node API key 或 Alpaca market keys；只有 Rust Gateway 持有市场凭据。它与主终端隔离，因此关闭研究服务不影响 OpenTerminal、Gateway 或订单 preview。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
+OpenTerminal 可通过可选 `EQO_RESEARCH_PUBLIC_ORIGIN` 在原生 Sidebar 和 Command Palette 暴露 OpenBB Research 外链。它只接受纯 HTTPS origin（本地开发可用精确 loopback HTTP），hostname 必须不同于 `EQO_PUBLIC_ORIGIN`；链接在新标签打开，不共享 OpenTerminal OIDC 会话或凭据。未设置或非法时入口隐藏，主终端不依赖 OpenBB 服务启动。
+
+主终端与 OpenBB 浏览器都只通过各自的 Next BFF 访问受保护 API。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。OpenBB 使用独立 hostname 与 research-mode Next BFF；不同端口不足以隔离 host-only cookies，`EQO_TERMINAL_PUBLIC_ORIGIN` 缺失或与 research hostname 相同时 readiness 拒绝启动。Research BFF 只持有独立 research signer，验证其 OIDC 用户 session 与 `market:read` role 后签发最长 60 秒的 `market:read` 子 token。`/api/research/auth-check` 供 ingress 内部 `auth_request` 检查会话和角色，返回 204/401/403 且不签 token；公网 ingress 必须隐藏该路径。Research BFF/Lite 不配置终端 Gateway signer、Node API key 或 Alpaca market keys；只有 Rust Gateway 持有行情凭据。关闭可选 Research 服务不影响 OpenTerminal、Gateway 或 Node research 主服务。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
 
 ## Rust 数据接口
 

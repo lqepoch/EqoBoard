@@ -1,7 +1,8 @@
 import { expect, test as base, type APIRequestContext, type Page } from "@playwright/test";
 
 export const WEB_ORIGIN = process.env.E2E_WEB_ORIGIN ?? "http://127.0.0.1:3300";
-export const MOCK_OIDC_ORIGIN = process.env.E2E_OIDC_ORIGIN ?? "http://127.0.0.1:4310";
+const MOCK_OIDC_PORT = process.env.E2E_OIDC_PORT ?? "4310";
+export const MOCK_OIDC_ORIGIN = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${MOCK_OIDC_PORT}`;
 
 export async function setRoles(request: APIRequestContext, roles: string[]) {
   const response = await request.post(`${MOCK_OIDC_ORIGIN}/__test/roles`, { data: { roles } });

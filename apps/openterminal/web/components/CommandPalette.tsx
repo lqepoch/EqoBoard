@@ -7,7 +7,7 @@ import { useTerminal } from "../store/terminal";
 
 type SearchResult = { symbol: string; name: string; exchange: string; type: string };
 
-export default function CommandPalette() {
+export default function CommandPalette({ researchOrigin }: { researchOrigin: string | null }) {
   const open = useTerminal((s) => s.commandOpen);
   const setOpen = useTerminal((s) => s.setCommandOpen);
   const setActiveSymbol = useTerminal((s) => s.setActiveSymbol);
@@ -15,11 +15,15 @@ export default function CommandPalette() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const researchCommand = Boolean(
+    researchOrigin && /^(?:openbb(?:\s+research)?|research|workspace)$/i.test(query.trim()),
+  );
+  const showResearchAction = Boolean(researchOrigin && (!query.trim() || researchCommand));
 
   const { data: results = [] } = useQuery({
     queryKey: ["search", query],
     queryFn: () => apiGet<SearchResult[]>(`/api/search?q=${encodeURIComponent(query)}`),
-    enabled: open && query.trim().length > 0,
+    enabled: open && query.trim().length > 0 && !researchCommand,
     staleTime: 300_000,
   });
 
@@ -31,7 +35,7 @@ export default function CommandPalette() {
     }
   }, [open]);
 
-  useEffect(() => setSelected(0), [results.length]);
+  useEffect(() => setSelected(0), [query, results.length, showResearchAction]);
 
   if (!open) return null;
 
@@ -41,12 +45,21 @@ export default function CommandPalette() {
     setOpen(false);
   };
 
+  const openResearch = () => {
+    if (!researchOrigin) return;
+    window.open(researchOrigin, "_blank", "noopener,noreferrer");
+    setOpen(false);
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center pt-24"
       onClick={() => setOpen(false)}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
         className="w-[560px] bg-[var(--panel)] border border-[var(--amber-dim)]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -56,20 +69,41 @@ export default function CommandPalette() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") setOpen(false);
-            if (e.key === "ArrowDown") setSelected((s) => Math.min(s + 1, results.length - 1));
+            const itemCount = results.length + Number(showResearchAction);
+            if (e.key === "ArrowDown") setSelected((s) => Math.min(s + 1, Math.max(itemCount - 1, 0)));
             if (e.key === "ArrowUp") setSelected((s) => Math.max(s - 1, 0));
-            if (e.key === "Enter" && results[selected]) pick(results[selected], e.shiftKey);
+            if (e.key === "Enter") {
+              if (showResearchAction && selected === 0) {
+                e.preventDefault();
+                openResearch();
+                return;
+              }
+              const resultIndex = selected - Number(showResearchAction);
+              if (results[resultIndex]) pick(results[resultIndex], e.shiftKey);
+            }
           }}
           placeholder="Ticker, company, ETF, crypto, index…  (Enter = load · Shift+Enter = load + watchlist)"
           className="w-full !border-0 !border-b !border-[var(--border)] px-3 py-2 text-[13px]"
         />
         <div className="max-h-80 overflow-auto">
+          {showResearchAction && researchOrigin && (
+            <a
+              href={researchOrigin}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className={`px-3 py-1.5 flex gap-3 ${selected === 0 ? "bg-[#1f1a10] text-[var(--amber)]" : "hover:bg-[#161616]"}`}
+            >
+              <span className="flex-1">OpenBB Research</span>
+              <span className="dim">↗</span>
+            </a>
+          )}
           {results.map((r, i) => (
             <div
               key={r.symbol + i}
               onClick={() => pick(r)}
               className={`px-3 py-1.5 flex gap-3 cursor-pointer ${
-                i === selected ? "bg-[#1f1a10] text-[var(--amber)]" : "hover:bg-[#161616]"
+                i + Number(showResearchAction) === selected ? "bg-[#1f1a10] text-[var(--amber)]" : "hover:bg-[#161616]"
               }`}
             >
               <span className="w-24 font-bold">{r.symbol}</span>

@@ -67,6 +67,7 @@ export default defineConfig({
         EQO_GATEWAY_JWT_SECRET: "b".repeat(64),
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
         EQO_RESEARCH_API_KEY: "research-service-test-key-that-is-at-least-32-bytes",
+        EQO_RESEARCH_PUBLIC_ORIGIN: process.env.E2E_RESEARCH_PUBLIC_ORIGIN ?? "",
         EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
         API_URL: `http://127.0.0.1:${researchPort}`,
       },
