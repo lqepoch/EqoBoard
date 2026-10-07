@@ -11,7 +11,7 @@
 - 仓库 `allow_auto_merge` 为 `false`。
 - `EQO_AUTOMERGE_APP_ID` 等 Actions Variables 未配置；最近一次 `Trusted PR Auto Merge` 工作流运行被跳过。
 - `main` 当前组织规则要求一个有效审批，Team 是已配置的 bypass actor。没有证据表明专用 App 已安装或能够通过该规则。
-- 实读 `GET /repos/lqepoch/EqoBoard/rules/branches/main` 时，`pull_request.parameters.required_approving_review_count` 为 `1`，并同时返回官方 REST schema 未列出的 `require_extra_approval_for_unattributed_changes: false`。策略对未知 pull-request 参数 fail closed，因此遇到这个实际响应会阻止合并；在确认该字段语义和兼容方式前，不得启用自动合并。
+- 实读 `GET /repos/lqepoch/EqoBoard/rules/branches/main` 时，`pull_request.parameters.required_approving_review_count` 为 `1`，并同时返回 REST/OpenAPI schema 当前未列出的 `require_extra_approval_for_unattributed_changes: false`。GitHub 官方 ruleset 文档说明清除“unattributed Copilot PR”额外审批设置后只要求配置的审批数；策略因此只接受该字段为布尔 `false`，布尔 `true` 暂时阻断（尚未实现该额外身份条件），类型错误与其它未知参数也阻断。
 - 历史 CI run `37588824743` 已关联合并 PR；当前 REST 响应的 `pull_requests` 为空。该数据不能用于候选合并，策略会因无法确认唯一 PR 绑定而拒绝。
 - 最近已观察到的 required CI job context 是 `Rust data / gateway / execution`、`Offline market-data contract tests` 和 `OpenTerminal / AG Grid / Next.js`。实际验收 CI 增加或改名 job 时，必须先更新受信清单和对应 fixture。
 
@@ -30,6 +30,8 @@ GitHub 官方接口参考：[workflow_run 事件](https://docs.github.com/en/act
 ## 审查、路径与检查策略
 
 当前分支规则中的 `pull_request.parameters.required_approving_review_count` 应用于所有 PR；策略从 GitHub 活跃分支规则 API 读取并要求对应数量的独立人类审查者，其最新已提交 review 必须是绑定当前 head SHA 的 `APPROVED`。未知 pull-request 参数、缺少或无效的审批数均拒绝。敏感文件还至少需要一名这样的审查者；PR 作者、GitHub App、Bot、无写权限用户和旧 head 上的审批不计入。`CHANGES_REQUESTED` 和未解决 review thread 阻止合并。为避免沿用含义不清的旧批准，较新的 `COMMENTED` 或 `DISMISSED` review 也会使对应审查者的旧批准失效。
+
+GitHub 文档说明，未归属 Copilot PR 的额外审批默认启用；清除该设置后，PR 只需要配置的审批数。官方 REST/OpenAPI 和 Octokit generated schema 目前没有列出 API 返回的 `require_extra_approval_for_unattributed_changes` 扩展字段。策略只支持经官方文档确认的布尔 `false`；`true`、`require_code_owner_review` / `require_last_push_approval` 为 `true`、非空 `required_reviewers`、类型错误及其它未知参数都 fail closed。当前这项 API 字段不再阻塞，额外审批或特定审查规则尚未实现时仍阻止自动合并；GitHub App/Secrets 配置也仍未完成。参考：[ruleset 审批规则](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#additional-approval-for-unattributed-copilot-pull-requests)、[GitHub changelog](https://github.blog/changelog/2026-08-21-shared-agentic-work-with-github-copilot-in-microsoft-teams/)、[REST/OpenAPI schema at `734bc9c`](https://github.com/github/rest-api-description/blob/734bc9c1030b774eb3fc909cce477aceea21cf77/descriptions/api.github.com/api.github.com.2026-03-10.json)、[Octokit generated schema at `83df989`](https://github.com/octokit/openapi-types.ts/blob/83df9890720ab7d64bbaf8e07e57751f1b23ed59/packages/openapi-types/types.d.ts)。
 
 敏感范围覆盖 BFF/API、身份和安全、domain、Alpaca、execution、gateway、根和子项目配置、Docker/Compose、所有 workflow、AGENTS/skills、自动合并策略及其文档。重命名同时检查 `filename` 和 `previous_filename`；文件列表缺失、截断、路径不合法或 rename 来源缺失均拒绝。
 
