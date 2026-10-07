@@ -27,6 +27,12 @@ recipe, runner, patch, manifest, or source archive fails closed. The diff is a
 review aid for the pinned source transformation; it is not a built-image SBOM
 or browser-integration evidence.
 
+The current Community Docker recipe intentionally accepts exactly one locked
+patch and verifies that its Dockerfile copies and applies that same patch,
+runner, and adjacent manifest. Adding another patch requires an explicit
+recipe/contract update; the lock cannot silently describe extra source changes
+that the image build does not execute.
+
 The upstream source SPDX SBOM describes the pinned archive; the patched-source
 SPDX SBOM describes the verified Community patch result and frozen Bun/Poetry
 dependency locks. Both are separate from a runtime image SBOM. The runtime
@@ -58,8 +64,13 @@ inputs, and uses the pinned recipe for a local build. The lock's
 mean the image built, passed health checks, integrated in a browser, or is
 approved for deployment. Runtime Compose may use the same root-context
 Dockerfile, but direct Compose builds bypass the helper's local tag conflict
-guard. Neither a Compose tag nor the helper's content-specific local tag is an
-immutable image digest. Debian APT package bytes do not come from a frozen
+guard and process lock. Helper builds hold an owner-private XDG cache lock by
+full build identity and image tag, shared across worktrees for the same local
+user. The lock serializes cooperating helper processes only; manual Docker or
+Compose builds do not participate. Build records include the full identity,
+use a unique filename, and fail rather than replace an existing record. Neither
+a Compose tag nor the helper's content-specific local tag is an immutable image
+digest. Debian APT package bytes do not come from a frozen
 snapshot, pip bootstrap installs have version pins but no artifact hashes, and
 the upstream frontend downloads webfonts without a font digest. Therefore a
 repeat build can produce different image bytes even when source and recipe

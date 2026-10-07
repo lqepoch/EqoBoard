@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -11,11 +12,13 @@ import platform
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
 import urllib.request
+from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -38,6 +41,10 @@ REQUIRED_SOURCE_FILES = (
     "terminalpro/src/main.tsx",
     "terminalpro/config-profiles/lite.locked.json",
 )
+EXPECTED_COMMUNITY_RECIPE = "tools/openbb/community/Dockerfile"
+EXPECTED_COMMUNITY_RUNNER = "tools/openbb/community/apply_patch.py"
+EXPECTED_COMMUNITY_PATCH = "tools/openbb/community/patches/community.patch"
+EXPECTED_COMMUNITY_PATCH_MANIFEST = f"{EXPECTED_COMMUNITY_PATCH}.json"
 
 
 class SupplyChainError(RuntimeError):
@@ -83,6 +90,7 @@ def openbb_entry() -> dict[str, Any]:
             raise SupplyChainError("a local-buildable OpenBB gate requires a hash-pinned build recipe")
         if gate.get("required_findings_to_clear") != []:
             raise SupplyChainError("a local-buildable OpenBB gate cannot retain uncleared findings")
+        locked_recipe(entry)
     return entry
 
 
@@ -714,8 +722,19 @@ def validate_recipe_assets(recipe: dict[str, Any]) -> list[tuple[str, Path, str]
             raise SupplyChainError("build_recipe.source_patch must be an object")
         runner = patch_record.get("runner")
         patches = patch_record.get("files")
-        if not isinstance(runner, dict) or not isinstance(patches, list) or not patches:
-            raise SupplyChainError("source_patch must pin a runner and one or more patch files")
+        if (
+            not isinstance(runner, dict)
+            or not isinstance(patches, list)
+            or len(patches) != 1
+            or not isinstance(patches[0], dict)
+        ):
+            raise SupplyChainError("OpenBB Community Docker recipe supports exactly one lock-pinned source patch")
+        if runner.get("path") != EXPECTED_COMMUNITY_RUNNER:
+            raise SupplyChainError("OpenBB Community source patch runner differs from the reviewed Docker recipe")
+        if patches[0].get("path") != EXPECTED_COMMUNITY_PATCH:
+            raise SupplyChainError("OpenBB Community source patch differs from the reviewed Docker recipe")
+        if EXPECTED_COMMUNITY_PATCH_MANIFEST not in by_path:
+            raise SupplyChainError("OpenBB Community patch manifest must be hash-pinned with its patch")
         patch_assets = [runner, *patches]
         for item in patch_assets:
             relative = item.get("path", "") if isinstance(item, dict) else ""
@@ -725,6 +744,62 @@ def validate_recipe_assets(recipe: dict[str, Any]) -> list[tuple[str, Path, str]
                     f"source patch asset must also be pinned in support_files: {relative}"
                 )
     return validated
+
+
+def validate_docker_source_patch_contract(
+    recipe: dict[str, Any],
+    recipe_path: Path,
+) -> None:
+    """Fail closed unless Docker executes exactly the source patch represented by the lock."""
+    if recipe.get("path") != EXPECTED_COMMUNITY_RECIPE:
+        raise SupplyChainError("OpenBB Community build recipe path differs from the reviewed recipe contract")
+    patch_record = recipe.get("source_patch", {})
+    patch_files = patch_record.get("files", []) if isinstance(patch_record, dict) else []
+    runner = patch_record.get("runner", {}) if isinstance(patch_record, dict) else {}
+    if (
+        not isinstance(runner, dict)
+        or runner.get("path") != EXPECTED_COMMUNITY_RUNNER
+        or len(patch_files) != 1
+        or not isinstance(patch_files[0], dict)
+        or patch_files[0].get("path") != EXPECTED_COMMUNITY_PATCH
+    ):
+        raise SupplyChainError("OpenBB Community Docker recipe supports exactly its single reviewed patch")
+
+    instructions = dockerfile_logical_instructions(recipe_path.read_text(encoding="utf-8"))
+    community_copies: list[list[str]] = []
+    patch_runner_commands: list[list[str]] = []
+    for instruction in instructions:
+        try:
+            tokens = shlex.split(instruction)
+        except ValueError as exc:
+            raise SupplyChainError(f"cannot parse pinned OpenBB Dockerfile instruction: {instruction}") from exc
+        if not tokens:
+            continue
+        if tokens[0].upper() == "COPY" and any(
+            token.startswith("tools/openbb/community/") for token in tokens[1:]
+        ):
+            community_copies.append(tokens)
+        if tokens[0].upper() == "RUN" and "/opt/openbb-community/apply_patch.py" in tokens:
+            patch_runner_commands.append(tokens)
+
+    expected_copies = [
+        ["COPY", EXPECTED_COMMUNITY_RUNNER, "/opt/openbb-community/apply_patch.py"],
+        ["COPY", EXPECTED_COMMUNITY_PATCH, "/opt/openbb-community/community.patch"],
+        ["COPY", EXPECTED_COMMUNITY_PATCH_MANIFEST, "/opt/openbb-community/community.patch.json"],
+    ]
+    if community_copies != expected_copies:
+        raise SupplyChainError("pinned Dockerfile must copy exactly the lock-pinned OpenBB patch assets")
+    expected_runner_command = [
+        "RUN",
+        "python",
+        "/opt/openbb-community/apply_patch.py",
+        "--source",
+        f"/opt/workspace-{EXPECTED_COMMIT}",
+        "--patch",
+        "/opt/openbb-community/community.patch",
+    ]
+    if patch_runner_commands != [expected_runner_command]:
+        raise SupplyChainError("pinned Dockerfile must apply exactly the single lock-pinned OpenBB source patch")
 
 
 def build_identity(recipe: dict[str, Any], support_files: list[tuple[str, Path, str]]) -> str:
@@ -751,6 +826,7 @@ def locked_recipe(entry: dict[str, Any]) -> tuple[dict[str, Any], Path, list[tup
     if not re.fullmatch(r"[0-9a-f]{64}", recipe_sha256) or sha256_file(recipe_path) != recipe_sha256:
         raise SupplyChainError("OpenBB build recipe SHA-256 does not match the lock")
     support_files = validate_recipe_assets(recipe)
+    validate_docker_source_patch_contract(recipe, recipe_path)
     return recipe, recipe_path, support_files, build_identity(recipe, support_files)
 
 
@@ -832,6 +908,107 @@ def ensure_image_tag_available(tag: str, identity: str) -> None:
     raise SupplyChainError(
         f"refusing to rebuild or overwrite existing content-specific OpenBB image tag: {tag}"
     )
+
+
+@contextmanager
+def _advisory_lock(path: Path):
+    lock_root = local_build_lock_root()
+    if path.parent != lock_root:
+        raise SupplyChainError("OpenBB build lock path is outside the user-private lock directory")
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise SupplyChainError(f"cannot open OpenBB build lock {path}: {exc}") from exc
+    try:
+        lock_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_uid != os.getuid():
+            raise SupplyChainError(f"OpenBB build lock must be a regular file: {path}")
+        os.fchmod(descriptor, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+
+def local_build_lock_root() -> Path:
+    """Create/validate a stable per-user cache lock directory shared by worktrees."""
+    configured = os.environ.get("XDG_CACHE_HOME")
+    cache_base = Path(configured).expanduser() if configured else Path.home() / ".cache"
+    if not cache_base.is_absolute():
+        raise SupplyChainError("XDG_CACHE_HOME must be an absolute path for OpenBB build locking")
+    cache_base = cache_base.resolve()
+    try:
+        cache_base.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        raise SupplyChainError(f"cannot create OpenBB cache directory {cache_base}: {exc}") from exc
+    if cache_base.is_symlink() or not cache_base.is_dir():
+        raise SupplyChainError(f"OpenBB cache path must be a real directory: {cache_base}")
+    cache_stat = cache_base.stat()
+    if cache_stat.st_uid != os.getuid() or cache_stat.st_mode & 0o022:
+        raise SupplyChainError(f"OpenBB cache directory must be owned by this user and not group/world writable: {cache_base}")
+
+    lock_root = cache_base
+    for component in ("eqoboard", "openbb", "build-locks"):
+        lock_root = lock_root / component
+        try:
+            lock_root.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            raise SupplyChainError(f"cannot create OpenBB build lock directory {lock_root}: {exc}") from exc
+        if lock_root.is_symlink() or not lock_root.is_dir():
+            raise SupplyChainError(f"OpenBB build lock path must be a real directory: {lock_root}")
+        directory_stat = lock_root.stat()
+        if directory_stat.st_uid != os.getuid() or stat.S_IMODE(directory_stat.st_mode) != 0o700:
+            raise SupplyChainError(f"OpenBB build lock directory must be owner-only mode 0700: {lock_root}")
+    return lock_root
+
+
+@contextmanager
+def image_build_lock(identity: str, tag: str):
+    """Serialize helper builds across worktrees by identity and local image tag."""
+    lock_root = local_build_lock_root()
+    tag_digest = hashlib.sha256(tag.encode("utf-8")).hexdigest()
+    lock_paths = sorted((
+        lock_root / f"identity-{identity}.lock",
+        lock_root / f"tag-{tag_digest}.lock",
+    ))
+    with ExitStack() as stack:
+        for lock_path in lock_paths:
+            stack.enter_context(_advisory_lock(lock_path))
+        yield
+
+
+def ensure_build_record_available(path: Path) -> None:
+    if path.is_symlink() or path.exists():
+        raise SupplyChainError(f"refusing to overwrite existing OpenBB build record: {path}")
+
+
+def write_json_exclusive(path: Path, value: dict[str, Any]) -> None:
+    """Publish a new immutable JSON record without replacing an existing path."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, path, follow_symlinks=False)
+        except FileExistsError as exc:
+            raise SupplyChainError(f"refusing to overwrite existing OpenBB build record: {path}") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def inventory_source_tree(root: Path) -> dict[str, dict[str, Any]]:
@@ -994,7 +1171,40 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
         raise SystemExit(2)
 
     recipe, recipe_path, support_files, identity = locked_recipe(entry)
+    image_tag = tag or f"eqoboard/openbb-workspace:{EXPECTED_COMMIT}-{identity[:16]}"
+    validate_immutable_tag(image_tag, identity)
+    artifact_dir = ROOT / "build" / "openbb"
+    record_path = artifact_dir / f"workspace-image-{EXPECTED_COMMIT}-{identity}.build.json"
 
+    # The locks cover preflight, immutable-tag inspection, Docker build, SBOM, and
+    # record publication. A second helper process must observe the first one's result.
+    with image_build_lock(identity, image_tag):
+        ensure_build_record_available(record_path)
+        ensure_image_tag_available(image_tag, identity)
+        _build_lite_under_lock(
+            entry,
+            recipe,
+            recipe_path,
+            support_files,
+            identity,
+            image_tag,
+            archive,
+            artifact_dir,
+            record_path,
+        )
+
+
+def _build_lite_under_lock(
+    entry: dict[str, Any],
+    recipe: dict[str, Any],
+    recipe_path: Path,
+    support_files: list[tuple[str, Path, str]],
+    identity: str,
+    image_tag: str,
+    archive: Path | None,
+    artifact_dir: Path,
+    record_path: Path,
+) -> None:
     verified = archive or fetch_archive()
     report = verify_archive(verified)
     with tempfile.TemporaryDirectory(prefix="eqoboard-openbb-build-") as temporary:
@@ -1006,7 +1216,6 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
             raise SupplyChainError("source build blockers remain: " + "; ".join(item["id"] for item in findings))
         patched_tree_sha256 = inventory_digest(inventory_source_tree(workspace))
         syft, syft_version = syft_binary()
-        artifact_dir = ROOT / "build" / "openbb"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         patched_source_sbom_path = artifact_dir / (
             f"workspace-patched-source-{EXPECTED_COMMIT}-{identity[:16]}.spdx.json"
@@ -1038,9 +1247,9 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
         )
         licenses = context / "licenses"
         licenses.mkdir()
-        for record in entry["license_files"]:
-            local = resolve_under(ROOT, record["local_path"], "copied OpenBB license")
-            shutil.copy2(local, licenses / f"OPENBB-{Path(record['upstream_path']).name}")
+        for license_record in entry["license_files"]:
+            local = resolve_under(ROOT, license_record["local_path"], "copied OpenBB license")
+            shutil.copy2(local, licenses / f"OPENBB-{Path(license_record['upstream_path']).name}")
         for relative, asset_path, _ in support_files:
             context_asset = context / PurePosixPath(relative)
             if context_asset.exists():
@@ -1048,9 +1257,6 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
             context_asset.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(asset_path, context_asset)
         shutil.copy2(recipe_path, context / "Dockerfile")
-        image_tag = tag or f"eqoboard/openbb-workspace:{EXPECTED_COMMIT}-{identity[:16]}"
-        validate_immutable_tag(image_tag, identity)
-        ensure_image_tag_available(image_tag, identity)
         subprocess.run([
             "docker", "buildx", "build", "--load", "--tag", image_tag,
             "--label", f"org.opencontainers.image.source=https://github.com/{EXPECTED_REPOSITORY}",
@@ -1088,9 +1294,9 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
             "image_sbom_sha256": sbom_digest,
             "image_sbom_scope_note": "This scans the runtime image. The Vite frontend is a compiled dist bundle without Bun/npm package metadata; use the linked patched-source SBOM for the locked frontend dependency inventory.",
             "syft_version": syft_version,
+            "build_record": str(record_path),
         }
-        record_path = artifact_dir / f"workspace-image-{EXPECTED_COMMIT}.build.json"
-        record_path.write_text(json.dumps(build_record, indent=2) + "\n", encoding="utf-8")
+        write_json_exclusive(record_path, build_record)
         print(json.dumps(build_record, indent=2))
 
 

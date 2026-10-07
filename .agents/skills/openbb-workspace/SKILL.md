@@ -12,4 +12,4 @@ description: 维护 EqoBoard 的 OpenBB Workspace custom backend、widgets.json�
 - SIP/OPRA endpoint 必须显式检查 feed；失败返回错误，不切换数据源。
 - OpenBB 处于 OpenBQ/FINOS 治理迁移阶段，接口兼容层保持薄，业务模型不得绑定 Workspace 内部实现。
 - 新增 live_grid 前验证 WebSocket 的认证、Origin 和市场数据再分发边界。
-- Lite 社区适配必须从锁定 commit/archive SHA 派生；`tools/openbb/upstream-diff.sh` 只对锁定 runner/patch 生成逐文件差异报告，`tools/openbb/patched-source-sbom.sh` 为同一锁定 patched tree 生成独立 source-only SPDX。`local-buildable` 只允许本地 source/recipe 构建尝试，不代表运行镜像、登录、浏览器 E2E 或部署已通过。
+- Lite 社区适配必须从锁定 commit/archive SHA 派生；当前 recipe 只接受 Dockerfile 明确复制并执行的单一 runner/patch/manifest 组合。`tools/openbb/upstream-diff.sh` 只对同一锁定 patch 生成逐文件差异报告，`tools/openbb/patched-source-sbom.sh` 为相同 patched tree 生成独立 source-only SPDX。`build-lite.sh` 使用 owner-private XDG cache 锁跨 worktree 串行化身份/tag 检查和构建，并拒绝覆盖同 identity 的旧 build record；手动 Docker/Compose 构建不参与该锁。`local-buildable` 只允许本地 source/recipe 构建尝试，不代表运行镜像、登录、浏览器 E2E 或部署已通过。

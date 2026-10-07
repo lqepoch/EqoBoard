@@ -449,6 +449,79 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
                 with self.assertRaisesRegex(upstream.SupplyChainError, "SHA-256 does not match"):
                     upstream.validate_recipe_assets({"support_files": [record]})
 
+    def test_community_lock_rejects_multiple_patches_not_applied_by_docker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            paths = {
+                "runner": root / upstream.EXPECTED_COMMUNITY_RUNNER,
+                "patch": root / upstream.EXPECTED_COMMUNITY_PATCH,
+                "manifest": root / upstream.EXPECTED_COMMUNITY_PATCH_MANIFEST,
+                "second": root / "tools/openbb/community/patches/extra.patch",
+            }
+            for path in paths.values():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture", encoding="utf-8")
+            support = [
+                {"path": path.relative_to(root).as_posix(), "sha256": upstream.sha256_file(path)}
+                for path in paths.values()
+            ]
+            recipe = {
+                "support_files": support,
+                "source_patch": {
+                    "runner": support[0],
+                    "files": [support[1], support[3]],
+                },
+            }
+            with mock.patch.object(upstream, "ROOT", root):
+                with self.assertRaisesRegex(upstream.SupplyChainError, "exactly one lock-pinned source patch"):
+                    upstream.validate_recipe_assets(recipe)
+
+    def test_local_buildable_gate_rejects_a_lock_with_an_unapplied_patch(self):
+        lock = upstream.read_json(upstream.UPSTREAM_LOCK)
+        entry = next(item for item in lock["sources"] if item["name"] == "OpenBB Workspace")
+        entry["build_recipe"]["source_patch"]["files"].append(
+            dict(entry["build_recipe"]["source_patch"]["files"][0])
+        )
+        with mock.patch.object(upstream, "read_json", return_value=lock):
+            with self.assertRaisesRegex(upstream.SupplyChainError, "exactly one lock-pinned source patch"):
+                upstream.openbb_entry()
+
+    def test_community_lock_requires_dockerfile_to_apply_its_exact_patch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            dockerfile = root / upstream.EXPECTED_COMMUNITY_RECIPE
+            dockerfile.parent.mkdir(parents=True)
+            dockerfile.write_text(
+                "\n".join([
+                    "FROM fixture@sha256:pinned",
+                    "COPY tools/openbb/community/apply_patch.py /opt/openbb-community/apply_patch.py",
+                    "COPY tools/openbb/community/patches/community.patch /opt/openbb-community/community.patch",
+                    "COPY tools/openbb/community/patches/community.patch.json /opt/openbb-community/community.patch.json",
+                    "RUN python /opt/openbb-community/apply_patch.py --source "
+                    f"/opt/workspace-{upstream.EXPECTED_COMMIT} --patch /opt/openbb-community/other.patch",
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            recipe = {
+                "path": upstream.EXPECTED_COMMUNITY_RECIPE,
+                "source_patch": {
+                    "runner": {"path": upstream.EXPECTED_COMMUNITY_RUNNER},
+                    "files": [{"path": upstream.EXPECTED_COMMUNITY_PATCH}],
+                },
+            }
+            with self.assertRaisesRegex(upstream.SupplyChainError, "apply exactly the single lock-pinned"):
+                upstream.validate_docker_source_patch_contract(recipe, dockerfile)
+
+    def test_build_lock_directory_must_remain_owner_private(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = pathlib.Path(directory) / "cache"
+            with mock.patch.dict(upstream.os.environ, {"XDG_CACHE_HOME": str(cache)}):
+                lock_root = upstream.local_build_lock_root()
+                self.assertEqual(lock_root.stat().st_mode & 0o777, 0o700)
+                lock_root.chmod(0o755)
+                with self.assertRaisesRegex(upstream.SupplyChainError, "owner-only mode 0700"):
+                    upstream.local_build_lock_root()
+
 
 if __name__ == "__main__":
     unittest.main()

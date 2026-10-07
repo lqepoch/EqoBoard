@@ -3,10 +3,13 @@
 import importlib.util
 import io
 import json
+import os
 import pathlib
+import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 from unittest import mock
@@ -21,6 +24,86 @@ SPEC.loader.exec_module(upstream)
 
 
 class OpenBBUpstreamDiffTests(unittest.TestCase):
+    def test_build_lock_serializes_processes_sharing_an_immutable_tag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            first_worktree = root / "worktree-one"
+            second_worktree = root / "worktree-two"
+            first_worktree.mkdir()
+            second_worktree.mkdir()
+            shared_cache = root / "shared-cache"
+            first_started = root / "first.started"
+            first_entered = root / "first.entered"
+            second_started = root / "second.started"
+            second_entered = root / "second.entered"
+            release_first = root / "release-first"
+            worker = """
+import importlib.util
+import pathlib
+import sys
+import time
+spec = importlib.util.spec_from_file_location('openbb_lock_test', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.ROOT = pathlib.Path(sys.argv[2])
+pathlib.Path(sys.argv[6]).touch()
+with module.image_build_lock(sys.argv[3], sys.argv[4]):
+    pathlib.Path(sys.argv[7]).touch()
+    if sys.argv[5] != '-':
+        release = pathlib.Path(sys.argv[5])
+        while not release.exists():
+            time.sleep(0.01)
+"""
+            shared_tag = f"eqoboard/openbb-workspace:{'a' * 16}"
+            first_identity = "a" * 16 + "1" * 48
+            second_identity = "a" * 16 + "2" * 48
+
+            def start(identity, worktree, started, entered, release):
+                return subprocess.Popen([
+                    sys.executable,
+                    "-c",
+                    worker,
+                    str(MODULE_PATH),
+                    str(worktree),
+                    identity,
+                    shared_tag,
+                    str(release) if release else "-",
+                    str(started),
+                    str(entered),
+                ], env=dict(os.environ, XDG_CACHE_HOME=str(shared_cache)))
+
+            first = start(first_identity, first_worktree, first_started, first_entered, release_first)
+            second = None
+            try:
+                deadline = time.monotonic() + 5
+                while not first_entered.exists() and time.monotonic() < deadline:
+                    if first.poll() is not None:
+                        self.fail(f"first lock worker exited early with {first.returncode}")
+                    time.sleep(0.01)
+                self.assertTrue(first_entered.exists(), "first lock worker did not acquire the tag lock")
+                second = start(second_identity, second_worktree, second_started, second_entered, None)
+                deadline = time.monotonic() + 5
+                while not second_started.exists() and time.monotonic() < deadline:
+                    if second.poll() is not None:
+                        self.fail(f"second lock worker exited early with {second.returncode}")
+                    time.sleep(0.01)
+                self.assertTrue(second_started.exists(), "second lock worker did not start")
+                self.assertFalse(second_entered.exists(), "concurrent process entered a tag already being built")
+                release_first.touch()
+                self.assertEqual(first.wait(timeout=5), 0)
+                deadline = time.monotonic() + 5
+                while not second_entered.exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(second_entered.exists(), "second lock worker did not acquire released tag lock")
+                self.assertEqual(second.wait(timeout=5), 0)
+            finally:
+                if first.poll() is None:
+                    first.terminate()
+                    first.wait(timeout=5)
+                if second is not None and second.poll() is None:
+                    second.terminate()
+                    second.wait(timeout=5)
+
     def test_file_comparison_reports_exact_modified_added_deleted_and_mode_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -79,10 +162,23 @@ class OpenBBUpstreamDiffTests(unittest.TestCase):
             assets = root / "tools" / "openbb" / "community"
             assets.mkdir(parents=True)
             dockerfile = assets / "Dockerfile"
-            dockerfile.write_text("FROM pinned/base@sha256:fixture\n", encoding="utf-8")
-            patch_file = assets / "community.patch"
+            dockerfile.write_text(
+                "\n".join([
+                    "FROM pinned/base@sha256:fixture",
+                    "COPY tools/openbb/community/apply_patch.py /opt/openbb-community/apply_patch.py",
+                    "COPY tools/openbb/community/patches/community.patch /opt/openbb-community/community.patch",
+                    "COPY tools/openbb/community/patches/community.patch.json /opt/openbb-community/community.patch.json",
+                    "RUN python /opt/openbb-community/apply_patch.py \\",
+                    f"    --source /opt/workspace-{upstream.EXPECTED_COMMIT} \\",
+                    "    --patch /opt/openbb-community/community.patch",
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            patch_directory = assets / "patches"
+            patch_directory.mkdir()
+            patch_file = patch_directory / "community.patch"
             patch_file.write_text("pinned patch bytes\n", encoding="utf-8")
-            manifest = assets / "community.patch.json"
+            manifest = patch_directory / "community.patch.json"
             manifest.write_text("{}\n", encoding="utf-8")
             runner = assets / "apply_patch.py"
             runner.write_text(
@@ -166,9 +262,24 @@ class OpenBBUpstreamDiffTests(unittest.TestCase):
             community = root / "tools" / "openbb" / "community"
             community.mkdir(parents=True)
             recipe_path = community / "Dockerfile"
-            recipe_path.write_text("FROM fixture@sha256:pinned\n", encoding="utf-8")
-            patch_path = community / "community.patch"
+            patch_directory = community / "patches"
+            patch_directory.mkdir()
+            recipe_path.write_text(
+                "\n".join([
+                    "FROM fixture@sha256:pinned",
+                    "COPY tools/openbb/community/apply_patch.py /opt/openbb-community/apply_patch.py",
+                    "COPY tools/openbb/community/patches/community.patch /opt/openbb-community/community.patch",
+                    "COPY tools/openbb/community/patches/community.patch.json /opt/openbb-community/community.patch.json",
+                    "RUN python /opt/openbb-community/apply_patch.py \\",
+                    f"    --source /opt/workspace-{upstream.EXPECTED_COMMIT} \\",
+                    "    --patch /opt/openbb-community/community.patch",
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            patch_path = patch_directory / "community.patch"
             patch_path.write_text("pinned patch\n", encoding="utf-8")
+            manifest_path = patch_directory / "community.patch.json"
+            manifest_path.write_text("{}\n", encoding="utf-8")
             runner_path = community / "apply_patch.py"
             runner_path.write_text(
                 "\n".join([
@@ -185,7 +296,7 @@ class OpenBBUpstreamDiffTests(unittest.TestCase):
             )
             support = [
                 {"path": path.relative_to(root).as_posix(), "sha256": upstream.sha256_file(path)}
-                for path in (recipe_path, runner_path, patch_path)
+                for path in (recipe_path, runner_path, patch_path, manifest_path)
             ]
             recipe = {
                 "path": support[0]["path"],
@@ -208,6 +319,8 @@ class OpenBBUpstreamDiffTests(unittest.TestCase):
             }
             archive = root / "workspace.tar.gz"
             archive.write_bytes(b"test archive")
+            lock_root = root / "cache" / "eqoboard" / "openbb" / "build-locks"
+            lock_root.mkdir(parents=True, mode=0o700)
             real_subprocess_run = upstream.subprocess.run
             commands = []
 
@@ -241,17 +354,27 @@ class OpenBBUpstreamDiffTests(unittest.TestCase):
                 mock.patch.object(upstream, "safe_extract", side_effect=extract),
                 mock.patch.object(upstream, "inspect_build_blockers", return_value=[]),
                 mock.patch.object(upstream, "ensure_image_tag_available"),
+                mock.patch.object(upstream, "local_build_lock_root", return_value=lock_root),
                 mock.patch.object(upstream, "syft_binary", return_value=(root / "syft", "1.54.1")),
                 mock.patch.object(upstream, "stable_sbom_scan", side_effect=scan),
                 mock.patch.object(upstream.subprocess, "run", side_effect=run),
             ):
                 with redirect_stdout(io.StringIO()):
                     upstream.build_lite(None, archive)
+                self.assertEqual(len([item for item in commands if item[:2] == ["docker", "buildx"]]), 1)
+                build_records = list((root / "build" / "openbb").glob("*.build.json"))
+                self.assertEqual(len(build_records), 1)
+                build_record = json.loads(build_records[0].read_text(encoding="utf-8"))
+                self.assertEqual(build_record["local_image_id"], "sha256:fixture-image")
+                self.assertIn(build_record["build_identity"], build_records[0].name)
+                self.assertRegex(build_record["build_identity"], r"^[0-9a-f]{64}$")
 
-            self.assertEqual(len([item for item in commands if item[:2] == ["docker", "buildx"]]), 1)
-            build_records = list((root / "build" / "openbb").glob("*.build.json"))
-            self.assertEqual(len(build_records), 1)
-            self.assertEqual(json.loads(build_records[0].read_text(encoding="utf-8"))["local_image_id"], "sha256:fixture-image")
+                commands.clear()
+                with redirect_stdout(io.StringIO()), self.assertRaisesRegex(
+                    upstream.SupplyChainError, "existing OpenBB build record"
+                ):
+                    upstream.build_lite(None, archive)
+                self.assertEqual(commands, [])
 
 
 if __name__ == "__main__":
