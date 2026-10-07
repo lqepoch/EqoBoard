@@ -1,26 +1,17 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { apiGet } from "../lib/api";
 import { useTerminal } from "../store/terminal";
+import { useMarket } from "../store/market";
 
 type Status = {
-  ok: boolean;
-  providers: Array<{ name: string; ok: number; failed: number; lastLatencyMs: number | null }>;
-  ai: boolean;
   stockFeed?: string;
   optionFeed?: string;
   executionMode?: string;
 };
 
-function Clock({ tz, label }: { tz: string; label: string }) {
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => {
-    setNow(new Date());
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
+function Clock({ tz, label, now }: { tz: string; label: string; now: Date | null }) {
   if (!now) return null;
   return (
     <span className="dim">
@@ -32,46 +23,62 @@ function Clock({ tz, label }: { tz: string; label: string }) {
   );
 }
 
-function marketStateNY(): { label: string; open: boolean } {
-  const ny = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-  const day = ny.getDay();
-  const mins = ny.getHours() * 60 + ny.getMinutes();
-  const open = day >= 1 && day <= 5 && mins >= 570 && mins < 960; // 09:30–16:00
-  return { label: open ? "NYSE OPEN" : "NYSE CLOSED", open };
+function regularHoursEstimate(now: Date | null): "within" | "outside" | "unknown" {
+  if (!now) return "unknown";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
+  const weekday = value("weekday");
+  const weekdayHours = weekday !== undefined && ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday);
+  const minutes = Number(value("hour")) * 60 + Number(value("minute"));
+  return weekdayHours && minutes >= 9 * 60 + 30 && minutes < 16 * 60 ? "within" : "outside";
 }
 
 export default function TopBar() {
   const setCommandOpen = useTerminal((s) => s.setCommandOpen);
   const activeSymbol = useTerminal((s) => s.activeSymbol);
+  const marketClockMs = useMarket((s) => s.marketClockMs);
+  const stockFeedStatus = useMarket((s) => s.feedStatus.stocks);
   const { data: status } = useQuery({
     queryKey: ["status"],
     queryFn: () => apiGet<Status>("/api/status"),
     refetchInterval: 30_000,
   });
 
-  const market = marketStateNY();
-  const healthy = status?.providers.filter((p) => p.ok > 0) ?? [];
-  const label = status?.stockFeed && status?.optionFeed
-    ? "ALPACA " + status.stockFeed.toUpperCase() + " / " + status.optionFeed.toUpperCase()
-    : (healthy.length ? healthy.map(p => p.name).join(" · ") : "Alpaca gateway unavailable");
+  const now = marketClockMs > 0 ? new Date(marketClockMs) : null;
+  const session = stockFeedStatus?.market_session ?? "unknown";
+  const sessionLabel = session === "unknown"
+    ? "Trading day/session: unknown"
+    : `Market session: ${session} (Gateway status)`;
+  const regularHours = regularHoursEstimate(now);
+  const configuredFeeds = status
+    ? `${status.stockFeed?.toUpperCase() ?? "unknown"} / ${status.optionFeed?.toUpperCase() ?? "unknown"}`
+    : "unknown";
 
   return (
     <header className="flex items-center gap-4 px-3 h-8 bg-[var(--panel-2)] border-b border-[var(--border)] text-[11px] shrink-0">
       <span className="amber font-bold tracking-widest">EqoBoard / OpenTerminal</span>
-      <span className={market.open ? "up" : "down"}>● {market.label}</span>
-      <Clock tz="America/New_York" label="NY" />
-      <Clock tz="Europe/Rome" label="MIL" />
-      <Clock tz="Europe/London" label="LDN" />
-      <Clock tz="Asia/Tokyo" label="TYO" />
+      <span className="dim" data-testid="market-session-status" title="Weekday hours are an estimate; no holiday or early-close calendar is inferred">
+        {sessionLabel} · 09:30–16:00 ET weekday-hours estimate: {regularHours}
+      </span>
+      <Clock tz="America/New_York" label="NY" now={now} />
+      <Clock tz="Europe/Rome" label="MIL" now={now} />
+      <Clock tz="Europe/London" label="LDN" now={now} />
+      <Clock tz="Asia/Tokyo" label="TYO" now={now} />
       <button
         className="term-btn flex-1 max-w-md text-left dim"
         onClick={() => setCommandOpen(true)}
       >
         {activeSymbol} — search symbol… <span className="float-right">⌘K</span>
       </button>
-      <span className="dim ml-auto">
-        feeds:{" "}
-        {label}
+      <span className="dim ml-auto" data-testid="configured-market-feeds"
+        title="Configured feeds do not establish credentials or account entitlements">
+        Configured feeds: {configuredFeeds} · entitlement unverified
       </span>
       <span className="dim">Execution: {status?.executionMode ?? "disabled"}</span>
     </header>

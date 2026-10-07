@@ -286,3 +286,55 @@ describe("GET /api/heatmap real HTTP source contract", () => {
     }
   });
 });
+
+describe("GET /api/quotes upstream SIP authorization and throttling", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    observed.length = 0;
+  });
+
+  it.each([
+    { upstreamStatus: 401, symbol: "EQA401" },
+    { upstreamStatus: 429, symbol: "EQA429" },
+  ])("returns authenticated upstream HTTP $upstreamStatus with no price fallback", async ({ upstreamStatus, symbol }) => {
+    vi.stubEnv("EQO_RESEARCH_API_KEY", serviceKey);
+    vi.stubEnv("EQO_RESEARCH_JWT_SECRET", secret);
+    vi.stubEnv("EQO_RUST_URL", "http://rust-mock.test");
+    const token = await delegatedJwt();
+    const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      observed.push(`${url.hostname}${url.pathname}`);
+      expect(url.hostname).toBe("rust-mock.test");
+      expect(url.pathname).toBe("/api/v1/stocks/snapshots");
+      expect(url.searchParams.get("symbols")).toBe(symbol);
+      const authorization = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      expect(authorization?.startsWith("Bearer ")).toBe(true);
+      const delegated = await jwtVerify(authorization!.slice("Bearer ".length), new TextEncoder().encode(secret), {
+        algorithms: ["HS256"], issuer: "openterminal-research", audience: "eqoboard-gateway",
+      });
+      expect(delegated.payload.sub).toBe("market-reader-1");
+      expect(delegated.payload.scope).toEqual(["market:read"]);
+      return Response.json({ error: "upstream unavailable" }, { status: upstreamStatus });
+    });
+    vi.stubGlobal("fetch", upstream);
+    const { server, url } = await startServer();
+    try {
+      const anonymous = await getJson(`${url}/api/quotes?symbols=${symbol}`);
+      expect(anonymous.status).toBe(401);
+      expect(upstream).not.toHaveBeenCalled();
+
+      const authenticated = await getJson(`${url}/api/quotes?symbols=${symbol}`, token);
+      expect(authenticated.status).toBe(upstreamStatus);
+      expect(authenticated.body).toMatchObject({
+        error: "Alpaca SIP market data is unavailable",
+        source: "Alpaca SIP",
+        status: upstreamStatus,
+      });
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(observed).toEqual(["rust-mock.test/api/v1/stocks/snapshots"]);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+});

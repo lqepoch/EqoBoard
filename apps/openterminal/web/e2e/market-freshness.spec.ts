@@ -55,6 +55,7 @@ test("a connected silent SSE feed ages LIVE out without a new market event", asy
       {
         kind: "feed_status",
         feed: "stocks",
+        market_session: "unknown",
         transport: "connected",
         auth: "authenticated",
         desired: { quotes: ["QQQ"], trades: ["QQQ"] },
@@ -82,7 +83,13 @@ test("a connected silent SSE feed ages LIVE out without a new market event", asy
     ],
   });
   await expect(quotePanel).toContainText("PRICE FRESH · LIVE", { timeout: 8_000 });
+  await expect(page.getByTestId("configured-market-feeds")).toContainText("Configured feeds: SIP / OPRA · entitlement unverified");
+  const sessionStatus = page.getByTestId("market-session-status");
+  await expect(sessionStatus).toContainText("Trading day/session: unknown");
+  await expect(sessionStatus).toContainText(/weekday-hours estimate: (within|outside)/);
   await expect(quotePanel).toContainText("PRICE STALE", { timeout: 22_000 });
   await expect(quotePanel).toContainText("Browser SSE connected");
+  await expect(sessionStatus).toContainText("Trading day/session: unknown");
+  await expect(sessionStatus).not.toContainText(/closed/i);
   expect((await metrics(request)).gateway.streamOpened).toBeGreaterThan(0);
 });

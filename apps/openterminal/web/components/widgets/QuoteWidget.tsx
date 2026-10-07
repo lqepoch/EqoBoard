@@ -40,7 +40,7 @@ export default function QuoteWidget({ widget }: { widget: WidgetInstance }) {
     staleTime: 3_600_000,
   });
 
-  if (error) return <div className="p-2 down">Error: {(error as Error).message}</div>;
+  if (error) return <div className="p-2 down" data-testid="market-data-error">Error: {(error as Error).message}</div>;
   if (!data) return <div className="p-2 dim">Loading {symbol}…</div>;
 
   const quote=latestSnapshot??data;

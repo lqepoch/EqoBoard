@@ -505,7 +505,6 @@ export function marketCondition(
     const projectionAgeMs = freshness.age_ms + Math.max(0, now - statusReceivedAtMs);
     if (projectionAgeMs > MAX_LIVE_MARKET_AGE_MS) return "stale";
   }
-  if (status.market_session === "closed") return "stale";
   const againstGatewayAsOf = compareRfc3339Nanos(event.event_time, freshness.as_of);
   if (againstGatewayAsOf === null) return "unknown";
   if (againstGatewayAsOf < 0) return "waiting-for-data";

@@ -238,6 +238,24 @@ describe("shared market snapshot and stream state", () => {
     expect(marketCondition(useMarket.getState(), "stocks", "QQQ", "quote")).toBe("unknown");
   });
 
+  it("keeps Gateway session context separate from event freshness", () => {
+    const store = useMarket.getState();
+    store.setConnection(true);
+    store.applyBatch([status({
+      market_session: "closed",
+      freshness: {
+        "QQQ:quote": { state: "fresh", as_of: t3, age_ms: 0, fresh_until: "2026-10-07T14:30:05Z" },
+      },
+    }), quote("QQQ", t3, 2)]);
+
+    expect(useMarket.getState().feedStatus.stocks?.market_session).toBe("closed");
+    expect(marketCondition(useMarket.getState(), "stocks", "QQQ", "quote")).toBe("fresh");
+
+    store.setMarketClock(Date.parse(t3) + 5_001);
+    expect(useMarket.getState().feedStatus.stocks?.market_session).toBe("closed");
+    expect(marketCondition(useMarket.getState(), "stocks", "QQQ", "quote")).toBe("stale");
+  });
+
   it("shows authorization, ACK, and partial-coverage failures independently of browser SSE", () => {
     const store = useMarket.getState();
     store.setConnection(true);
