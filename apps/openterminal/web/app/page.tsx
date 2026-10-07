@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth";
-import { authOptions, isAuthRuntimeConfigured, isCurrentOidcIssuer } from "@/auth";
+import { authOptions, isAuthRuntimeConfigured, isCurrentOidcIssuer, publicResearchOrigin } from "@/auth";
 import { scopesForRoles } from "@/lib/permissions";
 import TerminalShell from "../components/TerminalShell";
 import SignOutButton from "../components/SignOutButton";
@@ -43,7 +43,10 @@ export default async function Home() {
     </AuthMessage>;
   }
 
-  return <TerminalShell userName={session.user.name ?? session.user.id} />;
+  return <TerminalShell
+    userName={session.user.name ?? session.user.id}
+    researchOrigin={publicResearchOrigin()}
+  />;
 }
 
 function AuthMessage({ title, children }: { title: string; children: React.ReactNode }) {

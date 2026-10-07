@@ -23,7 +23,7 @@ const ITEMS: Array<{ type: WidgetType; label: string; key: string }> = [
   { type: "recap", label: "MARKET RECAP", key: "" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ researchOrigin }: { researchOrigin: string | null }) {
   const addWidget = useTerminal((s) => s.addWidget);
   const resetWorkspace = useTerminal((s) => s.resetWorkspace);
 
@@ -43,6 +43,19 @@ export default function Sidebar() {
         </button>
       ))}
       <div className="mt-auto border-t border-[var(--border)]">
+        {researchOrigin && (
+          <div className="border-b border-[var(--border)]">
+            <div className="dim px-2 py-1 text-[10px] uppercase tracking-wider">Research</div>
+            <a
+              href={researchOrigin}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block px-2 py-1.5 text-[11px] hover:bg-[#1a1a1a] hover:text-[var(--amber)]"
+            >
+              OpenBB Research ↗
+            </a>
+          </div>
+        )}
         <button
           onClick={resetWorkspace}
           className="w-full text-left px-2 py-1.5 text-[11px] dim hover:text-[var(--down)]"

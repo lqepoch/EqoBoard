@@ -36,6 +36,8 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 
 旧 Vite UI 已删除。
 
+OpenTerminal 可通过可选 `EQO_RESEARCH_PUBLIC_ORIGIN` 在原生 Sidebar 和 Command Palette 暴露 OpenBB Research 外链。该变量只接受纯 HTTPS origin（本地开发可用精确 loopback HTTP），hostname 必须不同于 `EQO_PUBLIC_ORIGIN`；链接在新标签打开，不共享 OpenTerminal OIDC 会话或凭据。未设置或非法时入口隐藏，OpenTerminal 不依赖 OpenBB 服务启动。此入口只提供导航，OpenBB Workspace/Lite 的 OIDC 到 Gateway 委托认证仍未完成真实联调。
+
 浏览器只访问 Next BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。research Node 仅持有独立 research signer，只能为通过用户会话验证的市场读取请求签发 `market:read` 子 token。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
 
 ## Rust 数据接口

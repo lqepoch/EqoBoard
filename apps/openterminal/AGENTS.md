@@ -7,6 +7,7 @@
 - Web/Node 只消费 Gateway 提供的可信来源/时间/状态字段，不推断 `feed=sip|opra` 就代表 Alpaca。当前 Gateway 基线缺少部分来源身份、实例和typed ACK字段：legacy REST 数值可以展示，但 source/as-of 必须标 unknown；legacy SSE 不得显示 LIVE。#3 Rust协议验收未由 Web/Node 测试代替。
 - FRED/SEC/FINRA/新闻等补充研究 Provider 可沿用上游 server。
 - EqoBoard 自有 widget 放在 `web/components/widgets`，优先复用当前依赖，避免再引入同类 UI 框架。
+- 可选 OpenBB Research 入口只扩展原生 Sidebar/Command Palette，使用服务端验证后的 `EQO_RESEARCH_PUBLIC_ORIGIN` 在新标签打开独立 origin；变量必须是 HTTPS 或精确 loopback HTTP 纯 origin，hostname 与 `EQO_PUBLIC_ORIGIN` 不同。缺省或非法配置隐藏入口且不影响终端；这只是外链，不共享 OIDC 会话、凭据或 Gateway 状态。
 - Option Chain 固定 AG Grid Community；空 IV/Greeks 不转换成 0。
 - 所有 U.S. 股票/ETF 的价格、涨跌、成交量、历史 bars、财报价格变动请求 `Alpaca SIP`；TradingView 只用于市场元数据和明确标注的研究字段。SIP 403/缺失时显示 unavailable，不回退到免费行情源；缺少可信来源字段的 legacy 数值需显示 source/as-of unknown。
 - 期权 quote/trade 请求 `Alpaca OPRA`。IV/Greeks 是 Alpaca REST snapshot 的 vendor/model 字段，不是 OPRA 原生字段；没有独立模型时间就显示 `model as-of unknown`，不能继承 quote/trade 或 Gateway response 时间。

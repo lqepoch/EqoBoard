@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { allowlistedRoles } from "@/lib/permissions";
+import { validatePublicResearchOrigin } from "@/lib/research-origin";
 
 type OidcProfile = Record<string, unknown> & {
   sub: string;
@@ -45,6 +46,14 @@ export function publicAppOrigin(): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Optional public OpenBB Workspace origin. It is navigation-only: the browser
+ * starts its own OpenBB session and never receives Gateway or BFF credentials.
+ */
+export function publicResearchOrigin(): string | null {
+  return validatePublicResearchOrigin(process.env.EQO_RESEARCH_PUBLIC_ORIGIN, publicAppOrigin());
 }
 
 export function isOidcConfigured(): boolean {

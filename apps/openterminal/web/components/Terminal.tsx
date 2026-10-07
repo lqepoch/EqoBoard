@@ -7,7 +7,7 @@ import Workspace from "./Workspace";
 import CommandPalette from "./CommandPalette";
 import { useTerminal } from "../store/terminal";
 
-export default function Terminal() {
+export default function Terminal({ researchOrigin }: { researchOrigin: string | null }) {
   const setCommandOpen = useTerminal((s) => s.setCommandOpen);
   const addWidget = useTerminal((s) => s.addWidget);
 
@@ -45,12 +45,12 @@ export default function Terminal() {
     <div className="flex flex-col h-screen">
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
+        <Sidebar researchOrigin={researchOrigin} />
         <main className="flex-1 overflow-auto">
           <Workspace />
         </main>
       </div>
-      <CommandPalette />
+      <CommandPalette researchOrigin={researchOrigin} />
     </div>
   );
 }
