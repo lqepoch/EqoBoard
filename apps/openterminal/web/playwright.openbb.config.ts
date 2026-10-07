@@ -5,7 +5,11 @@ if (!researchOrigin) throw new Error("EQO_RESEARCH_PUBLIC_ORIGIN is required for
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: process.env.OPENBB_E2E_RECOVERY_ONLY ? "openbb-recovery.spec.ts" : "openbb-lite.spec.ts",
+  testMatch: process.env.OPENBB_E2E_RECOVERY_ONLY
+    ? "openbb-recovery.spec.ts"
+    : process.env.OPENBB_E2E_CORE_ONLY
+      ? "openbb-core-availability.spec.ts"
+      : "openbb-lite.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

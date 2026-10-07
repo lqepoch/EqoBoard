@@ -10,6 +10,7 @@ ARTIFACT_DIR="${OPENBB_E2E_ARTIFACT_DIR:-/root/.codex/artifacts/eqoboard-openbb-
 LITE_IMAGE="eqoboard/openbb-workspace-lite:${PROJECT_NAME}-lite"
 ENV_FILE=""
 STATE_FILE=""
+MAIN_STATE_FILE=""
 ROLLBACK_TAG_MUTATED=0
 LITE_IMAGE_ID=""
 COMPOSE_PATH="${ROOT_DIR}/compose.openbb.e2e.yaml"
@@ -117,6 +118,7 @@ cleanup() {
   fi
   if [[ -n "${ENV_FILE}" && -f "${ENV_FILE}" ]]; then rm -f "${ENV_FILE}"; fi
   if [[ -n "${STATE_FILE}" && -f "${STATE_FILE}" ]]; then rm -f "${STATE_FILE}"; fi
+  if [[ -n "${MAIN_STATE_FILE}" && -f "${MAIN_STATE_FILE}" ]]; then rm -f "${MAIN_STATE_FILE}"; fi
   exit "${status}"
 }
 trap cleanup EXIT
@@ -169,7 +171,8 @@ RESEARCH_API_KEY="$(openssl rand -hex 32)"
 MAIN_OIDC_SECRET="$(openssl rand -hex 24)"
 RESEARCH_OIDC_SECRET="$(openssl rand -hex 24)"
 STATE_FILE="$(mktemp /tmp/eqoboard-openbb-runtime-state.XXXXXX)"
-chmod 600 "${STATE_FILE}"
+MAIN_STATE_FILE="$(mktemp /tmp/eqoboard-openbb-main-state.XXXXXX)"
+chmod 600 "${STATE_FILE}" "${MAIN_STATE_FILE}"
 
 cat >"${ENV_FILE}" <<EOF
 EQO_GATEWAY_HOST_PORT=${GATEWAY_PORT}
@@ -311,6 +314,7 @@ run_logged "Run real browser OIDC, native OpenBB email login, custom backend val
     E2E_RESEARCH_OIDC_CONTROL_TOKEN="${RESEARCH_OIDC_CONTROL_TOKEN}" \
     OPENBB_ADMIN_EMAIL="${ADMIN_EMAIL}" OPENBB_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
     OPENBB_E2E_STORAGE_STATE="${STATE_FILE}" \
+    OPENBB_MAIN_E2E_STORAGE_STATE="${MAIN_STATE_FILE}" \
     OPENBB_E2E_ARTIFACT_DIR="${ARTIFACT_DIR}" \
     OPENBB_E2E_JSON_REPORT="${ARTIFACT_DIR}/openbb-lite-playwright.json" \
     npm --prefix apps/openterminal run test:e2e:openbb
@@ -337,15 +341,20 @@ run_logged "Verify persisted native workspace and all three market APIs after Ga
     OPENBB_E2E_SCENARIO=gateway-restarted \
     npm --prefix apps/openterminal run test:e2e:openbb:recovery
 
-log_phase "Stop optional services only and prove the three core services remain healthy"
-compose_e2e stop mock-openbb-oidc-research mock-openbb-oidc-main mock-openbb-alpaca
+log_phase "Stop only the three OpenBB profile services and prove core health and the signed-in native Terminal Workspace remain usable"
 compose_e2e stop openbb-research-ingress openbb-lite openbb-research-bff
 for service in eqoboard research terminal; do assert_health "${service}"; done
 curl --fail --silent --show-error "http://127.0.0.1:${GATEWAY_PORT}/healthz" >/dev/null
 curl --fail --silent --show-error "${MAIN_ORIGIN}/api/healthz" >/dev/null
+run_logged "Verify signed-in OpenTerminal native workspace remains available while OpenBB is stopped" \
+  "${ARTIFACT_DIR}/playwright-core-openbb-stopped.log" \
+  env -i PATH="${TASK_PATH}" HOME="${TASK_HOME}" \
+    EQO_PUBLIC_ORIGIN="${MAIN_ORIGIN}" EQO_RESEARCH_PUBLIC_ORIGIN="${RESEARCH_ORIGIN}" \
+    OPENBB_MAIN_E2E_STORAGE_STATE="${MAIN_STATE_FILE}" \
+    OPENBB_E2E_ARTIFACT_DIR="${ARTIFACT_DIR}" OPENBB_E2E_CORE_ONLY=1 \
+    npm --prefix apps/openterminal run test:e2e:openbb
 compose_e2e up --detach --no-build --wait --wait-timeout 120 \
-  openbb-research-bff openbb-lite openbb-research-ingress \
-  mock-openbb-alpaca mock-openbb-oidc-main mock-openbb-oidc-research
+  openbb-research-bff openbb-lite openbb-research-ingress
 
 log_phase "Simulate a broken image upgrade, reject its failed healthcheck, then restore the saved exact image archive"
 compose_e2e stop openbb-research-ingress openbb-lite

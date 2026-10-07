@@ -31,7 +31,7 @@ if (oidcOrigin && new URL(oidcOrigin).port && Number(new URL(oidcOrigin).port) !
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "*.spec.ts",
-  testIgnore: "research-bff.spec.ts",
+  testIgnore: ["research-bff.spec.ts", "openbb-*.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,

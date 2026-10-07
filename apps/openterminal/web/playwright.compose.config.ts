@@ -8,7 +8,7 @@ const webUrl = process.env.E2E_WEB_ORIGIN ?? "http://127.0.0.1:3000";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "*.spec.ts",
-  testIgnore: "research-bff.spec.ts",
+  testIgnore: ["research-bff.spec.ts", "openbb-*.spec.ts"],
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,

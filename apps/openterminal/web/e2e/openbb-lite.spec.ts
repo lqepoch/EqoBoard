@@ -8,6 +8,7 @@ const RESEARCH_OIDC_ORIGIN = process.env.E2E_OPENBB_OIDC_ORIGIN!;
 const MAIN_OIDC_ORIGIN = process.env.E2E_MAIN_OIDC_ORIGIN!;
 const RESEARCH_OIDC_CONTROL_TOKEN = process.env.E2E_RESEARCH_OIDC_CONTROL_TOKEN!;
 const MAIN_OIDC_CONTROL_TOKEN = process.env.E2E_MAIN_OIDC_CONTROL_TOKEN!;
+const MAIN_STORAGE_STATE = process.env.OPENBB_MAIN_E2E_STORAGE_STATE!;
 const MOCK_ORIGIN = process.env.E2E_ALPACA_ORIGIN!;
 const CONTROL_TOKEN = process.env.E2E_CONTROL_TOKEN!;
 const ADMIN_EMAIL = process.env.OPENBB_ADMIN_EMAIL!;
@@ -209,6 +210,7 @@ test("research origin gates Lite, isolates terminal cookies, and exposes only su
   const mainCookies = await page.context().cookies(TERMINAL_ORIGIN);
   expect(mainCookies.some((cookie) => cookie.name === "next-auth.session-token")).toBe(true);
   expect(mainCookies.some((cookie) => cookie.name === "eqo-research-session-token")).toBe(false);
+  await page.context().storageState({ path: MAIN_STORAGE_STATE });
 
   await page.goto(`${TERMINAL_ORIGIN}/`);
   const researchLink = page.getByRole("navigation").getByRole("link", { name: /OpenBB Research/ });
@@ -260,23 +262,24 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await expect(page.getByRole("navigation").getByRole("link", { name: "Widgets", exact: true })).toBeVisible();
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-onboarding-complete.png"), fullPage: true });
   await page.goto(`${RESEARCH_ORIGIN}/app/widgets`);
+  await expect(page).toHaveTitle(/Widgets Library \| OpenBB Lite/);
   await expect(page.getByText("Widgets Library", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Add Data" }).click();
-  await page.getByRole("tab", { name: "Apps", exact: true }).click();
-  await page.getByLabel("Name").fill("仅演示 / MOCK SIP/OPRA");
-  await page.getByLabel("URL").fill(`${RESEARCH_ORIGIN}/api/openbb`);
+  await page.getByRole("button", { name: "Add Data", exact: true }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Add Data", exact: true });
+  await dialog.getByRole("tab", { name: "Apps", exact: true }).click();
+  await dialog.getByLabel("Name", { exact: true }).fill("仅演示 / MOCK SIP/OPRA");
+  await dialog.getByLabel("URL", { exact: true }).fill(`${RESEARCH_ORIGIN}/api/openbb`);
 
-  const validateControl = page.getByRole("combobox", { name: /Validate Widgets/i });
-  if (await validateControl.count()) {
-    await validateControl.selectOption({ label: "Yes" });
-  } else {
-    await page.getByRole("radio", { name: "Yes", exact: true }).check();
-  }
-  await page.getByRole("button", { name: "Test", exact: true }).click();
-  await expect(page.getByText(/Test successful/i)).toBeVisible();
-  await expect(page.getByText(/3 Widgets found/i)).toBeVisible();
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  await page.getByRole("button", { name: /Add to new dashboard/i }).click();
+  const validateControl = dialog.getByText("Validate Widgets", { exact: true }).locator("xpath=..").getByRole("combobox");
+  await validateControl.click();
+  await page.getByRole("option", { name: "Yes", exact: true }).click();
+  await dialog.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(dialog.getByText("Test successful", { exact: true })).toBeVisible();
+  await expect(dialog.getByText(/3 Widgets found/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Add", exact: true }).click();
+  const addToNewDashboard = page.getByRole("button", { name: "Add to new dashboard", exact: true });
+  await expect(addToNewDashboard).toBeVisible();
+  await addToNewDashboard.click();
   await expect(page.getByText("EqoBoard SIP Stock Quotes", { exact: true })).toBeVisible();
   await expect(page.getByText("EqoBoard OPRA Option Chain", { exact: true })).toBeVisible();
   await expect(page.getByText("EqoBoard SIP OHLCV", { exact: true })).toBeVisible();
