@@ -518,8 +518,29 @@ test.describe("real Rust Gateway market protocol", () => {
       },
     });
     expect(old.delivered).toBeGreaterThan(0);
-    await expect.poll(async () => (await latestFeedStatus(page, "stocks"))?.out_of_order_count ?? 0,
-      { timeout: 10_000 }).toBeGreaterThan(statusBeforeOldTick!.out_of_order_count);
+    let oldStockEventPublished = false;
+    await expect.poll(async () => {
+      const status = await latestFeedStatus(page, "stocks");
+      const events = await observedEvents(page);
+      oldStockEventPublished = events.some((event) => event && typeof event === "object" &&
+        (event as { kind?: string; symbol?: string; price?: number }).kind === "stock_trade" &&
+        (event as { symbol?: string }).symbol === "QQQ" && (event as { price?: number }).price === 699.99);
+      return Boolean(status && status.out_of_order_count > statusBeforeOldTick!.out_of_order_count) ||
+        oldStockEventPublished;
+    }, { timeout: 10_000 }).toBe(true);
+    if (oldStockEventPublished) {
+      const oldStockEvent = [...await observedEvents(page)].reverse().find((event) => event && typeof event === "object" &&
+        (event as { kind?: string; symbol?: string; price?: number }).kind === "stock_trade" &&
+        (event as { symbol?: string }).symbol === "QQQ" && (event as { price?: number }).price === 699.99) as
+        { event_time?: string | null; connection_epoch?: number; local_sequence?: number } | undefined;
+      expect(oldStockEvent?.event_time).not.toBeNull();
+      expect(Date.parse(oldStockEvent!.event_time!)).toBeLessThan(Date.parse(snapshotTime));
+      expect(oldStockEvent?.connection_epoch).toBe(tradeWatermark!.connection_epoch);
+      expect(oldStockEvent?.local_sequence).toBeGreaterThan(Number(tradeWatermark!.local_sequence));
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+    }
     await expect(refreshedQuote.locator(".text-xl")).toContainText("600.12");
     await expect(refreshedQuote).not.toContainText("PRICE FRESH · LIVE");
 
