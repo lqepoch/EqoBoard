@@ -1,5 +1,9 @@
 {
   "postimages": {
+    "backend-api/backend/api/crud.py": "7021bf815a5fe36ed4dcbd50f497e655f1dbc15b35266d51603b967338142c67",
+    "backend-api/backend/api/sql_expressions.py": "225f39049fa4aa94437b8ec02f6062f60ae5cc3ca5f34b222fda1be16c2ad36a",
+    "backend-api/backend/routers/pro/helpers.py": "850486e11e6708bbdc278373de70427c9d7853dc1cc1b158b6e7588945dafa57",
+    "backend-api/backend/tests/test_sqlite_string_concat.py": "06b02066ac540fbe807d66ce5231d24f95123b835ce368684db34b5f4b14d119",
     "lite/entrypoint.sh": "3134b921d1ae1eb9a172223b27a8aedd3d9d066aa38fd918bb9c5fc926b64b4b",
     "terminalpro/bun.lock": "4c5d367c62178738058a1e71373ee31d62608011f5394ab453616cf677c39673",
     "terminalpro/package.json": "0cdadb1f083d1a85c2c0c3a1b18e309806b958a6c973edf9b1a3858eac7ac86b",
@@ -42,6 +46,10 @@
     "terminalpro/vite.config.ts": "115f6dd22788c2624f00b32258490e531734e2da074082b07e4116216c4f4383"
   },
   "preimages": {
+    "backend-api/backend/api/crud.py": "51fc65e7cea5938a8654f90671fd8180f81a0fea6fcd955f20d991ad6053c411",
+    "backend-api/backend/api/sql_expressions.py": null,
+    "backend-api/backend/routers/pro/helpers.py": "09e5354bd676ac4d7d328d6911bbaa8748a181da2d76d9b01c1a74af196078fc",
+    "backend-api/backend/tests/test_sqlite_string_concat.py": null,
     "lite/entrypoint.sh": "42b2d8a30cf801ac03d83bb24c839a5a157365de8d12d8fb6d343e193b74fe75",
     "terminalpro/bun.lock": "6bf311d0714daa825d7d0b89c9519ce48ed882a23ba7d206565168b61e7149e0",
     "terminalpro/package.json": "48d9550e7e7312809a6b36a4a47871f7c5b741447d21d36d8575f52fe0f935bf",
