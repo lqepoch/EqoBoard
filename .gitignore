@@ -1,0 +1,14 @@
+# Credentials never belong in source control
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+target/
+coverage/
+*.log
+*.db
+.DS_Store
+.idea/
+.vscode/
+audit/
