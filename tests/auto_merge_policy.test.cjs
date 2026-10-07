@@ -313,6 +313,7 @@ test('active pull-request ruleset approval count applies to every PR and unknown
       dismiss_stale_reviews_on_push: true,
       dismissal_restriction: { enabled: false, allowed_actors: [] },
       require_code_owner_review: false,
+      require_extra_approval_for_unattributed_changes: false,
       require_last_push_approval: false,
       required_approving_review_count: 1,
       required_review_thread_resolution: true,
@@ -352,6 +353,54 @@ test('active pull-request ruleset approval count applies to every PR and unknown
     assert.equal(evaluatePolicySnapshot(twoApprovals).eligible, true);
   });
 
+  await t.test('documented false value requires only the configured approvals', async () => {
+    const pr = makePr();
+    const run = makeRun(pr);
+    const rules = [{ type: 'pull_request', parameters: {
+      allowed_merge_methods: ['merge', 'squash', 'rebase'],
+      dismiss_stale_reviews_on_push: true,
+      require_code_owner_review: false,
+      require_extra_approval_for_unattributed_changes: false,
+      require_last_push_approval: false,
+      required_approving_review_count: 1,
+      required_review_thread_resolution: false,
+      required_reviewers: [],
+    } }];
+    const mock = createGithubMock({ pr, run, rules, reviews: [makeReview()] });
+    const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+    assert.equal(result.state, 'merged');
+    assert.equal(mock.state.mergeCalls.length, 1);
+  });
+
+  await t.test('unimplemented or malformed approval requirements fail closed', async (t) => {
+    for (const [parameter, value, reason] of [
+      ['require_extra_approval_for_unattributed_changes', true, 'pull-request-extra-approval-requirement-unsupported'],
+      ['require_extra_approval_for_unattributed_changes', 'false', 'pull-request-extra-approval-setting-invalid'],
+      ['require_code_owner_review', true, 'pull-request-require_code_owner_review-unsupported'],
+      ['require_last_push_approval', true, 'pull-request-require_last_push_approval-unsupported'],
+      ['required_reviewers', [{ file_patterns: ['crates/**'], minimum_approvals: 1 }], 'pull-request-required-reviewers-unsupported'],
+      ['required_reviewers', 'review-team', 'pull-request-required-reviewers-invalid'],
+    ]) {
+      await t.test(`${parameter}=${JSON.stringify(value)}`, async () => {
+        const pr = makePr();
+        const run = makeRun(pr);
+        const mock = createGithubMock({
+          pr,
+          run,
+          rules: [{ type: 'pull_request', parameters: {
+            required_approving_review_count: 1,
+            [parameter]: value,
+          } }],
+          reviews: [makeReview()],
+        });
+        const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+        assert.equal(result.state, 'blocked');
+        assert.equal(mock.state.mergeCalls.length, 0);
+        assert.ok(result.reasons.includes(reason));
+      });
+    }
+  });
+
   await t.test('unknown pull-request rule parameter from the GitHub API blocks before merge', async () => {
     const pr = makePr();
     const run = makeRun(pr);
@@ -360,7 +409,7 @@ test('active pull-request ruleset approval count applies to every PR and unknown
       run,
       rules: [{ type: 'pull_request', parameters: {
         required_approving_review_count: 0,
-        require_extra_approval_for_unattributed_changes: false,
+        future_approval_bypass: true,
       } }],
       files: [{ filename: 'README.md', status: 'modified' }],
     });

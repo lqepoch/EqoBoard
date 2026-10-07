@@ -200,6 +200,7 @@ const PULL_REQUEST_RULE_PARAMETERS = new Set([
   'dismiss_stale_reviews_on_push',
   'dismissal_restriction',
   'require_code_owner_review',
+  'require_extra_approval_for_unattributed_changes',
   'require_last_push_approval',
   'required_approving_review_count',
   'required_review_thread_resolution',
@@ -218,6 +219,29 @@ function rulesetRequiredApprovals(rules) {
     }
     if (Object.keys(parameters).some((key) => !PULL_REQUEST_RULE_PARAMETERS.has(key))) {
       return { valid: false, count: 0, reason: 'pull-request-rule-parameters-unknown' };
+    }
+    const extraApproval = parameters.require_extra_approval_for_unattributed_changes;
+    if (extraApproval !== undefined && typeof extraApproval !== 'boolean') {
+      return { valid: false, count: 0, reason: 'pull-request-extra-approval-setting-invalid' };
+    }
+    if (extraApproval === true) {
+      return { valid: false, count: 0, reason: 'pull-request-extra-approval-requirement-unsupported' };
+    }
+    for (const field of ['require_code_owner_review', 'require_last_push_approval']) {
+      const enabled = parameters[field];
+      if (enabled !== undefined && typeof enabled !== 'boolean') {
+        return { valid: false, count: 0, reason: `pull-request-${field}-invalid` };
+      }
+      if (enabled === true) {
+        return { valid: false, count: 0, reason: `pull-request-${field}-unsupported` };
+      }
+    }
+    const requiredReviewers = parameters.required_reviewers;
+    if (requiredReviewers !== undefined && !Array.isArray(requiredReviewers)) {
+      return { valid: false, count: 0, reason: 'pull-request-required-reviewers-invalid' };
+    }
+    if (requiredReviewers?.length > 0) {
+      return { valid: false, count: 0, reason: 'pull-request-required-reviewers-unsupported' };
     }
     const required = parameters.required_approving_review_count;
     if (!Number.isSafeInteger(required) || required < 0) {
