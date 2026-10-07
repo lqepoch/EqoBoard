@@ -1,6 +1,5 @@
 import {useEffect,useMemo,useState} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
-import ReactGridLayout,{useContainerWidth,verticalCompactor,type Layout} from 'react-grid-layout';
 import {Activity,BarChart3,Database,Layers,LayoutDashboard,Search,
   Settings2,ShieldCheck,Wifi,WifiOff,RefreshCw,AlertTriangle} from 'lucide-react';
 import {getBars,getChain,getStatus,getStocks,getToken,setToken} from './api';
@@ -14,15 +13,11 @@ import {OptionChain} from './components/OptionChain';
 import {VolatilityChart} from './components/VolatilityChart';
 import {ActivityTape} from './components/ActivityTape';
 import {VerticalBuilder} from './components/VerticalBuilder';
+import {QuoteSummary} from './components/QuoteSummary';
+import {OpenTerminalWorkspace} from './upstream/openterminal/Workspace';
+import {useTerminal,type WidgetInstance} from './upstream/openterminal/store';
+import type {GatewayStatus} from './types';
 
-const DEFAULT_LAYOUT:Layout=[
-  {i:'watch',x:0,y:0,w:3,h:5,minW:2,minH:3},
-  {i:'chart',x:3,y:0,w:6,h:5,minW:3,minH:3},
-  {i:'builder',x:9,y:0,w:3,h:5,minW:3,minH:4},
-  {i:'chain',x:0,y:5,w:8,h:8,minW:6,minH:4},
-  {i:'iv',x:8,y:5,w:4,h:4,minW:3,minH:3},
-  {i:'tape',x:8,y:9,w:4,h:4,minW:3,minH:3}
-];
 const TABS:{id:Page;name:string;icon:typeof LayoutDashboard}[]=[
   {id:'overview',name:'综合交易台',icon:LayoutDashboard},
   {id:'stocks',name:'股票行情',icon:BarChart3},
@@ -30,17 +25,6 @@ const TABS:{id:Page;name:string;icon:typeof LayoutDashboard}[]=[
   {id:'vertical',name:'垂直价差',icon:ShieldCheck},
   {id:'system',name:'系统状态',icon:Settings2}
 ];
-function readLayout():Layout{
-  try{
-    const parsed:unknown=JSON.parse(localStorage.getItem('eqoboard:layout-v1')||'null');
-    if(Array.isArray(parsed) && parsed.length===DEFAULT_LAYOUT.length &&
-      parsed.every(p=>p&&typeof p.i==='string' && DEFAULT_LAYOUT.some(d=>d.i===p.i) &&
-        ['x','y','w','h'].every(k=>Number.isInteger(p[k]) && p[k]>=0 && p[k]<100))) {
-      return parsed as Layout;
-    }
-  }catch{/* corrupted/old layout -> default */}
-  return DEFAULT_LAYOUT;
-}
 function SystemPanel({statusError}:{statusError:string|null}){
   const status=useQuery({queryKey:['status'],queryFn:getStatus,refetchInterval:30_000});
   const feedStatus=useMarket(s=>s.feedStatus);
@@ -74,19 +58,43 @@ function SystemPanel({statusError}:{statusError:string|null}){
     </div>
   </Panel>;
 }
-function Workspace({elements}:{elements:Record<string,React.ReactNode>}){
-  const {width,containerRef,mounted}=useContainerWidth();
-  const [layout,setLayout]=useState<Layout>(readLayout);
-  return <div ref={containerRef} className="workspace-container">
-    {mounted&&<ReactGridLayout width={width} layout={layout}
-      gridConfig={{cols:12,rowHeight:57,margin:[12,12],containerPadding:[0,0]}}
-      dragConfig={{enabled:true,handle:'.panel-handle',cancel:'button,input,select'}}
-      resizeConfig={{enabled:true}}
-      compactor={verticalCompactor}
-      onLayoutChange={(next)=>{setLayout(next);localStorage.setItem('eqoboard:layout-v1',JSON.stringify(next));}}>
-      {Object.entries(elements).map(([key,child])=><div key={key} className="widget-shell">{child}</div>)}
-    </ReactGridLayout>}
-  </div>;
+/** Uses the extracted OpenTerminal widget registry, EqoBoard's existing real data widgets. */
+function WorkspaceMarketWidget({widget,symbol,expiration,status,watchlist}:{widget:WidgetInstance;
+  symbol:string;expiration:string;status:GatewayStatus|undefined;watchlist:string[];}){
+  const [timeframe,setTimeframe]=useState('1Min');
+  const enabled=status?.market_credentials_present===true;
+  const needsStock=['quote','options','iv'].includes(widget.type);
+  const quote=useQuery({queryKey:['workspace','stock',symbol],queryFn:()=>getStocks([symbol]),
+    enabled:enabled&&needsStock,refetchInterval:15_000});
+  const spot=quote.data?.snapshots[0]?.last;
+  const needsBars=widget.type==='chart';
+  const bars=useQuery({queryKey:['bars',symbol,timeframe],queryFn:()=>getBars(symbol,timeframe),
+    enabled:enabled&&needsBars,refetchInterval:30_000});
+  const needsOptions=widget.type==='options'||widget.type==='iv';
+  const range=spot!=null&&spot>0
+    ?{gte:Math.max(.01,Math.floor(spot*.85/5)*5),lte:Math.ceil(spot*1.15/5)*5}:undefined;
+  const chain=useQuery({queryKey:['options',symbol,expiration,range?.gte,range?.lte],
+    queryFn:()=>getChain(symbol,expiration,range),enabled:enabled&&needsOptions,
+    refetchInterval:30_000});
+  const stocks=useQuery({queryKey:['stocks',watchlist.join(',')],queryFn:()=>getStocks(watchlist),
+    enabled:enabled&&widget.type==='watchlist',refetchInterval:15_000});
+  switch(widget.type){
+    case 'quote': return <QuoteSummary symbol={symbol} quote={quote.data?.snapshots[0]}
+      error={quote.error?.message??null} loading={quote.isFetching}/>;
+    case 'watchlist': return <QuoteList stocks={stocks.data?.snapshots??[]}
+      loading={stocks.isFetching} error={stocks.error?.message??null}/>;
+    case 'chart': return <StockChart selected={symbol} data={bars.data}
+      loading={bars.isFetching} error={bars.error?.message??null}
+      timeframe={timeframe} onTimeframe={setTimeframe}/>;
+    case 'options': return <OptionChain data={chain.data} spot={spot}
+      loading={chain.isFetching} error={chain.error?.message??null}
+      maxSubscriptions={Math.min(status?.max_option_subscriptions??100,120)}/>;
+    case 'iv': return <VolatilityChart contracts={chain.data?.contracts??[]}
+      truncated={chain.data?.truncated??false}/>;
+    case 'tape': return <ActivityTape/>;
+    case 'vertical': return <VerticalBuilder enabled={status?.execution_mode==='paper'}
+      adapters={status?.configured_adapters??[]}/>;
+  }
 }
 function CurrentTime(){
   const [now,setNow]=useState(new Date());
@@ -96,9 +104,11 @@ function CurrentTime(){
 export function App(){
   const queryClient=useQueryClient();
   const page=useUi(s=>s.page);
+  const watchlist=useTerminal(s=>s.watchlist);
   const setPage=useUi(s=>s.setPage);
   const symbol=useUi(s=>s.selectedSymbol);
   const setSymbol=useUi(s=>s.setSymbol);
+  useEffect(()=>{if(useTerminal.getState().activeSymbol!==symbol) useTerminal.getState().setActiveSymbol(symbol);},[symbol]);
   const expiration=useUi(s=>s.expiration);
   const setExpiration=useUi(s=>s.setExpiration);
   const [input,setInput]=useState(symbol);
@@ -107,8 +117,8 @@ export function App(){
   useMarketStream(status.data?.market_credentials_present===true);
   const connected=useMarket(s=>s.connected);
   const streamError=useMarket(s=>s.error);
-  const universe=useMemo(()=>[...new Set([...(status.data?.stock_symbols??['SPY','QQQ','IWM','NVDA','TSLA']),symbol])],
-    [status.data?.stock_symbols,symbol]);
+  const universe=useMemo(()=>[...new Set([...(status.data?.stock_symbols??['SPY','QQQ','IWM','NVDA','TSLA']),...watchlist,symbol])],
+    [status.data?.stock_symbols,symbol,watchlist]);
   const stocks=useQuery({queryKey:['stocks',universe.join(',')],queryFn:()=>getStocks(universe),
     enabled:status.data?.market_credentials_present===true,refetchInterval:15_000});
   const selectedStock=stocks.data?.snapshots.find(s=>s.symbol===symbol);
@@ -117,14 +127,14 @@ export function App(){
   const previous=selectedStock?.previous_close;
   const change=last!=null&&previous!=null&&previous>0?(last/previous-1)*100:null;
   const bars=useQuery({queryKey:['bars',symbol,timeframe],queryFn:()=>getBars(symbol,timeframe),
-    enabled:status.data?.market_credentials_present===true&&page!=='system',
+    enabled:status.data?.market_credentials_present===true&&page==='stocks',
     refetchInterval:30_000});
   const range=last!=null&&last>0?{gte:Math.max(0.01,Math.floor(last*0.85/5)*5),
     lte:Math.ceil(last*1.15/5)*5}:undefined;
   const rangeKey=range?range.gte+':'+range.lte:'all';
   const chain=useQuery({queryKey:['options',symbol,expiration,rangeKey],
     queryFn:()=>getChain(symbol,expiration,range),
-    enabled:status.data?.market_credentials_present===true&&!['system','stocks'].includes(page),
+    enabled:status.data?.market_credentials_present===true&&['options','vertical'].includes(page),
     refetchInterval:30_000});
   const statusError=status.error?.message??null;
   const stocksError=stocks.error?.message??null;
@@ -204,7 +214,9 @@ export function App(){
           </label>}
           <span className="asof">行情时间：{humanTime(live?.timestamp??selectedStock?.updated_at)}</span>
         </div>}
-        {page==='overview'&&<Workspace elements={widgets}/>}
+        {page==='overview'&&<OpenTerminalWorkspace render={(widget,scopeSymbol)=>
+          <WorkspaceMarketWidget widget={widget} symbol={scopeSymbol} expiration={expiration}
+            status={status.data} watchlist={watchlist}/>}/>}
         {page==='stocks'&&<div className="focused-layout two-col">
           {widgets.watch}{widgets.chart}
         </div>}

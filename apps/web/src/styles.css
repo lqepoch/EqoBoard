@@ -131,3 +131,10 @@ padding:9px;border-radius:7px;font-size:11px;color:#8be4c1}
 .header-search{width:200px}.asof{display:none}}
 @media(max-width:1030px){body{min-width:740px}.navigation{width:62px;min-width:62px}.top-header{padding:0 12px}
 .header-search{width:160px}.focused-layout.two-col{grid-template-columns:240px 1fr}}
+
+.ot-quote-summary{display:flex;flex-direction:column;gap:14px;padding:15px;height:100%}
+.ot-quote-main{display:flex;align-items:baseline;gap:12px}.ot-quote-main strong{font-family:'JetBrains Mono',monospace;font-size:26px;color:#eaf6ff}
+.ot-quote-main span{font-family:monospace;font-size:13px}
+.ot-quote-metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.ot-quote-metrics>div{display:flex;justify-content:space-between;background:#132739;border:1px solid #27465a;
+padding:8px 10px;border-radius:5px}.ot-quote-metrics span{color:#7895af}.ot-quote-metrics b{font-family:monospace;color:#dceeff}

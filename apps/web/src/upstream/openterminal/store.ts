@@ -103,7 +103,7 @@ export const useTerminal = create<TerminalState>()(
       },
       toggleLinked: (id) =>
         set((st) => ({
-          widgets: st.widgets.map((w) => (w.id === id ? { ...w, linked: !w.linked } : w)),
+          widgets: st.widgets.map((w) => (w.id === id ? { ...w, symbol: w.linked ? st.activeSymbol : w.symbol, linked: !w.linked } : w)),
         })),
       setLayout: (layout) => set({ layout }),
       addToWatchlist: (s) => {
