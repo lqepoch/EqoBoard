@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { captureJsonResponses, type CapturedResponse } from "./openbb-response-capture";
 
 const RESEARCH_ORIGIN = process.env.EQO_RESEARCH_PUBLIC_ORIGIN!;
 const TERMINAL_ORIGIN = process.env.EQO_PUBLIC_ORIGIN!;
@@ -16,8 +17,6 @@ const ADMIN_PASSWORD = process.env.OPENBB_ADMIN_PASSWORD!;
 const ARTIFACT_DIR = process.env.OPENBB_E2E_ARTIFACT_DIR ?? "/tmp/openbb-e2e-artifacts";
 const STORAGE_STATE = process.env.OPENBB_E2E_STORAGE_STATE ?? join(ARTIFACT_DIR, "native-user-storage-state.json");
 const DASHBOARD_URL_FILE = join(ARTIFACT_DIR, "native-dashboard-url.json");
-
-type CapturedResponse = { path: string; status: number; body?: unknown };
 
 async function jsonRequest(request: APIRequestContext, url: string, data: unknown, headers = {}) {
   const response = await request.post(url, { data, headers });
@@ -135,49 +134,21 @@ async function controlMock(request: APIRequestContext, mode: Record<string, stri
   await jsonRequest(request, `${MOCK_ORIGIN}/__test/control`, mode, { "x-e2e-control": CONTROL_TOKEN });
 }
 
-async function captureOpenbbResponses(page: Page) {
-  const responses: CapturedResponse[] = [];
-  const pending: Promise<void>[] = [];
-  page.on("response", (response) => {
-    const url = new URL(response.url());
-    if (url.origin !== RESEARCH_ORIGIN || !url.pathname.startsWith("/api/openbb/")) return;
-    const capturedResponse: CapturedResponse = {
-      path: `${url.pathname}${url.search}`,
-      status: response.status(),
-    };
-    responses.push(capturedResponse);
-    pending.push((async () => {
-      try {
-        capturedResponse.body = await response.json();
-      } catch {
-        capturedResponse.body = undefined;
-      }
-    })());
-  });
-  return {
-    responses,
-    async settle() {
-      await Promise.all(pending);
-    },
-  };
-}
-
-function rowsFor(responses: CapturedResponse[], route: string) {
-  const response = responses.find((item) => item.path.startsWith(route) && item.status === 200);
-  expect(response, `No successful native browser response for ${route}`).toBeDefined();
-  expect(Array.isArray(response?.body), `${route} did not return OpenBB flat rows`).toBe(true);
+function rowsFor(response: CapturedResponse | undefined, route: string) {
+  expect(response, `No completed successful native browser response for ${route}`).toBeDefined();
+  expect(Array.isArray(response?.body) && response.body.length > 0, `${route} did not return non-empty OpenBB flat rows`).toBe(true);
   return response!.body as Record<string, unknown>[];
 }
 
-function latestAsOfValues(responses: CapturedResponse[], route: string) {
-  for (const response of [...responses].reverse()) {
-    if (!response.path.startsWith(route) || response.status !== 200 || !Array.isArray(response.body)) continue;
-    const values = (response.body as Record<string, unknown>[])
-      .map((row) => row.market_as_of)
-      .filter((value): value is string => typeof value === "string");
-    if (values.length > 0) return values;
-  }
-  return [];
+async function latestAsOfValues(captured: ReturnType<typeof captureJsonResponses>, route: string, since: number) {
+  const response = await captured.latestSettled(
+    (item) => item.path.startsWith(route) && item.status === 200,
+    since,
+  );
+  if (!response || !Array.isArray(response.body)) return [];
+  return (response.body as Record<string, unknown>[])
+    .map((row) => row.market_as_of)
+    .filter((value): value is string => typeof value === "string");
 }
 
 function barsPollSignatures(responses: CapturedResponse[]) {
@@ -343,7 +314,7 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   activeNativeDiagnostics = diagnostics;
   const browserCalls: string[] = [];
   page.on("request", (browserRequest) => browserCalls.push(browserRequest.url()));
-  const captured = await captureOpenbbResponses(page);
+  const captured = captureJsonResponses(page, RESEARCH_ORIGIN, (_response, path) => path.startsWith("/api/openbb/"));
 
   await signIn(page, RESEARCH_OIDC_ORIGIN, RESEARCH_ORIGIN, "/login", RESEARCH_OIDC_CONTROL_TOKEN);
   await nativeLiteLogin(page);
@@ -376,7 +347,7 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await dialog.getByRole("button", { name: "Add", exact: true }).click();
   const addToNewDashboard = page.getByRole("button", { name: "Add to new dashboard", exact: true });
   await expect(addToNewDashboard).toBeVisible();
-  const nativeDashboardResponseStart = captured.responses.length;
+  const nativeDashboardResponseStart = captured.mark();
   await addToNewDashboard.click();
   await expect(page.getByText("EqoBoard SIP Stock Quotes", { exact: true })).toBeVisible();
   await expect(page.getByText("EqoBoard OPRA Option Chain", { exact: true })).toBeVisible();
@@ -398,7 +369,24 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await expect(page).toHaveTitle(/^仅演示 \/ MOCK SIP\/OPRA \| OpenBB Lite$/);
   await expect(page.getByRole("treeitem").filter({ hasText: "仅演示 / MOCK SIP/OPRA" })).toBeVisible();
 
-  await expect.poll(() => captured.responses.filter((item) => item.status === 200).length, { timeout: 45_000 }).toBeGreaterThanOrEqual(5);
+  await expect.poll(() => captured.since(nativeDashboardResponseStart).filter((item) => item.status === 200).length, { timeout: 45_000 }).toBeGreaterThanOrEqual(5);
+  const marketRoutes = [
+    "/api/openbb/openbb/v1/stocks",
+    "/api/openbb/openbb/v1/bars",
+    "/api/openbb/openbb/v1/options",
+  ];
+  const initialMarketResponses: CapturedResponse[] = [];
+  for (const route of marketRoutes) {
+    await expect.poll(async () => {
+      const response = await captured.latestSettled(
+        (item) => item.path.startsWith(route) && item.status === 200,
+        nativeDashboardResponseStart,
+      );
+      if (!Array.isArray(response?.body) || response.body.length === 0) return false;
+      initialMarketResponses[marketRoutes.indexOf(route)] = response;
+      return true;
+    }, { timeout: 45_000, message: `Native dashboard did not receive non-empty flat rows from ${route}` }).toBe(true);
+  }
   await captured.settle();
   const widgets = captured.responses.find((item) => item.path === "/api/openbb/widgets.json" && item.status === 200);
   const apps = captured.responses.find((item) => item.path === "/api/openbb/apps.json" && item.status === 200);
@@ -409,9 +397,9 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   expect(captured.responses.some((item) => item.path.startsWith("/api/openbb/openbb/v1/bars") && item.status === 200)).toBe(true);
   expect(captured.responses.some((item) => item.path.startsWith("/api/openbb/openbb/v1/options") && item.status === 200)).toBe(true);
 
-  const stocks = rowsFor(captured.responses, "/api/openbb/openbb/v1/stocks");
-  const bars = rowsFor(captured.responses, "/api/openbb/openbb/v1/bars");
-  const options = rowsFor(captured.responses, "/api/openbb/openbb/v1/options");
+  const stocks = rowsFor(initialMarketResponses[0], marketRoutes[0]);
+  const bars = rowsFor(initialMarketResponses[1], marketRoutes[1]);
+  const options = rowsFor(initialMarketResponses[2], marketRoutes[2]);
   expect(stocks[0]).toMatchObject({ symbol: "QQQ", source: "unknown", source_mode: "unknown", source_label: "source unknown", feed: "sip", complete: true, truncated: false });
   expect(stocks[0].market_as_of).toEqual(expect.any(String));
   expect(stocks[0].quote_at).toEqual(expect.any(String));
@@ -451,7 +439,7 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await expect(optionsWidget).toHaveCount(1);
   await expect(barsWidget.getByRole("columnheader", { name: "Market as of", exact: true })).toBeVisible();
   await captured.settle();
-  const dashboardResponses = () => captured.responses.slice(nativeDashboardResponseStart);
+  const dashboardResponses = () => captured.since(nativeDashboardResponseStart);
   const stockParams = latestResponseUrl(dashboardResponses(), "/api/openbb/openbb/v1/stocks").searchParams;
   const barsParams = latestResponseUrl(dashboardResponses(), "/api/openbb/openbb/v1/bars").searchParams;
   const optionParams = latestResponseUrl(dashboardResponses(), "/api/openbb/openbb/v1/options").searchParams;
@@ -462,12 +450,23 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   expect(barsParams.get("limit")).toBe("500");
   expect(optionParams.get("underlying")).toBe("QQQ");
   expect(optionParams.get("expiration")).toBe(optionRequest.expiration_date);
-  await expect.poll(() => new Set(barsPollSignatures(dashboardResponses())).size, { timeout: 50_000 })
-    .toBeGreaterThan(1);
+  const initialBarsIndex = captured.responses.indexOf(initialMarketResponses[1]);
+  await expect.poll(async () => {
+    await captured.settle();
+    const barsAfterInitialDashboardLoad = dashboardResponses().slice(
+      Math.max(0, initialBarsIndex - nativeDashboardResponseStart + 1),
+    );
+    return new Set(barsPollSignatures(barsAfterInitialDashboardLoad)).size;
+  }, { timeout: 65_000, message: "Native dashboard did not complete two distinct bars polling responses after its initial load" })
+    .toBeGreaterThanOrEqual(2);
   const visibleMarketAsOfCells = barsWidget.locator('.ag-cell[col-id="market_as_of"]').filter({ visible: true });
   await expect.poll(async () => {
     const rendered = await visibleMarketAsOfCells.allTextContents();
-    const latestBarsAsOfValues = latestAsOfValues(dashboardResponses(), "/api/openbb/openbb/v1/bars");
+    const latestBarsAsOfValues = await latestAsOfValues(
+      captured,
+      "/api/openbb/openbb/v1/bars",
+      nativeDashboardResponseStart,
+    );
     return latestBarsAsOfValues.length > 0 && latestBarsAsOfValues.some((value) => rendered.includes(value));
   }).toBe(true);
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-market-time.png"), fullPage: true });
@@ -504,15 +503,24 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-completeness.png"), fullPage: true });
 
   await controlMock(request, { bars: "empty-truncated", options: "empty-truncated" });
-  const paginationResponseStart = captured.responses.length;
+  const paginationResponseStart = captured.mark();
   await page.goto(dashboardUrl);
-  const paginationResponses = () => captured.responses.slice(paginationResponseStart);
-  await expect.poll(() => paginationResponses().some((item) => item.path.startsWith("/api/openbb/openbb/v1/bars") && item.status === 502), { timeout: 45_000 }).toBe(true);
-  await expect.poll(() => paginationResponses().some((item) => item.path.startsWith("/api/openbb/openbb/v1/options") && item.status === 502), { timeout: 45_000 }).toBe(true);
-  await expect.poll(() => paginationResponses().some((item) =>
-    item.path.startsWith("/api/openbb/openbb/v1/stocks") && item.status === 200 &&
-    Array.isArray(item.body) && item.body.some((row: Record<string, unknown>) => row.symbol === "QQQ"),
-  ), { timeout: 45_000 }).toBe(true);
+  for (const route of ["bars", "options"] as const) {
+    await expect.poll(async () => {
+      const response = await captured.latestSettled(
+        (item) => item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 502,
+        paginationResponseStart,
+      );
+      return (response?.body as { error?: string } | undefined)?.error === "market_data_truncated";
+    }, { timeout: 45_000, message: `Native ${route} endpoint did not return its latest completed truncation response` }).toBe(true);
+  }
+  await expect.poll(async () => {
+    const response = await captured.latestSettled(
+      (item) => item.path.startsWith("/api/openbb/openbb/v1/stocks") && item.status === 200,
+      paginationResponseStart,
+    );
+    return Array.isArray(response?.body) && response.body.some((row: Record<string, unknown>) => row.symbol === "QQQ");
+  }, { timeout: 45_000, message: "Pagination phase did not receive completed healthy QQQ stock rows" }).toBe(true);
   await captured.settle();
   await expect(barsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
   await expect(optionsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
@@ -536,14 +544,18 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
 
   const metricsBeforeDenied = await (await request.get(`${MOCK_ORIGIN}/__test/metrics`, { headers: { "x-e2e-control": CONTROL_TOKEN } })).json();
   const deniedFixtureCallStart = metricsBeforeDenied.calls.length;
-  const deniedResponseStart = captured.responses.length;
+  const deniedResponseStart = captured.mark();
   await controlMock(request, { stocks: "denied", bars: "denied", options: "denied" });
   await page.goto(dashboardUrl);
-  const deniedResponses = () => captured.responses.slice(deniedResponseStart);
   for (const route of ["stocks", "bars", "options"]) {
-    await expect.poll(() => deniedResponses().some((item) =>
-      item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 403,
-    ), { timeout: 45_000 }).toBe(true);
+    await expect.poll(async () => {
+      const response = await captured.latestSettled(
+        (item) => item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 403,
+        deniedResponseStart,
+      );
+      const body = response?.body as { error?: string; detail?: string } | undefined;
+      return body?.error === "market_data_error" && body.detail?.includes("403") === true;
+    }, { timeout: 45_000, message: `Native ${route} provider denial did not return its latest completed 403 response` }).toBe(true);
   }
   await captured.settle();
   for (const [widget, route] of [
@@ -553,8 +565,9 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   ] as const) {
     await expect(widget.getByTestId("results-not-found")).toContainText(/status code 403/i);
     await expect(widget.getByRole("gridcell")).toHaveCount(0);
-    const response = [...deniedResponses()].reverse().find((item) =>
+    const response = await captured.latestSettled((item) =>
       item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 403,
+      deniedResponseStart,
     );
     expect(response?.body).toMatchObject({ error: "market_data_error" });
     expect((response?.body as { detail?: string } | undefined)?.detail).toContain("403");
@@ -571,16 +584,39 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-market-entitlement-denied.png"), fullPage: true });
 
   await controlMock(request, { stocks: "normal", bars: "normal", options: "normal" });
-  const restoredResponseStart = captured.responses.length;
+  const restoredResponseStart = captured.mark();
   await page.goto(dashboardUrl);
   await expect(page).toHaveTitle(/^仅演示 \/ MOCK SIP\/OPRA \| OpenBB Lite$/);
-  await expect.poll(() => ["stocks", "bars", "options"].every((route) =>
-    captured.responses.slice(restoredResponseStart).some((item) =>
-      item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 200,
-    ),
-  ), { timeout: 45_000 }).toBe(true);
+  const restoredRows: Record<string, Record<string, unknown>[]> = {};
+  for (const route of ["stocks", "bars", "options"] as const) {
+    await expect.poll(async () => {
+      const response = await captured.latestSettled(
+        (item) => item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 200,
+        restoredResponseStart,
+      );
+      if (!Array.isArray(response?.body) || response.body.length === 0) return false;
+      restoredRows[route] = response.body as Record<string, unknown>[];
+      return route === "options"
+        ? restoredRows[route].some((row) => row.underlying === "QQQ")
+        : restoredRows[route].some((row) => row.symbol === "QQQ");
+    }, { timeout: 45_000, message: `Native ${route} API did not recover with completed QQQ rows after the denied phase` }).toBe(true);
+  }
+  await captured.settle();
   await expect.poll(async () =>
     (await stocksWidget.locator('.ag-cell[col-id="symbol"]').allTextContents()).some((text) => text.trim() === "QQQ"),
+  ).toBe(true);
+  await expect(barsWidget.getByRole("gridcell")).not.toHaveCount(0);
+  await revealGridColumns(page, barsWidget, ["open"]);
+  const recoveredOpenCells = barsWidget.locator('.ag-cell[col-id="open"]').filter({ visible: true });
+  await expect.poll(async () =>
+    (await recoveredOpenCells.allTextContents()).some((text) =>
+      Number(text.replace(/[,$]/g, "").trim()) === restoredRows.bars[0]?.open,
+    ),
+  ).toBe(true);
+  await expect.poll(async () =>
+    (await optionsWidget.locator('.ag-cell[col-id="symbol"]').allTextContents()).some((text) =>
+      restoredRows.options.some((row) => row.symbol === text.trim()),
+    ),
   ).toBe(true);
   expect(browserCalls.some((url) => url.includes("/assets/js/datafeeds/udf/dist/bundle.js"))).toBe(false);
   expect(diagnostics.pageErrors).toEqual([]);

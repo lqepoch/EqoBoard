@@ -211,7 +211,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 2
 fi
 IFS=$'\t' read -r OPENTERMINAL_SOURCE_COMMIT OPENBB_SOURCE_COMMIT OPENBB_SOURCE_ARCHIVE_SHA256 OPENBB_BUILD_IDENTITY \
-  < <(python3 - <<'PY'
+  < <(python3 -B - <<'PY'
 import sys
 sys.path.insert(0, "tools/openbb")
 import openbb_upstream as upstream
@@ -343,6 +343,8 @@ run_logged "Validate default OpenBB profile config without operator environment"
     docker compose --env-file /dev/null --profile openbb config --quiet
 run_logged "Validate E2E overlay config" "${ARTIFACT_DIR}/compose-e2e-config.log" \
   compose_e2e --profile openbb config --quiet
+run_logged "Run Docker archive verifier fault-injection tests" "${ARTIFACT_DIR}/openbb-archive-verifier-tests.log" \
+  env -i PATH="${TASK_PATH}" python3 -B tests/test_openbb_docker_save_oci.py
 
 if [[ "${OPENBB_E2E_SKIP_DEFAULT_PROFILE_SMOKE:-0}" == "1" ]]; then
   log_phase "Skip default profile rebuild/smoke for an explicitly requested diagnostic iteration; final acceptance must run without this flag"
@@ -395,188 +397,9 @@ docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}
 docker save "${LITE_IMAGE}" -o "${IMAGE_ARCHIVE}"
 chmod 600 "${IMAGE_ARCHIVE}"
 sha256sum "${IMAGE_ARCHIVE}" | tee "${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar.sha256"
-python3 - "${IMAGE_ARCHIVE}" "${LITE_IMAGE}" "${ARTIFACT_DIR}/openbb-lite-compose-image-inspect.json" "${ARTIFACT_DIR}/openbb-lite-compose-archive-manifest.json" <<'PY'
-import hashlib
-import json
-import sys
-import tarfile
-
-archive_path, image_tag, inspect_path, output_path = sys.argv[1:]
-with open(inspect_path, encoding="utf-8") as stream:
-    inspect = json.load(stream)[0]
-image_id = inspect["Id"]
-platform = f'{inspect["Os"]}/{inspect["Architecture"]}'
-
-def sha256_stream(stream):
-    digest = hashlib.sha256()
-    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-        digest.update(chunk)
-    return digest.hexdigest()
-
-def digest_bytes(data):
-    return "sha256:" + hashlib.sha256(data).hexdigest()
-
-def descriptor_blob(archive, descriptor):
-    digest = descriptor.get("digest", "")
-    if not digest.startswith("sha256:"):
-        raise SystemExit(f"unsupported or missing OCI descriptor digest: {digest}")
-    path = "blobs/sha256/" + digest.split(":", 1)[1]
-    item = archive.extractfile(path)
-    if item is None:
-        raise SystemExit(f"OCI descriptor points to a missing blob: {path}")
-    data = item.read()
-    if digest_bytes(data) != digest:
-        raise SystemExit(f"OCI blob digest mismatch: {digest}")
-    if len(data) != descriptor.get("size"):
-        raise SystemExit(f"OCI blob size mismatch: {digest}")
-    verified_digests.add(digest)
-    return data
-
-with tarfile.open(archive_path, "r") as archive:
-    archive_names = set(archive.getnames())
-    manifest_file = archive.extractfile("manifest.json")
-    if manifest_file is None:
-        raise SystemExit("docker save archive has no manifest.json")
-    manifests = json.load(manifest_file)
-    matches = [item for item in manifests if image_tag in (item.get("RepoTags") or [])]
-    if len(matches) != 1:
-        raise SystemExit(f"expected one docker save manifest for {image_tag}, found {len(matches)}")
-    docker_record = matches[0]
-    config_file = archive.extractfile(docker_record["Config"])
-    if config_file is None:
-        raise SystemExit("docker save manifest points to a missing config object")
-    config_bytes = config_file.read()
-    config_digest = digest_bytes(config_bytes)
-    docker_layers = []
-    for layer_path in docker_record["Layers"]:
-        layer_file = archive.extractfile(layer_path)
-        if layer_file is None:
-            raise SystemExit(f"docker save manifest points to missing layer {layer_path}")
-        layer_bytes = layer_file.read()
-        docker_layers.append({"path": layer_path, "digest": digest_bytes(layer_bytes), "size": len(layer_bytes)})
-
-    oci_evidence = None
-    id_relation = "config" if image_id == config_digest else "unresolved"
-    verified_digests = set()
-    if "index.json" in archive_names:
-        layout_file = archive.extractfile("oci-layout")
-        index_file = archive.extractfile("index.json")
-        if layout_file is None or index_file is None:
-            raise SystemExit("OCI image layout is missing oci-layout or index.json")
-        layout = json.load(layout_file)
-        if layout.get("imageLayoutVersion") != "1.0.0":
-            raise SystemExit("unsupported OCI image layout version")
-        root_index_bytes = index_file.read()
-        root_index = json.loads(root_index_bytes)
-        root_index_digest = digest_bytes(root_index_bytes)
-        root_descriptors = root_index.get("manifests", [])
-        id_descriptors = [item for item in root_descriptors if item.get("digest") == image_id]
-        if len(id_descriptors) == 1:
-            id_relation = id_descriptors[0].get("mediaType", "descriptor")
-        elif len(id_descriptors) > 1:
-            raise SystemExit("Docker image inspect ID matches multiple OCI root descriptors")
-        elif image_id != config_digest:
-            raise SystemExit("Docker image inspect ID is not linked to the OCI archive index or image config")
-
-        visited = set()
-        app_manifests = []
-        index_descriptors = []
-        def visit_descriptor(descriptor, path=()):
-            digest = descriptor.get("digest")
-            if digest in visited:
-                return
-            visited.add(digest)
-            blob = descriptor_blob(archive, descriptor)
-            media_type = descriptor.get("mediaType", "")
-            if media_type.endswith("image.index.v1+json"):
-                index_descriptors.append(descriptor)
-                nested = json.loads(blob)
-                for child in nested.get("manifests", []):
-                    child_path = path + (child,)
-                    visit_descriptor(child, child_path)
-            elif media_type.endswith("image.manifest.v1+json"):
-                manifest = json.loads(blob)
-                config = manifest.get("config")
-                if not isinstance(config, dict):
-                    raise SystemExit(f"OCI image manifest has no config descriptor: {digest}")
-                descriptor_blob(archive, config)
-                for layer in manifest.get("layers", []):
-                    descriptor_blob(archive, layer)
-                platform_descriptor = next((item.get("platform") for item in reversed(path) if item.get("platform")), {})
-                platform_value = f'{platform_descriptor.get("os", "")}/{platform_descriptor.get("architecture", "")}'
-                if platform_value == platform:
-                    app_manifests.append({"descriptor": descriptor, "manifest": manifest})
-            else:
-                raise SystemExit(f"unsupported OCI descriptor media type: {media_type}")
-
-        for descriptor in root_descriptors:
-            visit_descriptor(descriptor, (descriptor,))
-        if len(app_manifests) != 1:
-            raise SystemExit(f"expected one OCI application manifest for {platform}, found {len(app_manifests)}")
-        app = app_manifests[0]
-        app_manifest = app["manifest"]
-        app_config = app_manifest["config"]
-        app_layers = app_manifest.get("layers", [])
-        if app_config["digest"] != config_digest:
-            raise SystemExit("OCI application config does not match the Docker archive manifest config")
-        if [item["digest"] for item in app_layers] != [item["digest"] for item in docker_layers]:
-            raise SystemExit("OCI application layer descriptors do not match Docker archive manifest layers")
-        repo_digests = inspect.get("RepoDigests") or []
-        unlinked_repo_digests = [
-            value.rsplit("@", 1)[-1]
-            for value in repo_digests
-            if value.rsplit("@", 1)[-1] not in verified_digests
-        ]
-        if unlinked_repo_digests:
-            raise SystemExit("Docker RepoDigest observations are not linked to verified OCI archive descriptors")
-        candidate_indexes = [item["digest"] for item in index_descriptors]
-        observed_index = next((digest for digest in candidate_indexes if digest == image_id), None)
-        if observed_index is None:
-            observed_index = next((digest for digest in candidate_indexes if any(
-                value.rsplit("@", 1)[-1] == digest for value in repo_digests
-            )), None)
-        if observed_index is None and len(candidate_indexes) == 1:
-            observed_index = candidate_indexes[0]
-        oci_evidence = {
-            "layout_index_sha256": root_index_digest,
-            "docker_inspect_id_relation": id_relation,
-            "image_index_digest": observed_index,
-            "application_manifest_digest": app["descriptor"]["digest"],
-            "application_manifest_size": app["descriptor"]["size"],
-            "platform": platform,
-            "config_digest": app_config["digest"],
-            "config_size": app_config["size"],
-            "layer_count": len(app_layers),
-            "layers": app_layers,
-            "verified_oci_descriptors_and_blobs": len(verified_digests),
-            "docker_repo_digests_linked_to_verified_archive": True,
-            "docker_save_manifest_matches_application_config_and_layers": True,
-        }
-    elif image_id != config_digest:
-        raise SystemExit("Docker image inspect ID is neither an OCI archive descriptor nor the Docker-save config")
-    elif inspect.get("RepoDigests"):
-        raise SystemExit("Docker RepoDigest observations cannot be associated without an OCI archive index")
-
-with open(archive_path, "rb") as stream:
-    archive_sha256 = sha256_stream(stream)
-with open(output_path, "w", encoding="utf-8") as output:
-    json.dump({
-        "format": "docker-save-archive",
-        "image_tag": image_tag,
-        "docker_image_id": image_id,
-        "docker_image_id_relation": id_relation,
-        "docker_repo_digests": inspect.get("RepoDigests") or [],
-        "archive_sha256": archive_sha256,
-        "archive_manifest_file": "manifest.json",
-        "docker_manifest_record": docker_record,
-        "platform": platform,
-        "image_config_sha256": config_digest,
-        "image_config_matches_docker_inspect_id": image_id == config_digest,
-        "layer_archives": docker_layers,
-        "oci": oci_evidence,
-        "note": "OCI descriptors are included only after digest/size validation and association with the Docker-save config/layers. A daemon RepoDigest observation does not imply registry publication."
-    }, output, indent=2)
-PY
+python3 -B tools/openbb/verify_docker_save_oci.py \
+  "${IMAGE_ARCHIVE}" "${LITE_IMAGE}" "${ARTIFACT_DIR}/openbb-lite-compose-image-inspect.json" \
+  "${ARTIFACT_DIR}/openbb-lite-compose-archive-manifest.json"
 printf '%s\n' "${LITE_IMAGE_ID}" >"${ARTIFACT_DIR}/openbb-lite-compose-image-id.txt"
 chmod 600 "${ARTIFACT_DIR}/openbb-lite-compose-image-id.txt"
 log_phase "Saved project-scoped Compose Lite image and Docker archive for rollback; Docker image id ${LITE_IMAGE_ID}"
@@ -658,7 +481,7 @@ compose_e2e --profile openbb up --detach --no-build --no-deps --force-recreate o
 
 broken_status=""
 for _ in $(seq 1 30); do
-  broken_id="$(compose ps -q openbb-lite)"
+  broken_id="$(compose_e2e ps --all -q openbb-lite)"
   broken_status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${broken_id}" 2>/dev/null || true)"
   [[ "${broken_status}" == unhealthy ]] && break
   sleep 2

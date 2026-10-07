@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
+import { captureJsonResponses, type CapturedResponse } from "./openbb-response-capture";
 
 const RESEARCH_ORIGIN = process.env.EQO_RESEARCH_PUBLIC_ORIGIN!;
 const ARTIFACT_DIR = process.env.OPENBB_E2E_ARTIFACT_DIR ?? "/tmp/openbb-e2e-artifacts";
@@ -9,15 +10,11 @@ const DASHBOARD_URL_FILE = join(ARTIFACT_DIR, "native-dashboard-url.json");
 const scenario = process.env.OPENBB_E2E_SCENARIO ?? "recovered";
 const gatewayExpectedDown = process.env.OPENBB_E2E_EXPECT_GATEWAY_OFFLINE === "1";
 
-type CapturedMarketResponse = { path: string; url: string; status: number; body?: unknown };
-
 test.use({ storageState: STORAGE_STATE });
 
-function rowsFor(responses: CapturedMarketResponse[], path: string) {
-  const response = [...responses].reverse().find((item) =>
-    item.path === path && item.status === 200 && Array.isArray(item.body) && item.body.length > 0,
-  );
+function rowsFor(response: CapturedResponse | undefined, path: string) {
   expect(response, `Native browser did not receive non-empty rows from ${path}`).toBeDefined();
+  expect(Array.isArray(response?.body) && response.body.length > 0, `Native browser did not receive non-empty rows from ${path}`).toBe(true);
   return response!.body as Record<string, unknown>[];
 }
 
@@ -92,25 +89,9 @@ function numericValueIsRendered(values: unknown[], text: string) {
 }
 
 test("openbb-recovery native workspace reflects Gateway state and restores all three widget grids", async ({ page }) => {
-  const marketResponses: CapturedMarketResponse[] = [];
-  const pendingResponses: Promise<void>[] = [];
-  page.on("response", (response) => {
-    const url = new URL(response.url());
-    if (url.origin !== RESEARCH_ORIGIN || !/^\/api\/openbb\/openbb\/v1\/(stocks|bars|options)$/.test(url.pathname)) return;
-    const captured: CapturedMarketResponse = {
-      path: url.pathname,
-      url: response.url(),
-      status: response.status(),
-    };
-    marketResponses.push(captured);
-    pendingResponses.push((async () => {
-      try {
-        captured.body = await response.json();
-      } catch {
-        captured.body = undefined;
-      }
-    })());
-  });
+  const marketResponses = captureJsonResponses(page, RESEARCH_ORIGIN, (_response, path) =>
+    /^\/api\/openbb\/openbb\/v1\/(stocks|bars|options)$/.test(path),
+  );
 
   const { url: dashboardUrl } = JSON.parse(await readFile(DASHBOARD_URL_FILE, "utf8")) as { url: string };
   expect(new URL(dashboardUrl).origin).toBe(RESEARCH_ORIGIN);
@@ -137,9 +118,18 @@ test("openbb-recovery native workspace reflects Gateway state and restores all t
     "/api/openbb/openbb/v1/options",
   ];
   await expect.poll(() => routes.map((path) =>
-    marketResponses.some((response) => response.path === path && response.status === expectedStatus),
+    marketResponses.responses.some((response) => response.pathname === path && response.status === expectedStatus),
   ), { timeout: 45_000 }).toEqual([true, true, true]);
-  await Promise.all(pendingResponses);
+  for (const route of routes) {
+    await expect.poll(async () => {
+      const response = await marketResponses.latestSettled(
+        (item) => item.pathname === route && item.status === expectedStatus,
+      );
+      if (expectedStatus === 200) return Array.isArray(response?.body) && response.body.length > 0;
+      return typeof response?.body === "object" && response.body !== null;
+    }, { timeout: 30_000, message: `Latest completed native response for ${route} did not have the expected JSON shape` }).toBe(true);
+  }
+  await marketResponses.settle();
 
   if (gatewayExpectedDown) {
     for (const widget of [stocksWidget, barsWidget, optionsWidget]) {
@@ -150,9 +140,9 @@ test("openbb-recovery native workspace reflects Gateway state and restores all t
     return;
   }
 
-  const stockRows = rowsFor(marketResponses, routes[0]);
-  const barsRows = rowsFor(marketResponses, routes[1]);
-  const optionRows = rowsFor(marketResponses, routes[2]);
+  const stockRows = rowsFor(await marketResponses.latestSettled((item) => item.pathname === routes[0] && item.status === 200), routes[0]);
+  const barsRows = rowsFor(await marketResponses.latestSettled((item) => item.pathname === routes[1] && item.status === 200), routes[1]);
+  const optionRows = rowsFor(await marketResponses.latestSettled((item) => item.pathname === routes[2] && item.status === 200), routes[2]);
   const stock = stockRows.find((row) => row.symbol === "QQQ");
   const bar = barsRows[0];
   const option = optionRows.find((row) => row.underlying === "QQQ");
