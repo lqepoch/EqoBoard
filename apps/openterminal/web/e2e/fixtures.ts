@@ -11,8 +11,12 @@ export async function setRoles(request: APIRequestContext, roles: string[]) {
 export async function resetDownstream(request: APIRequestContext) {
   await expect.poll(async () => {
     const result = await metrics(request);
-    return result.gateway.activeStreams === 0 && result.gateway.inFlight === 0 && result.research.inFlight === 0;
-  }, { timeout: 5_000 }).toBe(true);
+    return {
+      activeStreams: result.gateway.activeStreams,
+      gatewayInFlight: result.gateway.inFlight,
+      researchInFlight: result.research.inFlight,
+    };
+  }, { timeout: 5_000 }).toEqual({ activeStreams: 0, gatewayInFlight: 0, researchInFlight: 0 });
   const response = await request.post(`${MOCK_OIDC_ORIGIN}/__test/reset`);
   expect(response.ok()).toBeTruthy();
 }
