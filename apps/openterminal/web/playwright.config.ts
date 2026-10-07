@@ -1,4 +1,7 @@
 import { defineConfig } from "@playwright/test";
+import { assertHostE2eEnvironmentIsIsolated } from "./e2e/isolated-env";
+
+assertHostE2eEnvironmentIsIsolated();
 
 function readPort(name: string, fallback: number): number {
   const raw = process.env[name];

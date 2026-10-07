@@ -72,7 +72,7 @@ Portfolio API 对每个已验证主体限制每分钟 120 次，并对单个 res
 bash tools/container-e2e.sh
 ```
 
-此脚本会用专属 Compose project 和临时 env file，清除继承的 Alpaca/OIDC/service secret 环境变量，使用仅供测试的身份 key 和 loopback mock，不读取真实市场 key、不向 broker 下单。脚本输出实际 image ID、entrypoint/command、端口映射、运行用户、rootfs 权限、health/readiness、重启和 cache volume 重建结果，并通过 Playwright 驱动生产模式 Next 容器。失败时会先输出本次 Compose logs，再清理该专属 project 与 volumes。
+此脚本会用专属 Compose project 和临时 env file；Docker Compose 清除继承的 Alpaca/OIDC/service secret，host 侧 Playwright、mock server 和开发态 Next 进程只通过 `env -i` 接收测试所需 allowlist。它使用仅供测试的身份 key 和 loopback mock，不读取真实市场 key、不向 broker 下单。脚本输出实际 image ID、entrypoint/command、端口映射、运行用户、rootfs 权限、health/readiness、重启和 cache volume 重建结果，并通过 Playwright 驱动生产模式 Next 容器。失败时会先输出本次 Compose logs，再清理该专属 project 与 volumes。
 
 `E2E_ONLY=1` 只运行末尾生产模式浏览器阶段，供本地定位时使用；它不替代完整脚本，也不应在 CI 配置。离线 network overlay 配置可单独校验：
 

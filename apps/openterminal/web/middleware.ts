@@ -31,5 +31,10 @@ export function middleware(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ["/:path*"],
+  // Next's middleware adapter clones non-GET request bodies before invoking
+  // route handlers. Let bounded JSON handlers read the original stream so the
+  // route-level size and timeout limits remain effective.
+  matcher: [
+    "/((?!api/portfolios(?:/|$)|api/ai/chat(?:/|$)|api/eqo/orders(?:/|$)|api/eqo/stocks/subscribe(?:/|$)|api/eqo/options/subscribe(?:/|$)).*)",
+  ],
 };

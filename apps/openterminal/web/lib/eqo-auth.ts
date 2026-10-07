@@ -31,6 +31,10 @@ function jsonError(status: number, error: string): NextResponse {
   return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+export function researchModeRouteUnavailable(): NextResponse | null {
+  return process.env.EQO_BFF_MODE === "research" ? jsonError(404, "route_not_available") : null;
+}
+
 function validRequestHeaders(request: Request): NextResponse | null {
   const method = request.method.toUpperCase();
   const isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
