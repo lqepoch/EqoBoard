@@ -1,7 +1,7 @@
 //! Fail-closed, broker-neutral order gateway; never places live orders.
 use async_trait::async_trait;
-use chrono::{Duration as ChronoDuration, Utc};
-use eqo_domain::parse_occ;
+use chrono::{Duration as ChronoDuration, NaiveDate, Utc};
+use eqo_domain::{parse_occ, Right};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -125,20 +125,45 @@ impl RiskPolicy {
     }
 }
 
+const OPTION_CONTRACT_MULTIPLIER: i64 = 100;
+const MONEY_MILLIS_PER_DOLLAR: i64 = 1_000;
+const MONEY_MILLIS_PER_CENT: i64 = 10;
+const MAX_SAFE_INTEGER: u128 = 9_007_199_254_740_991;
+
+#[derive(Clone, Debug)]
+struct StandardOptionContract {
+    underlying: String,
+    expiration: NaiveDate,
+    right: Right,
+    strike_millis: i64,
+}
+
 pub fn validate_order(intent: &OrderIntent, risk: RiskPolicy) -> Result<f64, OrderError> {
+    validate_order_at(intent, risk, Utc::now().date_naive())
+}
+
+/// Validate against a caller-controlled date so expiry rules are deterministic in tests and replays.
+pub fn validate_order_at(
+    intent: &OrderIntent,
+    risk: RiskPolicy,
+    as_of: NaiveDate,
+) -> Result<f64, OrderError> {
     if intent.environment != Environment::Paper {
         return Err(OrderError::LiveForbidden);
     }
     if intent.quantity == 0 || intent.quantity > risk.max_qty {
         return Err(OrderError::RiskLimit);
     }
-    if !intent.limit_price.is_finite() || intent.limit_price <= 0.0 {
-        return Err(OrderError::Invalid(
-            "limit price must be positive and finite",
-        ));
-    }
-    let q = f64::from(intent.quantity);
-    let loss = match intent.kind {
+    let limit_cents = decimal_to_integer_units(intent.limit_price, 100).ok_or(
+        OrderError::Invalid("limit price must be positive whole cents"),
+    )?;
+    let limit_millis = limit_cents
+        .checked_mul(MONEY_MILLIS_PER_CENT)
+        .ok_or(OrderError::RiskLimit)?;
+    let max_loss_millis = decimal_to_integer_units(risk.max_loss, MONEY_MILLIS_PER_DOLLAR)
+        .filter(|max_loss| *max_loss > 0)
+        .ok_or(OrderError::RiskLimit)?;
+    let loss_millis = match intent.kind {
         OrderKind::Stock => {
             let symbol = intent
                 .symbol
@@ -150,7 +175,7 @@ pub fn validate_order(intent: &OrderIntent, risk: RiskPolicy) -> Result<f64, Ord
             {
                 return Err(OrderError::Invalid("stock order format"));
             }
-            intent.limit_price * q
+            checked_order_risk_millis(limit_millis, 1, intent.quantity)?
         }
         OrderKind::Option => {
             if intent.legs.len() != 1
@@ -162,9 +187,9 @@ pub fn validate_order(intent: &OrderIntent, risk: RiskPolicy) -> Result<f64, Ord
                     "standalone options must be buy-to-open",
                 ));
             }
-            parse_occ(&intent.legs[0].symbol)
-                .map_err(|_| OrderError::Invalid("invalid option symbol"))?;
-            intent.limit_price * 100.0 * q
+            let contract = parse_standard_option(&intent.legs[0].symbol)?;
+            validate_expiration(contract.expiration, as_of)?;
+            checked_order_risk_millis(limit_millis, OPTION_CONTRACT_MULTIPLIER, intent.quantity)?
         }
         OrderKind::Vertical => {
             if intent.legs.len() != 2
@@ -175,40 +200,200 @@ pub fn validate_order(intent: &OrderIntent, risk: RiskPolicy) -> Result<f64, Ord
                     "vertical needs one buy and one sell leg",
                 ));
             }
-            let a = parse_occ(&intent.legs[0].symbol)
-                .map_err(|_| OrderError::Invalid("invalid OCC leg"))?;
-            let b = parse_occ(&intent.legs[1].symbol)
-                .map_err(|_| OrderError::Invalid("invalid OCC leg"))?;
-            if a.underlying != b.underlying
-                || a.expiration != b.expiration
-                || a.right != b.right
-                || (a.strike - b.strike).abs() < 0.00001
+            let buy_leg = intent
+                .legs
+                .iter()
+                .find(|leg| leg.side == Side::Buy)
+                .ok_or(OrderError::Invalid("vertical needs one buy leg"))?;
+            let sell_leg = intent
+                .legs
+                .iter()
+                .find(|leg| leg.side == Side::Sell)
+                .ok_or(OrderError::Invalid("vertical needs one sell leg"))?;
+            let long = parse_standard_option(&buy_leg.symbol)?;
+            let short = parse_standard_option(&sell_leg.symbol)?;
+            if long.underlying != short.underlying
+                || long.expiration != short.expiration
+                || long.right != short.right
             {
                 return Err(OrderError::Invalid(
-                    "legs must share underlying/expiry/right and differ by strike",
+                    "legs must share underlying/expiry/right",
                 ));
             }
-            let width = (a.strike - b.strike).abs();
-            if intent.limit_price >= width {
+            validate_expiration(long.expiration, as_of)?;
+            let width_millis = long.strike_millis.abs_diff(short.strike_millis) as i64;
+            if width_millis == 0 {
+                return Err(OrderError::Invalid("vertical legs must differ by strike"));
+            }
+            if limit_millis >= width_millis {
                 return Err(OrderError::Invalid(
                     "net limit must be less than spread width",
                 ));
             }
-            let max_loss_per_spread = match intent.net_effect {
-                NetEffect::Debit => intent.limit_price,
-                NetEffect::Credit => width - intent.limit_price,
+            let inferred_effect = match long.right {
+                Right::Call if long.strike_millis < short.strike_millis => NetEffect::Debit,
+                Right::Call => NetEffect::Credit,
+                Right::Put if long.strike_millis > short.strike_millis => NetEffect::Debit,
+                Right::Put => NetEffect::Credit,
             };
-            max_loss_per_spread * 100.0 * q
+            if intent.net_effect != inferred_effect {
+                return Err(OrderError::Invalid(
+                    "net effect conflicts with option type and long/short strike direction",
+                ));
+            }
+            let signed_cashflow_millis = match inferred_effect {
+                NetEffect::Debit => limit_millis.checked_neg().ok_or(OrderError::RiskLimit)?,
+                NetEffect::Credit => limit_millis,
+            };
+            // Debit cashflow is negative and becomes the amount at risk. Credit
+            // cashflow offsets the bounded strike-width liability.
+            let max_loss_per_spread_millis = if signed_cashflow_millis < 0 {
+                signed_cashflow_millis
+                    .checked_neg()
+                    .ok_or(OrderError::RiskLimit)?
+            } else {
+                width_millis
+                    .checked_sub(signed_cashflow_millis)
+                    .ok_or(OrderError::RiskLimit)?
+            };
+            checked_order_risk_millis(
+                max_loss_per_spread_millis,
+                OPTION_CONTRACT_MULTIPLIER,
+                intent.quantity,
+            )?
         }
     };
-    if !loss.is_finite()
-        || !risk.max_loss.is_finite()
-        || loss > risk.max_loss
-        || risk.max_loss <= 0.0
-    {
+    if loss_millis > max_loss_millis {
         return Err(OrderError::RiskLimit);
     }
-    Ok(loss)
+    if loss_millis <= 0 || loss_millis as u128 > MAX_SAFE_INTEGER {
+        return Err(OrderError::RiskLimit);
+    }
+    let displayed_loss = loss_millis as f64 / MONEY_MILLIS_PER_DOLLAR as f64;
+    if decimal_to_integer_units(displayed_loss, MONEY_MILLIS_PER_DOLLAR) != Some(loss_millis) {
+        return Err(OrderError::RiskLimit);
+    }
+    Ok(displayed_loss)
+}
+
+/// Convert the shortest round-trippable decimal form of a JSON number into
+/// fixed integer units without a magnitude-dependent floating-point tolerance.
+fn decimal_to_integer_units(value: f64, scale: i64) -> Option<i64> {
+    if !value.is_finite() || value <= 0.0 {
+        return None;
+    }
+    let scale_power = decimal_power_of_ten(scale)?;
+    let next = f64::from_bits(value.to_bits().checked_add(1)?);
+    if !next.is_finite() || next - value > 1.0 / scale as f64 {
+        return None;
+    }
+    let text = value.to_string();
+    let (mantissa, exponent) = match text.find(['e', 'E']) {
+        Some(index) => (&text[..index], text[index + 1..].parse::<i32>().ok()?),
+        None => (text.as_str(), 0),
+    };
+    let decimal_places = mantissa
+        .split_once('.')
+        .map_or(0, |(_, fraction)| fraction.len());
+    let digits: String = mantissa
+        .chars()
+        .filter(|character| *character != '.')
+        .collect();
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let coefficient = digits.parse::<u128>().ok()?;
+    if coefficient == 0 {
+        return None;
+    }
+    let unit_shift = exponent
+        .checked_sub(i32::try_from(decimal_places).ok()?)?
+        .checked_add(scale_power)?;
+    let units = if unit_shift >= 0 {
+        let factor = checked_power_of_ten(u32::try_from(unit_shift).ok()?)?;
+        coefficient.checked_mul(factor)?
+    } else {
+        let divisor = checked_power_of_ten(unit_shift.unsigned_abs())?;
+        if coefficient % divisor != 0 {
+            return None;
+        }
+        coefficient / divisor
+    };
+    if units == 0 || units > MAX_SAFE_INTEGER {
+        return None;
+    }
+    i64::try_from(units).ok()
+}
+
+fn decimal_power_of_ten(value: i64) -> Option<i32> {
+    if value < 1 {
+        return None;
+    }
+    let mut remaining = value;
+    let mut power = 0;
+    while remaining > 1 {
+        if remaining % 10 != 0 {
+            return None;
+        }
+        remaining /= 10;
+        power += 1;
+    }
+    Some(power)
+}
+
+fn checked_power_of_ten(power: u32) -> Option<u128> {
+    (0..power).try_fold(1_u128, |value, _| value.checked_mul(10))
+}
+
+fn checked_order_risk_millis(
+    per_share_millis: i64,
+    multiplier: i64,
+    quantity: u32,
+) -> Result<i64, OrderError> {
+    per_share_millis
+        .checked_mul(multiplier)
+        .and_then(|amount| amount.checked_mul(i64::from(quantity)))
+        .ok_or(OrderError::RiskLimit)
+}
+
+fn validate_expiration(expiration: NaiveDate, as_of: NaiveDate) -> Result<(), OrderError> {
+    if expiration <= as_of {
+        return Err(OrderError::Invalid(
+            "option expiration must be after the validation date",
+        ));
+    }
+    Ok(())
+}
+
+fn parse_standard_option(symbol: &str) -> Result<StandardOptionContract, OrderError> {
+    let parsed = parse_occ(symbol).map_err(|_| OrderError::Invalid("invalid OCC leg"))?;
+    let root_len = symbol.len().saturating_sub(15);
+    let root = symbol
+        .get(..root_len)
+        .ok_or(OrderError::Invalid("invalid OCC root"))?;
+    let strike_text = symbol
+        .get(root_len + 7..)
+        .ok_or(OrderError::Invalid("invalid OCC strike"))?;
+    if root.is_empty() || root.len() > 6 || !root.bytes().all(|byte| byte.is_ascii_uppercase()) {
+        return Err(OrderError::Invalid(
+            "only standard alphabetic option roots are supported",
+        ));
+    }
+    if strike_text.len() != 8 || !strike_text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(OrderError::Invalid("invalid OCC strike"));
+    }
+    let strike_millis = strike_text
+        .parse::<i64>()
+        .map_err(|_| OrderError::Invalid("invalid OCC strike"))?;
+    if strike_millis <= 0 {
+        return Err(OrderError::Invalid("invalid OCC strike"));
+    }
+    Ok(StandardOptionContract {
+        underlying: parsed.underlying,
+        expiration: parsed.expiration,
+        right: parsed.right,
+        strike_millis,
+    })
 }
 
 fn valid_stock_symbol(s: &str) -> bool {
@@ -379,27 +564,65 @@ impl BrokerRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn vertical() -> OrderIntent {
+    fn test_day() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 10, 7).unwrap()
+    }
+
+    fn option_symbol(expiration: NaiveDate, right: Right, strike_millis: i64) -> String {
+        let right = match right {
+            Right::Call => 'C',
+            Right::Put => 'P',
+        };
+        format!(
+            "QQQ{}{right}{strike_millis:08}",
+            expiration.format("%y%m%d")
+        )
+    }
+
+    fn vertical_for(
+        expiration: NaiveDate,
+        right: Right,
+        long_strike_millis: i64,
+        short_strike_millis: i64,
+        net_effect: NetEffect,
+        reverse_leg_order: bool,
+    ) -> OrderIntent {
+        let mut legs = vec![
+            OrderLeg {
+                symbol: option_symbol(expiration, right.clone(), long_strike_millis),
+                side: Side::Buy,
+            },
+            OrderLeg {
+                symbol: option_symbol(expiration, right, short_strike_millis),
+                side: Side::Sell,
+            },
+        ];
+        if reverse_leg_order {
+            legs.reverse();
+        }
         OrderIntent {
             broker: Broker::Ibkr,
             environment: Environment::Paper,
             kind: OrderKind::Vertical,
             symbol: None,
             quantity: 1,
-            limit_price: 0.92,
-            net_effect: NetEffect::Debit,
-            legs: vec![
-                OrderLeg {
-                    symbol: "QQQ261007P00600000".into(),
-                    side: Side::Buy,
-                },
-                OrderLeg {
-                    symbol: "QQQ261007P00599000".into(),
-                    side: Side::Sell,
-                },
-            ],
+            limit_price: 0.01,
+            net_effect,
+            legs,
         }
     }
+
+    fn vertical() -> OrderIntent {
+        vertical_for(
+            test_day() + ChronoDuration::days(2),
+            Right::Put,
+            600_000,
+            599_000,
+            NetEffect::Debit,
+            false,
+        )
+    }
+
     #[test]
     fn loss_and_live_guard() {
         let policy = RiskPolicy {
@@ -407,20 +630,21 @@ mod tests {
             max_loss: 250.0,
         };
         let order = vertical();
-        assert_eq!(validate_order(&order, policy).unwrap(), 92.0);
+        assert_eq!(validate_order_at(&order, policy, test_day()).unwrap(), 1.0);
         let mut live = order.clone();
         live.environment = Environment::Live;
         assert!(matches!(
-            validate_order(&live, policy),
+            validate_order_at(&live, policy, test_day()),
             Err(OrderError::LiveForbidden)
         ));
         let mut excessive = order;
         excessive.quantity = 4;
         assert!(matches!(
-            validate_order(&excessive, policy),
+            validate_order_at(&excessive, policy, test_day()),
             Err(OrderError::RiskLimit)
         ));
     }
+
     #[test]
     fn blocks_naked_short_and_mixed_expiration() {
         let policy = RiskPolicy {
@@ -428,15 +652,163 @@ mod tests {
             max_loss: 100_000.0,
         };
         let mut order = vertical();
-        order.legs[0].symbol = "QQQ261009P00600000".into();
-        assert!(validate_order(&order, policy).is_err());
+        order.legs[0].symbol = "QQQ261010P00600000".into();
+        assert!(validate_order_at(&order, policy, test_day()).is_err());
         order.kind = OrderKind::Option;
         order.legs = vec![OrderLeg {
-            symbol: "QQQ261007P00600000".into(),
+            symbol: option_symbol(test_day() + ChronoDuration::days(2), Right::Put, 600_000),
             side: Side::Sell,
         }];
-        assert!(validate_order(&order, policy).is_err());
+        assert!(validate_order_at(&order, policy, test_day()).is_err());
     }
+
+    #[test]
+    fn fixed_point_conversion_rejects_subnormals_and_large_fractional_units() {
+        assert_eq!(decimal_to_integer_units(0.01, 100), Some(1));
+        assert_eq!(decimal_to_integer_units(0.29, 100), Some(29));
+        assert_eq!(decimal_to_integer_units(0.001, 1_000), Some(1));
+        assert_eq!(decimal_to_integer_units(f64::from_bits(1), 100), None);
+        assert_eq!(decimal_to_integer_units(1e-15, 100), None);
+        assert_eq!(decimal_to_integer_units(10_000_000_000_000.005, 100), None);
+        assert_eq!(decimal_to_integer_units(90_000_000_000_000.0, 100), None);
+        assert_eq!(decimal_to_integer_units(9_000_000_000_000.0, 1_000), None);
+        assert_eq!(decimal_to_integer_units(f64::MAX, 100), None);
+    }
+
+    #[test]
+    fn vertical_direction_matrix_derives_effect_and_integer_max_loss() {
+        let expiration = test_day() + ChronoDuration::days(2);
+        let policy = RiskPolicy {
+            max_qty: 10,
+            max_loss: 10_000.0,
+        };
+        let cases = [
+            (Right::Call, 600_000, 620_000, NetEffect::Debit, 1.0),
+            (Right::Call, 620_000, 600_000, NetEffect::Credit, 1_999.0),
+            (Right::Put, 620_000, 600_000, NetEffect::Debit, 1.0),
+            (Right::Put, 600_000, 620_000, NetEffect::Credit, 1_999.0),
+        ];
+
+        for (right, long, short, effect, expected_loss) in cases {
+            for reverse_leg_order in [false, true] {
+                let order = vertical_for(
+                    expiration,
+                    right.clone(),
+                    long,
+                    short,
+                    effect,
+                    reverse_leg_order,
+                );
+                assert_eq!(
+                    validate_order_at(&order, policy, test_day()).unwrap(),
+                    expected_loss
+                );
+
+                let mut conflicting = order;
+                conflicting.net_effect = match effect {
+                    NetEffect::Debit => NetEffect::Credit,
+                    NetEffect::Credit => NetEffect::Debit,
+                };
+                assert!(matches!(
+                    validate_order_at(&conflicting, policy, test_day()),
+                    Err(OrderError::Invalid(_))
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn reported_issue_3_put_direction_is_rejected_and_correct_credit_exceeds_cap() {
+        let expiration = test_day() + ChronoDuration::days(2);
+        let policy = RiskPolicy {
+            max_qty: 10,
+            max_loss: 1_000.0,
+        };
+        let mut contradictory = vertical_for(
+            expiration,
+            Right::Put,
+            600_000,
+            620_000,
+            NetEffect::Debit,
+            false,
+        );
+        contradictory.limit_price = 0.01;
+        assert!(matches!(
+            validate_order_at(&contradictory, policy, test_day()),
+            Err(OrderError::Invalid(_))
+        ));
+
+        contradictory.net_effect = NetEffect::Credit;
+        assert!(matches!(
+            validate_order_at(&contradictory, policy, test_day()),
+            Err(OrderError::RiskLimit)
+        ));
+    }
+
+    #[test]
+    fn rejects_expiry_boundary_adjusted_roots_subcent_and_invalid_spread_bounds() {
+        let policy = RiskPolicy {
+            max_qty: 10,
+            max_loss: 100_000.0,
+        };
+        let expiration = test_day() + ChronoDuration::days(2);
+        let mut order = vertical();
+        assert!(validate_order_at(&order, policy, test_day()).is_ok());
+        assert!(matches!(
+            validate_order_at(&order, policy, expiration + ChronoDuration::days(1)),
+            Err(OrderError::Invalid(_))
+        ));
+        assert!(matches!(
+            validate_order_at(&order, policy, expiration),
+            Err(OrderError::Invalid(_))
+        ));
+
+        order.legs[0].symbol = "QQQ1261009P00600000".into();
+        assert!(matches!(
+            validate_order_at(&order, policy, test_day()),
+            Err(OrderError::Invalid(_))
+        ));
+        order = vertical();
+        order.limit_price = 0.015;
+        assert!(matches!(
+            validate_order_at(&order, policy, test_day()),
+            Err(OrderError::Invalid(_))
+        ));
+        order.limit_price = 1.0;
+        assert!(matches!(
+            validate_order_at(&order, policy, test_day()),
+            Err(OrderError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_cross_underlying_right_and_quantity_conflicts() {
+        let expiration = test_day() + ChronoDuration::days(2);
+        let policy = RiskPolicy {
+            max_qty: 3,
+            max_loss: 10_000.0,
+        };
+        let mut order = vertical();
+        order.legs[1].symbol = format!("SPY{}P00599000", expiration.format("%y%m%d"));
+        assert!(validate_order_at(&order, policy, test_day()).is_err());
+
+        order = vertical();
+        order.legs[1].symbol = option_symbol(expiration, Right::Call, 599_000);
+        assert!(validate_order_at(&order, policy, test_day()).is_err());
+
+        order = vertical();
+        order.quantity = 0;
+        assert!(matches!(
+            validate_order_at(&order, policy, test_day()),
+            Err(OrderError::RiskLimit)
+        ));
+        order.quantity = 4;
+        assert!(matches!(
+            validate_order_at(&order, policy, test_day()),
+            Err(OrderError::RiskLimit)
+        ));
+    }
+
     #[tokio::test]
     async fn preview_single_use() {
         let store = PreviewStore::default();
@@ -444,7 +816,15 @@ mod tests {
             max_qty: 3,
             max_loss: 250.0,
         };
-        let preview = store.create(vertical(), policy).await.unwrap();
+        let preview_order = vertical_for(
+            Utc::now().date_naive() + ChronoDuration::days(2),
+            Right::Put,
+            600_000,
+            599_000,
+            NetEffect::Debit,
+            false,
+        );
+        let preview = store.create(preview_order, policy).await.unwrap();
         assert!(store.consume(preview.preview_id).await.is_ok());
         assert!(matches!(
             store.consume(preview.preview_id).await,
