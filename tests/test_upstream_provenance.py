@@ -37,6 +37,29 @@ class ProvenanceTests(unittest.TestCase):
             self.assertIn("dataKey", widget["data"])
             self.assertGreaterEqual(widget["refetchInterval"], 1000)
             self.assertGreaterEqual(widget["staleTime"], 1000)
+            self.assertEqual(widget["type"], "table")
+            self.assertNotIn("wsEndpoint", widget)
+            self.assertIn("HTTP polling", widget["description"])
+            self.assertIn("not a Live Grid", widget["description"])
+
+        fields = {
+            name: {column["field"] for column in widget["data"]["table"]["columnsDefs"]}
+            for name, widget in widgets.items()
+        }
+        self.assertTrue({"source_label", "feed", "market_as_of", "complete", "truncated"}
+                        <= fields["eqo_sip_watchlist"])
+        self.assertTrue({"source_label", "feed", "quote_at", "trade_at", "model_as_of",
+                         "market_as_of", "pages_fetched", "has_more", "truncated"}
+                        <= fields["eqo_opra_contracts"])
+        self.assertTrue({"source_label", "feed", "market_as_of", "pages_fetched",
+                         "has_more", "truncated", "complete"}
+                        <= fields["eqo_sip_bars"])
+
+        options = widgets["eqo_opra_contracts"]
+        expiration = next(param for param in options["params"] if param["paramName"] == "expiration")
+        self.assertEqual(expiration["value"], "$currentDate+1w")
+        apps = json.loads((ROOT/"apps/gateway/openbb/apps.json").read_text())
+        self.assertNotIn("expiration", json.dumps(apps))
 
 if __name__=="__main__":
     unittest.main()

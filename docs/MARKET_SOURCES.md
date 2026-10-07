@@ -1,6 +1,6 @@
 # Market source and timestamp contract
 
-This document describes the values shown by OpenTerminal and the evidence that may be used to call a value current. Provider response time, observation time, browser stream connectivity, and exchange event time are different facts and stay separate. A protocol name such as `sip` or `opra` does not prove the source or account entitlement.
+This document describes the values shown by OpenTerminal and the evidence that may be used to call a value current. Provider response time, observation time, browser stream connectivity, and exchange event time are different facts and stay separate. A protocol name such as `sip` or `opra` does not prove the source or account entitlement. OpenBB Gateway rows now carry source and field-specific observation metadata; that row adapter does not complete the separate OpenTerminal stream freshness/ACK contract.
 
 ## Source matrix
 
@@ -28,6 +28,8 @@ The source pairs and typed timestamps below describe the Web/Node contract when 
 | SEC Form 4 insider filings | SEC EDGAR filing data. | Filing date and transaction date are distinct. | Filing/transaction dates are not quote times. |
 
 ## Feed status and freshness
+
+The OpenBB Gateway adapter returns row-level `source`, `source_mode`, `source_label`, and `feed`. It marks rows `alpaca` only when the built-in `https://data.alpaca.markets` endpoint is used; any configured base URL override reports `unknown`, even when the feed parameter is `sip` or `opra`. Stock `market_as_of` follows the source used for `last` (`trade` or daily bar); quote and daily-bar timestamps are separate. Option `quote_at`, `trade_at`, and `model_as_of` are separate; absent model time stays null. A bar's `market_as_of` is its source bar timestamp. These OpenBB rows do not imply that account entitlement or stream readiness has been verified.
 
 The Web/Node layer accepts server-controlled `source_mode` and `source_label` on Gateway envelopes, snapshots/bars/options, stream events, and `feed_status`, and preserves them through its quote/history APIs. The accepted live SIP pair is `alpaca` / `Alpaca SIP`; the accepted live OPRA pair is `alpaca` / `Alpaca OPRA`. Test-only Next/Gateway fixtures use `offline_mock` / `OFFLINE MOCK — NOT MARKET DATA`. The UI displays only a recognized matching pair. Missing or mismatched fields display `source unknown`; the client never derives an Alpaca claim from `feed=sip` or `feed=opra`. The browser cannot choose the mode. FRED, SEC, FINRA, foreign listings, and explicit crypto pairs retain their own provider labels and observation times rather than being forced into this two-mode contract.
 

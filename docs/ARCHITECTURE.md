@@ -52,7 +52,10 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 - `POST /api/v1/orders/preview`
 - `POST /api/v1/orders/submit`
 
-OpenBB：`/widgets.json`、`/apps.json`、`/openbb/stocks`、`/openbb/options`、`/openbb/bars`。
+OpenBB：`/widgets.json`、`/apps.json`、`/openbb/v1/stocks`、`/openbb/v1/options`、`/openbb/v1/bars`。三类数据路由返回 Workspace table 使用的 flat row arrays。每行包含 `source` / `source_mode` / `source_label`、实际 `feed`、市场字段的 `market_as_of`、页数及 `has_more` / `truncated`。股票 row 另含请求覆盖及 snapshot/price/time completeness；bars 的 `market_as_of` 等于 Alpaca bar 时间；期权 quote、trade、model 时间分离，当前没有专用模型时间时 `model_as_of` 保持 null。上游页数有限制，错误 OHLCV 行会使请求失败，不会静默丢弃或填入零。
+
+只有使用内置 `https://data.alpaca.markets` 时，OpenBB row 才声明 `source_mode=alpaca`；任何 `EQO_MARKET_DATA_BASE_URL` 覆盖都显示来源 unknown。OpenBB 普通 table 的 `refetchInterval` 只是 HTTP polling，不构成 Live Grid。期权默认日期使用 Workspace 动态日期修饰符，不保留固定到期日。空结果保持空数组，不追加伪记录；因此无数据行时，Workspace 表格没有行可呈现分页字段。
+
 OpenBB 研究行情 handler 要求带 `market:read` scope 的可验证短时委托主体；`/widgets.json` 和 `/apps.json` 只返回兼容 schema metadata，不授予行情访问能力。OpenBB Workspace 的 OIDC 登录/服务委托联调属于后续 #13，当前不接受静态 bearer token，也不通过放宽 Gateway 鉴权来兼容。
 
 ## 数据原则
