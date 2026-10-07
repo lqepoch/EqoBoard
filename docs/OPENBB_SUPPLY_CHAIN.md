@@ -33,6 +33,15 @@ runner, and adjacent manifest. Adding another patch requires an explicit
 recipe/contract update; the lock cannot silently describe extra source changes
 that the image build does not execute.
 
+The locked patch includes a backend portability fix for the pinned Bookworm
+image: its SQLite 3.40 does not provide the `concat()` function used by the
+upstream user display-name query. The patch uses SQLAlchemy string operations
+(SQLite/PostgreSQL `||`, MySQL `concat()`) and the Docker build runs a SQLite
+regression before Cython compilation. A prior browser attempt against the old
+r3 candidate returned an API 500 on this query. That candidate used the
+previous patch and has a different build identity; it is not evidence for the
+currently locked recipe. The r4 image and browser retest remain pending.
+
 The upstream source SPDX SBOM describes the pinned archive; the patched-source
 SPDX SBOM describes the verified Community patch result and frozen Bun/Poetry
 dependency locks. Both are separate from a runtime image SBOM. The runtime
@@ -83,9 +92,11 @@ patched-source SBOM records the locked frontend dependency graph absent from
 the compiled Vite bundle. Do not call an image config ID a RepoDigest. Keep the
 complete build record with the deployment reference. No image digest or
 deployment rollback target is established until those artifacts exist. The
-lock's release `image_digest` remains unset for the local r3 candidate: its OCI
-index and archive digests are host-local build evidence, not a registry
-publication or deployed rollback reference.
+lock's release `image_digest` remains unset. The previous r3 candidate's OCI
+index and archive digests are host-local evidence for the previous patch, not
+the current recipe, a registry publication, or a deployed rollback reference.
+Generate a new OCI artifact and SBOM only from the current recipe; do not reuse
+the r3 inventory for the changed patch.
 
 For an image rollback, redeploy the last known healthy immutable OCI or
 registry reference recorded by the deployment. Do not rebuild the failed
