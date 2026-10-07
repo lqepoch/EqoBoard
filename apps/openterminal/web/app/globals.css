@@ -151,3 +151,53 @@ button.term-btn.active {
 .react-grid-item > .react-resizable-handle::after {
   border-color: var(--amber-dim) !important;
 }
+
+.auth-message {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-message-card {
+  width: min(560px, 100%);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 24px;
+  line-height: 1.7;
+}
+
+.auth-message-card h1 {
+  color: var(--amber);
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+
+.auth-message-card a,
+.auth-message-card button,
+.terminal-session-controls button {
+  display: inline-block;
+  color: var(--amber);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  margin-top: 16px;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+}
+
+.terminal-session-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+
+.terminal-session-controls button {
+  padding: 2px 8px;
+  margin: 0;
+}

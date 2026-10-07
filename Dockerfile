@@ -1,4 +1,4 @@
-FROM rust:bookworm AS backend
+FROM rust:1.99.0-bookworm AS backend
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
@@ -6,7 +6,7 @@ COPY apps/gateway ./apps/gateway
 RUN cargo build --locked --release -p eqo-gateway
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/* \
  && useradd -m -u 10001 eqo \
  && mkdir -p /var/lib/eqoboard /opt/eqoboard/empty \

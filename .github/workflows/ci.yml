@@ -39,7 +39,7 @@ jobs:
   openterminal:
     name: OpenTerminal / AG Grid / Next.js
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: apps/openterminal
@@ -55,10 +55,13 @@ jobs:
       - run: npm run test -w server
       - run: npx tsc --noEmit -p web/tsconfig.json
       - run: npm run build -w web
+      - name: Install browser for end-to-end checks
+        run: npx playwright install --with-deps chromium
       - name: Validate compose contract
         working-directory: .
-        env:
-          EQO_ACCESS_TOKEN: ci-only-token
         run: |
           cp .env.example .env
           docker compose config --quiet
+      - name: Build and exercise production containers with offline mocks
+        working-directory: .
+        run: bash tools/container-e2e.sh

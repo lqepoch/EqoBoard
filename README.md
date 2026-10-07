@@ -11,7 +11,7 @@
 | 图表 | OpenTerminal Lightweight Charts + Recharts | Alpaca SIP K线、OPRA IV |
 | 行情 | Rust + Tokio + Axum | SIP/OPRA REST/WS、50ms 批处理、租约、来源/时间戳 |
 | 研究工作台 | OpenBB Workspace custom backend | widgets.json、apps.json、SIP/OPRA 表格 |
-| 执行 | Rust BrokerAdapter | Alpaca / IBKR / Schwab；disabled → paper，live 拒绝 |
+| 执行 | Rust BrokerAdapter | 当前版本 effective mode 固定为 disabled；Paper 和 Live 均不提交 |
 
 OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定提交见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。旧的自研 Vite 终端已退出仓库，防止两套 UI 长期分叉。
 
@@ -19,13 +19,25 @@ OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定�
 
 ## 启动
 
-复制 `.env.example` 为 `.env`，填写：
+复制 `.env.example` 为 `.env`。要启用终端登录，配置受信 OIDC issuer、客户端和三个彼此独立的签名密钥：
 
 ```bash
-ALPACA_KEY=...
-ALPACA_SECRET=...
-EQO_ACCESS_TOKEN=请使用强随机值
+openssl rand -hex 32 # 分别生成四次，不要复用
 ```
+
+将不同生成值写入 `.env`：
+
+```dotenv
+EQO_OIDC_ISSUER=https://identity.example.com
+EQO_OIDC_CLIENT_ID=...
+EQO_OIDC_CLIENT_SECRET=...
+NEXTAUTH_SECRET=<独立随机值，至少32字符>
+EQO_GATEWAY_JWT_SECRET=<独立随机值，至少64个可打印字符>
+EQO_RESEARCH_JWT_SECRET=<独立随机值，至少64个可打印字符>
+EQO_RESEARCH_API_KEY=<独立随机值，至少32字符>
+```
+
+同时将 `EQO_PUBLIC_ORIGIN` 与 `NEXTAUTH_URL` 设为浏览器访问的同一个 HTTPS origin，并在 OIDC 客户端登记 `${EQO_PUBLIC_ORIGIN}/api/auth/callback/eqo-oidc`。本机开发允许 loopback HTTP。Alpaca SIP/OPRA 凭据是可选的服务端变量；没有凭据时行情不可用，不会回退到其他来源。配置项和权限要求见 [部署说明](docs/DEPLOYMENT.md)。
 
 运行：
 
@@ -36,23 +48,34 @@ docker compose up --build
 入口：
 
 - `http://127.0.0.1:3000`：OpenTerminal 主终端。
-- `http://127.0.0.1:8080`：Rust API / OpenBB Workspace backend。
-- OpenBB Workspace 添加 Data Connector 时填 Rust backend URL，并配置 `Authorization: Bearer <EQO_ACCESS_TOKEN>`。
+- `http://127.0.0.1:8080`：仅本机可访问的 Rust Gateway API；research Node API 不发布宿主端口。
+- 浏览器只访问 OpenTerminal BFF。Rust API 不接受静态用户 token，也不把客户端身份头当作身份凭证。
 
 本地开发：
 
 ```bash
+# 在两个终端分别执行；先按上文完成 .env 中的认证设置
+set -a && source .env && set +a
 cargo run -p eqo-gateway
+```
+
+另一个终端：
+
+```bash
+set -a && source .env && set +a
 cd apps/openterminal
 npm ci
-EQO_RUST_URL=http://127.0.0.1:8080 npm run dev
+npm run dev
 ```
 
 ## 当前边界
 
 - 股票关键行情固定请求 SIP，期权关键行情固定请求 OPRA；401/403/429 原样转为显式状态，不做隐藏回退。
 - OpenTerminal 的 FRED、SEC、FINRA、新闻、宏观等研究 Provider 保留；股票/期权价格与历史图表通过 EqoBoard Rust Gateway。
-- 订单默认关闭。只有 `EQO_EXECUTION_MODE=paper` 且对应 Rust broker service 配置完成时，Paper 两腿流程才可进入确认阶段。
+- 所有 BFF 路由都要求 OIDC 会话和对应 action scope；写请求还要通过同源校验及有界 JSON 请求检查。`EQO_ACCESS_TOKEN` 已废弃。
+- `/api/quotes` 与美股 `/api/history/:symbol` 只把美国上市股票/ETF发往 Rust SIP；VIX、已支持 crypto、海外挂牌后缀继续走对应研究 Provider。SIP 失败显式返回，不回退到 Yahoo 等来源。OpenBB 兼容路由仍受 Gateway 委托身份保护；OpenBB Lite 登录/令牌联调属于后续 #13，不使用静态 bearer token。
+- 登录配置缺失时页面会显示身份服务不可用，受保护 BFF 不向下游发请求。`/healthz` 是进程存活检查；`/readyz` 的身份就绪不代表 SIP/OPRA entitlement 或行情已就绪。
+- 订单预览是离线风险检查；Paper submit 当前始终 blocked，Live 始终拒绝。持久 preview/outbox、账户身份和真实 broker Paper 能力完成前不会开放提交。
 - OpenBB 公司于 **2026-10-01** 公布业务收尾和开源/治理迁移；Workspace 代码计划由 FINOS 承接，OpenBQ 承接相关资产。EqoBoard 将 OpenBB 作为可替换研究入口，主交易终端不依赖其托管服务。
 
 ## 验证

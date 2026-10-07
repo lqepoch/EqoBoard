@@ -1,17 +1,25 @@
-# Actual OpenTerminal is primary; Rust is the sole stock/option data authority.
+# OpenTerminal is the browser entry point. Rust Gateway remains the sole
+# stock/option authority; research and market credentials never reach browsers.
 services:
   eqoboard:
     build: .
     ports:
-      - "127.0.0.1:8080:8080"
-    env_file:
-      - .env
+      - "127.0.0.1:${EQO_GATEWAY_HOST_PORT:-8080}:8080"
     environment:
       EQO_BIND: "0.0.0.0:8080"
-      EQO_ACCESS_TOKEN: ${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}
+      ALPACA_KEY: ${ALPACA_KEY:-}
+      ALPACA_SECRET: ${ALPACA_SECRET:-}
+      EQO_GATEWAY_JWT_SECRET: ${EQO_GATEWAY_JWT_SECRET:-}
+      EQO_RESEARCH_JWT_SECRET: ${EQO_RESEARCH_JWT_SECRET:-}
       EQO_STOCK_FEED: "sip"
       EQO_OPTION_FEED: "opra"
       EQO_EXECUTION_MODE: "disabled"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 3s
     security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs: [/tmp]
@@ -23,17 +31,36 @@ services:
     build:
       context: .
       dockerfile: apps/openterminal/Dockerfile
-      target: terminal
-    image: eqoboard-openterminal:local
+      target: runtime
+    image: eqoboard-openterminal-runtime:local
+    command: ["npm", "run", "start", "--workspace", "web"]
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${EQO_TERMINAL_HOST_PORT:-3000}:3000"
     environment:
       EQO_RUST_URL: http://eqoboard:8080
-      EQO_ACCESS_TOKEN: ${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}
+      EQO_GATEWAY_JWT_SECRET: ${EQO_GATEWAY_JWT_SECRET:-}
+      EQO_RESEARCH_JWT_SECRET: ${EQO_RESEARCH_JWT_SECRET:-}
+      EQO_RESEARCH_API_KEY: ${EQO_RESEARCH_API_KEY:-}
       API_URL: http://research:4000
-      API_KEY: ${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}
       NEXT_TELEMETRY_DISABLED: "1"
-    depends_on: [eqoboard, research]
+      EQO_PUBLIC_ORIGIN: ${EQO_PUBLIC_ORIGIN:-http://localhost:3000}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
+      EQO_SESSION_TTL_SECONDS: ${EQO_SESSION_TTL_SECONDS:-3600}
+      EQO_OIDC_ISSUER: ${EQO_OIDC_ISSUER:-}
+      EQO_OIDC_CLIENT_ID: ${EQO_OIDC_CLIENT_ID:-}
+      EQO_OIDC_CLIENT_SECRET: ${EQO_OIDC_CLIENT_SECRET:-}
+    depends_on:
+      eqoboard:
+        condition: service_healthy
+      research:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs: [/tmp]
@@ -42,17 +69,24 @@ services:
     restart: unless-stopped
 
   research:
-    build:
-      context: .
-      dockerfile: apps/openterminal/Dockerfile
-      target: research
-    image: eqoboard-openterminal:local
+    image: eqoboard-openterminal-runtime:local
+    command: ["npm", "run", "start", "--workspace", "server"]
     environment:
       API_HOST: "0.0.0.0"
       API_PORT: "4000"
-      API_KEY: ${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}
+      EQO_RESEARCH_API_KEY: ${EQO_RESEARCH_API_KEY:-}
+      EQO_RESEARCH_JWT_SECRET: ${EQO_RESEARCH_JWT_SECRET:-}
       DATA_DIR: /var/lib/openterminal
-      WEB_ORIGIN: http://localhost:3000
+      WEB_ORIGIN: ${EQO_PUBLIC_ORIGIN:-http://localhost:3000}
+    depends_on:
+      eqoboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 3s
     security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs: [/tmp]

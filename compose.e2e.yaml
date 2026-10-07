@@ -1,0 +1,45 @@
+# Test-only overlay: the terminal image runs an offline OIDC/Gateway/research
+# mock on loopback ports. No Alpaca or external market provider is configured.
+services:
+  eqoboard:
+    environment:
+      ALPACA_KEY: ""
+      ALPACA_SECRET: ""
+      EQO_GATEWAY_JWT_SECRET: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      EQO_RESEARCH_JWT_SECRET: "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+
+  terminal:
+    build:
+      context: .
+      dockerfile: apps/openterminal/Dockerfile
+      target: compose-e2e
+    image: eqoboard-openterminal-compose-e2e:local
+    command: ["node", "/srv/e2e/compose-e2e-server.mjs"]
+    ports:
+      - "127.0.0.1:${E2E_OIDC_HOST_PORT:-14310}:${E2E_OIDC_PORT:-14310}"
+      - "127.0.0.1:${E2E_GATEWAY_HOST_PORT:-14311}:${E2E_GATEWAY_PORT:-14311}"
+      - "127.0.0.1:${E2E_RESEARCH_HOST_PORT:-14312}:${E2E_RESEARCH_PORT:-14312}"
+    environment:
+      EQO_RUST_URL: http://127.0.0.1:${E2E_GATEWAY_PORT:-14311}
+      EQO_GATEWAY_JWT_SECRET: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      EQO_RESEARCH_JWT_SECRET: "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+      EQO_RESEARCH_API_KEY: research-service-test-key-that-is-at-least-32-bytes
+      API_URL: http://127.0.0.1:${E2E_RESEARCH_PORT:-14312}
+      EQO_PUBLIC_ORIGIN: http://127.0.0.1:${EQO_TERMINAL_HOST_PORT:-3000}
+      NEXTAUTH_URL: http://127.0.0.1:${EQO_TERMINAL_HOST_PORT:-3000}
+      NEXTAUTH_SECRET: nextauth-compose-e2e-secret-is-at-least-32-characters
+      EQO_SESSION_TTL_SECONDS: ${E2E_SESSION_TTL_SECONDS:-30}
+      EQO_OIDC_ISSUER: http://127.0.0.1:${E2E_OIDC_PORT:-14310}
+      EQO_OIDC_CLIENT_ID: eqo-test
+      EQO_OIDC_CLIENT_SECRET: test-secret
+      E2E_MOCK_BIND_HOST: 0.0.0.0
+      E2E_OIDC_PORT: ${E2E_OIDC_PORT:-14310}
+      E2E_GATEWAY_PORT: ${E2E_GATEWAY_PORT:-14311}
+      E2E_RESEARCH_PORT: ${E2E_RESEARCH_PORT:-14312}
+      E2E_WEB_ORIGIN: http://127.0.0.1:${EQO_TERMINAL_HOST_PORT:-3000}
+      E2E_OIDC_ORIGIN: http://127.0.0.1:${E2E_OIDC_PORT:-14310}
+
+  research:
+    environment:
+      EQO_RESEARCH_API_KEY: research-service-test-key-that-is-at-least-32-bytes
+      EQO_RESEARCH_JWT_SECRET: "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"

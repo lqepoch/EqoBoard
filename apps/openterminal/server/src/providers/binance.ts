@@ -1,14 +1,18 @@
 import type { CryptoRow } from "./coingecko.js";
 import type { Quote, Candle } from "./yahoo.js";
+import { CRYPTO_ASSETS, CRYPTO_SYMBOLS, isExplicitCryptoSymbol } from "./market-symbol.js";
+export { CRYPTO_SYMBOLS, isExplicitCryptoSymbol };
 
-const NAMES: Record<string, string> = {
-  BTCUSDT: "Bitcoin", ETHUSDT: "Ethereum", SOLUSDT: "Solana", BNBUSDT: "BNB",
-  XRPUSDT: "XRP", ADAUSDT: "Cardano", DOGEUSDT: "Dogecoin", AVAXUSDT: "Avalanche",
-  DOTUSDT: "Polkadot", LINKUSDT: "Chainlink", LTCUSDT: "Litecoin", MATICUSDT: "Polygon",
-};
+const NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(CRYPTO_ASSETS).map(([symbol, name]) => [`${symbol}USDT`, name]),
+);
 
-/** Plain tickers (BTC, ETH, ...) this app treats as crypto for routing quotes/history. */
-export const CRYPTO_SYMBOLS = new Set(Object.keys(NAMES).map((s) => s.replace("USDT", "")));
+/** Normalize a plain or BASE-USD symbol to a Binance USDT pair before URL encoding. */
+export function normalizeBinancePair(symbol: string): string {
+  const normalized = symbol.trim().toUpperCase();
+  const base = normalized.endsWith("-USD") ? normalized.slice(0, -4) : normalized;
+  return `${base}USDT`;
+}
 
 /** Fallback crypto board built from Binance public 24hr tickers (no key required). */
 export async function markets(): Promise<CryptoRow[]> {
@@ -34,7 +38,7 @@ export async function markets(): Promise<CryptoRow[]> {
 }
 
 export async function orderBook(symbol: string, limit = 20): Promise<{ bids: [string, string][]; asks: [string, string][] }> {
-  const pair = encodeURIComponent(symbol.toUpperCase() + "USDT");
+  const pair = encodeURIComponent(normalizeBinancePair(symbol));
   const res = await fetch(`https://api.binance.com/api/v3/depth?symbol=${pair}&limit=${limit}`);
   if (!res.ok) throw new Error(`binance ${res.status}`);
   const d = await res.json();
@@ -43,13 +47,14 @@ export async function orderBook(symbol: string, limit = 20): Promise<{ bids: [st
 
 /** Single-symbol quote so crypto tickers can flow through the same /api/quotes path as stocks. */
 export async function quote(symbol: string): Promise<Quote> {
-  const pair = symbol.toUpperCase() + "USDT";
+  const pair = normalizeBinancePair(symbol);
+  const displaySymbol = symbol.trim().toUpperCase();
   const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(pair)}`);
   if (!res.ok) throw new Error(`binance ticker ${res.status}`);
   const d = await res.json();
   return {
-    symbol: symbol.toUpperCase(),
-    name: NAMES[pair] ?? symbol.toUpperCase(),
+    symbol: displaySymbol,
+    name: NAMES[pair] ?? displaySymbol,
     price: +d.lastPrice,
     change: +d.priceChange,
     changePercent: +d.priceChangePercent,
@@ -90,7 +95,7 @@ const RANGE_TO_KLINE: Record<string, { interval: string; limit: number }> = {
 
 export async function history(symbol: string, rangeKey: string): Promise<Candle[]> {
   const { interval, limit } = RANGE_TO_KLINE[rangeKey] ?? RANGE_TO_KLINE["6M"];
-  const pair = symbol.toUpperCase() + "USDT";
+  const pair = normalizeBinancePair(symbol);
   const res = await fetch(
     `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(pair)}&interval=${interval}&limit=${limit}`
   );

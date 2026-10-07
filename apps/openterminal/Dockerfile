@@ -22,7 +22,8 @@ COPY --from=build /build/node_modules /srv/node_modules
 COPY --from=build /build/web /srv/web
 COPY --from=build /build/server /srv/server
 RUN mkdir -p /srv/web/.next/cache /var/lib/openterminal \
-    && chown -R node:node /srv/web/.next/cache /var/lib/openterminal
+    && chown -R node:node /srv/web/.next/cache /var/lib/openterminal \
+    && rm -rf /srv/web/e2e /srv/web/playwright*.ts /srv/web/test-results
 USER node
 
 FROM runtime AS terminal
@@ -32,3 +33,9 @@ CMD ["npm", "run", "start", "-w", "web"]
 FROM runtime AS research
 EXPOSE 4000
 CMD ["npm", "run", "start", "-w", "server"]
+
+# Test-only image derived from the production runtime. It adds an offline mock
+# OIDC/Gateway/research process for Compose E2E; production runtime omits it.
+FROM runtime AS compose-e2e
+COPY --from=build --chown=node:node /build/web/e2e/mock-services.mjs /srv/e2e/mock-services.mjs
+COPY --from=build --chown=node:node /build/web/e2e/compose-e2e-server.mjs /srv/e2e/compose-e2e-server.mjs

@@ -1,0 +1,5 @@
+# Isolated runtime verification overlay: preserve production images and
+# service commands while denying every container outbound network access.
+networks:
+  default:
+    internal: true

@@ -1,3 +1,6 @@
+import { usesSIPEquitySymbol } from "../../server/src/providers/market-symbol.ts";
+export { usesSIPEquitySymbol };
+
 /**
  * EqoBoard's single source of truth for U.S. equity/options prices.
  * OpenTerminal visuals consume the existing Rust gateway's SIP/OPRA contract.
@@ -49,11 +52,10 @@ function requireFeed(feed: string, expected: "sip" | "opra"): void {
   if (feed !== expected) throw new EqoUpstreamError(409,
     "EqoBoard configured feed is "+feed+"; "+expected+" required. No silent fallback.");
 }
-async function getRust<T>(path: string): Promise<T> {
+async function getRust<T>(path: string, authorization: string): Promise<T> {
   const host = process.env.EQO_RUST_URL ?? "http://127.0.0.1:8080";
   // Server-managed deployment configuration; never accept a URL from a client.
-  const headers: Record<string,string> = {};
-  if (process.env.EQO_ACCESS_TOKEN) headers.Authorization = "Bearer "+process.env.EQO_ACCESS_TOKEN;
+  const headers: Record<string,string> = { Authorization: `Bearer ${authorization}` };
   const response = await fetch(host.replace(/\/+$/, "")+path, {
     cache:"no-store", headers, signal:AbortSignal.timeout(15_000)
   }).catch(()=> { throw new EqoUpstreamError(502,"Rust market-data gateway unavailable"); });
@@ -64,9 +66,9 @@ async function getRust<T>(path: string): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
-export async function eqoStatus() {
+export async function eqoStatus(authorization: string) {
   const data=await getRust<{market_credentials_present:boolean;stock_feed:string;option_feed:string;
-    execution_mode:string;configured_adapters:string[];as_of:string}>("/api/v1/status");
+    execution_mode:string;configured_adapters:string[];as_of:string}>("/api/v1/status", authorization);
   return {
     ok:data.market_credentials_present, ai:false,
     providers:[{name:"Alpaca "+data.stock_feed.toUpperCase()+" (configuration)",ok:0,failed:0,lastLatencyMs:null},
@@ -77,11 +79,11 @@ export async function eqoStatus() {
     asOf:data.as_of
   };
 }
-export async function eqoQuotes(input: string) {
+export async function eqoQuotes(input: string, authorization: string) {
   const symbols = [...new Set(input.split(",").map(validateTicker))];
   if (!symbols.length||symbols.length>50) throw new EqoUpstreamError(400,"Expected 1..50 stock symbols");
   const data=await getRust<{feed:string;snapshots:Snapshot[]}>(
-    "/api/v1/stocks/snapshots?symbols="+encodeURIComponent(symbols.join(",")));
+    "/api/v1/stocks/snapshots?symbols="+encodeURIComponent(symbols.join(",")), authorization);
   requireFeed(data.feed,"sip");
   return data.snapshots.map(s=>({
     symbol:s.symbol,name:null,price:s.last,change:s.last!=null && s.previous_close!=null?s.last-s.previous_close:null,
@@ -92,13 +94,13 @@ export async function eqoQuotes(input: string) {
     currency:"USD",exchange:null,marketState:null,source:"Alpaca SIP",asOf:s.updated_at
   }));
 }
-export async function eqoHistory(symbol: string, range: string) {
+export async function eqoHistory(symbol: string, range: string, authorization: string) {
   const sym=validateTicker(symbol), r=ranges[range];
   if (!r) throw new EqoUpstreamError(400,"Unsupported historical range");
   const query=new URLSearchParams({
     symbol:sym,timeframe:r.timeframe,limit:String(r.limit),days:String(r.days)
   });
-  const data=await getRust<BarsResponse>("/api/v1/stocks/bars?"+query.toString());
+  const data=await getRust<BarsResponse>("/api/v1/stocks/bars?"+query.toString(), authorization);
   requireFeed(data.feed,"sip");
   // OpenTerminal charts use UNIX seconds. Preserve upstream bars without inventing candles.
   const bars=data.bars.map(b=>({
@@ -112,7 +114,7 @@ export async function eqoHistory(symbol: string, range: string) {
   }
   return bars;
 }
-export async function eqoChain(symbol: string, expiry?: string): Promise<EqoChain> {
+export async function eqoChain(symbol: string, expiry: string | undefined, authorization: string): Promise<EqoChain> {
   const sym=validateTicker(symbol);
   const nyDate=new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",
     year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
@@ -121,7 +123,7 @@ export async function eqoChain(symbol: string, expiry?: string): Promise<EqoChai
     throw new EqoUpstreamError(400,"Invalid option expiry");
   const query=new URLSearchParams({underlying:sym,expiration:date});
   const raw=await getRust<{feed:string;as_of:string;truncated:boolean;contracts:Option[]}>(
-    "/api/v1/options/chain?"+query.toString());
+    "/api/v1/options/chain?"+query.toString(), authorization);
   requireFeed(raw.feed,"opra");
   return {
     symbol:sym,underlyingPrice:null,selectedDate:date,source:"Alpaca OPRA",

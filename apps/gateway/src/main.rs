@@ -2,7 +2,7 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Query, Request, State,
+        Extension, Query, Request, State,
     },
     http::{header, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
@@ -17,7 +17,8 @@ use chrono::{NaiveDate, Utc};
 use eqo_alpaca_data::{AlpacaData, DataError};
 use eqo_domain::{parse_occ, MarketEvent};
 use eqo_execution::{BrokerRouter, OrderError, OrderIntent, PreviewStore, RiskPolicy};
-use futures_util::stream::{self, Stream};
+use futures_util::stream;
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -37,15 +38,77 @@ use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-type ConsumerLeases = HashMap<Uuid, (Instant, HashSet<String>)>;
+type ConsumerKey = (String, String, Uuid);
+type ConsumerLeases = HashMap<ConsumerKey, (Instant, HashSet<String>)>;
+type WebSocketTicket = (Instant, String, String);
+type WebSocketTickets = HashMap<Uuid, WebSocketTicket>;
+
+const BFF_ISSUER: &str = "eqoboard-openterminal";
+const RESEARCH_ISSUER: &str = "openterminal-research";
+const GATEWAY_AUDIENCE: &str = "eqoboard-gateway";
+
+#[derive(Clone, Default)]
+struct AuthKeyring {
+    bff: Option<Arc<Vec<u8>>>,
+    research: Option<Arc<Vec<u8>>>,
+}
+
+impl AuthKeyring {
+    fn from_env() -> Self {
+        Self {
+            bff: env_secret("EQO_GATEWAY_JWT_SECRET"),
+            research: env_secret("EQO_RESEARCH_JWT_SECRET"),
+        }
+    }
+
+    fn ready(&self) -> bool {
+        self.bff
+            .as_deref()
+            .zip(self.research.as_deref())
+            .is_some_and(|(bff, research)| bff != research)
+    }
+}
+
+fn env_secret(name: &str) -> Option<Arc<Vec<u8>>> {
+    std::env::var(name)
+        .ok()
+        .filter(|secret| secret.len() >= 64 && secret.is_ascii())
+        .map(|secret| Arc::new(secret.into_bytes()))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct DelegationClaims {
+    sub: String,
+    iss: String,
+    aud: String,
+    exp: usize,
+    iat: usize,
+    jti: String,
+    idp_iss: String,
+    scope: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GatewayPrincipal {
+    subject: String,
+    identity_issuer: String,
+    scopes: HashSet<String>,
+}
+
+impl GatewayPrincipal {
+    fn has_scope(&self, scope: &str) -> bool {
+        self.scopes.contains(scope)
+    }
+}
 
 #[derive(Clone)]
 struct AppState {
     data: Option<AlpacaData>,
     stock_feed: String,
     option_feed: String,
+    requested_execution_mode: String,
     execution_enabled: bool,
-    token: Option<String>,
+    auth_keys: AuthKeyring,
     stock_symbols: Vec<String>,
     max_stock_subscriptions: usize,
     stock_tx: watch::Sender<Vec<String>>,
@@ -54,7 +117,7 @@ struct AppState {
     option_tx: watch::Sender<Vec<String>>,
     option_leases: Arc<Mutex<ConsumerLeases>>,
     broadcasts: broadcast::Sender<MarketEvent>,
-    tickets: Arc<Mutex<HashMap<Uuid, Instant>>>,
+    tickets: Arc<Mutex<WebSocketTickets>>,
     previews: PreviewStore,
     risk: RiskPolicy,
     brokers: BrokerRouter,
@@ -119,34 +182,164 @@ fn option_subscription_union(leases: &ConsumerLeases) -> Vec<String> {
     combined
 }
 
-async fn require_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
-    if let Some(expected) = &state.token {
-        let provided = request
-            .headers()
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|s| s.strip_prefix("Bearer "));
-        if provided != Some(expected.as_str()) {
+fn authenticate_delegation(
+    token: &str,
+    keys: &AuthKeyring,
+    now: usize,
+) -> Result<GatewayPrincipal, ()> {
+    let header = decode_header(token).map_err(|_| ())?;
+    if header.alg != Algorithm::HS256 {
+        return Err(());
+    }
+    let key_id = header.kid.as_deref().ok_or(())?;
+    let (key, expected_issuer) = match key_id {
+        "bff" => (keys.bff.as_deref().ok_or(())?, BFF_ISSUER),
+        "research" => (keys.research.as_deref().ok_or(())?, RESEARCH_ISSUER),
+        _ => return Err(()),
+    };
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.leeway = 5;
+    validation.validate_nbf = true;
+    validation.set_issuer(&[expected_issuer]);
+    validation.set_audience(&[GATEWAY_AUDIENCE]);
+    validation.set_required_spec_claims(&["exp", "iss", "aud", "sub"]);
+    let data = decode::<DelegationClaims>(token, &DecodingKey::from_secret(key), &validation)
+        .map_err(|_| ())?;
+    let claims = data.claims;
+    if claims.iss != expected_issuer
+        || claims.aud != GATEWAY_AUDIENCE
+        || claims.sub.trim().is_empty()
+        || claims.idp_iss.trim().is_empty()
+        || claims.jti.trim().is_empty()
+        || claims.iat > now.saturating_add(5)
+        || claims.exp <= claims.iat
+        || claims.exp.saturating_sub(claims.iat) > 65
+        || !claims.scope.iter().all(|scope| valid_scope(scope))
+        || claims.scope.is_empty()
+    {
+        return Err(());
+    }
+    if key_id == "research" && (claims.scope.len() != 1 || claims.scope[0] != "market:read") {
+        return Err(());
+    }
+    Ok(GatewayPrincipal {
+        subject: claims.sub,
+        identity_issuer: claims.idp_iss,
+        scopes: claims.scope.into_iter().collect(),
+    })
+}
+
+fn valid_scope(scope: &str) -> bool {
+    matches!(
+        scope,
+        "market:read"
+            | "market:stream"
+            | "market:subscribe"
+            | "research:read"
+            | "research:ai"
+            | "workspace:read"
+            | "workspace:write"
+            | "orders:preview"
+            | "paper:submit"
+    )
+}
+
+async fn require_auth(
+    State(keys): State<Arc<AuthKeyring>>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    if !keys.ready() {
+        return fail(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "identity_unavailable",
+            "gateway identity validation is not configured",
+        );
+    }
+    let provided = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "));
+    let Some(token) = provided else {
+        return fail(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "verified user delegation required",
+        );
+    };
+    let now = Utc::now().timestamp().max(0) as usize;
+    let principal = match authenticate_delegation(token, &keys, now) {
+        Ok(principal) => principal,
+        Err(()) => {
             return fail(
                 StatusCode::UNAUTHORIZED,
                 "unauthorized",
-                "bearer token required",
+                "verified user delegation required",
             );
         }
-    }
+    };
+    request.extensions_mut().insert(principal);
     next.run(request).await
+}
+
+fn require_scope(principal: &GatewayPrincipal, scope: &'static str) -> Option<Response> {
+    if principal.has_scope(scope) {
+        None
+    } else {
+        Some(fail(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "action is not authorized",
+        ))
+    }
 }
 
 async fn healthz() -> impl IntoResponse {
     Json(json!({"status":"ok","service":"eqo-gateway"}))
 }
-async fn status(State(state): State<AppState>) -> impl IntoResponse {
+async fn readyz(State(state): State<AppState>) -> Response {
+    let ready = state.auth_keys.ready();
+    let market_data_configured = state.data.is_some();
+    let body = json!({
+        "ready":ready,
+        "identity_validation_configured":ready,
+        "market_credentials_present":market_data_configured,
+        "market_data_configured":market_data_configured,
+        "market_data_ready":false,
+        "market_data_status":if market_data_configured {"awaiting_upstream"} else {"not_configured"},
+        "market_data_provider":"alpaca",
+        "execution_mode":"disabled",
+        "execution_enabled":false
+    });
+    (
+        if ready {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
+        Json(body),
+    )
+        .into_response()
+}
+async fn status(
+    Extension(principal): Extension<GatewayPrincipal>,
+    State(state): State<AppState>,
+) -> Response {
+    if let Some(response) = require_scope(&principal, "market:read") {
+        return response;
+    }
     Json(json!({
         "service":"EqoBoard", "schema_version":1,
         "market_credentials_present":state.data.is_some(),
+        "market_data_configured":state.data.is_some(),
+        "market_data_ready":false,
+        "market_data_status":if state.data.is_some() {"awaiting_upstream"} else {"not_configured"},
         "stock_feed":state.stock_feed,"option_feed":state.option_feed,
         "market_data_provider":"alpaca",
-        "execution_mode":if state.execution_enabled {"paper"} else {"disabled"},
+        "requested_execution_mode":state.requested_execution_mode,
+        "execution_mode":"disabled",
+        "execution_enabled":false,
         "configured_adapters":state.brokers.configured(),
         "max_stock_subscriptions":state.max_stock_subscriptions,
         "active_stock_subscriptions":state.stock_tx.borrow().len(),
@@ -156,6 +349,7 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
         "as_of":Utc::now().to_rfc3339(),
         "notes":"configured feeds do not imply entitlements; upstream 403 remains explicit"
     }))
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -163,9 +357,13 @@ struct SymbolsQuery {
     symbols: Option<String>,
 }
 async fn stock_snapshots(
+    Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
     Query(query): Query<SymbolsQuery>,
 ) -> Response {
+    if let Some(response) = require_scope(&principal, "market:read") {
+        return response;
+    }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -198,7 +396,14 @@ struct BarsQuery {
     limit: Option<usize>,
     days: Option<i64>,
 }
-async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
+async fn stock_bars(
+    Extension(principal): Extension<GatewayPrincipal>,
+    State(state): State<AppState>,
+    Query(query): Query<BarsQuery>,
+) -> Response {
+    if let Some(response) = require_scope(&principal, "market:read") {
+        return response;
+    }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -242,7 +447,14 @@ struct ChainQuery {
     strike_gte: Option<f64>,
     strike_lte: Option<f64>,
 }
-async fn option_chain(State(state): State<AppState>, Query(query): Query<ChainQuery>) -> Response {
+async fn option_chain(
+    Extension(principal): Extension<GatewayPrincipal>,
+    State(state): State<AppState>,
+    Query(query): Query<ChainQuery>,
+) -> Response {
+    if let Some(response) = require_scope(&principal, "market:read") {
+        return response;
+    }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -311,9 +523,13 @@ async fn openbb_apps() -> Json<Value> {
 
 /// OpenBB AG Grid consumes flat arrays. The existing SIP source and as-of fields are preserved.
 async fn openbb_stocks(
+    Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
     Query(query): Query<SymbolsQuery>,
 ) -> Response {
+    if let Some(response) = require_scope(&principal, "market:read") {
+        return response;
+    }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -341,9 +557,13 @@ async fn openbb_stocks(
 
 /// The IV and Greeks are snapshots, not synchronized executable combo prices.
 async fn openbb_options(
+    Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
     Query(query): Query<ChainQuery>,
 ) -> Response {
+    if let Some(response) = require_scope(&principal, "market:read") {
+        return response;
+    }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -383,7 +603,14 @@ async fn openbb_options(
         Err(err) => data_failure(err),
     }
 }
-async fn openbb_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
+async fn openbb_bars(
+    Extension(principal): Extension<GatewayPrincipal>,
+    State(state): State<AppState>,
+    Query(query): Query<BarsQuery>,
+) -> Response {
+    if let Some(response) = require_scope(&principal, "market:read") {
+        return response;
+    }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -431,9 +658,13 @@ struct SubscribeSymbols {
     symbols: Vec<String>,
 }
 async fn stock_subscribe(
+    Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
     Json(body): Json<SubscribeSymbols>,
 ) -> Response {
+    if let Some(response) = require_scope(&principal, "market:subscribe") {
+        return response;
+    }
     if body.symbols.len() > state.max_stock_subscriptions {
         return fail(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -455,13 +686,18 @@ async fn stock_subscribe(
     }
     let mut leases = state.stock_leases.lock().await;
     leases.retain(|_, (until, _)| *until > Instant::now());
-    leases.insert(
+    let consumer_key = (
+        principal.identity_issuer,
+        principal.subject,
         body.consumer_id,
+    );
+    leases.insert(
+        consumer_key.clone(),
         (Instant::now() + Duration::from_secs(90), wanted),
     );
     let sorted = stock_subscription_union(&state.stock_symbols, &leases);
     if sorted.len() > state.max_stock_subscriptions {
-        leases.remove(&body.consumer_id);
+        leases.remove(&consumer_key);
         return fail(
             StatusCode::UNPROCESSABLE_ENTITY,
             "subscription_limit",
@@ -478,9 +714,13 @@ async fn stock_subscribe(
 }
 
 async fn option_subscribe(
+    Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
     Json(body): Json<SubscribeSymbols>,
 ) -> Response {
+    if let Some(response) = require_scope(&principal, "market:subscribe") {
+        return response;
+    }
     if body.symbols.len() > state.max_option_subscriptions {
         return fail(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -501,13 +741,18 @@ async fn option_subscribe(
     }
     let mut leases = state.option_leases.lock().await;
     leases.retain(|_, (until, _)| *until > Instant::now());
-    leases.insert(
+    let consumer_key = (
+        principal.identity_issuer,
+        principal.subject,
         body.consumer_id,
+    );
+    leases.insert(
+        consumer_key.clone(),
         (Instant::now() + Duration::from_secs(90), wanted),
     );
     let sorted = option_subscription_union(&leases);
     if sorted.len() > state.max_option_subscriptions {
-        leases.remove(&body.consumer_id);
+        leases.remove(&consumer_key);
         return fail(
             StatusCode::UNPROCESSABLE_ENTITY,
             "subscription_limit",
@@ -551,9 +796,15 @@ async fn prune_leases(state: AppState) {
     }
 }
 
-async fn create_ticket(State(state): State<AppState>) -> Response {
+async fn create_ticket(
+    Extension(principal): Extension<GatewayPrincipal>,
+    State(state): State<AppState>,
+) -> Response {
+    if let Some(response) = require_scope(&principal, "market:stream") {
+        return response;
+    }
     let mut tickets = state.tickets.lock().await;
-    tickets.retain(|_, end| *end > Instant::now());
+    tickets.retain(|_, (end, _, _)| *end > Instant::now());
     if tickets.len() >= 1000 {
         return fail(
             StatusCode::TOO_MANY_REQUESTS,
@@ -562,7 +813,14 @@ async fn create_ticket(State(state): State<AppState>) -> Response {
         );
     }
     let ticket = Uuid::new_v4();
-    tickets.insert(ticket, Instant::now() + Duration::from_secs(15));
+    tickets.insert(
+        ticket,
+        (
+            Instant::now() + Duration::from_secs(15),
+            principal.identity_issuer.clone(),
+            principal.subject.clone(),
+        ),
+    );
     Json(json!({"ticket":ticket.to_string(),"expires_in_seconds":15})).into_response()
 }
 #[derive(Deserialize)]
@@ -596,7 +854,9 @@ async fn market_ws(
         .lock()
         .await
         .remove(&ticket.ticket)
-        .is_some_and(|expires| expires > Instant::now());
+        .is_some_and(|(expires, issuer, subject)| {
+            expires > Instant::now() && !issuer.trim().is_empty() && !subject.trim().is_empty()
+        });
     if !valid {
         return fail(StatusCode::UNAUTHORIZED, "ticket", "expired/used WS ticket");
     }
@@ -644,8 +904,12 @@ async fn stream_to_browser(mut ws: WebSocket, mut rx: broadcast::Receiver<Market
 /// Same normalized market broadcast used by the existing WebSocket terminal.
 /// Next.js serves it to the OpenTerminal browser with credentials kept server-side.
 async fn live_sse(
+    Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+) -> Response {
+    if let Some(response) = require_scope(&principal, "market:stream") {
+        return response;
+    }
     let mut timer = tokio::time::interval(Duration::from_millis(50));
     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let events = stream::unfold(
@@ -686,10 +950,15 @@ async fn live_sse(
                 }
             }
             let json = serde_json::to_string(&batch).unwrap_or_else(|_| "[]".into());
-            Some((Ok(Event::default().data(json)), (rx, Vec::new(), flush)))
+            Some((
+                Ok::<Event, Infallible>(Event::default().data(json)),
+                (rx, Vec::new(), flush),
+            ))
         },
     );
-    Sse::new(events).keep_alive(KeepAlive::default())
+    Sse::new(events)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 #[derive(Deserialize)]
@@ -698,7 +967,14 @@ struct SubmitPreview {
     confirm: bool,
 }
 
-async fn order_preview(State(state): State<AppState>, Json(order): Json<OrderIntent>) -> Response {
+async fn order_preview(
+    Extension(principal): Extension<GatewayPrincipal>,
+    State(state): State<AppState>,
+    Json(order): Json<OrderIntent>,
+) -> Response {
+    if let Some(response) = require_scope(&principal, "orders:preview") {
+        return response;
+    }
     match state.previews.create(order, state.risk).await {
         Ok(preview) => Json(json!({"preview":preview,"execution_enabled":state.execution_enabled}))
             .into_response(),
@@ -730,9 +1006,25 @@ async fn audit(
     Ok(())
 }
 
-async fn order_submit(State(state): State<AppState>, Json(body): Json<SubmitPreview>) -> Response {
+async fn order_submit(
+    Extension(principal): Extension<GatewayPrincipal>,
+    State(state): State<AppState>,
+    Json(body): Json<SubmitPreview>,
+) -> Response {
+    if let Some(response) = require_scope(&principal, "paper:submit") {
+        return response;
+    }
     if !state.execution_enabled {
-        return order_failure(OrderError::Disabled);
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "state":"blocked",
+                "retryable":false,
+                "recovery_required":false,
+                "detail":"Paper execution is disabled until persistent preview, outbox, and account-binding gates are complete."
+            })),
+        )
+            .into_response();
     }
     if !body.confirm {
         return fail(
@@ -802,15 +1094,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
     let bind = std::env::var("EQO_BIND").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let addr: SocketAddr = bind.parse()?;
-    let token = std::env::var("EQO_ACCESS_TOKEN")
-        .ok()
-        .filter(|s| !s.is_empty());
-    if !addr.ip().is_loopback() && token.is_none() {
-        return Err("non-loopback bind requires EQO_ACCESS_TOKEN".into());
+    let auth_keys = AuthKeyring::from_env();
+    if !auth_keys.ready() {
+        if !addr.ip().is_loopback() {
+            return Err(
+                "non-loopback bind requires verifiable gateway and research JWT keys".into(),
+            );
+        }
+        warn!("identity signing keys unavailable or not independent; protected API and readiness remain fail-closed");
     }
     let mode = std::env::var("EQO_EXECUTION_MODE").unwrap_or_else(|_| "disabled".into());
-    if !["disabled", "paper"].contains(&mode.as_str()) {
-        return Err("only disabled and paper execution modes are allowed".into());
+    if !["disabled", "paper", "live"].contains(&mode.as_str()) {
+        return Err("EQO_EXECUTION_MODE must be disabled, paper, or live".into());
     }
     let data = match AlpacaData::from_env() {
         Ok(c) => Some(c),
@@ -847,8 +1142,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data: data.clone(),
         stock_feed,
         option_feed,
-        execution_enabled: mode == "paper",
-        token,
+        requested_execution_mode: mode,
+        execution_enabled: false,
+        auth_keys: auth_keys.clone(),
         stock_symbols: stocks,
         max_stock_subscriptions,
         stock_tx: stock_tx.clone(),
@@ -891,17 +1187,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/auth/ws-ticket", post(create_ticket))
         .route("/api/v1/orders/preview", post(order_preview))
         .route("/api/v1/orders/submit", post(order_submit))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+        .route_layer(middleware::from_fn_with_state(
+            Arc::new(auth_keys.clone()),
+            require_auth,
+        ));
     let web_dist = std::env::var("EQO_WEB_DIST").unwrap_or_else(|_| "./apps/gateway/empty".into());
     let openbb_api = Router::new()
         .route("/openbb/v1/stocks", get(openbb_stocks))
         .route("/openbb/v1/options", get(openbb_options))
         .route("/openbb/v1/bars", get(openbb_bars))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+        .route_layer(middleware::from_fn_with_state(
+            Arc::new(auth_keys),
+            require_auth,
+        ));
     let mut app = Router::new()
         .route("/widgets.json", get(openbb_widgets))
         .route("/apps.json", get(openbb_apps))
         .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz))
         .route("/api/v1/stream", get(market_ws))
         .merge(api)
         .merge(openbb_api)
@@ -934,12 +1237,85 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jsonwebtoken::{encode, EncodingKey, Header};
+    use serde::Serialize;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tower::ServiceExt;
+
+    #[derive(Serialize)]
+    struct TestClaims<'a> {
+        sub: &'a str,
+        iss: &'a str,
+        aud: &'a str,
+        iat: usize,
+        exp: usize,
+        jti: &'a str,
+        idp_iss: &'a str,
+        scope: Vec<&'a str>,
+    }
+
+    fn test_token(secret: &[u8], kid: &str, issuer: &str, scope: Vec<&str>) -> String {
+        let now = Utc::now().timestamp().max(0) as usize;
+        let mut header = Header::new(Algorithm::HS256);
+        header.kid = Some(kid.to_owned());
+        encode(
+            &header,
+            &TestClaims {
+                sub: "subject-1",
+                iss: issuer,
+                aud: GATEWAY_AUDIENCE,
+                iat: now,
+                exp: now + 60,
+                jti: "test-token-id",
+                idp_iss: "https://identity.example",
+                scope,
+            },
+            &EncodingKey::from_secret(secret),
+        )
+        .expect("test token encodes")
+    }
+
+    async fn protected_call_count(keys: AuthKeyring, token: Option<&str>) -> (StatusCode, usize) {
+        async fn protected(
+            Extension(principal): Extension<GatewayPrincipal>,
+            State(calls): State<Arc<AtomicUsize>>,
+        ) -> Response {
+            if let Some(response) = require_scope(&principal, "orders:preview") {
+                return response;
+            }
+            calls.fetch_add(1, Ordering::SeqCst);
+            StatusCode::NO_CONTENT.into_response()
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let app = Router::new()
+            .route("/protected", get(protected))
+            .route_layer(middleware::from_fn_with_state(Arc::new(keys), require_auth))
+            .with_state(calls.clone());
+        let mut request = axum::http::Request::builder()
+            .uri("/protected")
+            .header("x-user", "attacker")
+            .header("x-role", "eqoboard-paper-operator");
+        if let Some(token) = token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+        let response = app
+            .oneshot(request.body(axum::body::Body::empty()).unwrap())
+            .await
+            .unwrap();
+        (response.status(), calls.load(Ordering::SeqCst))
+    }
+
     #[test]
     fn subscription_unions_are_sorted_and_deduplicated() {
         let now = Instant::now() + Duration::from_secs(60);
         let mut leases = ConsumerLeases::new();
         leases.insert(
-            Uuid::nil(),
+            (
+                "https://issuer.example".into(),
+                "user-1".into(),
+                Uuid::nil(),
+            ),
             (
                 now,
                 ["QQQ".to_string(), "NVDA".to_string()]
@@ -961,5 +1337,83 @@ mod tests {
         assert!(safe_symbol("SPY"));
         assert!(safe_symbol("BRK.B"));
         assert!(!safe_symbol("SPY/../../secrets"));
+    }
+
+    #[test]
+    fn key_id_and_issuer_select_separate_delegation_keys_and_scopes() {
+        let bff = b"bff-signing-secret-that-is-at-least-64-bytes-long-0123456789abcdef";
+        let research = b"research-signing-secret-that-is-at-least-64-bytes-long-0123456789";
+        let keys = AuthKeyring {
+            bff: Some(Arc::new(bff.to_vec())),
+            research: Some(Arc::new(research.to_vec())),
+        };
+
+        assert!(authenticate_delegation(
+            &test_token(bff, "bff", BFF_ISSUER, vec!["orders:preview"]),
+            &keys,
+            Utc::now().timestamp().max(0) as usize,
+        )
+        .is_ok());
+        assert!(authenticate_delegation(
+            &test_token(research, "research", RESEARCH_ISSUER, vec!["market:read"]),
+            &keys,
+            Utc::now().timestamp().max(0) as usize,
+        )
+        .is_ok());
+
+        // A process with only the Node research key cannot claim the BFF kid/issuer.
+        assert!(authenticate_delegation(
+            &test_token(research, "bff", BFF_ISSUER, vec!["orders:preview"]),
+            &keys,
+            Utc::now().timestamp().max(0) as usize,
+        )
+        .is_err());
+        assert!(authenticate_delegation(
+            &test_token(research, "research", RESEARCH_ISSUER, vec!["paper:submit"]),
+            &keys,
+            Utc::now().timestamp().max(0) as usize,
+        )
+        .is_err());
+    }
+
+    #[tokio::test]
+    async fn forged_identity_headers_and_static_access_token_never_reach_handlers() {
+        let keys = AuthKeyring {
+            bff: Some(Arc::new(vec![b'b'; 64])),
+            research: Some(Arc::new(vec![b'r'; 64])),
+        };
+        for token in [None, Some("static-test-access-token")] {
+            let (status, downstream_calls) = protected_call_count(keys.clone(), token).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED);
+            assert_eq!(downstream_calls, 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn shared_bff_and_research_signing_key_fails_closed_before_handlers() {
+        let shared = Arc::new(vec![b's'; 64]);
+        let keys = AuthKeyring {
+            bff: Some(shared.clone()),
+            research: Some(shared),
+        };
+        assert!(!keys.ready());
+        let token = test_token(
+            keys.bff.as_deref().expect("test key"),
+            "bff",
+            BFF_ISSUER,
+            vec!["orders:preview"],
+        );
+        let (status, downstream_calls) = protected_call_count(keys, Some(&token)).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(downstream_calls, 0);
+    }
+
+    #[tokio::test]
+    async fn missing_identity_keys_fail_closed_without_stopping_liveness_process() {
+        let keys = AuthKeyring::default();
+        assert!(!keys.ready());
+        let (status, downstream_calls) = protected_call_count(keys, None).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(downstream_calls, 0);
     }
 }
