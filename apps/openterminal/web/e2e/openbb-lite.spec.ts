@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -164,6 +164,54 @@ function rowsFor(responses: CapturedResponse[], route: string) {
   expect(response, `No successful native browser response for ${route}`).toBeDefined();
   expect(Array.isArray(response?.body), `${route} did not return OpenBB flat rows`).toBe(true);
   return response!.body as Record<string, unknown>[];
+}
+
+function latestAsOfValues(responses: CapturedResponse[], route: string) {
+  for (const response of [...responses].reverse()) {
+    if (!response.path.startsWith(route) || response.status !== 200 || !Array.isArray(response.body)) continue;
+    const values = (response.body as Record<string, unknown>[])
+      .map((row) => row.market_as_of)
+      .filter((value): value is string => typeof value === "string");
+    if (values.length > 0) return values;
+  }
+  return [];
+}
+
+async function revealGridColumns(page: Page, widget: Locator, columnIds: string[]) {
+  const viewport = widget.locator(".ag-body-horizontal-scroll-viewport");
+  await expect(viewport).toBeVisible();
+  const headers = columnIds.map((columnId) =>
+    widget.locator('.ag-header-cell[col-id="' + columnId + '"]').first(),
+  );
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const viewportBox = await viewport.boundingBox();
+    if (!viewportBox) throw new Error("Native AG Grid horizontal viewport is not rendered");
+    const headerBoxes = await Promise.all(headers.map((header) => header.boundingBox()));
+    if (headerBoxes.every((box) => box !== null)) {
+      const visibleLeft = viewportBox.x;
+      const visibleRight = viewportBox.x + viewportBox.width;
+      const targetLeft = Math.min(...headerBoxes.map((box) => box!.x));
+      const targetRight = Math.max(...headerBoxes.map((box) => box!.x + box!.width));
+      const delta = targetLeft < visibleLeft
+        ? targetLeft - visibleLeft
+        : targetRight > visibleRight
+          ? targetRight - visibleRight
+          : 0;
+      if (delta === 0) return;
+      await viewport.evaluate((element, offset) => {
+        (element as HTMLElement).scrollLeft += offset;
+      }, delta);
+    } else {
+      await viewport.evaluate((element) => {
+        const horizontalViewport = element as HTMLElement;
+        horizontalViewport.scrollLeft += Math.max(100, horizontalViewport.clientWidth * 0.6);
+      });
+    }
+    await page.waitForTimeout(50);
+  }
+
+  throw new Error("Native AG Grid columns were not visible: " + columnIds.join(", "));
 }
 
 let activeNativeDiagnostics: ReturnType<typeof collectPageDiagnostics> | null = null;
@@ -341,55 +389,61 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   const barsWidget = page.locator(".react-grid-item").filter({
     has: page.getByText("EqoBoard SIP OHLCV", { exact: true }),
   });
+  const stocksWidget = page.locator(".react-grid-item").filter({
+    has: page.getByText("EqoBoard SIP Stock Quotes", { exact: true }),
+  });
+  const optionsWidget = page.locator(".react-grid-item").filter({
+    has: page.getByText("EqoBoard OPRA Option Chain", { exact: true }),
+  });
   await expect(barsWidget).toHaveCount(1);
+  await expect(stocksWidget).toHaveCount(1);
+  await expect(optionsWidget).toHaveCount(1);
   await expect(barsWidget.getByRole("columnheader", { name: "Market as of", exact: true })).toBeVisible();
   await captured.settle();
-  const latestBarsResponse = captured.responses
-    .filter((item) => item.path.startsWith("/api/openbb/openbb/v1/bars") && item.status === 200)
-    .slice(-1)[0];
-  expect(latestBarsResponse).toBeDefined();
-  const latestBarsAsOfValues = (Array.isArray(latestBarsResponse?.body)
-    ? latestBarsResponse.body as Record<string, unknown>[]
-    : [])
-    .map((row) => row.market_as_of)
-    .filter((value): value is string => typeof value === "string");
-  expect(latestBarsAsOfValues.length).toBeGreaterThan(0);
   const visibleMarketAsOfCells = barsWidget.locator('.ag-cell[col-id="market_as_of"]').filter({ visible: true });
   await expect.poll(async () => {
     const rendered = await visibleMarketAsOfCells.allTextContents();
-    return latestBarsAsOfValues.some((value) => rendered.includes(value));
+    const latestBarsAsOfValues = latestAsOfValues(captured.responses, "/api/openbb/openbb/v1/bars");
+    return latestBarsAsOfValues.length > 0 && latestBarsAsOfValues.some((value) => rendered.includes(value));
   }).toBe(true);
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-market-time.png"), fullPage: true });
 
-  const horizontalViewports = page.locator(".ag-body-horizontal-scroll-viewport");
-  await expect(horizontalViewports).toHaveCount(3);
-  await horizontalViewports.evaluateAll((elements) => {
-    for (const element of elements) {
-      const viewport = element as HTMLElement;
-      viewport.scrollLeft = viewport.scrollWidth;
-    }
-  });
-  await expect(page.getByRole("columnheader", { name: "Source", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Feed", exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Truncated", exact: true }).first()).toBeVisible();
-  await expect(page.getByText("source unknown", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("sip", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("opra", { exact: true }).first()).toBeVisible();
+  const nativeWidgets = [
+    { widget: stocksWidget, feed: "sip" },
+    { widget: barsWidget, feed: "sip" },
+    { widget: optionsWidget, feed: "opra" },
+  ] as const;
+  for (const { widget } of nativeWidgets) await revealGridColumns(page, widget, ["source_label", "feed"]);
+  for (const { widget, feed } of nativeWidgets) {
+    await expect(widget.locator('.ag-header-cell[col-id="source_label"]')).toBeVisible();
+    await expect(widget.locator('.ag-header-cell[col-id="feed"]')).toBeVisible();
+    await expect(widget.locator('.ag-cell[col-id="source_label"]').filter({ visible: true }).first()).toHaveText("source unknown");
+    await expect(widget.locator('.ag-cell[col-id="feed"]').filter({ visible: true }).first()).toHaveText(feed);
+  }
   await expect(page.getByText("仅演示 / MOCK SIP/OPRA", { exact: false })).toBeVisible();
-  const dashboardText = await page.locator("body").innerText();
-  expect(dashboardText).toContain("source unknown");
-  expect(dashboardText.toLowerCase()).toContain("sip");
-  expect(dashboardText.toLowerCase()).toContain("opra");
-  await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard.png"), fullPage: true });
+  await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-source-feed.png"), fullPage: true });
+
+  for (const { widget } of nativeWidgets) await revealGridColumns(page, widget, ["truncated", "complete"]);
+  for (const { widget } of nativeWidgets) {
+    await expect(widget.locator('.ag-header-cell[col-id="truncated"]')).toBeVisible();
+    await expect(widget.locator('.ag-header-cell[col-id="complete"]')).toBeVisible();
+    await expect(widget.locator('.ag-cell[col-id="truncated"]').filter({ visible: true }).first()).toHaveText("false");
+    await expect(widget.locator('.ag-cell[col-id="complete"]').filter({ visible: true }).first()).toHaveText("true");
+  }
+  await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-completeness.png"), fullPage: true });
 
   await controlMock(request, { bars: "empty-truncated", options: "empty-truncated" });
   await page.goto(dashboardUrl);
   await expect.poll(() => captured.responses.some((item) => item.path.startsWith("/api/openbb/openbb/v1/bars") && item.status === 502), { timeout: 45_000 }).toBe(true);
   await expect.poll(() => captured.responses.some((item) => item.path.startsWith("/api/openbb/openbb/v1/options") && item.status === 502), { timeout: 45_000 }).toBe(true);
   await captured.settle();
-  const truncationText = await page.locator("body").innerText();
+  await expect(barsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
+  await expect(optionsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
+  await expect(barsWidget.getByRole("gridcell")).toHaveCount(0);
+  await expect(optionsWidget.getByRole("gridcell")).toHaveCount(0);
+  await revealGridColumns(page, stocksWidget, ["symbol"]);
+  await expect(stocksWidget.locator('.ag-cell[col-id="symbol"]').filter({ visible: true }).first()).toHaveText("QQQ");
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-pagination-error.png"), fullPage: true });
-  expect(truncationText).toMatch(/error|failed|unavailable|bad gateway|truncat/i);
 
   const truncatedBars = await page.request.get(`${RESEARCH_ORIGIN}/api/openbb/openbb/v1/bars?symbol=QQQ&timeframe=1Day&days=30&limit=500`);
   expect(truncatedBars.status()).toBe(502);

@@ -13,6 +13,7 @@ STATE_FILE=""
 MAIN_STATE_FILE=""
 ROLLBACK_TAG_MUTATED=0
 LITE_IMAGE_ID=""
+BROKEN_UPGRADE_IMAGE_ID=""
 COMPOSE_PATH="${ROOT_DIR}/compose.openbb.e2e.yaml"
 IMAGE_ARCHIVE="${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar"
 RUN_LOG="${ARTIFACT_DIR}/runtime-e2e.log"
@@ -60,7 +61,7 @@ assert_health() {
 
 cleanup() {
   local status=$?
-  local down_status cleanup_failed=0 remaining_containers remaining_volumes remaining_networks restored_image_id raw_logs
+  local down_status cleanup_failed=0 remaining_containers remaining_volumes remaining_networks restored_image_id restore_status raw_logs
   set +e
   if [[ ${status} -ne 0 ]]; then
     compose_e2e ps --all >"${ARTIFACT_DIR}/compose-failure-ps.txt" 2>&1
@@ -90,14 +91,27 @@ cleanup() {
   fi
   if [[ ${ROLLBACK_TAG_MUTATED} -eq 1 && -f "${IMAGE_ARCHIVE}" && -n "${LITE_IMAGE_ID}" ]]; then
     docker load -i "${IMAGE_ARCHIVE}" >"${ARTIFACT_DIR}/cleanup-image-restore.log" 2>&1
+    restore_status=$?
     restored_image_id="$(docker image inspect --format '{{.Id}}' "${LITE_IMAGE}" 2>/dev/null)"
-    if [[ "${restored_image_id}" == "${LITE_IMAGE_ID}" ]]; then
+    if [[ ${restore_status} -eq 0 && "${restored_image_id}" == "${LITE_IMAGE_ID}" ]]; then
       ROLLBACK_TAG_MUTATED=0
       printf 'restored_image_id=%s\n' "${restored_image_id}" >>"${ARTIFACT_DIR}/cleanup-image-restore.log"
     else
       cleanup_failed=1
-      printf 'expected_image_id=%s\nactual_image_id=%s\n' "${LITE_IMAGE_ID}" "${restored_image_id}" >>"${ARTIFACT_DIR}/cleanup-image-restore.log"
+      printf 'docker_load_exit=%s\nexpected_image_id=%s\nactual_image_id=%s\n' \
+        "${restore_status}" "${LITE_IMAGE_ID}" "${restored_image_id}" >>"${ARTIFACT_DIR}/cleanup-image-restore.log"
     fi
+  elif [[ ${ROLLBACK_TAG_MUTATED} -eq 1 ]]; then
+    cleanup_failed=1
+    printf 'rollback tag was mutated but its saved image archive or original image id is missing\n' \
+      >"${ARTIFACT_DIR}/cleanup-image-restore.log"
+  fi
+  if [[ -n "${ENV_FILE}" && -f "${ENV_FILE}" ]]; then rm -f "${ENV_FILE}"; fi
+  if [[ -n "${STATE_FILE}" && -f "${STATE_FILE}" ]]; then rm -f "${STATE_FILE}"; fi
+  if [[ -n "${MAIN_STATE_FILE}" && -f "${MAIN_STATE_FILE}" ]]; then rm -f "${MAIN_STATE_FILE}"; fi
+  if [[ ( -n "${ENV_FILE}" && -e "${ENV_FILE}" ) || ( -n "${STATE_FILE}" && -e "${STATE_FILE}" ) || ( -n "${MAIN_STATE_FILE}" && -e "${MAIN_STATE_FILE}" ) ]]; then
+    cleanup_failed=1
+    printf 'temporary credentials/state files remain after cleanup\n' >>"${ARTIFACT_DIR}/cleanup-residuals.txt"
   fi
   {
     printf 'compose_down_exit=%s\n' "${down_status}"
@@ -107,7 +121,42 @@ cleanup() {
     printf 'cleanup_verified=%s\n' "$([[ ${cleanup_failed} -eq 0 ]] && printf true || printf false)"
   } >"${ARTIFACT_DIR}/cleanup-result.txt"
   if [[ ${status} -eq 0 && ${cleanup_failed} -eq 0 ]]; then
-    log_phase "PASS: scoped OpenBB E2E project stopped and its disposable volumes removed"
+    if cat >"${ARTIFACT_DIR}/runtime-result.json" <<EOF
+{
+  "result": "passed",
+  "cleanup_verified": true,
+  "compose_project": "${PROJECT_NAME}",
+  "lite_image": "${LITE_IMAGE}",
+  "docker_image_config_id": "${LITE_IMAGE_ID}",
+  "docker_daemon_repo_digest_observation": "$(cat "${ARTIFACT_DIR}/openbb-lite-compose-image-repodigest.txt")",
+  "artifact_identity_note": "The Compose local build is identified by its recipe inputs and saved archive SHA; the Docker image config ID is not an OCI index or manifest digest.",
+  "image_archive": "${IMAGE_ARCHIVE}",
+  "image_archive_sha256": "$(cut -d ' ' -f 1 "${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar.sha256")",
+  "rollback_image_id": "${BROKEN_UPGRADE_IMAGE_ID}",
+  "browser_evidence": [
+    "native-openbb-mock-dashboard-market-time.png",
+    "native-openbb-mock-dashboard-source-feed.png",
+    "native-openbb-mock-dashboard-completeness.png",
+    "native-openbb-pagination-error.png",
+    "research-role-denied.png",
+    "native-openbb-gateway-offline.png",
+    "native-openbb-gateway-restarted.png",
+    "native-terminal-openbb-stopped.png",
+    "native-openbb-rollback-restored.png"
+  ],
+  "execution_enabled": false,
+  "alpaca_fixture_source_label": "unknown",
+  "feeds": ["sip", "opra"]
+}
+EOF
+    then
+      log_phase "PASS: scoped OpenBB E2E project stopped and its disposable volumes removed"
+    else
+      cleanup_failed=1
+      status=1
+      rm -f "${ARTIFACT_DIR}/runtime-result.json"
+      log_phase "FAIL: cleanup was verified, but the final runtime result could not be recorded"
+    fi
   else
     if [[ ${cleanup_failed} -ne 0 && ${status} -eq 0 ]]; then status=1; fi
     if [[ ${cleanup_failed} -ne 0 ]]; then
@@ -116,9 +165,6 @@ cleanup() {
       log_phase "PASS: scoped OpenBB E2E cleanup verified clean after failed test run"
     fi
   fi
-  if [[ -n "${ENV_FILE}" && -f "${ENV_FILE}" ]]; then rm -f "${ENV_FILE}"; fi
-  if [[ -n "${STATE_FILE}" && -f "${STATE_FILE}" ]]; then rm -f "${STATE_FILE}"; fi
-  if [[ -n "${MAIN_STATE_FILE}" && -f "${MAIN_STATE_FILE}" ]]; then rm -f "${MAIN_STATE_FILE}"; fi
   exit "${status}"
 }
 trap cleanup EXIT
@@ -358,8 +404,12 @@ compose_e2e up --detach --no-build --wait --wait-timeout 120 \
 
 log_phase "Simulate a broken image upgrade, reject its failed healthcheck, then restore the saved exact image archive"
 compose_e2e stop openbb-research-ingress openbb-lite
+INGRESS_CONTAINER_ID="$(compose_e2e ps --all -q openbb-research-ingress)"
+test -n "${INGRESS_CONTAINER_ID}"
+BROKEN_UPGRADE_IMAGE_ID="$(docker inspect --format '{{.Image}}' "${INGRESS_CONTAINER_ID}")"
+docker image inspect "${BROKEN_UPGRADE_IMAGE_ID}" >/dev/null
 ROLLBACK_TAG_MUTATED=1
-docker image tag nginx:1.29.4-alpine "${LITE_IMAGE}"
+docker image tag "${BROKEN_UPGRADE_IMAGE_ID}" "${LITE_IMAGE}"
 compose_e2e --profile openbb up --detach --no-build --no-deps --force-recreate openbb-lite
 
 broken_status=""
@@ -378,6 +428,7 @@ RESTORED_IMAGE_ID="$(docker image inspect --format '{{.Id}}' "${LITE_IMAGE}")"
 test "${RESTORED_IMAGE_ID}" = "${LITE_IMAGE_ID}"
 ROLLBACK_TAG_MUTATED=0
 printf '%s\n' "restored_image_id=${RESTORED_IMAGE_ID}" | tee -a "${RUN_LOG}"
+printf '%s\n' "broken_upgrade_image_id=${BROKEN_UPGRADE_IMAGE_ID}" | tee -a "${RUN_LOG}"
 
 compose_e2e --profile openbb up --detach --no-build --no-deps --wait --wait-timeout 120 \
   openbb-lite openbb-research-ingress
@@ -392,26 +443,4 @@ run_logged "Verify native widgets and unknown-source market rows after image rol
     OPENBB_E2E_SCENARIO=rollback-restored \
     npm --prefix apps/openterminal run test:e2e:openbb:recovery
 
-cat >"${ARTIFACT_DIR}/runtime-result.json" <<EOF
-{
-  "result": "passed",
-  "compose_project": "${PROJECT_NAME}",
-  "lite_image": "${LITE_IMAGE}",
-  "docker_image_id": "${LITE_IMAGE_ID}",
-  "local_repo_digest": "$(cat "${ARTIFACT_DIR}/openbb-lite-compose-image-repodigest.txt")",
-  "image_archive": "${IMAGE_ARCHIVE}",
-  "image_archive_sha256": "$(cut -d ' ' -f 1 "${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar.sha256")",
-  "browser_evidence": [
-    "native-openbb-mock-dashboard.png",
-    "native-openbb-pagination-error.png",
-    "research-role-denied.png",
-    "native-openbb-gateway-offline.png",
-    "native-openbb-gateway-restarted.png",
-    "native-openbb-rollback-restored.png"
-  ],
-  "execution_enabled": false,
-  "alpaca_fixture_source_label": "unknown",
-  "feeds": ["sip", "opra"]
-}
-EOF
-log_phase "All native OpenBB runtime, fail-closed ingress, Rust recovery, core independence, and image rollback checks passed"
+log_phase "E2E assertions completed; the EXIT trap will record PASS only after cleanup verification"
