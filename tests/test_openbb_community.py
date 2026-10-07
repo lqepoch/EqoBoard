@@ -35,7 +35,7 @@ class OpenBBCommunityPatchTests(unittest.TestCase):
         paths = {change["path"].as_posix() for change in RUNNER.parse_patch(PATCH_PATH.read_bytes())}
         self.assertEqual(paths, set(manifest["preimages"]))
         self.assertEqual(paths, set(manifest["postimages"]))
-        self.assertEqual(len(paths), 36)
+        self.assertEqual(len(paths), 40)
 
     def test_patch_does_not_publish_upstream_enterprise_license_key(self) -> None:
         patch = PATCH_PATH.read_text(encoding="utf-8")
