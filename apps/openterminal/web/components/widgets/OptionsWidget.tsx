@@ -1,11 +1,12 @@
 "use client";
 
 import {useEffect,useMemo,useRef,useState} from "react";
-import {useQuery,useQueryClient} from "@tanstack/react-query";
+import {useQuery} from "@tanstack/react-query";
 import {AgGridReact} from "ag-grid-react";
 import {AllCommunityModule,ModuleRegistry,themeQuartz,type CellClickedEvent,type ColDef,type ColGroupDef} from "ag-grid-community";
 import {apiGet,fmt} from "../../lib/api";
 import {useTerminal,useWidgetSymbol,type WidgetInstance} from "../../store/terminal";
+import {useMarket} from "../../store/market";
 import type {EqoChain} from "../../lib/eqo-market";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -65,13 +66,12 @@ const columnDefs:Array<ColDef<Row>|ColGroupDef<Row>>=[
 export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const symbol=useWidgetSymbol(widget);
   const [expiry,setExpiry]=useState(currentNYDate);
-  const [connected,setConnected]=useState(false);
   const [subscriptionError,setSubscriptionError]=useState<string|null>(null);
   const [selected,setSelected]=useState<Contract|null>(null);
   const selectOptionLeg=useTerminal(s=>s.selectOptionLeg);
   const consumerId=useRef<string|null>(null);
   const grid=useRef<AgGridReact<Row>>(null);
-  const queryClient=useQueryClient();
+  const connected=useMarket(s=>s.connected);
   const {data,error,isFetching}=useQuery({
     queryKey:["eqo-opra",symbol,expiry],
     queryFn:()=>apiGet<EqoChain>("/api/options/"+encodeURIComponent(symbol)+"?expiry="+encodeURIComponent(expiry)),
@@ -111,19 +111,12 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
     return()=>{alive=false;clearInterval(timer);void refresh([]);};
   },[data]);
   useEffect(()=>{
-    const events=new EventSource("/api/eqo/live");
-    events.onopen=()=>setConnected(true);
-    events.onerror=()=>setConnected(false);
-    events.onmessage=e=>{
-      let batch:MarketEvent[];
-      try{batch=JSON.parse(e.data) as MarketEvent[];}catch{return;}
-      if(!Array.isArray(batch))return;
-      if(batch.some(x=>x.kind==="feed_status"&&x.state==="resync_required"))
-        void queryClient.invalidateQueries({queryKey:["eqo-opra",symbol,expiry]});
+    return useMarket.subscribe((state,previous)=>{
+      if(state.revision===previous.revision)return;
       const api=grid.current?.api;
       if(!api)return;
       const updates=new Map<number,Row>();
-      for(const item of batch){
+      for(const item of state.lastBatch){
         if(item.kind!=="option_quote")continue;
         const found=index.get(item.symbol);
         if(!found)continue;
@@ -136,9 +129,8 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
         }});
       }
       if(updates.size)api.applyTransactionAsync({update:[...updates.values()]});
-    };
-    return()=>{events.close();setConnected(false);};
-  },[index,queryClient,symbol,expiry]);
+    });
+  },[index]);
   function onCellClick(e:CellClickedEvent<Row>){
     const side=e.column.getColId().split(".")[0];
     if((side==="call"||side==="put")&&e.data?.[side]){

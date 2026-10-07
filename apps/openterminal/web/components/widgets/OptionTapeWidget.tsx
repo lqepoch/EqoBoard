@@ -1,8 +1,9 @@
 "use client";
 
-import {useEffect,useState} from "react";
+import {useMemo} from "react";
 import {fmt} from "../../lib/api";
 import {useWidgetSymbol,type WidgetInstance} from "../../store/terminal";
+import {useMarket} from "../../store/market";
 
 type Trade={kind:"option_trade";symbol:string;price:number;size:number;timestamp:string};
 function occRoot(symbol:string){return symbol.length>15?symbol.slice(0,-15):"";}
@@ -14,24 +15,9 @@ function et(ts:string){
 }
 export default function OptionTapeWidget({widget}:{widget:WidgetInstance}){
   const symbol=useWidgetSymbol(widget);
-  const [trades,setTrades]=useState<Trade[]>([]);
-  const [connected,setConnected]=useState(false);
-  useEffect(()=>{
-    setTrades([]);
-    const source=new EventSource("/api/eqo/live");
-    source.onopen=()=>setConnected(true);
-    source.onerror=()=>setConnected(false);
-    source.onmessage=e=>{
-      let batch:unknown;
-      try{batch=JSON.parse(e.data);}catch{return;}
-      if(!Array.isArray(batch))return;
-      const incoming=batch.filter((x):x is Trade=>
-        Boolean(x)&&typeof x==="object"&&(x as {kind?:string}).kind==="option_trade"&&
-        occRoot((x as Trade).symbol)===symbol);
-      if(incoming.length)setTrades(old=>[...incoming.reverse(),...old].slice(0,150));
-    };
-    return()=>source.close();
-  },[symbol]);
+  const connected=useMarket(s=>s.connected);
+  const allTrades=useMarket(s=>s.optionTrades);
+  const trades=useMemo(()=>allTrades.filter(t=>occRoot(t.symbol)===symbol).slice(0,150),[allTrades,symbol]);
   return <div className="h-full min-h-0 flex flex-col">
     <div className="flex justify-between px-2 py-1 border-b border-[#262626] text-[10px]">
       <span className="amber">OPRA TRADE TAPE · {symbol}</span>
