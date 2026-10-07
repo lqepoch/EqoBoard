@@ -141,9 +141,21 @@ function rowsFor(response: CapturedResponse | undefined, route: string) {
 }
 
 function isValidRfc3339Timestamp(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0 &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
-    Number.isFinite(Date.parse(value));
+  if (typeof value !== "string" || value.trim().length === 0) return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  if (!daysInMonth || day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) return false;
+  if (match[8] && (Number(match[9]) > 23 || Number(match[10]) > 59)) return false;
+  return Number.isFinite(Date.parse(value));
 }
 
 async function latestAsOfValues(captured: ReturnType<typeof captureJsonResponses>, route: string, since: number) {
@@ -316,6 +328,8 @@ test("research origin gates Lite, isolates terminal cookies, and exposes only su
 });
 
 test("native OpenBB Lite login adds and loads all three EqoBoard widgets without source fallback", async ({ page, request }) => {
+  // Includes native onboarding, widget polling, and bounded pagination/denial/recovery phases.
+  test.setTimeout(300_000);
   const diagnostics = collectPageDiagnostics(page);
   activeNativeDiagnostics = diagnostics;
   const browserCalls: string[] = [];
@@ -528,10 +542,18 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
     return Array.isArray(response?.body) && response.body.some((row: Record<string, unknown>) => row.symbol === "QQQ");
   }, { timeout: 45_000, message: "Pagination phase did not receive completed healthy QQQ stock rows" }).toBe(true);
   await captured.settle();
-  await expect(barsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
-  await expect(optionsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
-  await expect(barsWidget.getByRole("gridcell")).toHaveCount(0);
-  await expect(optionsWidget.getByRole("gridcell")).toHaveCount(0);
+  for (const [widget, route] of [[barsWidget, "bars"], [optionsWidget, "options"]] as const) {
+    const response = await captured.latestSettled(
+      (item) => item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 502,
+      paginationResponseStart,
+    );
+    expect(response?.body).toMatchObject({ error: "market_data_truncated", pages_fetched: 5, has_more: true });
+    const detail = (response?.body as { detail?: string } | undefined)?.detail;
+    expect(typeof detail === "string" && detail.length > 0).toBe(true);
+    await expect(widget.getByTestId("results-not-found")).toBeVisible();
+    await expect(widget.getByText(detail!, { exact: true })).toBeVisible();
+    await expect(widget.getByRole("gridcell")).toHaveCount(0);
+  }
   const paginationStockSymbols = stocksWidget.locator('.ag-cell[col-id="symbol"]');
   await expect.poll(async () =>
     (await paginationStockSymbols.allTextContents()).some((text) => text.trim() === "QQQ"),
@@ -569,14 +591,16 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
     [barsWidget, "bars"],
     [optionsWidget, "options"],
   ] as const) {
-    await expect(widget.getByTestId("results-not-found")).toContainText(/status code 403/i);
-    await expect(widget.getByRole("gridcell")).toHaveCount(0);
     const response = await captured.latestSettled((item) =>
       item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 403,
       deniedResponseStart,
     );
     expect(response?.body).toMatchObject({ error: "market_data_error" });
-    expect((response?.body as { detail?: string } | undefined)?.detail).toContain("403");
+    const detail = (response?.body as { detail?: string } | undefined)?.detail;
+    expect(detail).toContain("403");
+    await expect(widget.getByTestId("results-not-found")).toBeVisible();
+    await expect(widget.getByText(detail!, { exact: true })).toBeVisible();
+    await expect(widget.getByRole("gridcell")).toHaveCount(0);
   }
   const deniedMetrics = await (await request.get(`${MOCK_ORIGIN}/__test/metrics`, { headers: { "x-e2e-control": CONTROL_TOKEN } })).json();
   const deniedFixtureCalls = deniedMetrics.calls.slice(deniedFixtureCallStart).filter((call: { path: string }) => !call.path.startsWith("/__test/"));
