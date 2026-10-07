@@ -6,7 +6,10 @@ use axum::{
     },
     http::{header, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{get, post},
     Json, Router,
 };
@@ -14,10 +17,12 @@ use chrono::{Datelike, NaiveDate, Utc};
 use eqo_alpaca_data::{AlpacaData, DataError};
 use eqo_domain::{parse_occ, MarketEvent};
 use eqo_execution::{BrokerRouter, OrderError, OrderIntent, PreviewStore, RiskPolicy};
+use futures_util::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
+    convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
@@ -167,6 +172,7 @@ struct BarsQuery {
     symbol: String,
     timeframe: Option<String>,
     limit: Option<usize>,
+    days: Option<i64>,
 }
 async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
     let Some(data) = &state.data else {
@@ -175,7 +181,8 @@ async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery
     let symbol = query.symbol.to_uppercase();
     let timeframe = query.timeframe.unwrap_or_else(|| "1Min".into());
     if !safe_symbol(&symbol)
-        || !["1Min", "5Min", "15Min", "1Hour", "1Day"].contains(&timeframe.as_str())
+        || !["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week", "1Month"]
+            .contains(&timeframe.as_str())
     {
         return fail(
             StatusCode::BAD_REQUEST,
@@ -187,7 +194,11 @@ async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery
     if !(1..=1000).contains(&limit) {
         return fail(StatusCode::BAD_REQUEST, "invalid_limit", "1..1000");
     }
-    match data.stock_bars(&symbol, &timeframe, limit).await {
+    let days = query.days.unwrap_or(14);
+    if !(1..=11000).contains(&days) {
+        return fail(StatusCode::BAD_REQUEST, "invalid_days", "1..11000");
+    }
+    match data.stock_bars(&symbol, &timeframe, limit, days).await {
         Ok(bars) => {
             Json(json!({"symbol":symbol,"timeframe":timeframe,"feed":state.stock_feed,"bars":bars}))
                 .into_response()
@@ -381,7 +392,8 @@ async fn openbb_bars(State(state): State<AppState>, Query(query): Query<BarsQuer
     let symbol = query.symbol.to_uppercase();
     let timeframe = query.timeframe.unwrap_or_else(|| "1Min".to_owned());
     if !safe_symbol(&symbol)
-        || !["1Min", "5Min", "15Min", "1Hour", "1Day"].contains(&timeframe.as_str())
+        || !["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week", "1Month"]
+            .contains(&timeframe.as_str())
     {
         return fail(
             StatusCode::BAD_REQUEST,
@@ -389,7 +401,16 @@ async fn openbb_bars(State(state): State<AppState>, Query(query): Query<BarsQuer
             "invalid symbol or timeframe",
         );
     }
-    match data.stock_bars(&symbol, &timeframe, 200).await {
+    let limit = query.limit.unwrap_or(200);
+    let days = query.days.unwrap_or(14);
+    if !(1..=1000).contains(&limit) || !(1..=11000).contains(&days) {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_window",
+            "limit 1..1000 and days 1..11000 required",
+        );
+    }
+    match data.stock_bars(&symbol, &timeframe, limit, days).await {
         Ok(bars) => Json(json!({
             "symbol": symbol,
             "feed": state.stock_feed,
@@ -543,6 +564,58 @@ async fn stream_to_browser(mut ws: WebSocket, mut rx: broadcast::Receiver<Market
             },
         }
     }
+}
+
+async fn market_sse(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut timer = tokio::time::interval(Duration::from_millis(50));
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let events = stream::unfold(
+        (
+            state.broadcasts.subscribe(),
+            Vec::<MarketEvent>::with_capacity(256),
+            timer,
+        ),
+        |(mut rx, mut batch, mut flush)| async move {
+            loop {
+                tokio::select! {
+                    received = rx.recv() => match received {
+                        Ok(event) => {
+                            if batch.len() >= 512 {
+                                batch.clear();
+                                batch.push(MarketEvent::FeedStatus {
+                                    feed: "all".into(),
+                                    state: "resync_required".into(),
+                                    timestamp: Utc::now().to_rfc3339(),
+                                });
+                            }
+                            batch.push(event);
+                        },
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            batch.clear();
+                            batch.push(MarketEvent::FeedStatus {
+                                feed: "all".into(),
+                                state: "resync_required".into(),
+                                timestamp: Utc::now().to_rfc3339(),
+                            });
+                        },
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    },
+                    _ = flush.tick(), if !batch.is_empty() => break,
+                }
+                if batch.len() >= 256 {
+                    break;
+                }
+            }
+            let payload = serde_json::to_string(&batch).unwrap_or_else(|_| "[]".into());
+            Some((
+                Ok(Event::default().data(payload)),
+                (rx, Vec::with_capacity(256), flush),
+            ))
+        },
+    );
+    Sse::new(events).keep_alive(KeepAlive::default())
 }
 
 #[derive(Deserialize)]
@@ -726,6 +799,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(prune_leases(state.clone()));
     let api = Router::new()
         .route("/api/v1/status", get(status))
+        .route("/api/v1/stream/sse", get(market_sse))
         .route("/api/v1/stocks/snapshots", get(stock_snapshots))
         .route("/api/v1/stocks/bars", get(stock_bars))
         .route("/api/v1/options/chain", get(option_chain))
