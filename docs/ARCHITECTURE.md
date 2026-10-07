@@ -41,3 +41,10 @@ Browser 订单意图 → 风险预览(60秒一次性ID) → 明确确认 → Bro
 Foundation（本次）：启动、行情快照、WS、只读页面、无凭据 CI、适配器契约、风险门闩与只读外部 smoke。
 Paper MVP（后续）：统一订单生命周期、IB Gateway/Schwab SDK 端到端 Paper、对账、断连/幂等恢复、重放测试。
 Production：SLO、集中观测、分布式订阅协调、OIDC、审计 WORM、限额及审批、灰度/回滚、secret rotation、容灾；通过市场数据授权复核。
+
+
+## 成熟前端复用（2026-10-07）
+
+OpenTerminal MIT 源码移植层是 EqoBoard React 主 Workspace 的权威 Widget registry、布局持久化和 Command Palette；StockChart 使用 Lightweight Charts，OptionsChain 使用 AG Grid Community，IV Skew 使用 ECharts。全部读 Rust SIP/OPRA。
+
+OpenBB Workspace（官方源码 2026-10-01 已归档，Apache-2.0）作为**可选、可替换的第二分析界面**，通过本 Rust Gateway 的 /widgets.json、/apps.json 和 /openbb/v1/ 只读端点接入，不持有 Alpaca 凭据，不拥有下单权限。详见 integrations/openbb/README.md。

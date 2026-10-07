@@ -11,3 +11,4 @@
 7. AI 子 Agent 划分：行情、交易、前端、测试与运维，各 Agent 只修改所属路径；跨域契约变更由主 Agent 协调。
 8. 修改文件前检查所属目录 AGENTS.md 和 .agents/skills/**/SKILL.md。确保 GitHub Actions 全部通过再合并。
 9. 禁止使用真实交易密钥或对生产账号执行自动下单测试；外部 smoke 只读。
+10. Workspace 必须复用已引入的 OpenTerminal MIT Widget 系统（apps/web/src/upstream/openterminal），期权链复用 AG Grid，OpenBB 仅经官方 Custom Backend 接口共享 Rust 行情；不要另写并行布局框架。上游变更先核 third_party/upstreams.lock.json、许可证、NOTICE 与 docs/UPSTREAM_SOURCES.md。
