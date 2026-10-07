@@ -1,6 +1,6 @@
 import { configureMocks, loginWithOidc, metrics, resetDownstream, test, expect } from "./fixtures";
 import type { Route } from "@playwright/test";
-import { optionPutSymbol } from "./market-test-data";
+import { optionPutSymbol, sipSnapshotResponse } from "./market-test-data";
 
 const contractSymbol = optionPutSymbol;
 
@@ -12,6 +12,9 @@ function feedStatus(
 ) {
   return {
     kind: "feed_status",
+    gateway_instance_id: "gateway-e2e-offline-1",
+    source_mode: "offline_mock",
+    source_label: "OFFLINE MOCK — NOT MARKET DATA",
     feed: "options",
     transport: "connected",
     auth: "authenticated",
@@ -46,10 +49,12 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
 
   const baseMs = Date.now();
   const snapshotTime = new Date(baseMs - 20_000).toISOString();
-  const liveTime = new Date(baseMs).toISOString();
-  const olderTime = new Date(baseMs - 1_000).toISOString();
   const contract = {
     symbol: contractSymbol,
+    gateway_instance_id: "gateway-e2e-offline-1",
+    source_mode: "offline_mock",
+    source_label: "OFFLINE MOCK — NOT MARKET DATA",
+    received_at: new Date().toISOString(),
     right: "put",
     strike: 600,
     bid: 1.25,
@@ -76,24 +81,30 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
 
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: /OPTIONS/ }).click();
-  const optionPanels = page.locator(".terminal-panel").filter({ hasText: "ALPACA OPRA QUOTES" });
+  const optionPanels = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ });
   await expect(optionPanels).toHaveCount(2);
   await expect(optionPanels.first()).toContainText("SUBSCRIPTION AWAITING ACK");
+  await expect(optionPanels.first()).toContainText("OPRA quotes · source unknown");
   await expect(optionPanels.first()).toContainText("model as-of unknown");
 
   const secondTab = await context.newPage();
   await secondTab.goto("/");
-  await expect(secondTab.locator(".terminal-panel").filter({ hasText: "ALPACA OPRA QUOTES" })).toHaveCount(2);
+  await expect(secondTab.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ })).toHaveCount(2);
   await expect.poll(async () => {
     const seen = await metrics(request);
     return seen.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
       entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).length;
   }, { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
 
+  const liveTime = new Date().toISOString();
+  const olderTime = new Date(Date.parse(liveTime) - 1_000).toISOString();
   await configureMocks(request, {
     sseEvents: [
       feedStatus(3, [contractSymbol], liveTime, new Date(Date.now() + 30_000).toISOString()),
       {
+        gateway_instance_id: "gateway-e2e-offline-1",
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
         kind: "option_quote", symbol: contractSymbol, bid: 1.5, ask: 1.6,
         bid_size: 8, ask_size: 9, event_time: liveTime,
         received_at: new Date().toISOString(), connection_epoch: 8, local_sequence: 4,
@@ -101,7 +112,7 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
     ],
   });
   const firstPanel = optionPanels.first();
-  await expect(firstPanel).toContainText("FRESH · LIVE", { timeout: 8_000 });
+  await expect(firstPanel).toContainText("FRESH · OFFLINE MOCK", { timeout: 8_000 });
   const bidCell = firstPanel.locator('.ag-row[row-index="0"] [col-id="put.bid"]');
   await expect(bidCell).toContainText("1.50");
 
@@ -109,6 +120,9 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
     sseEvents: [
       feedStatus(6, [contractSymbol], liveTime, new Date(Date.now() + 2_000).toISOString()),
       {
+        gateway_instance_id: "gateway-e2e-offline-1",
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
         kind: "option_quote", symbol: contractSymbol, bid: 0.75, ask: 0.85,
         bid_size: 1, ask_size: 1, event_time: olderTime,
         received_at: new Date().toISOString(), connection_epoch: 8, local_sequence: 5,
@@ -132,6 +146,10 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
   await expect(firstPanel).toContainText("Browser SSE connected");
 
   let observed = await metrics(request);
+  let optionLeases = observed.gateway.subscriptions.filter((entry: { path: string }) =>
+    entry.path.endsWith("/subscriptions/options"));
+  const emptyCleanupCountBeforeSnapshotPoll = optionLeases.filter((entry: { body: { symbols?: string[] } }) =>
+    (entry.body.symbols?.length ?? 0) === 0).length;
   const optionChainRequests = observed.gateway.requests["/api/v1/options/chain"] ?? 0;
   // The normal 15-second snapshot poll returns new contract objects without
   // changing membership. It must not issue an empty cleanup in either tab.
@@ -139,28 +157,37 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
     observed = await metrics(request);
     return observed.gateway.requests["/api/v1/options/chain"] ?? 0;
   }, { timeout: 18_000 }).toBeGreaterThan(optionChainRequests);
-  let optionLeases = observed.gateway.subscriptions.filter((entry: { path: string }) =>
+  optionLeases = observed.gateway.subscriptions.filter((entry: { path: string }) =>
     entry.path.endsWith("/subscriptions/options"));
   expect(optionLeases.length).toBeGreaterThanOrEqual(4);
-  expect(optionLeases.every((entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) > 0)).toBe(true);
-  expect(optionLeases.every((entry: { body: { symbols?: string[] } }) =>
+  const emptyLeaseCountAfterSnapshotPoll = optionLeases.filter((entry: { body: { symbols?: string[] } }) =>
+    (entry.body.symbols?.length ?? 0) === 0).length;
+  expect(emptyLeaseCountAfterSnapshotPoll).toBe(emptyCleanupCountBeforeSnapshotPoll);
+  const nonEmptyOptionLeases = optionLeases.filter((entry: { body: { symbols?: string[] } }) =>
+    (entry.body.symbols?.length ?? 0) > 0);
+  expect(nonEmptyOptionLeases.every((entry: { body: { symbols?: string[] } }) =>
     entry.body.symbols?.length === 1 && entry.body.symbols[0] === contractSymbol)).toBe(true);
 
-  const secondTabOptions = secondTab.locator(".terminal-panel").filter({ hasText: "ALPACA OPRA QUOTES" });
+  const secondTabOptions = secondTab.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ });
+  const emptyCleanupCountBeforeTabClose = optionLeases.filter((entry: { body: { symbols?: string[] } }) =>
+    (entry.body.symbols?.length ?? 0) === 0).length;
   await secondTabOptions.nth(0).locator(".panel-title button").last().click();
   await secondTabOptions.nth(0).locator(".panel-title button").last().click();
   await expect.poll(async () => {
     observed = await metrics(request);
     return observed.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
       entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) === 0).length;
-  }, { timeout: 5_000 }).toBe(2);
+  }, { timeout: 5_000 }).toBe(emptyCleanupCountBeforeTabClose + 2);
   optionLeases = observed.gateway.subscriptions.filter((entry: { path: string }) =>
     entry.path.endsWith("/subscriptions/options"));
-  const firstConsumers = optionLeases.filter((entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) > 0);
-  const releasedConsumer = optionLeases.find((entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) === 0)!;
-  const originalLease = firstConsumers.find((entry: { body: { consumer_id: string } }) =>
-    entry.body.consumer_id === releasedConsumer.body.consumer_id)!;
-  expect(releasedConsumer.body.generation).toBeGreaterThan(originalLease.body.generation);
+  const releasedConsumers = optionLeases.filter((entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) === 0)
+    .slice(emptyCleanupCountBeforeTabClose);
+  for (const releasedConsumer of releasedConsumers) {
+    const originalLease = optionLeases.find((entry: { body: { consumer_id: string; generation: number; symbols?: string[] } }) =>
+      entry.body.consumer_id === releasedConsumer.body.consumer_id &&
+      (entry.body.symbols?.length ?? 0) > 0 && entry.body.generation < releasedConsumer.body.generation)!;
+    expect(releasedConsumer.body.generation).toBeGreaterThan(originalLease.body.generation);
+  }
 
   // Reorder a real browser request at the Next BFF boundary: hold the cleanup
   // generated by an expiry change until its newer non-empty renewal has reached
@@ -218,69 +245,58 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
     await page.unroute("**/api/eqo/options/subscribe", holdOldCleanup);
   }
 
+  observed = await metrics(request);
+  optionLeases = observed.gateway.subscriptions.filter((entry: { path: string }) =>
+    entry.path.endsWith("/subscriptions/options"));
+  const emptyCleanupCountBeforeFirstPanelClose = optionLeases.filter((entry: { body: { symbols?: string[] } }) =>
+    (entry.body.symbols?.length ?? 0) === 0).length;
   await firstPanel.locator(".panel-title button").last().click();
   await expect.poll(async () => {
     observed = await metrics(request);
     return observed.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
       entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) === 0).length;
-  }, { timeout: 5_000 }).toBe(4);
+  }, { timeout: 5_000 }).toBe(emptyCleanupCountBeforeFirstPanelClose + 1);
   optionLeases = observed.gateway.subscriptions.filter((entry: { path: string }) =>
     entry.path.endsWith("/subscriptions/options"));
-  const emptyLeases = optionLeases.filter((entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) === 0);
+  const emptyLeases = optionLeases.filter((entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) === 0)
+    .slice(emptyCleanupCountBeforeFirstPanelClose);
   for (const cleanup of emptyLeases) {
-    const previous = optionLeases.find((entry: { body: { consumer_id: string; symbols?: string[] } }) =>
-      entry.body.consumer_id === cleanup.body.consumer_id && (entry.body.symbols?.length ?? 0) > 0)!;
+    const previous = optionLeases.find((entry: { body: { consumer_id: string; generation: number; symbols?: string[] } }) =>
+      entry.body.consumer_id === cleanup.body.consumer_id &&
+      (entry.body.symbols?.length ?? 0) > 0 && entry.body.generation < cleanup.body.generation)!;
     expect(cleanup.body.generation).toBeGreaterThan(previous.body.generation);
   }
 });
 
 test("a browser stream outage cannot pin an old U.S. tick over a newer REST SIP snapshot", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
-  const now = Date.now();
-  const snapshotTime = new Date(now - 60_000).toISOString();
-  const liveTime = new Date(now).toISOString();
-  const refreshedTime = new Date(now).toISOString();
-  const quote = (price: number, lastAsOf: string) => ({
-    symbol: "QQQ",
-    name: "Invesco QQQ Trust",
-    price,
-    change: price - 99,
-    changePercent: ((price - 99) / 99) * 100,
-    open: 99,
-    high: price,
-    low: 99,
-    previousClose: 99,
-    bid: price - 0.01,
-    ask: price + 0.01,
-    volume: 100_000,
-    avgVolume: null,
-    marketCap: null,
-    pe: null,
-    eps: null,
-    dividendYield: null,
-    week52High: null,
-    week52Low: null,
-    beta: null,
-    sharesOutstanding: null,
-    currency: "USD",
-    exchange: "NASDAQ",
-    marketState: null,
-    source: "mock-fixture/SIP",
-    asOf: lastAsOf,
-    quoteAt: lastAsOf,
-    tradeAt: lastAsOf,
-    dailyBarAt: lastAsOf,
-    previousDailyBarAt: snapshotTime,
-    lastAsOf,
-    lastBasis: "trade",
-    watermarks: [],
-  });
+  const gatewayInstanceId = "gateway-e2e-outage-1";
+  const offlineSource = { sourceMode: "offline_mock" as const, sourceLabel: "OFFLINE MOCK — NOT MARKET DATA" };
+  const snapshotTime = new Date(Date.now() - 20_000).toISOString();
   await configureMocks(request, {
-    quotes: [quote(100, snapshotTime)],
+    snapshots: sipSnapshotResponse(100, snapshotTime, 12, 0, { gatewayInstanceId, ...offlineSource }),
     sseDisconnectAfterMs: 12_000,
+    sseEvents: [],
+  });
+
+  let streamRequests = 0;
+  await page.route("**/api/eqo/live", async (route) => {
+    streamRequests += 1;
+    if (streamRequests > 1) return route.abort();
+    return route.continue();
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const quotePanel = page.locator(".terminal-panel").filter({ hasText: /Quote\s*QQQ/ }).first();
+  await expect(quotePanel).toContainText("Browser SSE connected", { timeout: 15_000 });
+
+  const liveTime = new Date().toISOString();
+  await configureMocks(request, {
     sseEvents: [
       {
         kind: "feed_status",
+        gateway_instance_id: gatewayInstanceId,
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
         feed: "stocks",
         transport: "connected",
         auth: "authenticated",
@@ -291,43 +307,39 @@ test("a browser stream outage cannot pin an old U.S. tick over a newer REST SIP 
         coverage: { desired_count: 1, confirmed_count: 1, limit: null, complete: true },
         connection_epoch: 12,
         local_sequence: 1,
-        received_at: new Date(now).toISOString(),
+        received_at: liveTime,
         last_error: null,
         decode_error_count: 0,
         freshness: { "QQQ:trade": {
           state: "fresh", as_of: liveTime, age_ms: 1_000,
-          fresh_until: new Date(now + 30_000).toISOString(),
+          fresh_until: new Date(Date.now() + 30_000).toISOString(),
         } },
       },
       {
         kind: "stock_trade",
+        gateway_instance_id: gatewayInstanceId,
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
         symbol: "QQQ",
         price: 101,
         size: 10,
         event_time: liveTime,
-        received_at: new Date(now).toISOString(),
+        received_at: liveTime,
         connection_epoch: 12,
         local_sequence: 2,
       },
     ],
   });
-
-  let streamRequests = 0;
-  await page.route("**/api/eqo/live", async (route) => {
-    streamRequests += 1;
-    if (streamRequests > 1) return route.abort();
-    return route.continue();
-  });
-  await page.goto("/", { waitUntil: "domcontentloaded" });
-  const quotePanel = page.locator(".terminal-panel").filter({ hasText: "Invesco QQQ Trust" });
-  await expect(quotePanel).toContainText("FRESH · LIVE", { timeout: 15_000 });
+  await expect(quotePanel).toContainText("PRICE FRESH · OFFLINE MOCK", { timeout: 8_000 });
   await expect(quotePanel).toContainText("101.00");
 
   await expect(quotePanel).toContainText("BROWSER DISCONNECTED", { timeout: 20_000 });
-  await configureMocks(request, { quotes: [quote(105, refreshedTime)] });
-  await expect(quotePanel).toContainText("105.00", { timeout: 22_000 });
+  const refreshedTime = new Date().toISOString();
+  await configureMocks(request, { snapshots: sipSnapshotResponse(105, refreshedTime, 12, 2, {
+    gatewayInstanceId, ...offlineSource,
+  }) });
+  await expect(quotePanel).toContainText("105.00", { timeout: 20_000 });
   await expect(quotePanel).toContainText("PRICE BROWSER DISCONNECTED · REST snapshot");
-  await expect(quotePanel).not.toContainText("FRESH · LIVE");
   expect(streamRequests).toBeGreaterThan(1);
   expect((await metrics(request)).gateway.requests["/api/v1/orders/submit"]).toBeUndefined();
 });

@@ -6,7 +6,7 @@ import {AgGridReact} from "ag-grid-react";
 import {AllCommunityModule,ModuleRegistry,themeQuartz,type CellClickedEvent,type ColDef,type ColGroupDef} from "ag-grid-community";
 import {apiGet,fmt} from "../../lib/api";
 import {useTerminal,useWidgetSymbol,type WidgetInstance} from "../../store/terminal";
-import {compareRfc3339Nanos,marketCondition,statusText,useMarket,type OptionSnapshot} from "../../store/market";
+import {compareRfc3339Nanos,marketCondition,marketStatusTone,statusText,useMarket,type OptionSnapshot} from "../../store/market";
 import type {EqoChain} from "../../lib/eqo-market";
 import MarketFeedStatus from "./MarketFeedStatus";
 
@@ -85,11 +85,20 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const optionSnapshots=useMarket(s=>s.optionSnapshots);
   const setSnapshotWatermark=useMarket(s=>s.setSnapshotWatermark);
   const setOptionSnapshot=useMarket(s=>s.setOptionSnapshot);
-  const {data,error,isFetching}=useQuery({
+  const {data:responseData,error,isFetching}=useQuery({
     queryKey:["eqo-opra",symbol,expiry],
-    queryFn:()=>apiGet<EqoChain>("/api/options/"+encodeURIComponent(symbol)+"?expiry="+encodeURIComponent(expiry)),
+    queryFn:async()=>{
+      const requestGeneration=useMarket.getState().gatewayInstanceGeneration;
+      const chain=await apiGet<EqoChain>("/api/options/"+encodeURIComponent(symbol)+"?expiry="+encodeURIComponent(expiry));
+      if(!useMarket.getState().acceptsSnapshotInstance(chain.gateway_instance_id,requestGeneration))
+        throw new Error("Discarded snapshot from a retired Gateway instance");
+      return {...chain,clientGatewayInstanceGeneration:requestGeneration};
+    },
     refetchInterval:15_000,retry:1
   });
+  const gatewayInstanceId=useMarket(s=>s.gatewayInstanceId);
+  const data=responseData&&(!gatewayInstanceId||responseData.gateway_instance_id===gatewayInstanceId||
+    (responseData.source_mode!=="alpaca"&&responseData.source_mode!=="offline_mock"))?responseData:undefined;
   const subscriptionSymbols=useMemo(()=>{
     const contracts=[...(data?.calls??[]),...(data?.puts??[])];
     const center=data?.underlyingPrice;
@@ -101,6 +110,19 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const firstContract=subscriptionSymbols[0]??"";
   const firstSnapshotAsOf=useMarket(s=>firstContract?s.optionSnapshots[firstContract]?.quote_at??
     [...(data?.calls??[]),...(data?.puts??[])].find(c=>c.symbol===firstContract)?.quote_at??undefined:undefined);
+  const snapshotContractCount=useMemo(()=>new Set(
+    [...(data?.calls??[]),...(data?.puts??[])].map(contract=>contract.symbol)
+  ).size,[data]);
+  const modelMetadata=useMemo(()=>{
+    const contracts=[...(data?.calls??[]),...(data?.puts??[])];
+    const first=contracts.find(contract=>contract.greeksSource)||null;
+    const modelAsOf=contracts.reduce<string|null>((latest,contract)=>{
+      const candidate=contract.model_as_of;
+      if(!candidate)return latest;
+      return !latest||compareRfc3339Nanos(candidate,latest)===1?candidate:latest;
+    },null);
+    return {source:first?.greeksSource??"option model source unknown",asOf:modelAsOf};
+  },[data?.calls,data?.puts]);
   const quoteCondition=useMarket(s=>firstContract?
     marketCondition(s,"options",firstContract,"quote",firstSnapshotAsOf):"status-unknown");
   const rows=useMemo(()=>rowsFromChain(data,optionSnapshots,useMarket.getState()),
@@ -117,11 +139,12 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   useEffect(()=>{
     if(!data)return;
     for(const watermark of data.watermarks){
-      if(watermark.feed==="options")setSnapshotWatermark(watermark);
+      if(watermark.feed==="options")setSnapshotWatermark(watermark,data.received_at,data.clientGatewayInstanceGeneration);
     }
     const quoteWatermark=data.watermarks.find(w=>w.feed==="options"&&w.event_types.length===1&&w.event_types[0]==="quote");
     for(const contract of [...data.calls,...data.puts])setOptionSnapshot(contract,
-      quoteWatermark?.symbols.includes(contract.symbol)?quoteWatermark:null);
+      quoteWatermark?.symbols.includes(contract.symbol)?quoteWatermark:null,
+      data.received_at,data.clientGatewayInstanceGeneration);
   },[data,setOptionSnapshot,setSnapshotWatermark]);
   useEffect(()=>{
     // The first chain request has no membership yet. Do not create an empty
@@ -203,11 +226,13 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   }
   return <div className="h-full min-h-0 flex flex-col">
     <div className="flex items-center gap-2 flex-wrap px-2 py-1 border-b border-[#262626] text-[11px]">
-      <span className="amber font-semibold">ALPACA OPRA QUOTES · REST MODEL GREEKS</span>
+      <span className="amber font-semibold" data-testid="options-source-label">
+        OPRA quotes · {data?.source ?? "source unknown"} · REST model Greeks
+      </span>
       <label className="dim">到期日 <input aria-label="Option expiry" type="date" value={expiry}
         onChange={e=>setExpiry(e.target.value)}
         className="bg-[#171717] border border-[#444] px-2 py-1 text-[#ddd]" /></label>
-      <span className={quoteCondition==="fresh"?"up":"dim"}>{statusText(quoteCondition)}</span>
+      <span className={marketStatusTone(quoteCondition,feedStatus,"opra")}>{statusText(quoteCondition,feedStatus,"opra")}</span>
       <span className="dim ml-auto">{isFetching?"更新…":data?.asOf?("Gateway response "+data.asOf):"No snapshot"}</span>
     </div>
     <div className="px-2 py-1 border-b border-[#262626]">
@@ -216,9 +241,11 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
     {error&&<div role="alert" className="down p-2">OPRA: {(error as Error).message}. Check credentials/entitlement and expiry.</div>}
     {subscriptionError&&<div role="alert" className="down p-2">{subscriptionError}</div>}
     {data?.truncated&&<div className="down p-1">⚠ 期权链分页达到上限；数据不完整。</div>}
-    <div className="dim px-2 py-1 text-[9px]">
-      OPRA lease: {subscriptionSymbols.length} requested by this widget · {feedStatus?.coverage.confirmed_count??0}/{feedStatus?.coverage.desired_count??0} confirmed gateway-wide unique symbols
-      · limit {feedStatus?.coverage.limit??"unknown"} · {data?.calls.length??0}+{data?.puts.length??0} snapshot contracts
+    <div className="dim px-2 py-1 text-[9px]" data-testid="options-subscription-coverage">
+      OPRA lease: {subscriptionSymbols.length} requested by this widget · {feedStatus&&feedStatus.confirmed!==null
+        ? `${feedStatus.coverage.confirmed_count}/${feedStatus.coverage.desired_count} confirmed`
+        : `confirmed unknown${feedStatus?`/${feedStatus.coverage.desired_count} desired`:" · desired unknown"}`} gateway-wide unique symbols
+      · configured/local limit {feedStatus?.coverage.limit??"unknown"} · account entitlement unknown · {snapshotContractCount} unique snapshot contracts
       {data?.underlyingPrice===null&&" · SIP underlying unavailable; ATM ranking unavailable"}
     </div>
     <div className="flex-1 min-h-[230px]" style={{width:"100%"}}>
@@ -231,7 +258,7 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
       />
     </div>
     <div className="flex items-center justify-between px-2 py-1 border-t border-[#282828] text-[10px] dim">
-      <span>{rows.length} strikes · OPRA quote/trade stream · IV/Greeks: Alpaca REST option model · model as-of unknown · {data?.underlyingPrice==null?"underlying unavailable":"SIP underlying $"+fmt(data.underlyingPrice)} · missing Greeks stay empty</span>
+      <span>{rows.length} strikes · OPRA quote/trade stream · IV/Greeks: {modelMetadata.source} · model as-of {modelMetadata.asOf??"unknown"} · {data?.underlyingPrice==null?"underlying unavailable":"SIP underlying $"+fmt(data.underlyingPrice)} · missing Greeks stay empty</span>
       <span>{selected?selected.symbol+" · IV "+(selected.iv==null?"—":fmt(selected.iv*100,2)+"%"):"点击 CALL/PUT 单元格查看合约"}</span>
     </div>
     {selected&&<div className="flex gap-3 px-2 py-1 text-[10px] dim flex-wrap">

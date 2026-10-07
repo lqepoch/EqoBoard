@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { apiGet, fmt, fmtBig, pctClass, type Quote } from "../../lib/api";
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
-import { marketCondition, statusText, useMarket } from "../../store/market";
+import { marketCondition, marketStatusTone, statusText, useMarket } from "../../store/market";
 import Flash from "../Flash";
 import MarketFeedStatus from "./MarketFeedStatus";
 
@@ -12,14 +12,30 @@ type ShortVolume = { date: string; shortVolume: number; shortExemptVolume: numbe
 
 export default function QuoteWidget({ widget }: { widget: WidgetInstance }) {
   const symbol = useWidgetSymbol(widget);
-  const { data, error } = useQuery({
+  const { data: responseData, error } = useQuery({
     queryKey: ["quote", symbol],
-    queryFn: async () => (await apiGet<Quote[]>(`/api/quotes?symbols=${encodeURIComponent(symbol)}`))[0],
+    queryFn: async () => {
+      const requestGeneration = useMarket.getState().gatewayInstanceGeneration;
+      const quote = (await apiGet<Quote[]>(`/api/quotes?symbols=${encodeURIComponent(symbol)}`))[0];
+      if (!quote) throw new Error("Market gateway returned no snapshot");
+      const instanceId = quote.gateway_instance_id ?? quote.watermarks?.[0]?.gateway_instance_id ?? quote.watermark?.gateway_instance_id;
+      if (!useMarket.getState().acceptsSnapshotInstance(instanceId, requestGeneration)) {
+        throw new Error("Discarded snapshot from a retired Gateway instance");
+      }
+      return { ...quote, clientGatewayInstanceGeneration: requestGeneration };
+    },
     refetchInterval: 15_000,
   });
   const liveTrade = useMarket((s) => s.stockTrades[symbol]);
   const liveQuote = useMarket((s) => s.stockQuotes[symbol]);
+  const stockFeedStatus = useMarket((s) => s.feedStatus.stocks);
   const latestSnapshot = useMarket((s) => s.stockSnapshots[symbol]);
+  const gatewayInstanceId = useMarket((s) => s.gatewayInstanceId);
+  const data = responseData && (!gatewayInstanceId ||
+    (responseData.gateway_instance_id
+      ? responseData.gateway_instance_id === gatewayInstanceId
+      : responseData.source_mode !== "alpaca" && responseData.source_mode !== "offline_mock"))
+    ? responseData : undefined;
   const setSnapshotWatermark = useMarket((s) => s.setSnapshotWatermark);
   const setStockSnapshot = useMarket((s) => s.setStockSnapshot);
   const lastAsOf=latestSnapshot?.lastAsOf??(latestSnapshot?null:data?.lastAsOf??null);
@@ -29,9 +45,9 @@ export default function QuoteWidget({ widget }: { widget: WidgetInstance }) {
   useEffect(() => {
     if (!data) return;
     for (const watermark of data.watermarks ?? []) {
-      if (watermark.feed === "stocks") setSnapshotWatermark(watermark);
+      if (watermark.feed === "stocks") setSnapshotWatermark(watermark, data.received_at, data.clientGatewayInstanceGeneration);
     }
-    setStockSnapshot(data);
+    setStockSnapshot(data, data.clientGatewayInstanceGeneration);
   }, [data, setStockSnapshot, setSnapshotWatermark]);
   // FINRA's Reg SHO file only updates once a day (next-morning), so no point polling it fast.
   const { data: shortVol } = useQuery({
@@ -86,11 +102,11 @@ export default function QuoteWidget({ widget }: { widget: WidgetInstance }) {
           {quote.exchange ?? ""} · {quote.currency ?? ""} · {quote.source} · {asOf ?? "—"}
         </span>
       </div>
-      <div className={`text-[9px] mb-1 ${tradeCondition === "fresh" ? "up" : "dim"}`}>
-        PRICE {statusText(tradeCondition)} · {liveTradeReady ? "stream event time" : "REST snapshot"}
+      <div className={`text-[9px] mb-1 ${marketStatusTone(tradeCondition, stockFeedStatus, "sip")}`}>
+        PRICE {statusText(tradeCondition, stockFeedStatus, "sip")} · {liveTradeReady ? "stream event time" : "REST snapshot"}
       </div>
       <MarketFeedStatus feed="stocks" />
-      {quote.source === "Alpaca SIP" && <div className="dim text-[9px] mb-1">
+      {quote.lastBasis !== undefined && <div className="dim text-[9px] mb-1">
         SIP field times · last ({quote.lastBasis ?? "basis unknown"}): {asOf ?? "unknown"}
         · quote: {quote.quoteAt ?? "unknown"} · trade: {quote.tradeAt ?? "unknown"}
         · daily bar: {quote.dailyBarAt ?? "unknown"} · prior daily bar: {quote.previousDailyBarAt ?? "unknown"}

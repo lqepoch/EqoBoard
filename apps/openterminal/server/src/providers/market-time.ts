@@ -7,7 +7,9 @@ function rfc3339Nanos(value: string): bigint | null {
   const [, y, mo, d, h, mi, s, fraction = "", zone, sign, oh = "0", om = "0"] = match;
   const year = Number(y), month = Number(mo), day = Number(d);
   const hour = Number(h), minute = Number(mi), second = Number(s);
-  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 60) return null;
+  // Reject leap seconds until the upstream timestamp source and deployment
+  // calendar provide a verified leap-second table.
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return null;
   const date = new Date(0);
   date.setUTCFullYear(year, month - 1, day);
   date.setUTCHours(hour, minute, Math.min(second, 59), 0);
@@ -21,7 +23,7 @@ function rfc3339Nanos(value: string): bigint | null {
     epochMs -= offset;
   }
   const nanos = BigInt((fraction + "000000000").slice(0, 9));
-  return BigInt(epochMs) * 1_000_000n + nanos + (second === 60 ? 1_000_000_000n : 0n);
+  return BigInt(epochMs) * 1_000_000n + nanos;
 }
 
 /** Compare RFC3339 instants at nanosecond precision without Date truncation. */

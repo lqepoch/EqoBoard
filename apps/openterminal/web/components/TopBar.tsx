@@ -4,11 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "../lib/api";
 import { useTerminal } from "../store/terminal";
 import { useMarket } from "../store/market";
+import { resolveMarketSource } from "../../server/src/providers/market-source.ts";
 
 type Status = {
   stockFeed?: string;
   optionFeed?: string;
   executionMode?: string;
+  source_mode?: unknown;
+  source_label?: unknown;
 };
 
 function Clock({ tz, label, now }: { tz: string; label: string; now: Date | null }) {
@@ -59,6 +62,7 @@ export default function TopBar() {
   const configuredFeeds = status
     ? `${status.stockFeed?.toUpperCase() ?? "unknown"} / ${status.optionFeed?.toUpperCase() ?? "unknown"}`
     : "unknown";
+  const configuredSource = resolveMarketSource(stockFeedStatus, "sip").label;
 
   return (
     <header className="flex items-center gap-4 px-3 h-8 bg-[var(--panel-2)] border-b border-[var(--border)] text-[11px] shrink-0">
@@ -78,7 +82,7 @@ export default function TopBar() {
       </button>
       <span className="dim ml-auto" data-testid="configured-market-feeds"
         title="Configured feeds do not establish credentials or account entitlements">
-        Configured feeds: {configuredFeeds} · entitlement unverified
+        Configured feeds: {configuredFeeds} · source {configuredSource} · entitlement unverified
       </span>
       <span className="dim">Execution: {status?.executionMode ?? "disabled"}</span>
     </header>

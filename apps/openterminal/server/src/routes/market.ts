@@ -31,8 +31,12 @@ function fail(req: any, res: any, err: unknown) {
   console.error("[market]", req.path, detail);
   if (err instanceof SipGatewayError) {
     const status = err.status >= 400 && err.status < 600 ? err.status : 502;
+    const error = status === 401 ? "Alpaca SIP market-data authentication failed (HTTP 401)"
+      : status === 403 ? "Alpaca SIP market data is not authorized (HTTP 403)"
+      : status === 429 ? "Alpaca SIP market-data rate limit exceeded (HTTP 429)"
+      : "Alpaca SIP market data is unavailable";
     return res.status(status).json({
-      error: status === 403 ? "Alpaca SIP market data is not authorized" : "Alpaca SIP market data is unavailable",
+      error,
       source: "Alpaca SIP",
       status,
     });

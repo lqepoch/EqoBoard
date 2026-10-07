@@ -23,6 +23,7 @@ describe("RFC3339 market timestamps", () => {
   it("rejects malformed dates and offsets instead of guessing", () => {
     expect(compareRfc3339Nanos("2026-02-30T00:00:00Z", "2026-02-28T00:00:00Z")).toBeNull();
     expect(compareRfc3339Nanos("2026-10-07T14:30:00+01:99", "2026-10-07T14:30:00Z")).toBeNull();
+    expect(compareRfc3339Nanos("2026-10-07T14:30:60Z", "2026-10-07T14:30:59Z")).toBeNull();
     expect(latestRfc3339Nanos(["2026-10-07T14:30:00"])).toBeNull();
   });
 

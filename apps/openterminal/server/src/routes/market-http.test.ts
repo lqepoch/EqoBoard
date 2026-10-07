@@ -351,7 +351,8 @@ describe("GET /api/quotes upstream SIP authorization and throttling", () => {
       const authenticated = await getJson(`${url}/api/quotes?symbols=${symbol}`, token);
       expect(authenticated.status).toBe(upstreamStatus);
       expect(authenticated.body).toMatchObject({
-        error: "Alpaca SIP market data is unavailable",
+        error: upstreamStatus === 401 ? "Alpaca SIP market-data authentication failed (HTTP 401)"
+          : "Alpaca SIP market-data rate limit exceeded (HTTP 429)",
         source: "Alpaca SIP",
         status: upstreamStatus,
       });

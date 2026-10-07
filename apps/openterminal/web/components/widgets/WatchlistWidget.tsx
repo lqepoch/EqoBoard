@@ -12,6 +12,7 @@ import MarketFeedStatus from "./MarketFeedStatus";
 function LiveRow({sym,snapshot,onSelect,onRemove}:{sym:string;snapshot:Quote|undefined;onSelect:()=>void;onRemove:()=>void}) {
   const trade=useMarket(s=>s.stockTrades[sym]);
   const latest=useMarket(s=>s.stockSnapshots[sym]);
+  const feedStatus=useMarket(s=>s.feedStatus.stocks);
   const current=latest??snapshot;
   const condition=useMarket(s=>marketCondition(s,"stocks",sym,"trade",current?.lastAsOf??undefined));
   const price=condition==="fresh"&&trade?.event_time?trade.price:current?.price??null;
@@ -24,7 +25,9 @@ function LiveRow({sym,snapshot,onSelect,onRemove}:{sym:string;snapshot:Quote|und
       <Flash value={changePercent}>{fmt(changePercent)}%</Flash>
     </td>
     <td>{fmtBig(current?.volume)}</td>
-    <td className="dim text-[9px]" title={`${current?.source??"source unknown"} · ${current?.asOf??"as-of unknown"}`}>{statusText(condition)}</td>
+    <td className="dim text-[9px]" title={`${current?.source??"source unknown"} · ${current?.asOf??"as-of unknown"}`}>
+      {statusText(condition,feedStatus,"sip")}
+    </td>
     <td>
       <button onClick={e=>{e.stopPropagation();onRemove();}} className="dim hover:text-[var(--down)]">✕</button>
     </td>
@@ -39,20 +42,34 @@ export default function WatchlistWidget() {
   const [input, setInput] = useState("");
   const [invalid, setInvalid] = useState(false);
 
-  const { data = [], error } = useQuery({
+  const { data: responseData = [], error } = useQuery({
     queryKey: ["watchlist", watchlist.join(",")],
-    queryFn: () => apiGet<Quote[]>(`/api/quotes?symbols=${symbolsParam(watchlist)}`),
+    queryFn: async () => {
+      const requestGeneration = useMarket.getState().gatewayInstanceGeneration;
+      const rows = await apiGet<Quote[]>(`/api/quotes?symbols=${symbolsParam(watchlist)}`);
+      return rows.map((row) => {
+        const instanceId = row.gateway_instance_id ?? row.watermarks?.[0]?.gateway_instance_id ?? row.watermark?.gateway_instance_id;
+        if (!useMarket.getState().acceptsSnapshotInstance(instanceId, requestGeneration)) {
+          throw new Error("Discarded snapshot from a retired Gateway instance");
+        }
+        return { ...row, clientGatewayInstanceGeneration: requestGeneration };
+      });
+    },
     enabled: watchlist.length > 0,
     refetchInterval: 15_000,
   });
+  const gatewayInstanceId=useMarket(s=>s.gatewayInstanceId);
+  const data=responseData.filter(row=>!gatewayInstanceId||
+    (row.gateway_instance_id?row.gateway_instance_id===gatewayInstanceId:
+      row.source_mode!=="alpaca"&&row.source_mode!=="offline_mock"));
   const setSnapshotWatermark=useMarket(s=>s.setSnapshotWatermark);
   const setStockSnapshot=useMarket(s=>s.setStockSnapshot);
   useEffect(()=>{
     for(const row of data){
       for(const watermark of row.watermarks??[]){
-        if(watermark.feed==="stocks")setSnapshotWatermark(watermark);
+        if(watermark.feed==="stocks")setSnapshotWatermark(watermark,row.received_at,row.clientGatewayInstanceGeneration);
       }
-      setStockSnapshot(row);
+      setStockSnapshot(row,row.clientGatewayInstanceGeneration);
     }
   },[data,setSnapshotWatermark,setStockSnapshot]);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMarket, type FeedName } from "../../store/market";
+import { resolveMarketSource } from "../../../server/src/providers/market-source.ts";
 
 const channelNames = ["quotes", "trades"] as const;
 
@@ -8,6 +9,7 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
   const browserConnected = useMarket((state) => state.browserConnected);
   const status = useMarket((state) => state.feedStatus[feed]);
   const label = feed === "stocks" ? "SIP" : "OPRA";
+  const source = resolveMarketSource(status, feed === "stocks" ? "sip" : "opra");
 
   return (
     <div className="flex flex-wrap gap-x-2 gap-y-0.5 dim text-[9px]" data-testid={`market-feed-status-${feed}`}>
@@ -17,21 +19,29 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
       <span>{label} auth {status?.auth ?? "unknown"}</span>
       <span>{label} transport {status?.transport ?? "unknown"}</span>
       <span>{label} upstream {status?.upstream ?? "unknown"}</span>
+      <span data-testid={`market-source-${feed}`} data-source-mode={source.mode}>
+        data source {source.label}
+      </span>
       {channelNames.map((channel) => {
-        const desired = status?.desired[channel] ?? [];
-        const confirmed = status?.confirmed?.[channel] ?? [];
+        const desired = status?.desired[channel];
+        const confirmed = status?.confirmed?.[channel] ?? null;
         const pending = status?.pending.subscribe[channel] ?? [];
         const removing = status?.pending.unsubscribe[channel] ?? [];
+        const acknowledgement = !status || confirmed === null
+          ? `ACK unknown${desired ? `/${desired.length} desired` : " · desired unknown"}`
+          : `ACK ${confirmed.length}/${desired?.length ?? "unknown"}`;
         return <span key={channel}>
-          {channel} ACK {confirmed.length}/{desired.length}
+          {channel} {acknowledgement}
           {pending.length > 0 ? ` · ${pending.length} subscribe pending` : ""}
           {removing.length > 0 ? ` · ${removing.length} unsubscribe pending` : ""}
         </span>;
       })}
-      <span>
-        coverage {status?.coverage.confirmed_count ?? 0}/{status?.coverage.desired_count ?? 0}
-        {status ? status.coverage.complete ? " complete" : " partial" : " unknown"}
-      </span>
+      <span>{!status || status.confirmed === null
+        ? `coverage unknown${status ? `/${status.coverage.desired_count} desired` : ""}`
+        : `coverage ${status.coverage.confirmed_count}/${status.coverage.desired_count}${status.coverage.complete ? " complete" : " partial"}`}</span>
+      {feed === "options" && <span>
+        configured/local limit {status?.coverage.limit ?? "unknown"} · account entitlement unknown
+      </span>}
       {status?.last_error && <span className="down" title={status.last_error.message ?? status.last_error.class}>
         {status.last_error.code ? `HTTP ${status.last_error.code} · ` : ""}{status.last_error.class}
       </span>}

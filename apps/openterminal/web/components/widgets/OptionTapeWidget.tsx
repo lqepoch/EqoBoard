@@ -3,7 +3,7 @@
 import {useMemo} from "react";
 import {fmt} from "../../lib/api";
 import {useWidgetSymbol,type WidgetInstance} from "../../store/terminal";
-import {marketCondition,statusText,useMarket} from "../../store/market";
+import {marketCondition,marketStatusTone,statusText,useMarket} from "../../store/market";
 import MarketFeedStatus from "./MarketFeedStatus";
 
 type Trade=ReturnType<typeof useMarket.getState>["optionTrades"][number];
@@ -18,6 +18,7 @@ function et(ts:string|null){
 export default function OptionTapeWidget({widget}:{widget:WidgetInstance}){
   const symbol=useWidgetSymbol(widget);
   const allTrades=useMarket(s=>s.optionTrades);
+  const feedStatus=useMarket(s=>s.feedStatus.options);
   const trades=useMemo(()=>allTrades.filter(t=>occRoot(t.symbol)===symbol).slice(0,150),[allTrades,symbol]);
   const condition=useMarket(s=>trades[0]
     ?marketCondition(s,"options",trades[0].symbol,"trade")
@@ -25,7 +26,7 @@ export default function OptionTapeWidget({widget}:{widget:WidgetInstance}){
   return <div className="h-full min-h-0 flex flex-col">
     <div className="flex justify-between px-2 py-1 border-b border-[#262626] text-[10px]">
       <span className="amber">OPRA TRADE TAPE · {symbol}</span>
-      <span className={condition==="fresh"?"up":"dim"}>{statusText(condition)}</span>
+      <span className={marketStatusTone(condition,feedStatus,"opra")}>{statusText(condition,feedStatus,"opra")}</span>
     </div>
     <div className="px-2 py-1 border-b border-[#262626]">
       <MarketFeedStatus feed="options" />
