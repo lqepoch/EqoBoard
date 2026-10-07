@@ -15,7 +15,7 @@
 
 OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定提交见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。旧的自研 Vite 终端已退出仓库，防止两套 UI 长期分叉。
 
-OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 origin、host-only OIDC cookies 和 `market:read` 短时委托访问它们。当前还没有可运行的 OpenBB Lite Compose service 或 OpenTerminal Research 导航入口。生产构建的 BFF/API 浏览器测试不启动 OpenBB Lite，不代表 “OpenBB Web integrated”，也不证明真实 SIP/OPRA 行情接入。
+OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 hostname、host-only OIDC cookies 和 `market:read` 短时委托访问它们。不同端口仍共享 hostname Cookie 边界。当前还没有可运行的 OpenBB Lite Compose service 或 OpenTerminal Research 导航入口。生产构建的 BFF/API 浏览器测试不启动 OpenBB Lite，不代表 “OpenBB Web integrated”，也不证明真实 SIP/OPRA 行情接入。
 
 浏览器只建立 **1 条 EqoBoard SSE 行情连接**。Quote、Watchlist、AG Grid Option Chain、OPRA Tape 共用这条 50ms 批量流；股票 Watchlist/活动 Widget 通过租约合并为一条 Alpaca SIP 上游订阅。REST 快照用于初始状态与周期校准。
 
@@ -39,7 +39,7 @@ EQO_RESEARCH_JWT_SECRET=<独立随机值，至少64个可打印字符>
 EQO_RESEARCH_API_KEY=<独立随机值，至少32字符>
 ```
 
-同时将 `EQO_PUBLIC_ORIGIN` 与 `NEXTAUTH_URL` 设为浏览器访问的同一个 HTTPS origin，并在 OIDC 客户端登记 `${EQO_PUBLIC_ORIGIN}/api/auth/callback/eqo-oidc`。本机开发允许 loopback HTTP。Alpaca SIP/OPRA 凭据是可选的服务端变量；没有凭据时行情不可用，不会回退到其他来源。配置项和权限要求见 [部署说明](docs/DEPLOYMENT.md)。
+同时将 `EQO_PUBLIC_ORIGIN` 与 `NEXTAUTH_URL` 设为浏览器访问的同一个 HTTPS origin，并在 OIDC 客户端登记 `${EQO_PUBLIC_ORIGIN}/api/auth/callback/eqo-oidc`。本机开发允许 loopback HTTP。OpenBB research runtime 还需设置 `EQO_TERMINAL_PUBLIC_ORIGIN`，并确保其 hostname 与研究 hostname 不同。Alpaca SIP/OPRA 凭据是可选的服务端变量；没有凭据时行情不可用，不会回退到其他来源。配置项和权限要求见 [部署说明](docs/DEPLOYMENT.md)。
 
 运行：
 
