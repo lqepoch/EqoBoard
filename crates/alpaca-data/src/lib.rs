@@ -151,6 +151,9 @@ impl AlpacaData {
             result.push(StockSnapshot {
                 symbol: symbol.clone(),
                 last,
+                open: number(&snap["dailyBar"], "o"),
+                high: number(&snap["dailyBar"], "h"),
+                low: number(&snap["dailyBar"], "l"),
                 previous_close,
                 change_percent,
                 bid: number(&snap["latestQuote"], "bp"),
@@ -168,9 +171,10 @@ impl AlpacaData {
         symbol: &str,
         timeframe: &str,
         limit: usize,
+        days: i64,
     ) -> Result<Vec<Bar>, DataError> {
         // Descending order allows a useful recent window across weekends; result is then reversed.
-        let start = (Utc::now() - ChronoDuration::days(14)).to_rfc3339();
+        let start = (Utc::now() - ChronoDuration::days(days)).to_rfc3339();
         let data = self
             .get(
                 &format!("/v2/stocks/{symbol}/bars"),

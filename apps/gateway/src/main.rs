@@ -167,6 +167,7 @@ struct BarsQuery {
     symbol: String,
     timeframe: Option<String>,
     limit: Option<usize>,
+    days: Option<i64>,
 }
 async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
     let Some(data) = &state.data else {
@@ -175,7 +176,8 @@ async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery
     let symbol = query.symbol.to_uppercase();
     let timeframe = query.timeframe.unwrap_or_else(|| "1Min".into());
     if !safe_symbol(&symbol)
-        || !["1Min", "5Min", "15Min", "1Hour", "1Day"].contains(&timeframe.as_str())
+        || !["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week", "1Month"]
+            .contains(&timeframe.as_str())
     {
         return fail(
             StatusCode::BAD_REQUEST,
@@ -187,7 +189,11 @@ async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery
     if !(1..=1000).contains(&limit) {
         return fail(StatusCode::BAD_REQUEST, "invalid_limit", "1..1000");
     }
-    match data.stock_bars(&symbol, &timeframe, limit).await {
+    let days = query.days.unwrap_or(14);
+    if !(1..=11000).contains(&days) {
+        return fail(StatusCode::BAD_REQUEST, "invalid_days", "days must be 1..11000");
+    }
+    match data.stock_bars(&symbol, &timeframe, limit, days).await {
         Ok(bars) => {
             Json(json!({"symbol":symbol,"timeframe":timeframe,"feed":state.stock_feed,"bars":bars}))
                 .into_response()
