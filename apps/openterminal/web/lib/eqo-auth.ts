@@ -35,6 +35,15 @@ export function researchModeRouteUnavailable(): NextResponse | null {
   return process.env.EQO_BFF_MODE === "research" ? jsonError(404, "route_not_available") : null;
 }
 
+export function handleBffOptions(allow: string): NextResponse {
+  const unavailable = researchModeRouteUnavailable();
+  if (unavailable) return unavailable;
+  return new NextResponse(null, {
+    status: 204,
+    headers: { Allow: allow, "Cache-Control": "no-store" },
+  });
+}
+
 function validRequestHeaders(request: Request): NextResponse | null {
   const method = request.method.toUpperCase();
   const isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
@@ -191,17 +200,19 @@ export type JsonBodyResult =
   | { ok: true; text: string; value: unknown }
   | { ok: false; response: NextResponse };
 
-export async function readBoundedJson(request: Request): Promise<JsonBodyResult> {
-  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType !== "application/json") return { ok: false, response: jsonError(415, "json_required") };
+export type BoundedBodyResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; status: 400 | 408 | 413; error: "invalid_request_body" | "request_body_timeout" | "request_too_large" };
 
+export async function readBoundedBody(request: Request): Promise<BoundedBodyResult> {
   const contentLength = request.headers.get("content-length");
   if (contentLength !== null && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_REQUEST_BYTES)) {
-    return { ok: false, response: jsonError(413, "request_too_large") };
+    void request.body?.cancel().catch(() => undefined);
+    return { ok: false, status: 413, error: "request_too_large" };
   }
 
   const reader = request.body?.getReader();
-  if (!reader) return { ok: false, response: jsonError(400, "invalid_json") };
+  if (!reader) return { ok: true, bytes: new Uint8Array() };
   const chunks: Uint8Array[] = [];
   let total = 0;
   let deadline: ReturnType<typeof setTimeout> | undefined;
@@ -215,20 +226,40 @@ export async function readBoundedJson(request: Request): Promise<JsonBodyResult>
       total += value.byteLength;
       if (total > MAX_REQUEST_BYTES) {
         void reader.cancel().catch(() => undefined);
-        return { ok: false, response: jsonError(413, "request_too_large") };
+        return { ok: false, status: 413, error: "request_too_large" };
       }
       chunks.push(value);
     }
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
-    return { ok: true, text, value: JSON.parse(text) as unknown };
+    return { ok: true, bytes: Buffer.concat(chunks, total) };
   } catch (error) {
     void reader.cancel(error).catch(() => undefined);
     if (error instanceof Error && error.message === "request_body_timeout") {
-      return { ok: false, response: jsonError(408, "request_body_timeout") };
+      return { ok: false, status: 408, error: "request_body_timeout" };
     }
-    return { ok: false, response: jsonError(400, "invalid_json") };
+    return { ok: false, status: 400, error: "invalid_request_body" };
   } finally {
     if (deadline) clearTimeout(deadline);
+  }
+}
+
+export async function readBoundedJson(request: Request): Promise<JsonBodyResult> {
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "application/json") return { ok: false, response: jsonError(415, "json_required") };
+  if (!request.body) return { ok: false, response: jsonError(400, "invalid_json") };
+
+  const bounded = await readBoundedBody(request);
+  if (!bounded.ok) {
+    return {
+      ok: false,
+      response: jsonError(bounded.status, bounded.error === "invalid_request_body" ? "invalid_json" : bounded.error),
+    };
+  }
+
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bounded.bytes);
+    return { ok: true, text, value: JSON.parse(text) as unknown };
+  } catch {
+    return { ok: false, response: jsonError(400, "invalid_json") };
   }
 }
 

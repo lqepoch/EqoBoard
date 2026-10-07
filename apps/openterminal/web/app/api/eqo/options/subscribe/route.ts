@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authorizeBffRequest, readBoundedJson, researchModeRouteUnavailable } from "@/lib/eqo-auth";
+import { authorizeBffRequest, handleBffOptions, readBoundedJson, researchModeRouteUnavailable } from "@/lib/eqo-auth";
 
 export const runtime = "nodejs";
 
@@ -51,4 +51,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "market_subscription_unavailable" }, { status: 502 });
   }
+}
+
+export function OPTIONS() {
+  return handleBffOptions("GET, HEAD, OPTIONS, POST");
 }
