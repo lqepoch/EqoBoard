@@ -1,0 +1,786 @@
+--- a/lite/entrypoint.sh
++++ b/lite/entrypoint.sh
+@@ -121,0 +122 @@
++chmod 600 "$SECRETS_FILE"
+@@ -171,0 +173 @@
++chmod 600 /opt/code/scripts/cfgs/config.toml
+@@ -198 +199,0 @@
+-   Password: ${OPENBB_ADMIN_PASSWORD}
+--- a/terminalpro/bun.lock
++++ b/terminalpro/bun.lock
+@@ -75 +74,0 @@
+-        "ag-charts-enterprise": "12.1.1",
+@@ -77,3 +76,2 @@
+-        "ag-grid-community": "34.1.1",
+-        "ag-grid-enterprise": "34.1.1",
+-        "ag-grid-react": "34.1.1",
++        "ag-grid-community": "36.2.0",
++        "ag-grid-react": "36.2.0",
+@@ -94,2 +91,0 @@
+-        "highcharts": "^11.4.8",
+-        "highcharts-react-official": "^3.2.1",
+@@ -1663,2 +1658,0 @@
+-    "ag-charts-enterprise": ["ag-charts-enterprise@12.1.1", "", { "dependencies": { "ag-charts-community": "12.1.1", "ag-charts-core": "12.1.1" } }, "sha512-kcifzWM1JA+gmXKUcHrFb5P23MAnY+3lyBo9MVziZh0RMH/fHa7wEjgPHyim7/71Lbz9DmJbaYaPwXpLp/4f9Q=="],
+-
+@@ -1671,5 +1665,5 @@
+-    "ag-grid-community": ["ag-grid-community@34.1.1", "", { "dependencies": { "ag-charts-types": "12.1.1" } }, "sha512-ODVvGoMTkyGvMT8b5lzvum5r93bG6CKdJdNrk6u/aYS7oqZ5rUEXJJHC8n8Zq+o76KhFiXMBQrU39xuhz8i+Tg=="],
+-
+-    "ag-grid-enterprise": ["ag-grid-enterprise@34.1.1", "", { "dependencies": { "ag-grid-community": "34.1.1" }, "optionalDependencies": { "ag-charts-community": "12.1.1", "ag-charts-enterprise": "12.1.1" } }, "sha512-r/HPmKM7rU+EnMYjzUUnp7Zlq+C77chUCdcT9oTS4eYPbjS/TF4bZO8laL4Nx/eAnwN5G5tyltIqUnSHpJmqKw=="],
+-
+-    "ag-grid-react": ["ag-grid-react@34.1.1", "", { "dependencies": { "ag-grid-community": "34.1.1", "prop-types": "^15.8.1" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-ZffTltCJe5+yzC57LVTMFpjZiYUzFiX8+G4NNfM1MfiLV6cMl5kCEE6w3Afc0nSt8b1JCAZOiX6K0+VXqjIfYQ=="],
++    "ag-grid-community": ["ag-grid-community@36.2.0", "", { "dependencies": { "ag-charts-types": "14.2.0", "ag-stack": "36.2.0" } }, "sha512-tK0Toj7t0fV/OMLPnDc0xlYKAqDbnCT3iJodYSn2TJ541caU8jPdYwWhMdW+AP2+pUNwFiJVgc04eJNfvBPsWw=="],
++
++    "ag-grid-react": ["ag-grid-react@36.2.0", "", { "dependencies": { "ag-grid-community": "36.2.0", "prop-types": "^15.8.1" }, "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", "react-dom": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-7dsaR4Ga8/bJAOov7XJqxsDc1JAjUU5Bmh9+s4U9+/TKIdSsaVo53SuZb2yEFSB1elv3eh6aZP8a1fqGZehXwA=="],
++
++    "ag-stack": ["ag-stack@36.2.0", "", {}, "sha512-f3XT2htFs9dUPcHni2z9ak69QNta5ODEpooHuuNvbjN98JkokpEqRQ9YLQHQJFdCcgi9Ybs/j3zkkvmNRamIPg=="],
+@@ -2551,4 +2544,0 @@
+-    "highcharts": ["highcharts@11.4.8", "", {}, "sha512-5Tke9LuzZszC4osaFisxLIcw7xgNGz4Sy3Jc9pRMV+ydm6sYqsPYdU8ELOgpzGNrbrRNDRBtveoR5xS3SzneEA=="],
+-
+-    "highcharts-react-official": ["highcharts-react-official@3.2.2", "", { "peerDependencies": { "highcharts": ">=6.0.0", "react": ">=16.8.0" } }, "sha512-2kkWOB6RpdR26fmAJkrtJFG9xWFUDGKWyat88tW3fa/3l/Jc7D5ZfwTng2MZsdiKIH32AFy0Pr75udUe7uN6LA=="],
+-
+@@ -4391,0 +4382,2 @@
++
++    "ag-grid-community/ag-charts-types": ["ag-charts-types@14.2.0", "", {}, "sha512-4pDV6/4zbzPN7t607Gr1o6DO9RhmPafQGr+hIpTJBaerbaMoC+WOO3v/wkxFbvCNrHKOexEKSfNTH7PaAR4UzA=="],
+--- a/terminalpro/package.json
++++ b/terminalpro/package.json
+@@ -93 +92,0 @@
+-    "ag-charts-enterprise": "12.1.1",
+@@ -95,3 +94,2 @@
+-    "ag-grid-community": "34.1.1",
+-    "ag-grid-enterprise": "34.1.1",
+-    "ag-grid-react": "34.1.1",
++    "ag-grid-community": "36.2.0",
++    "ag-grid-react": "36.2.0",
+@@ -112,2 +109,0 @@
+-    "highcharts": "^11.4.8",
+-    "highcharts-react-official": "^3.2.1",
+--- a/terminalpro/src/components/AI/hooks/createWidgetUtils.ts
++++ b/terminalpro/src/components/AI/hooks/createWidgetUtils.ts
+@@ -1 +1 @@
+-import type { ChartType } from "ag-grid-enterprise";
++import type { ChartType } from "ag-grid-community";
+--- a/terminalpro/src/components/DataConnectors/WidgetsBuilder/UIConfiguration.tsx
++++ b/terminalpro/src/components/DataConnectors/WidgetsBuilder/UIConfiguration.tsx
+@@ -887,12 +887,4 @@
+-  const { enableCharts, showAll, chartViewEnabled, chartType } = useWidgetConfigContext(
+-    (s) => ({
+-      enableCharts: s.config.enableCharts,
+-      showAll: s.config.showAll,
+-      chartViewEnabled: s.config.chartViewEnabled,
+-      chartType: s.config.chartType,
+-    }),
+-  );
+-
+-  const handleWidgetConfigChange = useWidgetConfigContext(
+-    (s) => s.handleWidgetConfigChange,
+-  );
++  const { showAll, handleWidgetConfigChange } = useWidgetConfigContext((s) => ({
++    showAll: s.config.showAll,
++    handleWidgetConfigChange: s.handleWidgetConfigChange,
++  }));
+@@ -904,7 +895,0 @@
+-      <Checkbox
+-        id="enable-charts"
+-        label="Enable Charts"
+-        checked={enableCharts}
+-        onCheckedChange={handleWidgetConfigChange("enableCharts")}
+-      />
+-
+@@ -917,16 +901,0 @@
+-
+-      <Checkbox
+-        id="chart-view-enabled"
+-        label="Chart View Enabled by Default"
+-        checked={chartViewEnabled}
+-        onCheckedChange={handleWidgetConfigChange("chartViewEnabled")}
+-      />
+-
+-      {chartViewEnabled && (
+-        <Select
+-          label="Default Chart Type"
+-          value={chartType}
+-          onChange={handleWidgetConfigChange("chartType")}
+-          options={CHART_TYPES}
+-        />
+-      )}
+--- a/terminalpro/src/components/DataConnectors/WidgetsBuilder/consts.ts
++++ b/terminalpro/src/components/DataConnectors/WidgetsBuilder/consts.ts
+@@ -139 +138,0 @@
+-  { label: "Highcharts Chart", value: "chart-highcharts" },
+@@ -141,3 +140,2 @@
+-  { label: "SSRM Advanced", value: "ssrm_advanced" },
+-];
+-const SNOWFLAKE_TYPES = [{ label: "SSRM Advanced", value: "ssrm_advanced" as const }];
++];
++const SNOWFLAKE_TYPES = [];
+--- a/terminalpro/src/components/DataConnectors/WidgetsBuilder/widget-schema.json
++++ b/terminalpro/src/components/DataConnectors/WidgetsBuilder/widget-schema.json
+@@ -1913 +1912,0 @@
+-              "chart-highcharts",
+@@ -1945 +1943,0 @@
+-              "chart-highcharts",
+--- a/terminalpro/src/components/General/Table/AgChartFromTable.tsx
++++ b/terminalpro/src/components/General/Table/AgChartFromTable.tsx
+@@ -5 +5 @@
+-} from "ag-charts-enterprise";
++} from "ag-charts-community";
+--- a/terminalpro/src/components/General/Table/AgGrid.tsx
++++ b/terminalpro/src/components/General/Table/AgGrid.tsx
+@@ -7 +6,0 @@
+-import "ag-grid-enterprise";
+@@ -29,0 +29 @@
++import { getConfig } from "~/lib/runtimeConfig";
+@@ -45 +44,0 @@
+-import { getOpenBBChartTheme } from "./Chart/themes";
+@@ -52 +50,0 @@
+-import { clearCellSelection } from "./utils";
+@@ -60,0 +59,81 @@
++
++const COMMUNITY_ONLY_UNSUPPORTED_GRID_OPTIONS = new Set([
++  "cellSelection",
++  "createChartContainer",
++  "customChartThemes",
++  "enableAdvancedFilter",
++  "enableCharts",
++  "enableFillHandle",
++  "enableRangeSelection",
++  "getChartMenuItems",
++  "getChartToolbarItems",
++  "getContextMenuItems",
++  "getMainMenuItems",
++  "masterDetail",
++  "onChartCreated",
++  "onChartDestroyed",
++  "onChartOptionsChanged",
++  "onChartRangeSelectionChanged",
++  "pivotMode",
++  "pivotPanelShow",
++  "postProcessPopup",
++  "rowGroupPanelShow",
++  "sideBar",
++  "statusBar",
++]);
++
++const COMMUNITY_ONLY_UNSUPPORTED_COLUMN_OPTIONS = new Set([
++  "aggFunc",
++  "allowedAggFuncs",
++  "chartDataType",
++  "enablePivot",
++  "enableRowGroup",
++  "enableValue",
++  "pivot",
++  "pivotIndex",
++  "rowGroup",
++  "rowGroupIndex",
++]);
++
++function stripCommunityUnsupportedColumnOptions<T>(value: T): T {
++  if (Array.isArray(value)) {
++    return value.map(stripCommunityUnsupportedColumnOptions) as T;
++  }
++  if (!value || typeof value !== "object") return value;
++
++  const column = { ...(value as Record<string, unknown>) };
++  for (const key of COMMUNITY_ONLY_UNSUPPORTED_COLUMN_OPTIONS) delete column[key];
++  if (typeof column.filter === "string" && /^(agSetColumnFilter|agMultiColumnFilter|agGroupColumnFilter)$/.test(column.filter)) {
++    column.filter = true;
++  }
++  if (column.children) {
++    column.children = stripCommunityUnsupportedColumnOptions(column.children);
++  }
++  return column as T;
++}
++
++function stripCommunityUnsupportedGridOptions<T>(value: T): T {
++  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
++
++  const options = { ...(value as Record<string, unknown>) };
++  for (const key of COMMUNITY_ONLY_UNSUPPORTED_GRID_OPTIONS) delete options[key];
++  if (options.rowModelType === "serverSide") {
++    throw new Error("AG Grid Server Side Row Model is unavailable in OpenBB Workspace Lite Community.");
++  }
++  if (options.defaultColDef) {
++    options.defaultColDef = stripCommunityUnsupportedColumnOptions(options.defaultColDef);
++  }
++  if (options.columnDefs) {
++    options.columnDefs = stripCommunityUnsupportedColumnOptions(options.columnDefs);
++  }
++  return options as T;
++}
++
++/** Remove Enterprise-only options while retaining Community sorting, filtering, and row rendering. */
++export function adaptCommunityGridProps<T extends Record<string, unknown>>(props: T): T {
++  const options = stripCommunityUnsupportedGridOptions(props);
++  if (options.gridOptions) {
++    options.gridOptions = stripCommunityUnsupportedGridOptions(options.gridOptions);
++  }
++  return options;
++}
+@@ -245,0 +325,5 @@
++          if (getConfig().ui.isLite) {
++            clearTimeout(clickTimeout.current);
++            clickTimeout.current = null;
++            return;
++          }
+@@ -732 +816 @@
+-    cellSelection: true,
++    rowModelType: "clientSide",
+@@ -734 +817,0 @@
+-    enableCharts: true,
+@@ -739 +821,0 @@
+-    getMainMenuItems: getMainMenuItems,
+@@ -742,2 +823,0 @@
+-    getChartToolbarItems: (_) => [],
+-    columnMenu: "legacy",
+@@ -751,0 +832,2 @@
++      floatingFilter: true,
++      suppressHeaderMenuButton: true,
+@@ -764,26 +845,0 @@
+-    onCellClicked: (params) => {
+-      clearCellSelection(params);
+-    },
+-    onCellDoubleClicked: (params) => {
+-      if (params?.node) {
+-        const allColumns = params.api
+-          .getAllDisplayedColumns()
+-          // @ts-expect-error - colId property exists but not in types
+-          .map((col) => col.colId);
+-        params.api.addCellRange({
+-          rowStartIndex: params.node.rowIndex,
+-          rowEndIndex: params.node.rowIndex,
+-          columns: allColumns,
+-        });
+-      }
+-    },
+-    postProcessPopup: (params) => {
+-      // check callback is for menu
+-      if (params.type !== "columnMenu") {
+-        return;
+-      }
+-    },
+-    customChartThemes: {
+-      "openbb-dark": getOpenBBChartTheme("dark"),
+-      "openbb-light": getOpenBBChartTheme("light"),
+-    },
+--- a/terminalpro/src/components/General/Table/AgGridSSRM.tsx
++++ b/terminalpro/src/components/General/Table/AgGridSSRM.tsx
+@@ -9 +9 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/AgGridTable.tsx
++++ b/terminalpro/src/components/General/Table/AgGridTable.tsx
+@@ -15,4 +14,0 @@
+-import { ChartViewButton, ChartViewElement } from "./Chart/AgChartView";
+-import useChartOptions, {
+-  useChartToolPanelAction,
+-} from "./Chart/hooks/useChartOptions";
+@@ -232 +228,2 @@
+-  const chartView = widget.storage?.chartView?.enabled;
++  // Grid-integrated charts are an Enterprise feature; standalone community charts remain available.
++  const chartView = false;
+@@ -246,4 +243 @@
+-      const enableChart =
+-        widget?.external ?? widgetFromJSON?.data?.table?.enableCharts ?? false;
+-
+-      return getContextMenuItems(params, { enableChart, widgetId: widget?.id });
++      return getContextMenuItems(params, { enableChart: false, widgetId: widget?.id });
+@@ -251 +245 @@
+-    [widget?.external, widgetFromJSON?.data?.table?.enableCharts],
++    [widget?.id],
+@@ -259,6 +253 @@
+-  const agChartViewProps = useChartOptions();
+-  const ChartToolPanelActions = useChartToolPanelAction();
+-
+-  const extraSettings = useMemo(() => {
+-    return [quickActions, ...(chartView ? ChartToolPanelActions : [])];
+-  }, [chartView, quickActions, ChartToolPanelActions]);
++  const extraSettings = useMemo(() => [quickActions], [quickActions]);
+@@ -327,5 +315,0 @@
+-      extraNavbarElements={
+-        (!!widget?.storage?.chartView ||
+-          widget?.external ||
+-          widgetFromJSON?.data?.table?.enableCharts) && <ChartViewButton />
+-      }
+@@ -336 +319,0 @@
+-      {chartView && <ChartViewElement />}
+@@ -350 +332,0 @@
+-          {...agChartViewProps}
+--- a/terminalpro/src/components/General/Table/Chart/themes.tsx
++++ b/terminalpro/src/components/General/Table/Chart/themes.tsx
+@@ -11 +11 @@
+-} from "ag-charts-enterprise";
++} from "ag-charts-community";
+@@ -20 +20 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/Chart/utils.tsx
++++ b/terminalpro/src/components/General/Table/Chart/utils.tsx
+@@ -17 +16,0 @@
+-import { AgChartsEnterpriseModule } from "ag-charts-enterprise";
+@@ -25 +23,0 @@
+-import { AllEnterpriseModule, ModuleRegistry } from "ag-grid-enterprise";
+@@ -37 +34,0 @@
+-ModuleRegistry.registerModules([AllEnterpriseModule.with(AgChartsEnterpriseModule)]);
+--- a/terminalpro/src/components/General/Table/SubMenus/FormulasToolPanel.tsx
++++ b/terminalpro/src/components/General/Table/SubMenus/FormulasToolPanel.tsx
+@@ -5 +5 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/types.d.ts
++++ b/terminalpro/src/components/General/Table/hooks/types.d.ts
+@@ -1 +1 @@
+-import type { AgChartThemeOverrides } from "ag-charts-enterprise";
++import type { AgChartThemeOverrides } from "ag-charts-community";
+@@ -21 +21 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useCellOnClickHandler.ts
++++ b/terminalpro/src/components/General/Table/hooks/useCellOnClickHandler.ts
+@@ -1 +1 @@
+-import type { CellClickedEvent } from "ag-grid-enterprise";
++import type { CellClickedEvent } from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useCopilotFilteredData.tsx
++++ b/terminalpro/src/components/General/Table/hooks/useCopilotFilteredData.tsx
+@@ -6 +6 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useCreateChart.ts
++++ b/terminalpro/src/components/General/Table/hooks/useCreateChart.ts
+@@ -1,2 +1 @@
+-import type { ChartRef, ColDef, IRowNode, RowNode } from "ag-grid-enterprise";
+-import "ag-grid-enterprise";
++import type { ChartRef, ColDef, IRowNode, RowNode } from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/hooks/useTableContext.tsx
++++ b/terminalpro/src/components/General/Table/hooks/useTableContext.tsx
+@@ -1 +1 @@
+-import type { AgChartThemeOverrides } from "ag-charts-enterprise";
++import type { AgChartThemeOverrides } from "ag-charts-community";
+@@ -28,0 +29 @@
++import { adaptCommunityGridProps } from "../AgGrid";
+@@ -33,0 +35 @@
++import { getConfig } from "~/lib/runtimeConfig";
+@@ -200,0 +203 @@
++  const communityLite = getConfig().ui.isLite;
+@@ -253 +256 @@
+-    if (!(gridState?.gridReady && widget?.storage?.chartView)) return;
++    if (communityLite || !(gridState?.gridReady && widget?.storage?.chartView)) return;
+@@ -428 +431 @@
+-      gridRef.current.api.clearCellSelection();
++      gridRef.current.api.clearCellSelection?.();
+@@ -543 +546 @@
+-    if (!enableStats) newGridOptions.statusBar = undefined;
++    if (getConfig().ui.isLite || !enableStats) newGridOptions.statusBar = undefined;
+@@ -570 +573 @@
+-    if (!enableStats) newGridOptions.statusBar = undefined;
++    if (getConfig().ui.isLite || !enableStats) newGridOptions.statusBar = undefined;
+@@ -578,0 +582 @@
++    const gridProps = getConfig().ui.isLite ? adaptCommunityGridProps(rest) : rest;
+@@ -634 +638 @@
+-          createChartContainer={createChartContainer}
++          createChartContainer={getConfig().ui.isLite ? undefined : createChartContainer}
+@@ -648,3 +652,3 @@
+-          {...rest}
+-          popupParent={rest?.popupParent ?? document.body}
+-          gridOptions={rest?.gridOptions}
++          {...gridProps}
++          popupParent={gridProps?.popupParent ?? document.body}
++          gridOptions={gridProps?.gridOptions}
+@@ -680 +683,0 @@
+-        onChartRangeSelectionChanged,
+@@ -682 +684,0 @@
+-        onChartDestroyed,
+@@ -684 +685,0 @@
+-        createChartContainer,
+@@ -772,0 +774,2 @@
++  if (getConfig().ui.isLite) return undefined;
++
+--- a/terminalpro/src/components/General/Table/hooks/useUpdateColumnState.ts
++++ b/terminalpro/src/components/General/Table/hooks/useUpdateColumnState.ts
+@@ -16 +15,0 @@
+-import "ag-grid-enterprise";
+@@ -19 +17,0 @@
+-import "ag-grid-enterprise";
+--- a/terminalpro/src/components/General/Table/hooks/utils.ts
++++ b/terminalpro/src/components/General/Table/hooks/utils.ts
+@@ -1 +1 @@
+-import type { ColumnState, GridState } from "ag-grid-enterprise";
++import type { ColumnState, GridState } from "ag-grid-community";
+--- a/terminalpro/src/components/General/Table/utils.tsx
++++ b/terminalpro/src/components/General/Table/utils.tsx
+@@ -2 +2 @@
+-import type { IHeaderParams } from "ag-grid-enterprise";
++import type { IHeaderParams } from "ag-grid-community";
+@@ -352 +352 @@
+-  agGrid.api.clearCellSelection();
++  agGrid.api.clearCellSelection?.();
+--- a/terminalpro/src/components/ThemeSettings/ChartSettings.tsx
++++ b/terminalpro/src/components/ThemeSettings/ChartSettings.tsx
+@@ -5 +5 @@
+-} from "ag-charts-enterprise";
++} from "ag-charts-community";
+--- a/terminalpro/src/components/ThemeSettings/TableSettings.tsx
++++ b/terminalpro/src/components/ThemeSettings/TableSettings.tsx
+@@ -11 +11 @@
+-import { AllEnterpriseModule } from "ag-grid-enterprise";
++import { AllCommunityModule } from "ag-grid-community";
+@@ -39 +39 @@
+-ModuleRegistry.registerModules([AllEnterpriseModule]);
++ModuleRegistry.registerModules([AllCommunityModule]);
+@@ -140 +140 @@
+-  enableCharts: true,
++  enableCharts: false,
+@@ -142,13 +142 @@
+-  sideBar: {
+-    toolPanels: [
+-      {
+-        id: "columns",
+-        labelDefault: "Columns",
+-        labelKey: "columns",
+-        iconKey: "columns",
+-        toolPanel: "agColumnsToolPanel",
+-      },
+-    ],
+-    // delete this or set to null to not show it by default
+-    defaultToolPanel: "",
+-  },
++  sideBar: false,
+--- a/terminalpro/src/components/Widgets/AI/NixtlaPopup.tsx
++++ b/terminalpro/src/components/Widgets/AI/NixtlaPopup.tsx
+@@ -2 +2 @@
+-import type { ChartType } from "ag-grid-enterprise";
++import type { ChartType } from "ag-grid-community";
+--- /dev/null
++++ b/terminalpro/src/components/Widgets/CommunityUnavailableWidget.tsx
+@@ -0,0 +1,19 @@
++import { useWidgetContext } from "~/components/Widget.context";
++
++export default function CommunityUnavailableWidget() {
++  const { widget } = useWidgetContext();
++  const widgetId = widget?.widgetId ?? "This widget";
++
++  return (
++    <div
++      role="status"
++      data-testid="community-widget-unavailable"
++      className="flex h-full min-h-24 flex-col justify-center gap-2 p-4 text-sm text-light-500 dark:text-light-400"
++    >
++      <strong className="text-light-700 dark:text-light-200">
++        {widgetId} is unavailable in OpenBB Workspace Lite Community.
++      </strong>
++      <p>This widget requires an Enterprise or separately licensed chart module.</p>
++    </div>
++  );
++}
+--- a/terminalpro/src/components/Widgets/Equity/ComparisonAnalysis/constants.tsx
++++ b/terminalpro/src/components/Widgets/Equity/ComparisonAnalysis/constants.tsx
+@@ -1 +1 @@
+-import type { ColDef } from "ag-grid-enterprise";
++import type { ColDef } from "ag-grid-community";
+--- a/terminalpro/src/components/Widgets/charting/ChartHighcharts.tsx
++++ /dev/null
+@@ -1,80 +0,0 @@
+-import Highcharts from "highcharts/highcharts";
+-import HighchartsGantt from "highcharts/highcharts-gantt";
+-import HighchartsMaps from "highcharts/highmaps";
+-import HighchartsStocks from "highcharts/highstock";
+-import HighchartsReact from "highcharts-react-official";
+-import { useMemo } from "react";
+-import DraggableCard, { SetLoadingOnResize } from "~/components/DraggableCard";
+-import { useWidgetParamsPositions } from "~/components/General/Table/NavBar/QueryParams";
+-import { useWidgetContext } from "~/components/Widget.context";
+-import { useRawDataToggle } from "~/components/Widgets/charting/useRawDataToggle";
+-import { useJsonData } from "~/lib/api";
+-import { useShallowThemeStore } from "~/lib/state/theme";
+-
+-type ConstructorType = "stockChart" | "mapChart" | "chart" | "ganttChart";
+-
+-const constructorTypes: Record<ConstructorType, any> = {
+-  stockChart: HighchartsStocks,
+-  mapChart: HighchartsMaps,
+-  chart: Highcharts,
+-  ganttChart: HighchartsGantt,
+-};
+-
+-export default function ChartHighcharts() {
+-  const { widget } = useWidgetContext();
+-  const theme = useShallowThemeStore((s) => s.theme);
+-
+-  const options = useMemo(() => {
+-    const newParams = Object.fromEntries(
+-      Object.entries({
+-        ...(widget?.endpoint?.query ?? {}),
+-        ...(widget?.storage?.params ?? {}),
+-      }).filter(([_key, value]) => value !== "" && value !== undefined),
+-    );
+-    newParams.theme = theme;
+-    return {
+-      url: widget.endpoint?.url,
+-      endpointHeaders: widget.endpoint?.headers ?? {},
+-      method: widget.endpoint?.method ?? "GET",
+-      params: newParams,
+-    };
+-  }, [widget?.endpoint, widget?.storage?.params, theme]);
+-
+-  const { showTable, toggle, tableNode, rawData, rawLoading, rawError } =
+-    useRawDataToggle({ baseOptions: options });
+-
+-  const { data, isLoading, error, dataUpdatedAt } = useJsonData(options, {
+-    enabled: !showTable,
+-    staleTime: widget?.staleTime ?? 1000 * 60 * 15,
+-  });
+-
+-  const { renderRow0Params, renderBelowNavbarRows } = useWidgetParamsPositions();
+-
+-  return (
+-    <DraggableCard
+-      aiEnabled={true}
+-      aiData={showTable ? rawData : data}
+-      lastUpdated={dataUpdatedAt}
+-      //failingUrl={state.failingUrl}
+-      elementRightNextToTitle={renderRow0Params}
+-      elementBelowNavbar={renderBelowNavbarRows}
+-      extraNavbarElements={toggle}
+-      loading={showTable ? rawLoading : isLoading}
+-      error={showTable ? rawError || !rawData : error || !data}
+-      errorMessage={widget?.external ? error?.message : "No results found"}
+-    >
+-      <SetLoadingOnResize>
+-        {showTable
+-          ? tableNode
+-          : !isLoading &&
+-            data?.userOptions && (
+-              <HighchartsReact
+-                highcharts={constructorTypes[data?.constructorType ?? "chart"]}
+-                constructorType={data?.constructorType ?? "chart"}
+-                options={data?.userOptions}
+-              />
+-            )}
+-      </SetLoadingOnResize>
+-    </DraggableCard>
+-  );
+-}
+--- a/terminalpro/src/components/Widgets/index.ts
++++ b/terminalpro/src/components/Widgets/index.ts
+@@ -14,2 +13,0 @@
+-const AgGridSSRMFC = lazy(() => import("../General/Table/AgGridSSRM"));
+-const AgGridSSRMAdvancedFC = lazy(() => import("../General/Table/AgGridSSRMAdvanced"));
+@@ -18 +15,0 @@
+-const ChartHighchartsFC = lazy(() => import("./charting/ChartHighcharts"));
+@@ -19,0 +17 @@
++const CommunityUnavailableWidgetFC = lazy(() => import("./CommunityUnavailableWidget"));
+@@ -106,2 +103,0 @@
+-  ssrm_table: "AgGridSSRM",
+-  ssrm_advanced: "AgGridSSRMAdvanced",
+@@ -134 +130,3 @@
+-  "chart-highcharts": "ChartHighcharts",
++  ssrm_table: "CommunityUnavailableWidget",
++  ssrm_advanced: "CommunityUnavailableWidget",
++  "chart-highcharts": "CommunityUnavailableWidget",
+@@ -196,2 +193,0 @@
+-  AgGridSSRM: AgGridSSRMFC,
+-  AgGridSSRMAdvanced: AgGridSSRMAdvancedFC,
+@@ -200 +195,0 @@
+-  ChartHighcharts: ChartHighchartsFC,
+@@ -201,0 +197 @@
++  CommunityUnavailableWidget: CommunityUnavailableWidgetFC,
+--- a/terminalpro/src/components/types.d.ts
++++ b/terminalpro/src/components/types.d.ts
+@@ -7 +7 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/lib/state/copilot.ts
++++ b/terminalpro/src/lib/state/copilot.ts
+@@ -1 +1 @@
+-import type { ChartType } from "ag-grid-enterprise";
++import type { ChartType } from "ag-grid-community";
+--- a/terminalpro/src/lib/state/tableChartThemes.ts
++++ b/terminalpro/src/lib/state/tableChartThemes.ts
+@@ -1 +1 @@
+-import type { AgChartThemeName } from "ag-charts-enterprise";
++import type { AgChartThemeName } from "ag-charts-community";
+@@ -8 +8 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+--- a/terminalpro/src/main.tsx
++++ b/terminalpro/src/main.tsx
+@@ -3 +2,0 @@
+-import { AgChartsEnterpriseModule } from "ag-charts-enterprise";
+@@ -5,2 +4 @@
+-  AllEnterpriseModule,
+-  LicenseManager,
++  AllCommunityModule,
+@@ -8 +6 @@
+-} from "ag-grid-enterprise";
++} from "ag-grid-community";
+@@ -109 +107 @@
+-ModuleRegistry.registerModules([AllEnterpriseModule.with(AgChartsEnterpriseModule)]);
++ModuleRegistry.registerModules([AllCommunityModule]);
+--- a/terminalpro/tests/unit/components/Widgets/ChartHighcharts.test.tsx
++++ /dev/null
+@@ -1,153 +0,0 @@
+-import { screen } from "@testing-library/react";
+-import { beforeEach, describe, expect, it, vi } from "vitest";
+-import ChartHighcharts from "~/components/Widgets/charting/ChartHighcharts";
+-import { useJsonData } from "~/lib/api";
+-import { renderWidget } from "./WidgetTestWrapper";
+-
+-vi.mock("~/lib/api", () => ({
+-  useJsonData: vi.fn(),
+-}));
+-
+-vi.mock("~/components/DraggableCard", () => ({
+-  default: ({
+-    children,
+-    loading,
+-    error,
+-    errorMessage,
+-    aiData,
+-    extraNavbarElements,
+-  }: any) => (
+-    <div
+-      data-testid="draggable-card"
+-      data-ai-data={aiData ? JSON.stringify(aiData) : ""}
+-    >
+-      {extraNavbarElements}
+-      {loading && <span>Loading...</span>}
+-      {error && <span>Error: {errorMessage}</span>}
+-      {children}
+-    </div>
+-  ),
+-  SetLoadingOnResize: ({ children }: any) => <>{children}</>,
+-}));
+-
+-vi.mock("~/components/General/Table/NavBar/QueryParams", () => ({
+-  useWidgetParamsPositions: () => ({
+-    renderRow0Params: null,
+-    renderBelowNavbarRows: null,
+-  }),
+-}));
+-
+-vi.mock("~/lib/state/theme", () => ({
+-  useShallowThemeStore: vi.fn((selector: any) => selector({ theme: "dark" })),
+-}));
+-
+-vi.mock("highcharts-react-official", () => ({
+-  default: (props: any) => (
+-    <div
+-      data-testid="_highcharts"
+-      data-constructor={props.constructorType}
+-      data-options={JSON.stringify(props.options)}
+-    />
+-  ),
+-}));
+-
+-vi.mock("highcharts/highcharts", () => ({ default: {} }));
+-vi.mock("highcharts/highcharts-gantt", () => ({ default: {} }));
+-vi.mock("highcharts/highmaps", () => ({ default: {} }));
+-vi.mock("highcharts/highstock", () => ({ default: {} }));
+-
+-vi.mock("~/components/General/Table/hooks", () => ({
+-  Table: ({ children }: any) => <div data-testid="_raw-table">{children}</div>,
+-  AgGridProvider: ({ rowData }: any) => (
+-    <div data-testid="_ag-grid" data-rows={JSON.stringify(rowData)} />
+-  ),
+-}));
+-
+-vi.mock("~/components/General/Table/AgGridUtils", () => ({
+-  getColumnDefs: vi.fn(() => []),
+-  isDate: (_value: any) => false,
+-}));
+-
+-const widgetOverrides = {
+-  endpoint: { url: "https://example.com/chart", query: { symbol: "AAPL" } },
+-};
+-
+-const chartData = {
+-  constructorType: "chart",
+-  userOptions: { series: [{ data: [1, 2, 3] }] },
+-};
+-
+-describe("ChartHighcharts", () => {
+-  beforeEach(() => {
+-    vi.clearAllMocks();
+-  });
+-
+-  it("renders the Highcharts chart from fetched options", () => {
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: chartData,
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, { widgetOverrides });
+-    expect(screen.getByTestId("_highcharts")).toBeInTheDocument();
+-  });
+-
+-  it("does not render a raw-data toggle when the widget has no raw flag", () => {
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: chartData,
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, { widgetOverrides });
+-    expect(document.getElementById("raw-data-toggle-button")).not.toBeInTheDocument();
+-    expect(screen.queryByTestId("_raw-table")).not.toBeInTheDocument();
+-  });
+-
+-  it("renders a raw-data toggle and keeps the chart when raw flag is set", () => {
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: chartData,
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, {
+-      widgetOverrides: { ...widgetOverrides, raw: true },
+-    });
+-
+-    expect(document.getElementById("raw-data-toggle-button")).toBeInTheDocument();
+-    expect(screen.getByTestId("_highcharts")).toBeInTheDocument();
+-    expect(screen.queryByTestId("_raw-table")).not.toBeInTheDocument();
+-  });
+-
+-  it("switches to a data table when rawDataView is enabled", () => {
+-    const records = [{ tokenSymbol: "ETH", tvl: 50 }];
+-    vi.mocked(useJsonData).mockReturnValue({
+-      isLoading: false,
+-      data: { results: records },
+-      error: null,
+-      dataUpdatedAt: 0,
+-    } as any);
+-
+-    renderWidget(<ChartHighcharts />, {
+-      widgetOverrides: {
+-        ...widgetOverrides,
+-        raw: true,
+-        storage: { rawDataView: true },
+-      },
+-    });
+-
+-    expect(screen.getByTestId("_raw-table")).toBeInTheDocument();
+-    expect(screen.queryByTestId("_highcharts")).not.toBeInTheDocument();
+-
+-    const grid = screen.getByTestId("_ag-grid");
+-    expect(JSON.parse(grid.getAttribute("data-rows") ?? "[]")).toEqual(records);
+-
+-    const card = screen.getByTestId("draggable-card");
+-    expect(JSON.parse(card.getAttribute("data-ai-data") ?? "null")).toEqual(records);
+-  });
+-});
+--- a/terminalpro/tests/unit/routes/developer_onboarding/DeveloperOnboardingHomepage.test.tsx
++++ b/terminalpro/tests/unit/routes/developer_onboarding/DeveloperOnboardingHomepage.test.tsx
+@@ -100,6 +99,0 @@
+-// Mock the entire ChartHighcharts component
+-vi.mock("~/components/Widgets/charting/ChartHighcharts", () => ({
+-  default: vi.fn().mockImplementation(() => null),
+-}));
+-
+-// Mock any other components that might use Highcharts
+--- a/terminalpro/vite.config.ts
++++ b/terminalpro/vite.config.ts
+@@ -248 +247,0 @@
+-            if (pkg.startsWith("highcharts")) return "vendor-highcharts";
