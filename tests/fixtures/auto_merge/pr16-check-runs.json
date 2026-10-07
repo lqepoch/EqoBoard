@@ -1,0 +1,88 @@
+{
+  "captured_at": "2026-10-07T09:47:46Z",
+  "source": "GET /repos/lqepoch/EqoBoard/commits/ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde/check-runs",
+  "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+  "ci_check_suite_id": 101823484699,
+  "check_runs": [
+    {
+      "id": 112685319623,
+      "check_suite": { "id": 101823623528 },
+      "name": "CodeQL",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:41:22Z",
+      "app": { "id": 57789, "slug": "github-advanced-security" }
+    },
+    {
+      "id": 112685252943,
+      "check_suite": { "id": 101823484699 },
+      "name": "Offline market-data contract tests",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:41:12Z",
+      "app": { "id": 15368, "slug": "github-actions" }
+    },
+    {
+      "id": 112685252863,
+      "check_suite": { "id": 101823484699 },
+      "name": "OpenTerminal / AG Grid / Next.js",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:41:12Z",
+      "app": { "id": 15368, "slug": "github-actions" }
+    },
+    {
+      "id": 112685252752,
+      "check_suite": { "id": 101823484699 },
+      "name": "Rust data / gateway / execution",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:41:12Z",
+      "app": { "id": 15368, "slug": "github-actions" }
+    },
+    {
+      "id": 112685141997,
+      "check_suite": { "id": 101823470541 },
+      "name": "Analyze (rust)",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:41:00Z",
+      "app": { "id": 15368, "slug": "github-actions" }
+    },
+    {
+      "id": 112685141866,
+      "check_suite": { "id": 101823470541 },
+      "name": "Analyze (actions)",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:40:53Z",
+      "app": { "id": 15368, "slug": "github-actions" }
+    },
+    {
+      "id": 112685141816,
+      "check_suite": { "id": 101823470541 },
+      "name": "Analyze (python)",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:40:53Z",
+      "app": { "id": 15368, "slug": "github-actions" }
+    },
+    {
+      "id": 112685141756,
+      "check_suite": { "id": 101823470541 },
+      "name": "Analyze (javascript-typescript)",
+      "head_sha": "ed8d4bccb8aea8fecc79779c6866bd14f0dc6fde",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-07T07:40:53Z",
+      "app": { "id": 15368, "slug": "github-actions" }
+    }
+  ]
+}
