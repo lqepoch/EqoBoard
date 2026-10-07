@@ -8,11 +8,14 @@ import { useTerminal } from "../../store/terminal";
 import Flash from "../Flash";
 
 type MacroData = {
-  yields: Array<{ tenor: string; value: number | null }>;
+  yields: Array<{ tenor: string; value: number | null; source?: string; asOf?: string | null }>;
   vix: number | null;
-  indexes: Array<{ symbol: string; label: string; price: number | null; changePercent: number | null }>;
+  vixSource?: string; vixAsOf?: string | null;
+  indexes: Array<{ symbol: string; label: string; price: number | null; changePercent: number | null; source?: string; asOf?: string | null }>;
   policyRate: number | null;
+  policyRateSource?: string | null; policyRateAsOf?: string | null;
   inflation: number | null;
+  inflationSource?: string | null; inflationAsOf?: string | null;
 };
 
 export default function MacroWidget() {
@@ -58,18 +61,26 @@ function MacroBody({
       <div className="px-2 py-1 dim text-[10px] uppercase flex justify-between">
         <span>{region === "eu" ? "Euro Area AAA Yield Curve" : "US Treasury Yield Curve"}</span>
         {region === "us" && data.vix !== null && (
-          <span className="cursor-pointer" onClick={() => setActiveSymbol("^VIX")}>
+          <span className="cursor-pointer" onClick={() => setActiveSymbol("VIX")}
+            title={`${data.vixSource??"FRED VIXCLS"} · ${data.vixAsOf??"as-of unknown"}`}>
             VIX <Flash value={data.vix} className="amber">{fmt(data.vix, 2)}</Flash>
+            <span className="dim"> · {data.vixSource??"FRED VIXCLS"} {data.vixAsOf??"as-of unknown"}</span>
           </span>
         )}
         {region === "eu" && (data.policyRate !== null || data.inflation !== null) && (
           <span>
             {data.policyRate !== null && (
-              <>ECB depo <Flash value={data.policyRate} className="amber">{fmt(data.policyRate, 2)}%</Flash></>
+              <span title={`${data.policyRateSource??"ECB"} · ${data.policyRateAsOf??"as-of unknown"}`}>
+                ECB depo <Flash value={data.policyRate} className="amber">{fmt(data.policyRate, 2)}%</Flash>
+                <span className="dim"> · {data.policyRateSource??"ECB"} {data.policyRateAsOf??"as-of unknown"}</span>
+              </span>
             )}
             {data.inflation !== null && (
               <>
-                {" "}HICP <Flash value={data.inflation} className="amber">{fmt(data.inflation, 1)}%</Flash>
+                {" "}<span title={`${data.inflationSource??"ECB"} · ${data.inflationAsOf??"as-of unknown"}`}>
+                  HICP <Flash value={data.inflation} className="amber">{fmt(data.inflation, 1)}%</Flash>
+                  <span className="dim"> · {data.inflationSource??"ECB"} {data.inflationAsOf??"as-of unknown"}</span>
+                </span>
               </>
             )}
           </span>
@@ -88,9 +99,13 @@ function MacroBody({
           </LineChart>
         </ResponsiveContainer>
       </div>
+      <div className="dim px-2 text-[9px]" title={data.yields.map((item) =>
+        `${item.tenor}: ${item.source??"source unknown"} · ${item.asOf??"as-of unknown"}`).join("; ")}>
+        {data.yields.length?data.yields.map((item) => `${item.tenor} ${item.asOf??"unknown"}`).join(" · "):"No yield observations"}
+      </div>
       <table className="data-table">
         <thead>
-          <tr><th>Index / Commodity</th><th>Last</th><th>Chg%</th></tr>
+          <tr><th>Index / Commodity</th><th>Last</th><th>Chg%</th><th>Source · as of</th></tr>
         </thead>
         <tbody>
           {data.indexes.map((q) => (
@@ -100,6 +115,7 @@ function MacroBody({
               <td className={pctClass(q.changePercent)}>
                 <Flash value={q.changePercent}>{fmt(q.changePercent)}%</Flash>
               </td>
+              <td className="dim text-[9px]" title={q.asOf??"as-of unknown"}>{q.source??"source unknown"} · {q.asOf??"unknown"}</td>
             </tr>
           ))}
         </tbody>

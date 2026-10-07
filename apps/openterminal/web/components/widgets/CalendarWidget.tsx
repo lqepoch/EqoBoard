@@ -14,6 +14,10 @@ type EconEvent = {
   forecast: string | null;
   previous: string | null;
   actual: string | null;
+  scheduleSource?: string;
+  scheduleAsOf?: string | null;
+  actualSource?: string | null;
+  actualAsOf?: string | null;
 };
 
 type EarningsEntry = {
@@ -108,7 +112,10 @@ function EconomicTab() {
                 })}
               </td>
               <td>{e.country}</td>
-              <td className={`!text-left ${IMPACT_CLASS[e.impact]}`}>{e.title}</td>
+              <td className={`!text-left ${IMPACT_CLASS[e.impact]}`} title={`${e.scheduleSource??"Forex Factory"} schedule observation ${e.scheduleAsOf??"unknown"}; ${e.actualSource??"no actual source"} actual observation ${e.actualAsOf??"unknown"}`}>
+                {e.title}<div className="dim text-[9px]">{e.scheduleSource??"Forex Factory"} schedule · event {e.date}</div>
+                {e.actual!==null&&<div className="dim text-[9px]">{e.actualSource??"FRED"} actual · as-of {e.actualAsOf??"unknown"}</div>}
+              </td>
               <td>{e.forecast ?? "—"}</td>
               <td className="dim">{e.previous ?? "—"}</td>
               <td className={e.actual ? "text-[var(--text)]" : "dim"}>{e.actual ?? "—"}</td>
@@ -117,6 +124,9 @@ function EconomicTab() {
         </tbody>
       </table>
       {events.length === 0 && <div className="p-3 dim">No events in this window.</div>}
+      <div className="dim px-2 py-1 text-[9px]">
+        Forex Factory schedule/forecast/previous · FRED actuals for supported releases; observation date unavailable in this response.
+      </div>
     </div>
   );
 }
@@ -129,7 +139,11 @@ type EarningsHistoryRow = {
   eps: number | null;
   consensusForecast: number | null;
   surprisePercent: number | null;
+  surpriseSource?: string;
+  surpriseAsOf?: string | null;
   dayAfterChangePercent: number | null;
+  priceMoveSource?: string;
+  priceMoveAsOf?: string | null;
 };
 
 /** Actual vs forecast: beat = green, miss = red, in-line = white. */
@@ -160,7 +174,8 @@ function EarningsHistoryRows({ symbol }: { symbol: string }) {
           <th>Forecast</th>
           <th>Actual</th>
           <th>Surprise</th>
-          <th>Day After</th>
+          <th>EPS source · report date</th>
+          <th>Day After · price source</th>
         </tr>
       </thead>
       <tbody>
@@ -171,7 +186,8 @@ function EarningsHistoryRows({ symbol }: { symbol: string }) {
             <td className="dim">{row.consensusForecast != null ? `$${row.consensusForecast.toFixed(2)}` : "—"}</td>
             <td className={surpriseClass(row)}>{row.eps != null ? `$${row.eps.toFixed(2)}` : "—"}</td>
             <td className={surpriseClass(row)}>{row.surprisePercent != null ? `${fmt(row.surprisePercent, 1)}%` : "—"}</td>
-            <td className={pctClass(row.dayAfterChangePercent)}>
+            <td className="dim text-[9px]">{row.surpriseSource??"Nasdaq"} · {row.surpriseAsOf??fmtDate(row.dateReported)}</td>
+            <td className={pctClass(row.dayAfterChangePercent)} title={`${row.priceMoveSource??"price source unavailable"} · ${row.priceMoveAsOf??"as-of unknown"}`}>
               {row.dayAfterChangePercent != null ? `${fmt(row.dayAfterChangePercent, 1)}%` : "—"}
             </td>
           </tr>

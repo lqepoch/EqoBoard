@@ -2,14 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { apiGet, fmt, fmtBig, pctClass } from "../../lib/api";
+import { apiGet, fmt, fmtBig, pctClass, type MarketRowsEnvelope } from "../../lib/api";
 import { useTerminal } from "../../store/terminal";
 import Flash from "../Flash";
 
 type Row = {
   symbol: string; name: string; price: number | null;
   changePercent: number | null; volume: number | null; marketCap: number | null;
-  sector: string;
+  sector: string; priceSource?: string; priceAsOf?: string | null;
 };
 
 export default function ScreenerWidget() {
@@ -37,11 +37,12 @@ export default function ScreenerWidget() {
   params.set("sort", sort);
   params.set("dir", dir);
 
-  const { data = [], isLoading, error } = useQuery({
+  const { data: marketData, isLoading, error } = useQuery({
     queryKey: ["screener", params.toString()],
-    queryFn: () => apiGet<Row[]>(`/api/screener?${params}`),
+    queryFn: () => apiGet<MarketRowsEnvelope<Row>>(`/api/screener?${params}`),
     refetchInterval: 20_000,
   });
+  const data=marketData?.rows??[];
 
   const th = (key: string, label: string) => (
     <th
@@ -76,6 +77,12 @@ export default function ScreenerWidget() {
         <input className="w-24" placeholder="Vol min (M)" value={volumeMinM} onChange={(e) => setVolumeMinM(e.target.value)} />
         <span className="dim ml-auto">{isLoading ? "…" : `${data.length} results`}</span>
       </div>
+      {marketData&&<div className="px-2 py-1 text-[9px] dim">
+        {marketData.source} · as of {marketData.asOf??"unknown"} · {marketData.coverage.priced}/{marketData.coverage.requested} priced
+        · {marketData.coverage.priceComplete?"prices complete":"prices partial"}
+        · {marketData.coverage.timeComplete?"timestamps complete":"timestamps partial/unknown"}
+        {marketData.truncated?" · truncated":""}
+      </div>}
       {error && <div className="p-2 down">Error: {(error as Error).message}</div>}
       <table className="data-table">
         <thead>
@@ -95,7 +102,9 @@ export default function ScreenerWidget() {
               <td className="font-bold">{q.symbol}</td>
               <td className="!text-left max-w-40 truncate">{q.name}</td>
               <td className="!text-left dim">{q.sector}</td>
-              <td><Flash value={q.price}>{fmt(q.price)}</Flash></td>
+              <td title={`${q.priceSource??marketData?.source??"source unknown"} · ${q.priceAsOf??marketData?.asOf??"as-of unknown"}`}>
+                <Flash value={q.price}>{fmt(q.price)}</Flash>
+              </td>
               <td className={pctClass(q.changePercent)}>
                 <Flash value={q.changePercent}>{fmt(q.changePercent)}%</Flash>
               </td>

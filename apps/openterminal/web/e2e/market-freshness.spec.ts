@@ -32,7 +32,7 @@ test("a connected silent SSE feed ages LIVE out without a new market event", asy
     currency: "USD",
     exchange: "NASDAQ",
     marketState: null,
-    source: "Alpaca SIP",
+    source: "mock-fixture/SIP",
     asOf: snapshotTime,
     quoteAt: snapshotTime,
     tradeAt: snapshotTime,

@@ -7,15 +7,19 @@ import { useTerminal } from "../../store/terminal";
 import Flash from "../Flash";
 
 type RecapRow = { symbol: string; name: string; changePercent: number | null };
-type RecapIndex = { symbol: string; label: string; price: number | null; changePercent: number | null };
+type RecapIndex = { symbol: string; label: string; price: number | null; changePercent: number | null; source?: string; asOf?: string | null };
 type RecapSector = { sector: string; avgChangePercent: number };
 type RecapNews = { title: string; link: string; publisher: string; publishedAt: string | null };
 
 type Recap = {
   summary: string;
   updatedAt: string;
+  marketSource?: string;
+  marketAsOf?: string | null;
+  marketCoverage?: { requested: number; snapshots: number; priced: number; priceComplete?: boolean; timeComplete?: boolean; complete: boolean };
   indexes: RecapIndex[];
   vix: number | null;
+  vixSource?: string; vixAsOf?: string | null;
   gainers: RecapRow[];
   losers: RecapRow[];
   sectors: RecapSector[];
@@ -38,9 +42,14 @@ export default function RecapWidget() {
       <div className="px-2 py-1 flex justify-between items-baseline">
         <span className="dim text-[10px] uppercase">Market Recap</span>
         <span className="dim text-[9px]">
-          Updated {new Date(data.updatedAt).toLocaleTimeString()}
+          Computed {new Date(data.updatedAt).toLocaleTimeString()} · price as of {data.marketAsOf??"unknown"}
         </span>
       </div>
+      {data.marketSource&&<div className="dim text-[9px] px-2 pb-1">
+        {data.marketSource} · coverage {data.marketCoverage?.priced??0}/{data.marketCoverage?.requested??0} priced
+        · {data.marketCoverage?.priceComplete?"prices complete":"prices partial"}
+        · {data.marketCoverage?.timeComplete?"timestamps complete":"timestamps partial/unknown"}
+      </div>}
 
       <div className="px-2 pb-2 text-[12px] leading-relaxed border-b border-[#161616]">{data.summary}</div>
 
@@ -50,6 +59,7 @@ export default function RecapWidget() {
             <th>Index</th>
             <th>Last</th>
             <th>Chg%</th>
+            <th>Source · as of</th>
           </tr>
         </thead>
         <tbody>
@@ -62,12 +72,13 @@ export default function RecapWidget() {
               <td className={pctClass(q.changePercent)}>
                 <Flash value={q.changePercent}>{fmt(q.changePercent)}%</Flash>
               </td>
+              <td className="dim text-[9px]" title={q.asOf??"as-of unknown"}>{q.source??"source unknown"} · {q.asOf??"unknown"}</td>
             </tr>
           ))}
           {data.vix !== null && (
-            <tr className="cursor-pointer" onClick={() => setActiveSymbol("^VIX")}>
+            <tr className="cursor-pointer" onClick={() => setActiveSymbol("VIX")}>
               <td>VIX</td>
-              <td colSpan={2}>
+              <td colSpan={3} title={`${data.vixSource??"FRED"} · ${data.vixAsOf??"as-of unknown"}`}>
                 <Flash value={data.vix} className="amber">
                   {fmt(data.vix, 2)}
                 </Flash>
