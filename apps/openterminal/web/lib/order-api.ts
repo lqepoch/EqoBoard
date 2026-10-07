@@ -25,8 +25,10 @@ export async function postOrderJson<T>(
     });
   } catch {
     if (purpose === "submit") {
+      const requestBody = body && typeof body === "object" ? body as Record<string, unknown> : {};
+      const previewId = typeof requestBody.preview_id === "string" ? requestBody.preview_id : undefined;
       throw new OrderRequestError(unknownOrderError(
-        "No response was received. The order outcome is unknown; do not submit a new order ID."
+        `No response was received${previewId ? ` for preview ${previewId}` : ""}. The order outcome is unknown; reconcile this operation and do not submit a new order ID.`
       ));
     }
     throw new Error("Order preview service is unavailable");
@@ -43,7 +45,10 @@ export async function postOrderJson<T>(
         // Preserve the operation association when no stable broker ID was
         // returned. A preview id is for recovery correlation, never a retry id.
         client_order_id: contract.client_order_id,
-        detail: contract.detail || (previewId ? `Outcome for preview ${previewId} is unknown.` : contract.detail),
+        detail: contract.state === "unknown" && !contract.client_order_id && previewId &&
+            !contract.detail.includes(previewId)
+          ? `${contract.detail} Reconcile existing preview ${previewId}; do not submit a new order ID.`
+          : contract.detail,
       });
     }
     const errorPayload = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};

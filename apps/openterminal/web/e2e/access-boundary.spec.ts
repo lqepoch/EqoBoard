@@ -98,6 +98,23 @@ test("quotes route U.S. symbols to SIP, named research symbols to Node, preserve
   expect(observed.research.requests).toEqual({});
 });
 
+test("status route preserves disabled broker capabilities separately from configured endpoints", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const response = await page.context().request.get(`${WEB_ORIGIN}/api/status`);
+  expect(response.status()).toBe(200);
+  const status = await response.json();
+  expect(status.adapterEndpointsConfigured).toEqual(["ibkr"]);
+  expect(status.brokerCapabilities).toMatchObject({
+    ibkr: { paper: { enabled: false, implementation: "disabled" } },
+    schwab: { paper: { enabled: false, implementation: "disabled" } },
+  });
+  await page.goto("/");
+  await expect(page.getByLabel("Broker").locator("option").filter({ hasText: "IBKR · Paper disabled" })).toHaveCount(1);
+  const observed = await metrics(request);
+  expect(observed.gateway.requests["/api/v1/status"]).toBeGreaterThanOrEqual(1);
+  expect(observed.gateway.authorized).toBeGreaterThanOrEqual(1);
+});
+
 test("anonymous, forged identity, read-only, and cross-origin writes never reach protected services", async ({ page, request }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in to EqoBoard" })).toBeVisible();

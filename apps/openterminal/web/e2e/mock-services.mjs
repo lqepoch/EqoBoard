@@ -272,7 +272,12 @@ const gateway = createServer(async (req, res) => {
     return sendJson(res, 200, {
       service: "EqoBoard", market_credentials_present: false,
       stock_feed: "sip", option_feed: "opra", execution_mode: "disabled",
-      configured_adapters: [], as_of: new Date().toISOString(),
+      adapter_endpoints_configured: ["ibkr"],
+      broker_capabilities: Object.fromEntries(["alpaca", "ibkr", "schwab"].map((broker) => [broker, {
+        paper: { enabled: false, implementation: "disabled" },
+        live: { enabled: false, implementation: "disabled" },
+      }])),
+      as_of: new Date().toISOString(),
     });
   }
   if (url.pathname === "/api/v1/stocks/snapshots") {

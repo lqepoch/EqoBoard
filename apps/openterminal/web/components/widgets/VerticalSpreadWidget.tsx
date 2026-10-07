@@ -16,7 +16,9 @@ import { useTerminal, useWidgetSymbol, type WidgetInstance, type OptionLeg } fro
 import OrderOutcomePanel from "./OrderOutcomePanel";
 
 type Broker = "alpaca" | "ibkr" | "schwab";
-type Status = { executionMode?: string; adapters?: Broker[] };
+type Status = {
+  brokerCapabilities?: Partial<Record<Broker, { paper?: { enabled?: boolean; implementation?: string } }>>;
+};
 type NetEffect = "debit" | "credit";
 type FormState = { broker: Broker; quantity: string; limit: string; netEffect: NetEffect };
 type PreviewState = LockedPreview & { fingerprint: string };
@@ -168,7 +170,6 @@ export default function VerticalSpreadWidget({ widget }: { widget: WidgetInstanc
     }
   }
 
-  const adapters = status?.adapters ?? [];
   const submitBlockedReason = "Paper submission is blocked until the preview ledger, account binding, outbox, and atomic broker capability are verified.";
 
   return <div className="h-full overflow-auto p-2 text-[11px]">
@@ -192,7 +193,8 @@ export default function VerticalSpreadWidget({ widget }: { widget: WidgetInstanc
       <label className="dim">Broker<select aria-label="Broker" className="w-full mt-1" value={form.broker}
         onChange={(event) => isBroker(event.target.value) && updateForm({ broker: event.target.value })}>
         {(["alpaca", "ibkr", "schwab"] as Broker[]).map((broker) => <option key={broker} value={broker}>
-          {broker.toUpperCase()} {adapters.includes(broker) ? "configured" : "not configured"}
+          {broker.toUpperCase()} · {status?.brokerCapabilities?.[broker]?.paper?.enabled === true
+            ? "Paper enabled" : "Paper disabled"}
         </option>)}
       </select></label>
       <label className="dim">Qty<input aria-label="Quantity" className="w-full mt-1" type="number" min="1" step="1"

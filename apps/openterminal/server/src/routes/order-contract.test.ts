@@ -90,6 +90,8 @@ describe("typed order outcomes", () => {
       expect(orderError.contract.state).toBe("unknown");
       expect(orderError.contract.retryable).toBe(false);
       expect(orderError.contract.client_order_id).toBeUndefined();
+      expect(orderError.contract.detail).toContain(priorPreviewId);
+      expect(orderError.contract.detail).toContain("do not submit a new order ID");
       expect(priorPreviewId).toBe(lockedPreview.preview_id);
     }
   });

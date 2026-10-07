@@ -4,9 +4,14 @@ import { futureFridayOCCDate } from "./market-test-data";
 const previewId = "00000000-0000-4000-8000-000000000001";
 const clientOrderId = "client-order-unknown-e2e-17";
 const expiration = futureFridayOCCDate();
-const legs = [
-  { symbol: `QQQ${expiration}P00620000`, side: "buy", strike: 620, right: "put" },
-  { symbol: `QQQ${expiration}P00600000`, side: "sell", strike: 600, right: "put" },
+const expirationDate = `20${expiration.slice(0, 2)}-${expiration.slice(2, 4)}-${expiration.slice(4)}`;
+const contracts = [
+  { symbol: `QQQ${expiration}P00620000`, right: "put", strike: 620, bid: 1.10, ask: 1.20,
+    last: 1.15, iv: null, delta: null, gamma: null, theta: null, vega: null,
+    bid_size: 1, ask_size: 1, updated_at: null },
+  { symbol: `QQQ${expiration}P00600000`, right: "put", strike: 600, bid: 0.10, ask: 0.20,
+    last: 0.15, iv: null, delta: null, gamma: null, theta: null, vega: null,
+    bid_size: 1, ask_size: 1, updated_at: null },
 ];
 
 test.beforeEach(async ({ request }) => {
@@ -15,12 +20,14 @@ test.beforeEach(async ({ request }) => {
 
 test("a late preview cannot restore A after the form changes A to B and back to A", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader", "eqoboard-order-reviewer"]);
-  await configureMocks(request, { previewDelaysMs: [5_000, 0] });
+  await configureMocks(request, { previewDelaysMs: [5_000, 0], contracts });
   await page.goto("/");
-  await page.evaluate((value) => {
-    localStorage.setItem("eqoboard-open-terminal-v1", JSON.stringify({ state: { optionLegs: value }, version: 0 }));
-  }, legs);
-  await page.reload();
+  await page.getByLabel("Option expiry").fill(expirationDate);
+  await expect(page.locator('[row-id="620"]')).toBeVisible();
+  await page.locator('[row-id="620"] [col-id="put.last"]').click();
+  await page.locator('[row-id="600"] [col-id="put.last"]').click();
+  await expect(page.getByLabel("Leg 1 side")).toHaveValue("buy");
+  await expect(page.getByLabel("Leg 2 side")).toHaveValue("sell");
 
   const limit = page.getByLabel("Limit price");
   await limit.fill("0.01");
