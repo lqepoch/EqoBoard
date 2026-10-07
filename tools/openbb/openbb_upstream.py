@@ -503,6 +503,96 @@ def syft_binary() -> tuple[Path, str]:
     return executable, pinned["version"]
 
 
+def normalized_sbom_packages(sbom: dict[str, Any]) -> frozenset[tuple[str, str]]:
+    packages = sbom.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise SupplyChainError("Syft did not produce a non-empty package inventory")
+    identities: set[tuple[str, str]] = set()
+    for package in packages:
+        if not isinstance(package, dict):
+            raise SupplyChainError("Syft package inventory contains a malformed entry")
+        if str(package.get("SPDXID", "")).startswith("SPDXRef-DocumentRoot-"):
+            continue
+        name = package.get("name")
+        version = package.get("versionInfo", "")
+        if not isinstance(name, str) or not name.strip() or not isinstance(version, str):
+            raise SupplyChainError("Syft package inventory has a missing or malformed name/version")
+        identities.add((name.strip(), version.strip()))
+    return frozenset(identities)
+
+
+def stable_sbom_scan(
+    syft: Path,
+    source: str,
+    output: Path,
+    source_name: str,
+    source_version: str,
+    base_path: Path | None = None,
+) -> dict[str, Any]:
+    """Run Syft three times and fail closed if lockfile cataloging is unstable."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="eqoboard-openbb-sbom-runs-") as temporary:
+        scratch = Path(temporary)
+        stable_packages: frozenset[tuple[str, str]] | None = None
+        stable_count: int | None = None
+        selected_sbom: dict[str, Any] | None = None
+        selected_path: Path | None = None
+        for index in range(3):
+            candidate = scratch / f"scan-{index}.spdx.json"
+            command = [
+                str(syft), "scan", source,
+                "--source-name", source_name,
+                "--source-version", source_version,
+                "--parallelism", "1",
+                "--override-default-catalogers", "all",
+                "--quiet",
+            ]
+            if base_path is not None:
+                command.extend(["--base-path", str(base_path)])
+            command.extend(["-o", f"spdx-json={candidate}"])
+            environment = {
+                key: value for key, value in os.environ.items()
+                if not key.startswith("SYFT_")
+            }
+            # Syft 1.54.1 can nondeterministically drop production dependencies from Bun
+            # locks with duplicate names when it excludes dev dependencies. Including the
+            # full lock graph avoids that unsafe classification; repeat runs detect drift.
+            environment.update({
+                "SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES": "true",
+                "SYFT_CACHE_TTL": "0",
+                "SYFT_CHECK_FOR_APP_UPDATE": "false",
+            })
+            subprocess.run(command, check=True, env=environment)
+            sbom = read_json(candidate)
+            if sbom.get("spdxVersion") != "SPDX-2.3":
+                raise SupplyChainError("Syft did not produce SPDX 2.3 output")
+            identities = normalized_sbom_packages(sbom)
+            package_count = len(sbom["packages"])
+            if stable_packages is None:
+                stable_packages = identities
+                stable_count = package_count
+                selected_sbom = sbom
+                selected_path = candidate
+            elif identities != stable_packages or package_count != stable_count:
+                raise SupplyChainError(
+                    "SBOM_UNVERIFIED: Syft produced an unstable normalized package name/version inventory "
+                    f"for {source}; repeated scans reported {stable_count} and {package_count} package entries"
+                )
+        if selected_path is None or selected_sbom is None:
+            raise SupplyChainError("Syft produced no SBOM scan result")
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{output.name}.", suffix=".tmp", dir=output.parent
+        )
+        temporary_output = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as destination, selected_path.open("rb") as source_file:
+                shutil.copyfileobj(source_file, destination)
+            os.replace(temporary_output, output)
+        finally:
+            temporary_output.unlink(missing_ok=True)
+        return selected_sbom
+
+
 def source_sbom(output_path: Path | None, archive: Path | None) -> None:
     verified = archive or fetch_archive()
     report = verify_archive(verified)
@@ -515,19 +605,18 @@ def source_sbom(output_path: Path | None, archive: Path | None) -> None:
     with tempfile.TemporaryDirectory(prefix="eqoboard-openbb-sbom-") as temporary:
         source = Path(temporary) / "source"
         safe_extract(verified, source)
-        command = [
-            str(syft), "scan", f"dir:{source}",
-            "--source-name", "OpenBB Workspace source archive",
-            "--source-version", EXPECTED_COMMIT,
-            "--base-path", str(source),
-            "--quiet",
-            "-o", f"spdx-json={output}",
-        ]
-        subprocess.run(command, check=True)
-    sbom = read_json(output)
-    if sbom.get("spdxVersion") != "SPDX-2.3" or not sbom.get("packages"):
-        output.unlink(missing_ok=True)
-        raise SupplyChainError("Syft did not produce a non-empty SPDX 2.3 source SBOM")
+        sbom = stable_sbom_scan(
+            syft,
+            f"dir:{source}",
+            output,
+            "OpenBB Workspace source archive",
+            EXPECTED_COMMIT,
+            base_path=source,
+        )
+    identities = normalized_sbom_packages(sbom)
+    package_set_digest = hashlib.sha256(
+        json.dumps(sorted(identities), separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     print(json.dumps({
         "kind": "source-archive-sbom",
         "source_commit": report["commit"],
@@ -535,8 +624,12 @@ def source_sbom(output_path: Path | None, archive: Path | None) -> None:
         "syft_version": version,
         "spdx_version": sbom["spdxVersion"],
         "package_count": len(sbom["packages"]),
+        "normalized_package_identity_count": len(identities),
+        "normalized_package_set_sha256": package_set_digest,
+        "package_set_stability_runs": 3,
+        "javascript_dev_dependencies_included": True,
         "output": str(output),
-        "note": "This inventories the pinned source archive and declared/locked components; it is not an SBOM for a built runtime image.",
+        "note": "This inventories the pinned source archive, including JavaScript dev dependencies so Bun lock production packages cannot be nondeterministically dropped; it is not an SBOM for a built runtime image.",
     }, indent=2))
 
 
@@ -714,11 +807,13 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
         artifact_dir = ROOT / "build" / "openbb"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         sbom_path = artifact_dir / f"workspace-image-{EXPECTED_COMMIT}-{identity[:16]}.spdx.json"
-        subprocess.run([
-            str(syft), "scan", f"docker:{image_tag}",
-            "--source-name", image_tag, "--source-version", EXPECTED_COMMIT,
-            "--quiet", "-o", f"spdx-json={sbom_path}",
-        ], check=True)
+        stable_sbom_scan(
+            syft,
+            f"docker:{image_tag}",
+            sbom_path,
+            image_tag,
+            EXPECTED_COMMIT,
+        )
         sbom_digest = sha256_file(sbom_path)
         build_record = {
             "source_commit": EXPECTED_COMMIT,
