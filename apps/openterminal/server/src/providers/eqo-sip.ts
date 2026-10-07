@@ -1,7 +1,10 @@
 import type { GatewayWatermark } from "./snapshot-watermarks.js";
+import type { MarketSourceFields } from "./market-source.js";
 
-export type SipSnapshot = {
+export type SipSnapshot = MarketSourceFields & {
+  gateway_instance_id?: string;
   symbol: string;
+  received_at?: string | null;
   last: number | null;
   previous_close: number | null;
   change_percent: number | null;
@@ -22,7 +25,9 @@ export type SipSnapshot = {
   watermark?: GatewayWatermark | null;
 };
 
-export type SipBar = {
+export type SipBar = MarketSourceFields & {
+  gateway_instance_id?: string;
+  received_at?: string | null;
   time: string;
   open: number;
   high: number;
@@ -30,9 +35,12 @@ export type SipBar = {
   close: number;
   volume: number;
 };
-export type SipBars = {
+export type SipBars = MarketSourceFields & {
+  gateway_instance_id?: string;
+  received_at?: string | null;
   bars: SipBar[];
   watermark?: {
+    gateway_instance_id?: string;
     feed: "stocks";
     connection_epoch: number;
     request_start_sequence?: number | null;
@@ -149,13 +157,25 @@ export async function sipSnapshots(inputSymbols: string[], authorization: string
     }
     void mapLimited(batches, REQUEST_CONCURRENCY, async (batch) => {
       const query = new URLSearchParams({ symbols: batch.join(",") });
-      const response = await getRust<{ feed: string; snapshots: SipSnapshot[]; watermark?: GatewayWatermark }>(
+      const response = await getRust<{
+        feed: string;
+        gateway_instance_id?: string;
+        source_mode?: unknown;
+        source_label?: unknown;
+        received_at?: string | null;
+        snapshots: SipSnapshot[];
+        watermark?: GatewayWatermark;
+      }>(
         `/api/v1/stocks/snapshots?${query.toString()}`, authorization);
       if (response.feed !== "sip" || !Array.isArray(response.snapshots)) {
         throw new SipGatewayError(502, "Rust Gateway did not return an Alpaca SIP snapshot set");
       }
       return response.snapshots.map((snapshot) => ({
         ...snapshot,
+        source_mode: snapshot.source_mode === undefined ? response.source_mode : snapshot.source_mode,
+        source_label: snapshot.source_label === undefined ? response.source_label : snapshot.source_label,
+        gateway_instance_id: snapshot.gateway_instance_id ?? response.gateway_instance_id ?? response.watermark?.gateway_instance_id,
+        received_at: snapshot.received_at === undefined ? response.received_at : snapshot.received_at,
         watermark: response.watermark ? { ...response.watermark, feed: "stocks" as const } : snapshot.watermark ?? null,
       }));
     }).then((results) => {
@@ -196,13 +216,31 @@ export async function sipBars(
     throw new SipGatewayError(400, "Invalid SIP bar query");
   }
   const query = new URLSearchParams({ symbol: ticker, timeframe, limit: String(limit), days: String(days) });
-  const response = await getRust<{ feed: string; bars: SipBar[]; watermark?: Omit<NonNullable<SipBars["watermark"]>, "feed"> }>(
+  const response = await getRust<{
+    feed: string;
+    gateway_instance_id?: string;
+    source_mode?: unknown;
+    source_label?: unknown;
+    received_at?: string | null;
+    bars: SipBar[];
+    watermark?: Omit<NonNullable<SipBars["watermark"]>, "feed">;
+  }>(
     `/api/v1/stocks/bars?${query.toString()}`, authorization);
   if (response.feed !== "sip" || !Array.isArray(response.bars)) {
     throw new SipGatewayError(502, "Rust Gateway did not return Alpaca SIP bars");
   }
   return {
-    bars: response.bars,
+    bars: response.bars.map((bar) => ({
+      ...bar,
+      source_mode: bar.source_mode === undefined ? response.source_mode : bar.source_mode,
+      source_label: bar.source_label === undefined ? response.source_label : bar.source_label,
+      gateway_instance_id: bar.gateway_instance_id ?? response.gateway_instance_id ?? response.watermark?.gateway_instance_id,
+      received_at: bar.received_at === undefined ? response.received_at : bar.received_at,
+    })),
+    source_mode: response.source_mode,
+    source_label: response.source_label,
+    gateway_instance_id: response.gateway_instance_id ?? response.watermark?.gateway_instance_id,
+    received_at: response.received_at,
     watermark: response.watermark ? { ...response.watermark, feed: "stocks" } : null,
   };
 }

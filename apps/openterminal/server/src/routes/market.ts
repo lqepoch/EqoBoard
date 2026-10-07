@@ -18,6 +18,7 @@ import { sipBars, sipSnapshots, SipGatewayError, type SipSnapshot } from "../pro
 import { isExplicitCryptoSymbol, usesSIPEquitySymbol } from "../providers/market-symbol.js";
 import { latestRfc3339Nanos } from "../providers/market-time.js";
 import { splitSnapshotWatermarks } from "../providers/snapshot-watermarks.js";
+import { resolveMarketSource } from "../providers/market-source.js";
 
 export const marketRouter = Router();
 
@@ -121,6 +122,10 @@ async function vixHistory(rangeKey: string): Promise<yahoo.Candle[]> {
 // ---- quotes: U.S. prices are exclusively SIP; research instruments keep their provider ----
 
 type SourcedQuote = yahoo.Quote & {
+  gateway_instance_id?: string;
+  source_mode?: unknown;
+  source_label?: unknown;
+  received_at?: string | null;
   fundamentalSource?: string;
   fundamentalAsOf?: string | null;
   quoteAt?: string | null;
@@ -144,6 +149,7 @@ function unavailableQuote(symbol: string, source: string): SourcedQuote {
 }
 
 function quoteFromSip(snapshot: SipSnapshot): SourcedQuote {
+  const source = resolveMarketSource(snapshot, "sip");
   const price = snapshot.last;
   const previousClose = snapshot.previous_close;
   const changed = price !== null && previousClose !== null ? price - previousClose : null;
@@ -154,7 +160,11 @@ function quoteFromSip(snapshot: SipSnapshot): SourcedQuote {
     trade_at: snapshot.trade_at ?? (snapshot.last_basis === "trade" ? snapshot.updated_at : null),
   }]);
   return {
-    ...unavailableQuote(snapshot.symbol, "Alpaca SIP"),
+    ...unavailableQuote(snapshot.symbol, source.label),
+    source_mode: snapshot.source_mode,
+    source_label: snapshot.source_label,
+    gateway_instance_id: snapshot.gateway_instance_id ?? snapshot.watermark?.gateway_instance_id,
+    received_at: snapshot.received_at,
     price,
     previousClose,
     change: changed,
@@ -209,7 +219,7 @@ async function getQuotes(symbols: string[], authorization: string): Promise<Sour
     const bySymbol = new Map(snapshots.map((snapshot) => [snapshot.symbol, snapshot]));
     for (const symbol of sipSymbols) {
       const snapshot = bySymbol.get(symbol);
-      resolved.set(symbol, snapshot ? quoteFromSip(snapshot) : unavailableQuote(symbol, "Alpaca SIP"));
+      resolved.set(symbol, snapshot ? quoteFromSip(snapshot) : unavailableQuote(symbol, "source unknown"));
     }
   }
 
@@ -268,7 +278,12 @@ marketRouter.get("/history/:symbol", async (req, res) => {
         const firstDay = Date.parse(`${year}-01-01T00:00:00Z`) / 1000;
         bars = bars.filter((bar) => bar.time >= firstDay);
       }
-      const data: HistoryEnvelope = { bars, source: "Alpaca SIP",
+      const source = resolveMarketSource(snapshot, "sip");
+      const data: HistoryEnvelope = { bars, source: source.label,
+        source_mode: snapshot.source_mode,
+        source_label: snapshot.source_label,
+        gateway_instance_id: snapshot.gateway_instance_id ?? snapshot.watermark?.gateway_instance_id,
+        received_at: snapshot.received_at,
         asOf: bars.length ? new Date(bars[bars.length - 1]!.time * 1000).toISOString() : null,
         watermark: snapshot.watermark ?? null };
       if (data.bars.length === 0) throw new Error("Alpaca SIP returned no bars");
@@ -296,10 +311,14 @@ marketRouter.get("/history/:symbol", async (req, res) => {
 });
 
 type HistoryEnvelope = {
-  bars: yahoo.Candle[];
+  bars: Array<yahoo.Candle & { asOf?: string | null; source_mode?: unknown; source_label?: unknown; gateway_instance_id?: string; received_at?: string | null }>;
   source: string;
+  source_mode?: unknown;
+  source_label?: unknown;
+  gateway_instance_id?: string;
+  received_at?: string | null;
   asOf: string | null;
-  watermark?: { feed: "stocks"; connection_epoch: number; request_start_sequence?: number | null; local_sequence: number } | null;
+  watermark?: { gateway_instance_id?: string; feed: "stocks"; connection_epoch: number; request_start_sequence?: number | null; local_sequence: number } | null;
 };
 
 const SIP_HISTORY_RANGE: Record<string, { timeframe: string; days: number; limit: number }> = {
@@ -313,10 +332,16 @@ const SIP_HISTORY_RANGE: Record<string, { timeframe: string; days: number; limit
   MAX: { timeframe: "1Month", days: 10500, limit: 600 },
 };
 
-function toChartBars(bars: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>): yahoo.Candle[] {
+function toChartBars(bars: Array<{
+  time: string; open: number; high: number; low: number; close: number; volume: number;
+  source_mode?: unknown; source_label?: unknown; received_at?: string | null;
+  gateway_instance_id?: string;
+}>): HistoryEnvelope["bars"] {
   return bars.map((bar) => ({
     time: Math.floor(Date.parse(bar.time) / 1000), open: bar.open, high: bar.high,
-    low: bar.low, close: bar.close, volume: bar.volume,
+    low: bar.low, close: bar.close, volume: bar.volume, asOf: bar.time,
+    source_mode: bar.source_mode, source_label: bar.source_label,
+    gateway_instance_id: bar.gateway_instance_id, received_at: bar.received_at,
   })).filter((bar) => Number.isFinite(bar.time)).sort((left, right) => left.time - right.time);
 }
 
@@ -647,6 +672,10 @@ async function eurFxRates(): Promise<Record<string, number>> {
 type SourcedMarketRow = tradingview.MarketRow & {
   source: string;
   priceSource: string;
+  source_mode?: unknown;
+  source_label?: unknown;
+  gateway_instance_id?: string;
+  received_at?: string | null;
   priceAsOf: string | null;
   marketCapSource: string;
   marketCapAsOf: string | null;
@@ -655,6 +684,10 @@ type SourcedMarketRow = tradingview.MarketRow & {
 type MarketRowsEnvelope = {
   rows: SourcedMarketRow[];
   source: string;
+  source_mode?: unknown;
+  source_label?: unknown;
+  gateway_instance_id?: string;
+  received_at?: string | null;
   asOf: string | null;
   coverage: {
     requested: number; snapshots: number; priced: number;
@@ -698,13 +731,18 @@ async function marketRows(market: "us" | "eu", authorization: string): Promise<M
   const bySymbol = new Map(snapshots.map((snapshot) => [snapshot.symbol, snapshot]));
   const rows = metadata.map((row): SourcedMarketRow => {
     const snapshot = bySymbol.get(row.symbol);
+    const source = resolveMarketSource(snapshot, "sip");
     return {
       ...row,
       price: snapshot?.last ?? null,
       changePercent: snapshot?.change_percent ?? null,
       volume: snapshot?.volume ?? null,
-      source: "TradingView metadata + Alpaca SIP price data",
-      priceSource: "Alpaca SIP",
+      source: `TradingView metadata + ${source.label} price data`,
+      priceSource: source.label,
+      source_mode: snapshot?.source_mode,
+      source_label: snapshot?.source_label,
+      gateway_instance_id: snapshot?.gateway_instance_id ?? snapshot?.watermark?.gateway_instance_id,
+      received_at: snapshot?.received_at,
       priceAsOf: snapshot?.last_as_of ?? null,
       marketCapSource: "TradingView scanner",
       marketCapAsOf: null,
@@ -719,9 +757,20 @@ async function marketRows(market: "us" | "eu", authorization: string): Promise<M
   const priceComplete = symbols.length > 0 && priced === symbols.length;
   const timeComplete = symbols.length > 0 && requestedSnapshots.length === symbols.length && requestedSnapshots.every((snapshot) =>
     Boolean(snapshot.last_as_of && latestRfc3339Nanos([snapshot.last_as_of])));
+  const sourcePairs = requestedSnapshots.map((snapshot) => resolveMarketSource(snapshot, "sip"));
+  const source = sourcePairs.length > 0 && sourcePairs.every((item) =>
+    item.mode === sourcePairs[0]?.mode && item.label === sourcePairs[0]?.label)
+    ? sourcePairs[0]!
+    : { mode: "unknown" as const, label: "source unknown" };
+  const firstSnapshot = requestedSnapshots[0];
+  const sameRawSource = Boolean(firstSnapshot) && requestedSnapshots.every((snapshot) =>
+    snapshot.source_mode === firstSnapshot!.source_mode && snapshot.source_label === firstSnapshot!.source_label);
   return {
     rows,
-    source: "TradingView metadata + Alpaca SIP prices",
+    source: `TradingView metadata + ${source.label} prices`,
+    source_mode: sameRawSource ? firstSnapshot!.source_mode : undefined,
+    source_label: sameRawSource ? firstSnapshot!.source_label : undefined,
+    gateway_instance_id: firstSnapshot?.gateway_instance_id ?? firstSnapshot?.watermark?.gateway_instance_id,
     asOf,
     coverage: {
       requested: symbols.length, snapshots: snapshotsCount, priced,
@@ -924,13 +973,23 @@ marketRouter.get("/calendar", async (req, res) => {
 marketRouter.get("/earnings-history/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
-    const [surprises, barsResult] = await Promise.all([
-      nasdaq.earningsSurprise(symbol),
-      usesSIPEquitySymbol(symbol)
+    type EarningsPriceResult = {
+      bars: Array<yahoo.Candle & { asOf?: string | null }>;
+      source: string;
+      source_mode?: unknown;
+      source_label?: unknown;
+      gateway_instance_id?: string;
+      received_at?: string | null;
+    };
+    const priceBars: Promise<EarningsPriceResult> = usesSIPEquitySymbol(symbol)
         ? (async () => {
             const authorization = await sipAuthorization(req);
             const result = await sipBars(symbol, "1Day", 390, 650, authorization);
-            return { bars: toChartBars(result.bars), source: "Alpaca SIP" };
+            const source = resolveMarketSource(result, "sip");
+            return { bars: toChartBars(result.bars), source: source.label,
+              source_mode: result.source_mode, source_label: result.source_label,
+              gateway_instance_id: result.gateway_instance_id ?? result.watermark?.gateway_instance_id,
+              received_at: result.received_at };
           })()
         : (async () => {
             const result = await namedFallback([
@@ -938,8 +997,8 @@ marketRouter.get("/earnings-history/:symbol", async (req, res) => {
               ["Stooq", () => stooq.history(symbol)],
             ]);
             return { bars: result.data, source: result.source };
-          })(),
-    ]);
+          })();
+    const [surprises, barsResult] = await Promise.all([nasdaq.earningsSurprise(symbol), priceBars]);
     const sorted = [...barsResult.bars].sort((a, b) => a.time - b.time);
     // Earnings date is published as a UTC calendar date; select that session's
     // close (or the next session for weekends/holidays), then compare its next
@@ -959,7 +1018,10 @@ marketRouter.get("/earnings-history/:symbol", async (req, res) => {
         surpriseAsOf: new Date(surprise.dateReported * 1000).toISOString(),
         dayAfterChangePercent,
         priceMoveSource: barsResult.source,
-        priceMoveAsOf: after ? new Date(after.time * 1000).toISOString() : null,
+        priceMoveSourceMode: barsResult.source_mode,
+        priceMoveSourceLabel: barsResult.source_label,
+        priceMoveReceivedAt: barsResult.received_at,
+        priceMoveAsOf: after?.asOf ?? (after ? new Date(after.time * 1000).toISOString() : null),
       };
     });
     res.json(data);

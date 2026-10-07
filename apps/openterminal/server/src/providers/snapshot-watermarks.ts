@@ -2,6 +2,7 @@ import { compareRfc3339Nanos } from "./market-time.ts";
 
 export type WatermarkFeed = "stocks" | "options";
 export type GatewayWatermark = {
+  gateway_instance_id?: string;
   feed?: WatermarkFeed;
   connection_epoch: number;
   request_start_sequence?: number | null;
@@ -29,6 +30,7 @@ export function splitSnapshotWatermarks(
     feed,
     symbols,
     event_types: [eventType],
+    gateway_instance_id: watermark.gateway_instance_id,
     connection_epoch: watermark.connection_epoch,
     request_start_sequence: watermark.request_start_sequence ?? null,
     local_sequence: watermark.local_sequence,

@@ -63,6 +63,7 @@ describe("GET /api/heatmap real HTTP source contract", () => {
     vi.stubEnv("EQO_RUST_URL", "http://rust-mock.test");
     const token = await delegatedJwt();
     let rustStatus = 403;
+    let sourceMode: "alpaca" | "offline_mock" = "alpaca";
     let emptySnapshot = false;
     const upstream = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -88,9 +89,13 @@ describe("GET /api/heatmap real HTTP source contract", () => {
         if (rustStatus === 403) return Response.json({ error: "not entitled" }, { status: 403 });
         return Response.json({
           feed: "sip",
+          source_mode: sourceMode,
+          source_label: sourceMode === "alpaca" ? "Alpaca SIP" : "OFFLINE MOCK — NOT MARKET DATA",
           watermark: { connection_epoch: 4, request_start_sequence: 10, local_sequence: 12 },
           snapshots: [{
             symbol: "QQQ", last: emptySnapshot ? null : 200,
+            source_mode: sourceMode,
+            source_label: sourceMode === "alpaca" ? "Alpaca SIP" : "OFFLINE MOCK — NOT MARKET DATA",
             previous_close: emptySnapshot ? null : 198,
             change_percent: emptySnapshot ? null : 1.0101,
             open: emptySnapshot ? null : 199, high: emptySnapshot ? null : 201,
@@ -126,29 +131,44 @@ describe("GET /api/heatmap real HTTP source contract", () => {
       const accepted = await getJson(`${url}/api/heatmap?market=us`, token);
       expect(accepted.status).toBe(200);
       expect(accepted.body.source).toBe("TradingView metadata + Alpaca SIP prices");
+      expect(accepted.body).toMatchObject({ source_mode: "alpaca", source_label: "Alpaca SIP" });
       expect(accepted.body.asOf).toBe("2026-10-07T14:30:00.123456789Z");
       expect(accepted.body.coverage).toEqual({ requested: 1, snapshots: 1, priced: 1,
         snapshotComplete: true, priceComplete: true, timeComplete: true, complete: true });
       expect(accepted.body.rows[0]).toMatchObject({
         symbol: "QQQ", name: "QQQ ETF", marketCap: 1_000_000_000_000, sector: "Technology",
         price: 200, changePercent: 1.0101, volume: 123456, priceSource: "Alpaca SIP",
+        source_mode: "alpaca", source_label: "Alpaca SIP",
         priceAsOf: "2026-10-07T14:30:00.123456789Z", marketCapSource: "TradingView scanner",
       });
       expect(accepted.body.rows[0].price).not.toBe(999);
       expect(accepted.body.rows[0].changePercent).not.toBe(88);
       expect(accepted.body.rows[0].volume).not.toBe(99_999);
+      const quote = await getJson(`${url}/api/quotes?symbols=QQQ`, token);
+      expect(quote.status).toBe(200);
+      expect(quote.body[0]).toMatchObject({
+        source: "Alpaca SIP", source_mode: "alpaca", source_label: "Alpaca SIP",
+        quoteAt: "2026-10-07T14:29:59.123456789Z",
+      });
       expect(upstream.mock.calls.filter(([input]) => new URL(String(input)).hostname === "rust-mock.test")).toHaveLength(2);
       expect(upstream.mock.calls.every(([input]) => ["scanner.tradingview.com", "rust-mock.test"].includes(new URL(String(input)).hostname))).toBe(true);
 
       // A returned record with no price/time is not complete market coverage.
       await new Promise((resolve) => setTimeout(resolve, 1_100));
+      sourceMode = "offline_mock";
       emptySnapshot = true;
       const empty = await getJson(`${url}/api/heatmap?market=us`, token);
       expect(empty.status).toBe(200);
+      expect(empty.body).toMatchObject({
+        source_mode: "offline_mock", source_label: "OFFLINE MOCK — NOT MARKET DATA",
+      });
       expect(empty.body.coverage).toEqual({ requested: 1, snapshots: 1, priced: 0,
         snapshotComplete: true, priceComplete: false, timeComplete: false, complete: false });
       expect(empty.body.asOf).toBeNull();
-      expect(empty.body.rows[0]).toMatchObject({ price: null, changePercent: null, volume: null, priceAsOf: null });
+      expect(empty.body.rows[0]).toMatchObject({
+        price: null, changePercent: null, volume: null, priceAsOf: null,
+        priceSource: "OFFLINE MOCK — NOT MARKET DATA", source_mode: "offline_mock",
+      });
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
@@ -247,9 +267,12 @@ describe("GET /api/heatmap real HTTP source contract", () => {
       observed.push(`${url.hostname}${url.pathname}`);
       if (url.hostname === "rust-mock.test" && url.pathname === "/api/v1/stocks/bars") {
         expect(url.searchParams.get("timeframe")).toBe(url.searchParams.get("symbol") === "NVDA" ? "1Hour" : "1Day");
-        return Response.json({ feed: "sip", watermark: { connection_epoch: 5, request_start_sequence: 2, local_sequence: 4 }, bars: [
-          { time: "2026-10-05T20:00:00Z", open: 100, high: 103, low: 99, close: 101, volume: 1200 },
-          { time: "2026-10-06T20:00:00Z", open: 101, high: 104, low: 100, close: 103, volume: 1500 },
+        return Response.json({ feed: "sip", source_mode: "alpaca", source_label: "Alpaca SIP",
+          watermark: { connection_epoch: 5, request_start_sequence: 2, local_sequence: 4 }, bars: [
+          { time: "2026-10-05T20:00:00Z", open: 100, high: 103, low: 99, close: 101, volume: 1200,
+            source_mode: "alpaca", source_label: "Alpaca SIP" },
+          { time: "2026-10-06T20:00:00Z", open: 101, high: 104, low: 100, close: 103, volume: 1500,
+            source_mode: "alpaca", source_label: "Alpaca SIP" },
         ] });
       }
       if (url.hostname === "api.nasdaq.com" && url.pathname === "/api/company/AAPL/earnings-surprise") {
@@ -265,6 +288,7 @@ describe("GET /api/heatmap real HTTP source contract", () => {
       const history = await getJson(`${url}/api/history/NVDA?range=1M`, token);
       expect(history.status).toBe(200);
       expect(history.body.source).toBe("Alpaca SIP");
+      expect(history.body).toMatchObject({ source_mode: "alpaca", source_label: "Alpaca SIP" });
       expect(history.body.bars.at(-1)).toMatchObject({ close: 103, volume: 1500 });
 
       const earnings = await getJson(`${url}/api/earnings-history/AAPL`, token);
@@ -275,7 +299,7 @@ describe("GET /api/heatmap real HTTP source contract", () => {
         dayAfterChangePercent: expect.any(Number),
       });
       expect(earnings.body[0].surpriseAsOf).toBe("2026-10-05T00:00:00.000Z");
-      expect(earnings.body[0].priceMoveAsOf).toBe("2026-10-06T20:00:00.000Z");
+      expect(earnings.body[0].priceMoveAsOf).toBe("2026-10-06T20:00:00Z");
       expect(observed).toEqual([
         "rust-mock.test/api/v1/stocks/bars",
         "api.nasdaq.com/api/company/AAPL/earnings-surprise",

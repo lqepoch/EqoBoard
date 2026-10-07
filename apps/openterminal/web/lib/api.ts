@@ -51,6 +51,13 @@ export type Quote = {
   exchange: string | null;
   marketState: string | null;
   source: string;
+  /** Passed through from the trusted Gateway when present; never inferred from the feed name. */
+  source_mode?: unknown;
+  source_label?: unknown;
+  gateway_instance_id?: string | null;
+  /** Captured by the browser when a snapshot request begins; never sent over the wire. */
+  clientGatewayInstanceGeneration?: number;
+  received_at?: string | null;
   asOf?: string | null;
   watermark?: MarketSnapshotWatermark | null;
   watermarks?: MarketSnapshotWatermark[];
@@ -67,6 +74,7 @@ export type Quote = {
 };
 
 export type MarketSnapshotWatermark = {
+  gateway_instance_id?: string;
   feed: "stocks" | "options";
   symbols: string[];
   event_types: Array<"quote" | "trade">;
@@ -90,6 +98,10 @@ export type MarketCoverage = {
 export type MarketRowsEnvelope<T> = {
   rows: T[];
   source: string;
+  source_mode?: unknown;
+  source_label?: unknown;
+  gateway_instance_id?: string | null;
+  received_at?: string | null;
   asOf: string | null;
   coverage: MarketCoverage;
   truncated: boolean;
