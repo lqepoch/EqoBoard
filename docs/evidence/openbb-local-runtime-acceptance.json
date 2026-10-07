@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "scope": "local-mock",
+  "status": "passed",
+  "tested_commit": "00f7aec59c6a4e67e568c9b7de8a6afb4f37fa41",
+  "command": "OPENBB_E2E_ARTIFACT_DIR=/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec bash tools/openbb-lite-e2e.sh",
+  "artifact_directory": "/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec",
+  "upstream": {
+    "openterminal_commit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+    "openbb_workspace_commit": "be00e95019a55d57af146919ee46b7e1a4859226",
+    "openbb_source_archive_sha256": "4171aa8984c7c63e171239f8cda72c4bc950f1e068de33577035dc8e5d63e6a4",
+    "community_build_identity": "cfc03fb056e7c60226186f332d2dc7bf7eb6d30acd3de342fc7b7bb5efc77d47"
+  },
+  "runtime_acceptance": {
+    "default_profile_smoke_executed": true,
+    "default_compose_build_up": "passed",
+    "default_profile_healthy_services": 6,
+    "browser_tests_passed": 7,
+    "browser_tests_skipped": 0,
+    "native_lite_tests_passed": 3,
+    "gateway_offline_test_passed": true,
+    "gateway_restart_recovery_test_passed": true,
+    "terminal_available_with_openbb_stopped": true,
+    "broken_upgrade_unhealthy_and_archive_restore_passed": true,
+    "cleanup_verified": true
+  },
+  "market_data_scope": {
+    "fixture": "loopback Alpaca-compatible REST/WS protocol mock",
+    "requested_feeds": ["sip", "opra"],
+    "source_label": "unknown",
+    "real_alpaca_data_or_entitlement_verified": false,
+    "fallback_to_iex_or_yahoo": false
+  },
+  "execution": {
+    "enabled": false,
+    "orders_submitted": false
+  },
+  "compose_image": {
+    "local_tag": "eqoboard/openbb-workspace-lite:eqoboard-openbb-e2e-1176809-lite",
+    "docker_image_id_observation": "sha256:01c229c2a8cd9611e7767096c56ad02d7579f01eb02ad67e0c2d62b1c92f1d59",
+    "docker_image_id_relation": "oci-image-index",
+    "oci_index_digest": "sha256:01c229c2a8cd9611e7767096c56ad02d7579f01eb02ad67e0c2d62b1c92f1d59",
+    "linux_amd64_application_manifest_digest": "sha256:09e5e060a51f3621cdf0743398c4ebfe2c9c00bd35a7a6651e1bd8f57bffdc89",
+    "image_config_digest": "sha256:44e2b2b21f04756a67af95f88376e79ac334d48115c58ab4c006657329aa39ea",
+    "layer_count": 35,
+    "docker_archive_path": "/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec/openbb-lite-compose-image.docker.tar",
+    "docker_archive_sha256": "81750a957807907565e438f1c1f3a7001baf3a4969adbf020b5bef1df742f3cb",
+    "archive_manifest_path": "/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec/openbb-lite-compose-archive-manifest.json",
+    "archive_manifest_sha256": "04413711c662bf8f49adf041506d4e67ec49765342870bbfd188f74862123020"
+  },
+  "runtime_sbom": {
+    "tool": "Syft 1.54.1",
+    "path": "/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec/openbb-lite-compose-image.spdx.json",
+    "sha256": "0fca15c7fbe1838f2081f08ccf730d7cd48f4931c2f0826f1187840040e19afc",
+    "package_entries": 326,
+    "normalized_package_identities": 314,
+    "normalized_package_set_sha256": "bac53641f2bf80796346f3dbd6ac1e78fdd725b73bacc3247f7d845f1f4f8966",
+    "record_path": "/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec/openbb-lite-compose-image-sbom-record.json",
+    "record_sha256": "d2a1ab3d26df4a7ad67a10c73c110a9a04c512608982ebc6dafa1b9c11932109",
+    "patched_source_sbom_path": "/root/.codex/artifacts/eqoboard-openbb-20261007/openbb-community/patched-source-sbom-current-cfc03fb056e7c602-build-linked.spdx.json",
+    "patched_source_sbom_sha256": "4779ca362ccd0dfc745b0db1d57f1994542c79a3657030714b00006c0f168931"
+  },
+  "primary_result_record": {
+    "path": "/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec/runtime-result.json",
+    "sha256": "44b80d5058fee7fc0e1d5b403d221c540e996cb606159316c3e4fe5f7df6d218"
+  },
+  "release_gate": {
+    "runtime_acceptance": "not-verified",
+    "browser_e2e": "not-run",
+    "deployment": "not-approved",
+    "image_digest": null,
+    "registry_publication_asserted": false,
+    "production_deployment_asserted": false
+  },
+  "limitations": [
+    "This is local Compose and loopback protocol-mock evidence only; it does not verify real Alpaca market access or entitlement.",
+    "Docker local RepoDigest metadata is not evidence of a registry push or immutable release publication.",
+    "Paper and Live execution remain disabled; no order was submitted."
+  ]
+}

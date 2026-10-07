@@ -37,6 +37,50 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
             self.assertTrue(local.is_file())
             self.assertEqual(upstream.sha256_file(local), item["sha256"])
 
+    def test_local_mock_acceptance_is_hash_bound_and_separate_from_release_gate(self):
+        entry = upstream.openbb_entry()
+        pointer = entry["local_mock_evidence"]
+        record_path = ROOT / pointer["path"]
+        self.assertEqual(pointer["scope"], "local-mock")
+        self.assertEqual(pointer["status"], "passed")
+        self.assertEqual(upstream.sha256_file(record_path), pointer["sha256"])
+
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(record["scope"], "local-mock")
+        self.assertEqual(record["status"], "passed")
+        self.assertEqual(record["tested_commit"], pointer["tested_commit"])
+        self.assertTrue(record["runtime_acceptance"]["default_profile_smoke_executed"])
+        self.assertTrue(record["runtime_acceptance"]["cleanup_verified"])
+        self.assertEqual(record["runtime_acceptance"]["browser_tests_passed"], 7)
+        self.assertEqual(record["runtime_acceptance"]["browser_tests_skipped"], 0)
+        self.assertEqual(record["market_data_scope"]["source_label"], "unknown")
+        self.assertFalse(record["market_data_scope"]["real_alpaca_data_or_entitlement_verified"])
+        self.assertFalse(record["execution"]["enabled"])
+        self.assertFalse(record["execution"]["orders_submitted"])
+
+        gate = entry["build_gate"]
+        self.assertEqual(gate["runtime_acceptance"], "not-verified")
+        self.assertEqual(gate["browser_e2e"], "not-run")
+        self.assertEqual(gate["deployment"], "not-approved")
+        self.assertIsNone(gate["image_digest"])
+        self.assertIsNone(gate["evidence"])
+
+        recipe = (ROOT / entry["build_recipe"]["path"]).read_text(encoding="utf-8")
+        self.assertNotIn("upstreams.lock.json", recipe)
+
+    def test_build_gate_displays_local_evidence_without_promoting_release_status(self):
+        with mock.patch.object(upstream.sys, "argv", ["openbb_upstream.py", "build-gate"]):
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(upstream.main(), 0)
+
+        gate = json.loads(output.getvalue())
+        self.assertFalse(gate["deployment_approved"])
+        self.assertEqual(gate["runtime_acceptance"], "not-verified")
+        self.assertEqual(gate["browser_e2e"], "not-run")
+        self.assertEqual(gate["deployment"], "not-approved")
+        self.assertEqual(gate["local_mock_evidence"]["scope"], "local-mock")
+        self.assertEqual(gate["local_mock_evidence"]["status"], "passed")
+
     def test_syft_toolchain_is_exact_and_platform_hashes_are_present(self):
         syft = upstream.toolchain()
         self.assertEqual(syft["version"], "1.54.1")

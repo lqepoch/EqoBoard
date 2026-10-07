@@ -30,6 +30,13 @@
         "url": "https://codeload.github.com/OpenBB-finance/workspace/tar.gz/be00e95019a55d57af146919ee46b7e1a4859226",
         "sha256": "4171aa8984c7c63e171239f8cda72c4bc950f1e068de33577035dc8e5d63e6a4"
       },
+      "local_mock_evidence": {
+        "scope": "local-mock",
+        "status": "passed",
+        "tested_commit": "00f7aec59c6a4e67e568c9b7de8a6afb4f37fa41",
+        "path": "docs/evidence/openbb-local-runtime-acceptance.json",
+        "sha256": "e982f11643f647bf9fde9324e8d33207245a6d4a33e1b5b5584713c19e34cb35"
+      },
       "license_files": [
         {
           "upstream_path": "LICENSE",

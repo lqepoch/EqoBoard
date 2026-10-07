@@ -90,7 +90,8 @@ def openbb_entry() -> dict[str, Any]:
             raise SupplyChainError("a local-buildable OpenBB gate requires a hash-pinned build recipe")
         if gate.get("required_findings_to_clear") != []:
             raise SupplyChainError("a local-buildable OpenBB gate cannot retain uncleared findings")
-        locked_recipe(entry)
+        _recipe, _recipe_path, _support_files, identity = locked_recipe(entry)
+        validate_local_mock_evidence(entry, identity)
     return entry
 
 
@@ -126,6 +127,43 @@ def resolve_under(root: Path, relative: str, description: str) -> Path:
     if not resolved.is_relative_to(root) or not resolved.is_file():
         raise SupplyChainError(f"{description} path must be an existing file under its root: {relative}")
     return resolved
+
+
+def validate_local_mock_evidence(entry: dict[str, Any], build_identity: str) -> dict[str, Any]:
+    """Verify the separate local mock record without promoting release gates."""
+    pointer = entry.get("local_mock_evidence")
+    if not isinstance(pointer, dict):
+        raise SupplyChainError("OpenBB local_mock_evidence must point to a versioned local record")
+    relative = pointer.get("path")
+    digest = pointer.get("sha256")
+    tested_commit = pointer.get("tested_commit")
+    if (
+        pointer.get("scope") != "local-mock"
+        or pointer.get("status") != "passed"
+        or not isinstance(relative, str)
+        or not isinstance(digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        or not isinstance(tested_commit, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", tested_commit)
+    ):
+        raise SupplyChainError("OpenBB local_mock_evidence pointer has an invalid scope, status, path, or digest")
+    path = resolve_under(ROOT, relative, "OpenBB local mock evidence")
+    if sha256_file(path) != digest:
+        raise SupplyChainError("OpenBB local mock evidence digest changed")
+    record = read_json(path)
+    record_upstream = record.get("upstream")
+    if not isinstance(record_upstream, dict):
+        raise SupplyChainError("OpenBB local mock evidence is missing its upstream identity")
+    if (
+        record.get("schema_version") != 1
+        or record.get("scope") != "local-mock"
+        or record.get("status") != "passed"
+        or record.get("tested_commit") != tested_commit
+        or record_upstream.get("openbb_workspace_commit") != entry.get("commit")
+        or record_upstream.get("community_build_identity") != build_identity
+    ):
+        raise SupplyChainError("OpenBB local mock evidence does not match the locked source and recipe")
+    return pointer
 
 
 def validate_license_records(records: Any) -> None:
@@ -1324,7 +1362,7 @@ def parse_args() -> argparse.Namespace:
     )
     drift.add_argument("--archive", type=Path)
     drift.add_argument("--output", type=Path)
-    commands.add_parser("build-gate", help="show local build and deployment acceptance separately")
+    commands.add_parser("build-gate", help="show local mock evidence separately from the release gate")
     return parser.parse_args()
 
 
@@ -1366,6 +1404,7 @@ def main() -> int:
                 "deployment": gate.get("deployment", "not-approved"),
                 "required_findings_to_clear": gate.get("required_findings_to_clear", []),
                 "evidence": gate.get("evidence"),
+                "local_mock_evidence": entry.get("local_mock_evidence"),
             }, indent=2))
         return 0
     except SupplyChainError as exc:
