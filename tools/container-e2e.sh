@@ -70,7 +70,7 @@ missing_key_output="$(docker run --rm --network none -e EQO_BIND=0.0.0.0:8080 "$
 missing_key_status=$?
 set -e
 test "$missing_key_status" -ne 0
-printf '%s\n' "$missing_key_output" | rg -q 'non-loopback bind requires verifiable gateway and research JWT keys'
+printf '%s\n' "$missing_key_output" | grep -F 'non-loopback bind requires verifiable gateway and research JWT keys' >/dev/null
 printf '%s\n' 'Negative startup check: non-loopback Gateway rejects absent identity keys.'
 dc up --detach --wait --wait-timeout 240
 
@@ -95,15 +95,15 @@ terminal_ready_status="$(curl --silent --output "$terminal_ready_file" --write-o
 test "$gateway_ready_status" = 200
 test "$terminal_ready_status" = 503
 cat "$gateway_ready_file" "$terminal_ready_file"
-curl --fail --silent --show-error "http://127.0.0.1:$terminal_host_port/" | rg -q 'Sign-in is not configured'
+curl --fail --silent --show-error "http://127.0.0.1:$terminal_host_port/" | grep -F 'Sign-in is not configured' >/dev/null
 dc exec --no-TTY research node -e "fetch('http://127.0.0.1:4000/healthz').then(async r=>{console.log('research healthz',r.status,await r.text());if(!r.ok)process.exit(1)})"
 dc exec --no-TTY research node -e "fetch('http://127.0.0.1:4000/readyz').then(async r=>{console.log('research readyz',r.status,await r.text());if(!r.ok)process.exit(1)})"
 node -e 'fetch(process.argv[1]).then(response=>response.json()).then(value=>{if(value.identity_validation_configured!==true||value.market_data_ready!==false||value.execution_enabled!==false)process.exit(1);console.log("identity_validation_configured="+value.identity_validation_configured+" market_data_ready="+value.market_data_ready+" execution_enabled="+value.execution_enabled+" data_status="+value.market_data_status)})' "http://127.0.0.1:$gateway_host_port/readyz"
 
 printf '%s\n' 'Checking runtime user, readonly root filesystems, and writable named volumes.'
-docker inspect --format 'gateway_user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}}' "$gateway_id" | rg -q 'gateway_user=eqo readonly=true'
-docker inspect --format 'terminal_user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}}' "$terminal_id" | rg -q 'terminal_user=node readonly=true'
-docker inspect --format 'research_user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}}' "$research_id" | rg -q 'research_user=node readonly=true'
+docker inspect --format 'gateway_user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}}' "$gateway_id" | grep -F 'gateway_user=eqo readonly=true' >/dev/null
+docker inspect --format 'terminal_user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}}' "$terminal_id" | grep -F 'terminal_user=node readonly=true' >/dev/null
+docker inspect --format 'research_user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}}' "$research_id" | grep -F 'research_user=node readonly=true' >/dev/null
 dc exec --no-TTY terminal node -e "const fs=require('node:fs');try{fs.writeFileSync('/srv/web/.compose-readonly-probe','x');process.exit(1)}catch(e){if(!['EROFS','EACCES'].includes(e.code))throw e}fs.writeFileSync('/srv/web/.next/cache/.compose-volume-probe','ok');fs.unlinkSync('/srv/web/.next/cache/.compose-volume-probe');console.log('terminal readonly path rejected; cache volume writable')"
 dc exec --no-TTY research node -e "const fs=require('node:fs');try{fs.writeFileSync('/srv/server/.compose-readonly-probe','x');process.exit(1)}catch(e){if(!['EROFS','EACCES'].includes(e.code))throw e}fs.writeFileSync('/var/lib/openterminal/.compose-volume-probe','ok');fs.unlinkSync('/var/lib/openterminal/.compose-volume-probe');console.log('research readonly path rejected; data volume writable')"
 dc exec --no-TTY eqoboard /bin/sh -c 'test "$(id -u)" = 10001 && : > /var/lib/eqoboard/.compose-volume-probe && rm /var/lib/eqoboard/.compose-volume-probe && echo "gateway readonly root; audit volume writable as uid $(id -u)"'

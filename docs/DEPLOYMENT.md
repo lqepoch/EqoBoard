@@ -58,6 +58,8 @@ openssl rand -hex 32
 
 容器以非 root 用户运行并启用只读 root filesystem。Gateway 的审计数据使用 `eqoboard-audit` named volume；OpenTerminal Next cache 使用 `openterminal-next-cache`；research 本地 portfolio 数据使用 `openterminal-data`。维护/迁移前先对数据 volume 做一致性备份；本地旧 portfolio 的 `local` owner 不会自动转给首个 OIDC 用户。
 
+Portfolio API 对每个已验证主体限制每分钟 120 次，并对单个 research 进程内所有主体合计限制每分钟 1200 次。该限额使用进程内 memory store；多实例或多 worker 部署前须接入共享限流 store，或由可信 API ingress 提供等价的主体级与服务级限制。
+
 运行真实容器、mock 身份服务、路由边界与浏览器验收：
 
 ```bash
@@ -71,6 +73,15 @@ bash tools/container-e2e.sh
 ```bash
 docker compose -f compose.yaml -f compose.offline.yaml config --quiet
 ```
+
+开发态市场流用例可单独延长 OIDC-backed session，避免较慢的多标签页/确认流程撞上默认 30 秒到期：
+
+```bash
+cd apps/openterminal
+E2E_SESSION_TTL_SECONDS=120 npm run test:e2e -w web -- --grep market-stream.spec
+```
+
+测试环境默认 TTL 仍为 30 秒；会话过期与 SSE 到期用例须用默认值运行，不能使用延长配置代替过期边界验收。
 
 ## 配置变更与回滚
 

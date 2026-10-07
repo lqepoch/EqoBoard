@@ -143,8 +143,9 @@ Two optional knobs for the assistant, both standard for the Anthropic SDK:
 ### Security defaults
 
 - The API binds to `127.0.0.1` and only accepts browser requests from `http://localhost:3000` by default — nothing else on your network can reach it out of the box.
-- The portfolio and AI endpoints require a shared secret. If you don't set `API_KEY` yourself, the API generates one on first run and saves it to `data/.api-key`; the bundled web app reads that file automatically, so local dev stays zero-config.
-- To expose this beyond your own machine, set `API_HOST=0.0.0.0`, `API_KEY=<a-strong-secret>` (on both the api and web processes), and `WEB_ORIGIN=<your actual origin>` explicitly. Don't do this without also keeping dependencies patched — see [Known limitations](#known-limitations) below.
+- Portfolio reads and writes require a verified OIDC principal with the matching workspace scope. Rows are isolated by issuer and subject; existing `local` rows are not automatically reassigned to a user. The Node API also requires its private service key plus a short-lived signed user delegation from the Next BFF.
+- Portfolio routes are limited to 120 requests/minute per verified owner and 1,200 requests/minute per research process. The in-memory limiter is process-local; multi-process deployments need a shared store or an equivalent trusted ingress limit. The `/api/ai` limit remains 10 requests/minute by `req.ip`. Requests through the bundled web proxy share that proxy address by default; set `TRUST_PROXY=1` only behind a trusted reverse proxy that overwrites client forwarding headers.
+- Keep the API private to the Compose network or loopback. Do not expose it directly to the internet or use a browser-shared API key; expose only the TLS-protected Next BFF and configure the service identity through the deployment guide.
 - The `/api/ai` rate limit (10 req/min) keys on `req.ip`. Calls made through the bundled web proxy all arrive from that proxy's own address, so by default every caller sharing it shares one bucket. If you're serving more than one real user through it, set `TRUST_PROXY=1` on the api process **only if** you also run your own reverse proxy in front of the web service that sets `X-Forwarded-For` from the real client and doesn't let visitors set it themselves — otherwise a caller can forge that header to dodge the limit.
 
 <br/>
