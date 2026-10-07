@@ -58,6 +58,9 @@ pub fn parse_occ(symbol: &str) -> Result<OccContract, ContractError> {
 pub struct StockSnapshot {
     pub symbol: String,
     pub last: Option<f64>,
+    pub open: Option<f64>,
+    pub high: Option<f64>,
+    pub low: Option<f64>,
     pub previous_close: Option<f64>,
     pub change_percent: Option<f64>,
     pub bid: Option<f64>,

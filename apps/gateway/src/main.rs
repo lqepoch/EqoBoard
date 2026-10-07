@@ -6,18 +6,23 @@ use axum::{
     },
     http::{header, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{get, post},
     Json, Router,
 };
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{NaiveDate, Utc};
 use eqo_alpaca_data::{AlpacaData, DataError};
 use eqo_domain::{parse_occ, MarketEvent};
 use eqo_execution::{BrokerRouter, OrderError, OrderIntent, PreviewStore, RiskPolicy};
+use futures_util::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
+    convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
@@ -167,6 +172,7 @@ struct BarsQuery {
     symbol: String,
     timeframe: Option<String>,
     limit: Option<usize>,
+    days: Option<i64>,
 }
 async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
     let Some(data) = &state.data else {
@@ -175,7 +181,8 @@ async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery
     let symbol = query.symbol.to_uppercase();
     let timeframe = query.timeframe.unwrap_or_else(|| "1Min".into());
     if !safe_symbol(&symbol)
-        || !["1Min", "5Min", "15Min", "1Hour", "1Day"].contains(&timeframe.as_str())
+        || !["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week", "1Month"]
+            .contains(&timeframe.as_str())
     {
         return fail(
             StatusCode::BAD_REQUEST,
@@ -187,7 +194,15 @@ async fn stock_bars(State(state): State<AppState>, Query(query): Query<BarsQuery
     if !(1..=1000).contains(&limit) {
         return fail(StatusCode::BAD_REQUEST, "invalid_limit", "1..1000");
     }
-    match data.stock_bars(&symbol, &timeframe, limit).await {
+    let days = query.days.unwrap_or(14);
+    if !(1..=11000).contains(&days) {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_days",
+            "days must be 1..11000",
+        );
+    }
+    match data.stock_bars(&symbol, &timeframe, limit, days).await {
         Ok(bars) => {
             Json(json!({"symbol":symbol,"timeframe":timeframe,"feed":state.stock_feed,"bars":bars}))
                 .into_response()
@@ -251,6 +266,136 @@ async fn option_chain(State(state): State<AppState>, Query(query): Query<ChainQu
             }
             cache.insert(cache_key, (Instant::now(), body.clone()));
             Json(body).into_response()
+        }
+        Err(err) => data_failure(err),
+    }
+}
+
+/// OpenBB Workspace fetches these metadata descriptors via the configured data connector.
+async fn openbb_widgets() -> Json<Value> {
+    Json(
+        serde_json::from_str(include_str!("../openbb/widgets.json"))
+            .expect("bundled OpenBB widgets.json must be valid JSON"),
+    )
+}
+async fn openbb_apps() -> Json<Value> {
+    Json(
+        serde_json::from_str(include_str!("../openbb/apps.json"))
+            .expect("bundled OpenBB apps.json must be valid JSON"),
+    )
+}
+
+/// OpenBB AG Grid consumes flat arrays. The existing SIP source and as-of fields are preserved.
+async fn openbb_stocks(
+    State(state): State<AppState>,
+    Query(query): Query<SymbolsQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let raw = query.symbols.unwrap_or_else(|| "QQQ,SPY,NVDA".into());
+    let symbols: Vec<String> = raw.split(',').map(|x| x.trim().to_uppercase()).collect();
+    if symbols.is_empty() || symbols.len() > 50 || symbols.iter().any(|x| !safe_symbol(x)) {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_symbols",
+            "1..50 valid symbols required",
+        );
+    }
+    if state.stock_feed != "sip" {
+        return fail(
+            StatusCode::CONFLICT,
+            "invalid_feed",
+            "OpenBB SIP widget requires SIP entitlement",
+        );
+    }
+    match data.stock_snapshots(&symbols).await {
+        Ok(rows) => Json(json!(rows)).into_response(),
+        Err(err) => data_failure(err),
+    }
+}
+
+/// The IV and Greeks are snapshots, not synchronized executable combo prices.
+async fn openbb_options(
+    State(state): State<AppState>,
+    Query(query): Query<ChainQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let symbol = query.underlying.to_uppercase();
+    if !safe_symbol(&symbol) || NaiveDate::parse_from_str(&query.expiration, "%Y-%m-%d").is_err() {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_options_query",
+            "ticker or expiration invalid",
+        );
+    }
+    if state.option_feed != "opra" {
+        return fail(
+            StatusCode::CONFLICT,
+            "invalid_feed",
+            "OpenBB OPRA widget requires OPRA entitlement",
+        );
+    }
+    match data
+        .option_chain(&symbol, &query.expiration, None, None)
+        .await
+    {
+        Ok(page) => {
+            let rows: Vec<Value> = page
+                .contracts
+                .into_iter()
+                .map(|contract| {
+                    let mut row = serde_json::to_value(contract).expect("serialized contract");
+                    if let Some(map) = row.as_object_mut() {
+                        map.insert("truncated".into(), json!(page.truncated));
+                    }
+                    row
+                })
+                .collect();
+            Json(json!(rows)).into_response()
+        }
+        Err(err) => data_failure(err),
+    }
+}
+async fn openbb_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let symbol = query.symbol.to_uppercase();
+    let timeframe = query.timeframe.unwrap_or_else(|| "1Day".into());
+    let limit = query.limit.unwrap_or(500);
+    let days = query.days.unwrap_or(30);
+    if !safe_symbol(&symbol)
+        || !(1..=1000).contains(&limit)
+        || !(1..=11000).contains(&days)
+        || !["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week", "1Month"]
+            .contains(&timeframe.as_str())
+    {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_bars_query",
+            "invalid ticker/timeframe/window",
+        );
+    }
+    if state.stock_feed != "sip" {
+        return fail(
+            StatusCode::CONFLICT,
+            "invalid_feed",
+            "OpenBB SIP widget requires SIP entitlement",
+        );
+    }
+    match data.stock_bars(&symbol, &timeframe, limit, days).await {
+        Ok(bars) => {
+            let rows: Vec<Value> = bars
+                .into_iter()
+                .map(|bar| {
+                    json!({"time":bar.time,"open":bar.open,"high":bar.high,"low":bar.low,
+                    "close":bar.close,"volume":bar.volume,"symbol":symbol,"feed":"sip"})
+                })
+                .collect();
+            Json(json!(rows)).into_response()
         }
         Err(err) => data_failure(err),
     }
@@ -328,130 +473,6 @@ async fn prune_leases(state: AppState) {
             combined.sort();
             state.option_tx.send_replace(combined);
         }
-    }
-}
-
-// OpenBB Workspace official read-only Custom Backend protocol.
-// The archived OpenBB frontend is optional; this gateway remains authoritative.
-async fn openbb_widgets() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "application/json")],
-        include_str!("../../../integrations/openbb/widgets.json"),
-    )
-}
-
-async fn openbb_apps() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "application/json")],
-        include_str!("../../../integrations/openbb/apps.json"),
-    )
-}
-
-async fn openbb_stocks(
-    State(state): State<AppState>,
-    Query(query): Query<SymbolsQuery>,
-) -> Response {
-    let Some(data) = &state.data else {
-        return data_failure(DataError::MissingCredentials);
-    };
-    let raw = query.symbols.unwrap_or_else(|| "SPY,QQQ".to_owned());
-    let symbols: Vec<String> = raw.split(',').map(|s| s.trim().to_uppercase()).collect();
-    if symbols.is_empty() || symbols.len() > 50 || symbols.iter().any(|s| !safe_symbol(s)) {
-        return fail(
-            StatusCode::BAD_REQUEST,
-            "invalid_symbols",
-            "1..50 uppercase US stock symbols are required",
-        );
-    }
-    match data.stock_snapshots(&symbols).await {
-        Ok(snapshots) => Json(json!({
-            "feed": state.stock_feed,
-            "as_of": Utc::now().to_rfc3339(),
-            "snapshots": snapshots,
-        }))
-        .into_response(),
-        Err(err) => data_failure(err),
-    }
-}
-
-async fn openbb_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
-    let Some(data) = &state.data else {
-        return data_failure(DataError::MissingCredentials);
-    };
-    let symbol = query.symbol.to_uppercase();
-    let timeframe = query.timeframe.unwrap_or_else(|| "1Min".to_owned());
-    if !safe_symbol(&symbol)
-        || !["1Min", "5Min", "15Min", "1Hour", "1Day"].contains(&timeframe.as_str())
-    {
-        return fail(
-            StatusCode::BAD_REQUEST,
-            "invalid_bars_query",
-            "invalid symbol or timeframe",
-        );
-    }
-    match data.stock_bars(&symbol, &timeframe, 200).await {
-        Ok(bars) => Json(json!({
-            "symbol": symbol,
-            "feed": state.stock_feed,
-            "as_of": Utc::now().to_rfc3339(),
-            "bars": bars,
-        }))
-        .into_response(),
-        Err(err) => data_failure(err),
-    }
-}
-
-#[derive(Deserialize)]
-struct OpenBbOptionsQuery {
-    underlying: Option<String>,
-    expiration: Option<String>,
-}
-async fn openbb_options(
-    State(state): State<AppState>,
-    Query(query): Query<OpenBbOptionsQuery>,
-) -> Response {
-    let Some(data) = &state.data else {
-        return data_failure(DataError::MissingCredentials);
-    };
-    let underlying = query
-        .underlying
-        .unwrap_or_else(|| "QQQ".to_owned())
-        .to_uppercase();
-    if !safe_symbol(&underlying) {
-        return fail(
-            StatusCode::BAD_REQUEST,
-            "invalid_underlying",
-            "invalid US equity",
-        );
-    }
-    // Only a UI default. Exchange holidays/actual series availability are not guessed.
-    let today = Utc::now().date_naive();
-    let friday_offset = (5_i64 - i64::from(today.weekday().number_from_monday())).rem_euclid(7);
-    let expiration = query
-        .expiration
-        .filter(|date| !date.is_empty())
-        .unwrap_or_else(|| (today + chrono::Duration::days(friday_offset)).to_string());
-    if NaiveDate::parse_from_str(&expiration, "%Y-%m-%d").is_err() {
-        return fail(
-            StatusCode::BAD_REQUEST,
-            "invalid_expiration",
-            "ISO YYYY-MM-DD required",
-        );
-    }
-    match data
-        .option_chain(&underlying, &expiration, None, None)
-        .await
-    {
-        Ok(page) => Json(json!({
-            "underlying": underlying,
-            "expiration": expiration,
-            "feed": state.option_feed,
-            "as_of": Utc::now().to_rfc3339(),
-            "truncated": page.truncated,
-            "contracts": page.contracts,
-        }))
-        .into_response(),
-        Err(err) => data_failure(err),
     }
 }
 
@@ -543,6 +564,57 @@ async fn stream_to_browser(mut ws: WebSocket, mut rx: broadcast::Receiver<Market
             },
         }
     }
+}
+
+/// Same normalized market broadcast used by the existing WebSocket terminal.
+/// Next.js serves it to the OpenTerminal browser with credentials kept server-side.
+async fn live_sse(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut timer = tokio::time::interval(Duration::from_millis(50));
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let events = stream::unfold(
+        (
+            state.broadcasts.subscribe(),
+            Vec::<MarketEvent>::new(),
+            timer,
+        ),
+        |(mut rx, mut batch, mut flush)| async move {
+            loop {
+                tokio::select! {
+                    event = rx.recv() => match event {
+                        Ok(event) => {
+                            if batch.len() >= 512 {
+                                batch.clear();
+                                batch.push(MarketEvent::FeedStatus {
+                                    feed: "all".into(),
+                                    state: "resync_required".into(),
+                                    timestamp: Utc::now().to_rfc3339(),
+                                });
+                            }
+                            batch.push(event);
+                        },
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            batch.clear();
+                            batch.push(MarketEvent::FeedStatus {
+                                feed: "all".into(),
+                                state: "resync_required".into(),
+                                timestamp: Utc::now().to_rfc3339(),
+                            });
+                        },
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    },
+                    _ = flush.tick(), if !batch.is_empty() => break,
+                }
+                if batch.len() >= 256 {
+                    break;
+                }
+            }
+            let json = serde_json::to_string(&batch).unwrap_or_else(|_| "[]".into());
+            Some((Ok(Event::default().data(json)), (rx, Vec::new(), flush)))
+        },
+    );
+    Sse::new(events).keep_alive(KeepAlive::default())
 }
 
 #[derive(Deserialize)]
@@ -726,6 +798,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(prune_leases(state.clone()));
     let api = Router::new()
         .route("/api/v1/status", get(status))
+        .route("/api/v1/stream/sse", get(live_sse))
         .route("/api/v1/stocks/snapshots", get(stock_snapshots))
         .route("/api/v1/stocks/bars", get(stock_bars))
         .route("/api/v1/options/chain", get(option_chain))
@@ -734,11 +807,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/orders/preview", post(order_preview))
         .route("/api/v1/orders/submit", post(order_submit))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
-    let web_dist = std::env::var("EQO_WEB_DIST").unwrap_or_else(|_| "./apps/web/dist".into());
+    let web_dist = std::env::var("EQO_WEB_DIST").unwrap_or_else(|_| "./apps/gateway/empty".into());
     let openbb_api = Router::new()
         .route("/openbb/v1/stocks", get(openbb_stocks))
-        .route("/openbb/v1/bars", get(openbb_bars))
         .route("/openbb/v1/options", get(openbb_options))
+        .route("/openbb/v1/bars", get(openbb_bars))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
     let mut app = Router::new()
         .route("/widgets.json", get(openbb_widgets))
@@ -754,8 +827,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok()
         .filter(|value| !value.trim().is_empty())
     {
-        // Restrict cross-origin access to exactly one trusted OpenBB Workspace.
-        // A public unencrypted HTTP origin can leak the session token.
         let local_http =
             raw.starts_with("http://127.0.0.1:") || raw.starts_with("http://localhost:");
         if raw == "*" || !(raw.starts_with("https://") || local_http) {

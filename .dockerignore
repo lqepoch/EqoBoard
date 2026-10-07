@@ -10,3 +10,7 @@ audit
 *.log
 .vscode
 .idea
+
+**/.next
+**/*.tsbuildinfo
+**/coverage

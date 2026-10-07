@@ -1,0 +1,55 @@
+[
+  {
+    "name": "EqoBoard SIP + OPRA Research",
+    "description": "Source-preserving Alpaca SIP quotes and OPRA options in OpenBB Workspace",
+    "allowCustomization": true,
+    "tabs": {
+      "market": {
+        "id": "market",
+        "name": "US Options + Equities",
+        "layout": [
+          {
+            "i": "eqo_sip_watchlist",
+            "x": 0,
+            "y": 0,
+            "w": 20,
+            "h": 9,
+            "state": {
+              "params": {
+                "symbols": "QQQ,SPY,NVDA"
+              }
+            }
+          },
+          {
+            "i": "eqo_opra_contracts",
+            "x": 0,
+            "y": 9,
+            "w": 22,
+            "h": 15,
+            "state": {
+              "params": {
+                "underlying": "QQQ",
+                "expiration": "2026-10-09"
+              }
+            }
+          },
+          {
+            "i": "eqo_sip_bars",
+            "x": 22,
+            "y": 0,
+            "w": 18,
+            "h": 9,
+            "state": {
+              "params": {
+                "symbol": "QQQ",
+                "timeframe": "1Day",
+                "days": 30,
+                "limit": 500
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+]

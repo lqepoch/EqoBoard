@@ -1,0 +1,238 @@
+{
+  "eqo_sip_watchlist": {
+    "name": "EqoBoard SIP Stock Quotes",
+    "description": "US equities SIP quote snapshots from Alpaca Plus; source and as-of timestamp preserved. Fails explicitly if SIP access is unavailable.",
+    "endpoint": "openbb/v1/stocks",
+    "category": "EqoBoard",
+    "subCategory": "Stocks",
+    "type": "table",
+    "exportable": false,
+    "gridData": {
+      "w": 20,
+      "h": 9
+    },
+    "params": [
+      {
+        "paramName": "symbols",
+        "type": "text",
+        "label": "Stocks",
+        "value": "QQQ,SPY,NVDA",
+        "description": "Comma-separated US tickers (max 50)"
+      }
+    ],
+    "data": {
+      "table": {
+        "columnsDefs": [
+          {
+            "field": "symbol",
+            "headerName": "Symbol"
+          },
+          {
+            "field": "last",
+            "headerName": "Last",
+            "cellDataType": "number"
+          },
+          {
+            "field": "bid",
+            "headerName": "Bid",
+            "cellDataType": "number"
+          },
+          {
+            "field": "ask",
+            "headerName": "Ask",
+            "cellDataType": "number"
+          },
+          {
+            "field": "change_percent",
+            "headerName": "Change %",
+            "cellDataType": "number"
+          },
+          {
+            "field": "volume",
+            "headerName": "Volume",
+            "cellDataType": "number"
+          },
+          {
+            "field": "updated_at",
+            "headerName": "As of"
+          },
+          {
+            "field": "feed",
+            "headerName": "Feed"
+          }
+        ]
+      }
+    }
+  },
+  "eqo_opra_contracts": {
+    "name": "EqoBoard OPRA Option Chain",
+    "description": "Alpaca Plus OPRA contract snapshots with IV and Greeks; null metrics remain missing. Date is in New York market calendar.",
+    "endpoint": "openbb/v1/options",
+    "category": "EqoBoard",
+    "subCategory": "Options",
+    "type": "table",
+    "exportable": false,
+    "gridData": {
+      "w": 22,
+      "h": 15
+    },
+    "params": [
+      {
+        "paramName": "underlying",
+        "type": "text",
+        "label": "Ticker",
+        "value": "QQQ"
+      },
+      {
+        "paramName": "expiration",
+        "type": "date",
+        "label": "Expiry",
+        "value": "2026-10-09"
+      }
+    ],
+    "data": {
+      "table": {
+        "columnsDefs": [
+          {
+            "field": "symbol",
+            "headerName": "Contract"
+          },
+          {
+            "field": "strike",
+            "headerName": "Strike",
+            "cellDataType": "number"
+          },
+          {
+            "field": "right",
+            "headerName": "Right"
+          },
+          {
+            "field": "bid",
+            "headerName": "Bid",
+            "cellDataType": "number"
+          },
+          {
+            "field": "ask",
+            "headerName": "Ask",
+            "cellDataType": "number"
+          },
+          {
+            "field": "iv",
+            "headerName": "IV",
+            "cellDataType": "number"
+          },
+          {
+            "field": "delta",
+            "headerName": "Delta",
+            "cellDataType": "number"
+          },
+          {
+            "field": "gamma",
+            "headerName": "Gamma",
+            "cellDataType": "number"
+          },
+          {
+            "field": "theta",
+            "headerName": "Theta",
+            "cellDataType": "number"
+          },
+          {
+            "field": "vega",
+            "headerName": "Vega",
+            "cellDataType": "number"
+          },
+          {
+            "field": "updated_at",
+            "headerName": "As of"
+          },
+          {
+            "field": "feed",
+            "headerName": "Feed"
+          },
+          {
+            "field": "truncated",
+            "headerName": "Incomplete"
+          }
+        ]
+      }
+    }
+  },
+  "eqo_sip_bars": {
+    "name": "EqoBoard SIP OHLCV",
+    "description": "Alpaca SIP historical bars, exact market timestamp; requested timeframe and window must fit the current page bound.",
+    "endpoint": "openbb/v1/bars",
+    "category": "EqoBoard",
+    "subCategory": "Stocks",
+    "type": "table",
+    "exportable": false,
+    "gridData": {
+      "w": 20,
+      "h": 9
+    },
+    "params": [
+      {
+        "paramName": "symbol",
+        "type": "text",
+        "label": "Ticker",
+        "value": "QQQ"
+      },
+      {
+        "paramName": "timeframe",
+        "type": "text",
+        "label": "Timeframe",
+        "value": "1Day"
+      },
+      {
+        "paramName": "days",
+        "type": "number",
+        "label": "Days back",
+        "value": 30
+      },
+      {
+        "paramName": "limit",
+        "type": "number",
+        "label": "Max bars",
+        "value": 500
+      }
+    ],
+    "data": {
+      "table": {
+        "columnsDefs": [
+          {
+            "field": "time",
+            "headerName": "Time"
+          },
+          {
+            "field": "open",
+            "headerName": "Open",
+            "cellDataType": "number"
+          },
+          {
+            "field": "high",
+            "headerName": "High",
+            "cellDataType": "number"
+          },
+          {
+            "field": "low",
+            "headerName": "Low",
+            "cellDataType": "number"
+          },
+          {
+            "field": "close",
+            "headerName": "Close",
+            "cellDataType": "number"
+          },
+          {
+            "field": "volume",
+            "headerName": "Volume",
+            "cellDataType": "number"
+          },
+          {
+            "field": "feed",
+            "headerName": "Feed"
+          }
+        ]
+      }
+    }
+  }
+}
