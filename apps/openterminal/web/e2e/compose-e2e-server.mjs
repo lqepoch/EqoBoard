@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 
 const children = [];
 let stopping = false;
+const oidcPort = Number(process.env.E2E_OIDC_PORT ?? 4310);
 
 function start(command, args) {
   const child = spawn(command, args, { cwd: "/srv", stdio: "inherit", env: process.env });
@@ -13,7 +14,7 @@ const mocks = start(process.execPath, ["/srv/e2e/mock-services.mjs"]);
 for (let attempt = 0; attempt < 100; attempt += 1) {
   if (mocks.exitCode !== null) throw new Error(`offline mock exited with ${mocks.exitCode}`);
   try {
-    const response = await fetch("http://127.0.0.1:4310/.well-known/openid-configuration");
+    const response = await fetch(`http://127.0.0.1:${oidcPort}/.well-known/openid-configuration`);
     if (response.ok) break;
   } catch {
     // The mock service is still starting.

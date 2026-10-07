@@ -33,7 +33,7 @@ export default defineConfig({
         NEXT_TELEMETRY_DISABLED: "1",
         NEXTAUTH_URL: webUrl,
         NEXTAUTH_SECRET: "nextauth-e2e-secret-that-is-at-least-32-characters-long",
-        EQO_SESSION_TTL_SECONDS: "30",
+        EQO_SESSION_TTL_SECONDS: process.env.E2E_SESSION_TTL_SECONDS ?? "30",
         EQO_PUBLIC_ORIGIN: webUrl,
         EQO_OIDC_ISSUER: oidcUrl,
         EQO_OIDC_CLIENT_ID: "eqo-test",

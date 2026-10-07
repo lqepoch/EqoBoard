@@ -1,3 +1,6 @@
+import { usesSIPEquitySymbol } from "../../server/src/providers/market-symbol.ts";
+export { usesSIPEquitySymbol };
+
 /**
  * EqoBoard's single source of truth for U.S. equity/options prices.
  * OpenTerminal visuals consume the existing Rust gateway's SIP/OPRA contract.

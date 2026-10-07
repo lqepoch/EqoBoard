@@ -1,4 +1,4 @@
-import { expect, loginWithOidc, metrics, resetDownstream, setRoles, test, WEB_ORIGIN, MOCK_OIDC_ORIGIN } from "./fixtures";
+import { configureMocks, expect, loginWithOidc, metrics, resetDownstream, setRoles, test, WEB_ORIGIN, MOCK_OIDC_ORIGIN } from "./fixtures";
 import { request as httpRequest } from "node:http";
 
 function futureFridayOCCDate(): string {
@@ -51,6 +51,51 @@ async function postChunkedJson(cookie: string, body: string, finish: boolean) {
 test.beforeEach(async ({ request }) => {
   await resetDownstream(request);
   await setRoles(request, ["eqoboard-market-reader"]);
+});
+
+test("quotes route U.S. symbols to SIP, named research symbols to Node, preserve mixed order, and never fall back on SIP 403", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const response = await page.context().request.get(
+    `${WEB_ORIGIN}/api/quotes?symbols=QQQ,BTC,BTC-USD,VIX,7203.T`,
+  );
+  expect(response.status()).toBe(200);
+  const quotes = await response.json();
+  expect(quotes.map((quote: { symbol: string }) => quote.symbol)).toEqual(["QQQ", "BTC", "BTC-USD", "VIX", "7203.T"]);
+  expect(quotes.map((quote: { source: string }) => quote.source)).toEqual([
+    "Alpaca SIP", "Alpaca SIP", "mock-fixture/Binance", "mock-fixture/FRED", "mock-fixture/Yahoo",
+  ]);
+  let observed = await metrics(request);
+  expect(observed.gateway.calls.filter((call: { path: string }) => call.path === "/api/v1/stocks/snapshots"))
+    .toMatchObject([{ symbols: "QQQ,BTC" }]);
+  expect(observed.research.calls).toEqual([
+    { method: "GET", path: "/api/quotes", symbols: "BTC-USD,VIX,7203.T" },
+  ]);
+
+  await resetDownstream(request);
+  const researchHistory = await page.context().request.get(`${WEB_ORIGIN}/api/history/VIX?range=6M`);
+  expect(researchHistory.status()).toBe(200);
+  observed = await metrics(request);
+  expect(observed.gateway.requests).toEqual({});
+  expect(observed.research.calls).toEqual([
+    { method: "GET", path: "/api/history/VIX", symbols: null },
+  ]);
+
+  await resetDownstream(request);
+  const sipHistory = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?range=6M`);
+  expect(sipHistory.status()).toBe(200);
+  observed = await metrics(request);
+  expect(observed.gateway.requests).toEqual({ "/api/v1/stocks/bars": 1 });
+  expect(observed.research.requests).toEqual({});
+
+  await resetDownstream(request);
+  await configureMocks(request, { snapshotStatus: 403 });
+  const denied = await page.context().request.get(`${WEB_ORIGIN}/api/quotes?symbols=QQQ,BTC,VIX`);
+  expect(denied.status()).toBe(403);
+  observed = await metrics(request);
+  expect(observed.gateway.requests).toEqual({ "/api/v1/stocks/snapshots": 1 });
+  expect(observed.gateway.calls.filter((call: { path: string }) => call.path === "/api/v1/stocks/snapshots"))
+    .toMatchObject([{ symbols: "QQQ,BTC" }]);
+  expect(observed.research.requests).toEqual({});
 });
 
 test("anonymous, forged identity, read-only, and cross-origin writes never reach protected services", async ({ page, request }) => {

@@ -2,9 +2,9 @@ import { createServer } from "node:http";
 import { randomUUID, webcrypto } from "node:crypto";
 import { generateKeyPair, exportJWK, SignJWT, decodeProtectedHeader, jwtVerify } from "jose";
 
-const oidcPort = 4310;
-const gatewayPort = 4311;
-const researchPort = 4312;
+const oidcPort = Number(process.env.E2E_OIDC_PORT ?? 4310);
+const gatewayPort = Number(process.env.E2E_GATEWAY_PORT ?? 4311);
+const researchPort = Number(process.env.E2E_RESEARCH_PORT ?? 4312);
 const bindHost = process.env.E2E_MOCK_BIND_HOST ?? "127.0.0.1";
 const webOrigin = process.env.E2E_WEB_ORIGIN ?? "http://127.0.0.1:3300";
 const issuer = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${oidcPort}`;
@@ -25,7 +25,7 @@ const metrics = {
     requests: Object.create(null), authorized: 0, rejected: 0, streamOpened: 0, streamClosed: 0,
     activeStreams: 0, inFlight: 0, calls: [], subscriptions: [], previews: [],
   },
-  research: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0 },
+  research: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
 };
 const gatewayControl = {
   snapshotStatus: 200,
@@ -247,7 +247,12 @@ const gateway = createServer(async (req, res) => {
   trackResponse(metrics.gateway, res);
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${gatewayPort}`);
   countRequest(metrics.gateway, url.pathname);
-  metrics.gateway.calls.push({ method: req.method, path: url.pathname, bearer_present: Boolean(req.headers.authorization) });
+  metrics.gateway.calls.push({
+    method: req.method,
+    path: url.pathname,
+    symbols: url.searchParams.get("symbols"),
+    bearer_present: Boolean(req.headers.authorization),
+  });
   let payload;
   try {
     payload = await verifyGatewayRequest(req);
@@ -352,6 +357,7 @@ const research = createServer(async (req, res) => {
   trackResponse(metrics.research, res);
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${researchPort}`);
   countRequest(metrics.research, url.pathname);
+  metrics.research.calls.push({ method: req.method, path: url.pathname, symbols: url.searchParams.get("symbols") });
   let payload;
   try {
     payload = await verifyResearchRequest(req);
@@ -374,9 +380,15 @@ const research = createServer(async (req, res) => {
   if (url.pathname === "/api/quotes") {
     const requested = (url.searchParams.get("symbols") ?? "VIX").split(",").map((symbol) => symbol.trim()).filter(Boolean);
     const configured = Array.isArray(gatewayControl.quotes) ? gatewayControl.quotes : null;
+    const crypto = new Set(["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "DOT", "LINK", "LTC", "MATIC"]
+      .map((symbol) => `${symbol}-USD`));
+    const foreign = /\.(MI|PA|AS|BR|LS|DE|L|MC|SW|ST|CO|HE|OL|TO|AX|HK|T|NS|BO|TW|TWO|KS|KQ|SS|SZ|SI|JK|KL|BK|SA|MX|SN|ME|IS|TA|IL)$/i;
     const rows = requested.map((symbol) => configured?.find((row) => row?.symbol === symbol) ?? {
       symbol,
-      source: symbol === "VIX" || symbol === "^VIX" ? "mock-fixture/FRED" : "mock-fixture/SIP",
+      source: symbol === "VIX" || symbol === "^VIX" ? "mock-fixture/FRED"
+        : crypto.has(symbol) ? "mock-fixture/Binance"
+        : foreign.test(symbol) ? "mock-fixture/Yahoo"
+        : "mock-fixture/research",
       asOf: "2026-10-07T12:00:00Z",
       last: 500,
     });
