@@ -265,7 +265,9 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await expect(page).toHaveTitle(/Widgets Library \| OpenBB Lite/);
   await expect(page.getByText("Widgets Library", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Add Data", exact: true }).first().click();
-  const dialog = page.getByRole("dialog", { name: "Add Data", exact: true });
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Add Data", exact: true }),
+  });
   await dialog.getByRole("tab", { name: "Apps", exact: true }).click();
   await dialog.getByLabel("Name", { exact: true }).fill("仅演示 / MOCK SIP/OPRA");
   await dialog.getByLabel("URL", { exact: true }).fill(`${RESEARCH_ORIGIN}/api/openbb`);
