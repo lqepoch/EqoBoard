@@ -50,6 +50,7 @@ type TerminalState = {
 
 const DEFAULT_WIDGETS: WidgetInstance[] = [
   { id: "w-chart", type: "chart", linked: true },
+  { id: "w-options", type: "options", linked: true },
   { id: "w-quote", type: "quote", linked: true },
   { id: "w-watchlist", type: "watchlist", linked: false },
   { id: "w-news", type: "news", linked: true },
@@ -60,8 +61,9 @@ const DEFAULT_LAYOUT: LayoutItem[] = [
   { i: "w-chart", x: 0, y: 0, w: 7, h: 12 },
   { i: "w-quote", x: 7, y: 0, w: 5, h: 6 },
   { i: "w-watchlist", x: 7, y: 6, w: 5, h: 6 },
-  { i: "w-news", x: 0, y: 12, w: 7, h: 7 },
-  { i: "w-macro", x: 7, y: 12, w: 5, h: 7 },
+  { i: "w-options", x: 0, y: 12, w: 12, h: 11 },
+  { i: "w-news", x: 0, y: 23, w: 7, h: 7 },
+  { i: "w-macro", x: 7, y: 23, w: 5, h: 7 },
 ];
 
 const SIZE_BY_TYPE: Record<WidgetType, { w: number; h: number }> = {
@@ -85,10 +87,10 @@ const SIZE_BY_TYPE: Record<WidgetType, { w: number; h: number }> = {
 export const useTerminal = create<TerminalState>()(
   persist(
     (set) => ({
-      activeSymbol: "AAPL",
+      activeSymbol: "QQQ",
       widgets: DEFAULT_WIDGETS,
       layout: DEFAULT_LAYOUT,
-      watchlist: ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "GOOGL", "META", "SPY"],
+      watchlist: ["QQQ", "SPY", "IWM", "NVDA", "TSLA", "AAPL", "MSFT", "GLD"],
       commandOpen: false,
       setActiveSymbol: (s) => {
         const sym = normalizeSymbol(s);
@@ -132,7 +134,7 @@ export const useTerminal = create<TerminalState>()(
       removeFromWatchlist: (s) => set((st) => ({ watchlist: st.watchlist.filter((x) => x !== s) })),
       resetWorkspace: () => set({ widgets: DEFAULT_WIDGETS, layout: DEFAULT_LAYOUT }),
     }),
-    { name: "openterminal-workspace" }
+    { name: "eqoboard-open-terminal-v1" }
   )
 );
 
