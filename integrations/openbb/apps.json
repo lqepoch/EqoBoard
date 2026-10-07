@@ -1,0 +1,57 @@
+[
+  {
+    "name": "EqoBoard • Equities & Options",
+    "description": "Read-only SIP equity / OPRA option widgets sourced from Alpaca.",
+    "img": "",
+    "img_dark": "",
+    "img_light": "",
+    "allowCustomization": true,
+    "tabs": {
+      "main": {
+        "id": "main",
+        "name": "US Markets",
+        "layout": [
+          {
+            "i": "eqo_sip_equities",
+            "x": 0,
+            "y": 0,
+            "w": 18,
+            "h": 9,
+            "state": {
+              "params": {
+                "symbols": "SPY,QQQ,IWM,NVDA"
+              }
+            }
+          },
+          {
+            "i": "eqo_sip_bars",
+            "x": 18,
+            "y": 0,
+            "w": 22,
+            "h": 9,
+            "state": {
+              "params": {
+                "symbol": "QQQ",
+                "timeframe": "1Min"
+              }
+            }
+          },
+          {
+            "i": "eqo_opra_chain",
+            "x": 0,
+            "y": 9,
+            "w": 40,
+            "h": 14,
+            "state": {
+              "params": {
+                "underlying": "QQQ",
+                "expiration": ""
+              }
+            }
+          }
+        ]
+      }
+    },
+    "groups": []
+  }
+]

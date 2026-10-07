@@ -1,0 +1,37 @@
+{
+  "last_verified": "2026-10-07",
+  "sources": [
+    {
+      "name": "OpenTerminal",
+      "repository": "ErTasselli/OpenTerminal",
+      "commit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+      "license": "MIT",
+      "integration": "adapted and vendored code",
+      "upstream_paths": [
+        "web/store/terminal.ts",
+        "web/components/Workspace.tsx",
+        "web/components/CommandPalette.tsx",
+        "web/lib/symbol.ts"
+      ],
+      "downstream_prefix": "apps/web/src/upstream/openterminal",
+      "license_file": "third_party/OpenTerminal-LICENSE.txt"
+    },
+    {
+      "name": "OpenBB Workspace",
+      "repository": "OpenBB-finance/workspace",
+      "commit": "be00e95019a55d57af146919ee46b7e1a4859226",
+      "license": "Apache-2.0",
+      "archived_at": "2026-10-01",
+      "integration": "official widgets.json/apps.json custom backend protocol; not bundled",
+      "downstream_prefix": "integrations/openbb"
+    },
+    {
+      "name": "AG Grid Community",
+      "package": "ag-grid-community",
+      "version": "36.2.0",
+      "license": "MIT",
+      "integration": "real option chain grid",
+      "downstream_path": "apps/web/src/components/OptionChain.tsx"
+    }
+  ]
+}

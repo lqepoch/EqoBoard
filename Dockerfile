@@ -8,9 +8,10 @@ RUN npm run build
 
 FROM rust:bookworm AS backend
 WORKDIR /src
-COPY Cargo.toml rust-toolchain.toml ./
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
 COPY apps/gateway ./apps/gateway
+COPY integrations/openbb ./integrations/openbb
 RUN cargo build --release -p eqo-gateway
 
 FROM debian:bookworm-slim
@@ -20,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && mkdir -p /var/lib/eqoboard && chown -R eqo:eqo /var/lib/eqoboard
 COPY --from=backend /src/target/release/eqo-gateway /usr/local/bin/eqo-gateway
 COPY --from=web /app/apps/web/dist /opt/eqoboard/web
+COPY third_party/OpenTerminal-LICENSE.txt /usr/share/licenses/eqoboard/OpenTerminal-LICENSE.txt
 USER eqo
 WORKDIR /home/eqo
 ENV EQO_BIND=0.0.0.0:8080

@@ -26,6 +26,17 @@ cd apps/web && npm install && npm run typecheck && npm run test && npm run build
 
 没有密钥时 UI 明确显示行情不可用，**绝不会制造模拟报价或虚构成交**。CI 离线单元测试完全不需要密钥；market-data-smoke 工作流手动或定时用组织 Secrets \`ALPACA_KEY\` / \`ALPACA_SECRET\` 进行只读订阅验证。
 
+## 上游成熟框架复用（2026-10-07）
+
+- **OpenTerminal**：正式将 web/store/terminal.ts、Workspace、CommandPalette 和 Symbol 工具的 MIT 上游模式移植到 apps/web/src/upstream/openterminal，保留原许可证及固定 commit；首页已经使用此 Widget registry / draggable workspace。它的 Yahoo 等免费行情链没有带入。
+- **AG Grid Community**：apps/web/src/components/OptionChain.tsx 持续采用 v36.2.0，双侧期权链和 applyTransactionAsync 直接使用 AG Grid。
+- **OpenBB Workspace**：实现了官方 Custom Backend widgets.json / apps.json + Rust 只读 SIP/OPRA API，使用 OpenBB 自托管 Lite 时可在 Data Connectors 添加 EqoBoard。OpenBB 完整 UI 没有嵌进本程序；其官方原仓 2026-10-01 已归档开源，适合作可选分析界面，不影响主交易台运行。
+- **Rust/Tokio**：全部 Alpaca Plus SIP/OPRA 和 BrokerAdapter 继续由 EqoBoard 后端管理，浏览器不能触达密钥。
+
+详细来源、许可证和适配边界见 docs/UPSTREAM_SOURCES.md；OpenBB 接入见 integrations/openbb/README.md。
+
+⚠ **实测权限**：2026-10-07 Actions 检查当前组织 ALPACA_KEY/ALPACA_SECRET 对实时 SIP 和 OPRA 均返回 HTTP 403；45 分钟前 SIP 历史请求可用。必须核对 Plus 订阅归属，绝不静默改用 IEX/indicative。
+
 ## 技术选型
 
 | 模块 | 技术 | 原则 |

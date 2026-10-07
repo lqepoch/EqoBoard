@@ -1,7 +1,9 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {AgGridReact} from 'ag-grid-react';
 import {
-  AllCommunityModule,ModuleRegistry,themeQuartz,
+  CellStyleModule,ClientSideRowModelModule,RowSelectionModule,
+  NumberFilterModule,TextFilterModule,RowStyleModule,
+  ModuleRegistry,themeQuartz,
   type ColDef,type ColGroupDef,type CellClickedEvent
 } from 'ag-grid-community';
 import {useMarket,useUi} from '../state';
@@ -10,7 +12,12 @@ import type {OptionChainResponse,OptionContract,OptionRow} from '../types';
 import {buildOptionRows,money,mid} from '../utils';
 import {Panel} from './Panel';
 
-ModuleRegistry.registerModules([AllCommunityModule]);
+// Register the AG Grid Community capabilities actually used by the options chain.
+// Keeps Enterprise code and unused AllCommunityModule features out of the bundle.
+ModuleRegistry.registerModules([
+  ClientSideRowModelModule,CellStyleModule,RowStyleModule,
+  RowSelectionModule,NumberFilterModule,TextFilterModule
+]);
 const theme=themeQuartz.withParams({
   backgroundColor:'#0c1723',
   foregroundColor:'#d7e4f0',

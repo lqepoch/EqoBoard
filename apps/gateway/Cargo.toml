@@ -9,7 +9,7 @@ eqo-domain = { path = "../../crates/domain" }
 eqo-alpaca-data = { path = "../../crates/alpaca-data" }
 eqo-execution = { path = "../../crates/execution" }
 axum = { version = "0.8", features = ["ws", "json"] }
-tower-http = { version = "0.6", features = ["fs", "trace"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
