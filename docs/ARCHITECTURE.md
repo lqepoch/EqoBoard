@@ -5,7 +5,7 @@
 ```
                          ┌──────────────────────────────┐
                          │ OpenTerminal Next.js        │
-Browser ────────────────►│ Workspace / Widgets         │
+Browser ── OIDC cookie ─►│ BFF / Workspace / Widgets  │
                          │ AG Grid / Charts / Research │
                          └──────────────┬───────────────┘
                                         │ server-side proxy
@@ -36,7 +36,11 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 
 旧 Vite UI 已删除。
 
+浏览器只访问 Next BFF。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为每请求 action scope 的短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。research Node 仅持有独立 research signer，只能为通过用户会话验证的市场读取请求签发 `market:read` 子 token。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
+
 ## Rust 数据接口
+
+所有受保护 Gateway 路由都要求可验证委托主体；`/healthz` 仅表示进程存活，`/readyz` 表示身份 keyring 可用。行情配置和 SIP/OPRA 授权另行判断，身份 readiness 不等于市场数据 ready。
 
 - `GET /api/v1/status`
 - `GET /api/v1/stocks/snapshots`
@@ -49,6 +53,7 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 - `POST /api/v1/orders/submit`
 
 OpenBB：`/widgets.json`、`/apps.json`、`/openbb/stocks`、`/openbb/options`、`/openbb/bars`。
+OpenBB Gateway 路由也要求可验证的委托主体；OpenBB Lite 的登录/令牌交换联调属于后续 #13，当前不接受静态 bearer token。
 
 ## 数据原则
 
@@ -58,7 +63,7 @@ SIP/OPRA 是硬约束。关键行情不允许用 Yahoo、IEX、indicative 等源
 
 Foundation：OpenTerminal + Rust + AG Grid + OpenBB connector。
 
-Paper MVP：三券商执行服务、订单状态机、撤改单、持仓、成交、对账、恢复。
+当前基础版只开放离线订单预览，Paper 与 Live 提交固定关闭。Paper MVP 还需三券商持久订单状态机、一次性 preview/outbox、账户身份、撤改单、持仓、成交、对账与恢复后另行验收。
 
 Production：OIDC/RBAC、持久事件存储、OpenTelemetry/SLO、WORM 审计、行情授权、限额/Kill Switch、灰度和灾备。
 

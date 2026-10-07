@@ -62,7 +62,10 @@ impl AuthKeyring {
     }
 
     fn ready(&self) -> bool {
-        self.bff.is_some() && self.research.is_some()
+        self.bff
+            .as_deref()
+            .zip(self.research.as_deref())
+            .is_some_and(|(bff, research)| bff != research)
     }
 }
 
@@ -297,10 +300,16 @@ async fn healthz() -> impl IntoResponse {
 }
 async fn readyz(State(state): State<AppState>) -> Response {
     let ready = state.auth_keys.ready();
+    let market_data_configured = state.data.is_some();
     let body = json!({
         "ready":ready,
         "identity_validation_configured":ready,
-        "market_credentials_present":state.data.is_some(),
+        "market_credentials_present":market_data_configured,
+        "market_data_configured":market_data_configured,
+        "market_data_ready":false,
+        "market_data_status":if market_data_configured {"awaiting_upstream"} else {"not_configured"},
+        "market_data_provider":"alpaca",
+        "execution_mode":"disabled",
         "execution_enabled":false
     });
     (
@@ -323,6 +332,9 @@ async fn status(
     Json(json!({
         "service":"EqoBoard", "schema_version":1,
         "market_credentials_present":state.data.is_some(),
+        "market_data_configured":state.data.is_some(),
+        "market_data_ready":false,
+        "market_data_status":if state.data.is_some() {"awaiting_upstream"} else {"not_configured"},
         "stock_feed":state.stock_feed,"option_feed":state.option_feed,
         "market_data_provider":"alpaca",
         "requested_execution_mode":state.requested_execution_mode,
@@ -1083,8 +1095,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bind = std::env::var("EQO_BIND").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let addr: SocketAddr = bind.parse()?;
     let auth_keys = AuthKeyring::from_env();
-    if !addr.ip().is_loopback() && !auth_keys.ready() {
-        return Err("non-loopback bind requires verifiable gateway and research JWT keys".into());
+    if !auth_keys.ready() {
+        if !addr.ip().is_loopback() {
+            return Err(
+                "non-loopback bind requires verifiable gateway and research JWT keys".into(),
+            );
+        }
+        warn!("identity signing keys unavailable or not independent; protected API and readiness remain fail-closed");
     }
     let mode = std::env::var("EQO_EXECUTION_MODE").unwrap_or_else(|_| "disabled".into());
     if !["disabled", "paper", "live"].contains(&mode.as_str()) {
@@ -1370,5 +1387,33 @@ mod tests {
             assert_eq!(status, StatusCode::UNAUTHORIZED);
             assert_eq!(downstream_calls, 0);
         }
+    }
+
+    #[tokio::test]
+    async fn shared_bff_and_research_signing_key_fails_closed_before_handlers() {
+        let shared = Arc::new(vec![b's'; 64]);
+        let keys = AuthKeyring {
+            bff: Some(shared.clone()),
+            research: Some(shared),
+        };
+        assert!(!keys.ready());
+        let token = test_token(
+            keys.bff.as_deref().expect("test key"),
+            "bff",
+            BFF_ISSUER,
+            vec!["orders:preview"],
+        );
+        let (status, downstream_calls) = protected_call_count(keys, Some(&token)).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(downstream_calls, 0);
+    }
+
+    #[tokio::test]
+    async fn missing_identity_keys_fail_closed_without_stopping_liveness_process() {
+        let keys = AuthKeyring::default();
+        assert!(!keys.ready());
+        let (status, downstream_calls) = protected_call_count(keys, None).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(downstream_calls, 0);
     }
 }
