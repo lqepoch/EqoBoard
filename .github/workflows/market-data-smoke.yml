@@ -1,0 +1,33 @@
+name: Alpaca SIP + OPRA read-only smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 16 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - 'crates/alpaca-data/**'
+      - 'tools/check_alpaca_feeds.py'
+      - '.github/workflows/market-data-smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alpaca-entitlements
+  cancel-in-progress: false
+
+jobs:
+  entitlement-check:
+    name: Verify real SIP/OPRA entitlements (never submit orders)
+    if: github.repository == 'lqepoch/EqoBoard'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe read-only Alpaca Market Data APIs
+        env:
+          ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
+          ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
+        run: python3 tools/check_alpaca_feeds.py

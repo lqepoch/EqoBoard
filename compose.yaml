@@ -1,0 +1,22 @@
+services:
+  eqoboard:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - .env
+    environment:
+      EQO_BIND: "0.0.0.0:8080"
+      EQO_ACCESS_TOKEN: ${EQO_ACCESS_TOKEN:?Set a strong EQO_ACCESS_TOKEN in .env}
+      EQO_EXECUTION_MODE: "disabled"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - eqoboard-audit:/var/lib/eqoboard
+    restart: unless-stopped
+
+volumes:
+  eqoboard-audit:

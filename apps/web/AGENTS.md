@@ -1,0 +1,2 @@
+# 前端 Agent
+负责 React/Vite/AG Grid/Lightweight Charts/ECharts 的组件、信息结构、状态和性能。用户必须看见来源 SIP/OPRA、上游时间戳、断流/缺权限/分页不完整警示。使用 .agents/skills/option-chain-ui/SKILL.md 和 .agents/skills/market-charting/SKILL.md。严禁 UI 中计算或显示虚构 Greeks、成交方向、虚构收益。下单按钮绝不跳过后端预览与明确确认。
