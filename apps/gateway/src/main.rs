@@ -32,9 +32,9 @@ use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-#[derive(Clone)]
 type ConsumerLeases = HashMap<Uuid, (Instant, HashSet<String>)>;
 
+#[derive(Clone)]
 struct AppState {
     data: Option<AlpacaData>,
     stock_feed: String,
