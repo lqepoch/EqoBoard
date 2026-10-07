@@ -96,6 +96,17 @@ fn parse_bar(value: &Value) -> Result<Bar, DataError> {
     })
 }
 
+fn next_page_token(response: &Value) -> Result<Option<String>, DataError> {
+    // Alpaca uses an absent/null token to end pagination and a nonempty opaque
+    // string to continue. Treat an empty string or any other JSON type as malformed.
+    match response.get("next_page_token") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(token)) if !token.is_empty() => Ok(Some(token.clone())),
+        Some(Value::String(_)) => Err(DataError::InvalidResponse),
+        Some(_) => Err(DataError::InvalidResponse),
+    }
+}
+
 impl AlpacaData {
     pub fn from_env() -> Result<Self, DataError> {
         let key = std::env::var("ALPACA_KEY").unwrap_or_default();
@@ -319,11 +330,7 @@ impl AlpacaData {
                 page_bars.push(parse_bar(row)?);
             }
             out.extend(page_bars);
-            page_token = data
-                .get("next_page_token")
-                .and_then(Value::as_str)
-                .filter(|token| !token.is_empty())
-                .map(str::to_owned);
+            page_token = next_page_token(&data)?;
             has_more = page_token.is_some() || overflow;
             if !has_more || out.len() >= limit {
                 break;
@@ -382,9 +389,9 @@ impl AlpacaData {
                 .and_then(Value::as_object)
                 .ok_or(DataError::InvalidResponse)?;
             for (symbol, s) in snapshots {
-                let Ok(occ) = parse_occ(symbol) else { continue };
+                let occ = parse_occ(symbol).map_err(|_| DataError::InvalidResponse)?;
                 if occ.expiration.to_string() != expiration {
-                    continue;
+                    return Err(DataError::InvalidResponse);
                 }
                 let q = &s["latestQuote"];
                 let g = &s["greeks"];
@@ -411,11 +418,7 @@ impl AlpacaData {
                     feed: self.option_feed.clone(),
                 });
             }
-            token = response
-                .get("next_page_token")
-                .and_then(Value::as_str)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string);
+            token = next_page_token(&response)?;
             has_more = token.is_some();
             if !has_more {
                 break;

@@ -95,6 +95,21 @@ async fn mock_upstream(State(state): State<MockUpstream>, request: Request) -> R
             "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}],
             "next_page_token": null
         }),
+        "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Hour") => json!({
+            "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}]
+        }),
+        "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Day") => json!({
+            "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}],
+            "next_page_token": ""
+        }),
+        "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Week") => json!({
+            "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}],
+            "next_page_token": 2
+        }),
+        "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Month") => json!({
+            "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}],
+            "next_page_token": {"cursor":"unexpected"}
+        }),
         "/v2/stocks/QQQ/bars" if query.contains("timeframe=15Min") => json!({
             "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5}],
             "next_page_token": null
@@ -109,6 +124,46 @@ async fn mock_upstream(State(state): State<MockUpstream>, request: Request) -> R
                 {"t":"2026-10-07T13:00:00Z","o":599.0,"h":600.0,"l":598.0,"c":599.5,"v":1800}
             ],
             "next_page_token": "bars-page-2"
+        }),
+        "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-11") => json!({
+            "snapshots": {
+                "NOT-OCC": {
+                    "latestQuote":{"bp":1.2,"ap":1.4,"t":"2026-10-07T14:12:00Z"}
+                }
+            },
+            "next_page_token": null
+        }),
+        "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-12") => json!({
+            "snapshots": {
+                "QQQ261012C00600000": {
+                    "latestQuote":{"bp":1.2,"ap":1.4,"t":"2026-10-07T14:12:00Z"}
+                }
+            },
+            "next_page_token": 2
+        }),
+        "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-13") => json!({
+            "snapshots": {
+                "QQQ261013C00600000": {
+                    "latestQuote":{"bp":1.2,"ap":1.4,"t":"2026-10-07T14:12:00Z"}
+                }
+            },
+            "next_page_token": {"cursor":"unexpected"}
+        }),
+        "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-14") => json!({
+            "snapshots": {
+                "QQQ261014C00600000": {
+                    "latestQuote":{"bp":1.2,"ap":1.4,"t":"2026-10-07T14:12:00Z"}
+                }
+            },
+            "next_page_token": ""
+        }),
+        "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-15") => json!({
+            "snapshots": {
+                "QQQ261016C00600000": {
+                    "latestQuote":{"bp":1.2,"ap":1.4,"t":"2026-10-07T14:12:00Z"}
+                }
+            },
+            "next_page_token": null
         }),
         "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-10") => {
             truncated_option_page(query)
@@ -424,6 +479,62 @@ async fn openbb_bars_reject_malformed_rows_and_repeated_page_tokens() {
         .filter(|uri| uri.contains("timeframe=5Min"))
         .count();
     assert_eq!(repeated_page_calls, 2);
+    upstream.stop();
+}
+
+#[tokio::test]
+async fn openbb_rejects_malformed_option_symbols_and_page_tokens() {
+    let upstream = MockServer::start(200, None).await;
+    let (keys, _, research) = test_keys();
+    let bearer = token(&research, "research", RESEARCH_ISSUER, vec!["market:read"]);
+    let app = openbb_app(
+        AlpacaData::with_test_endpoint(&upstream.base).expect("mock endpoint is allowed"),
+        keys,
+    );
+
+    let (missing_status, missing_rows) = get_json(
+        &app,
+        "/openbb/v1/bars?symbol=QQQ&timeframe=1Hour&limit=2&days=1",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(missing_status, StatusCode::OK);
+    assert_eq!(missing_rows.as_array().unwrap().len(), 1);
+    assert_eq!(missing_rows[0]["has_more"], false);
+    assert_eq!(missing_rows[0]["complete"], true);
+
+    for timeframe in ["1Day", "1Week", "1Month"] {
+        let path = format!("/openbb/v1/bars?symbol=QQQ&timeframe={timeframe}&limit=2&days=1");
+        let (status, body) = get_json(&app, &path, Some(&bearer)).await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY, "{timeframe}");
+        assert_eq!(body["error"], "market_data_error", "{timeframe}");
+    }
+
+    let (occ_status, occ_body) = get_json(
+        &app,
+        "/openbb/v1/options?underlying=QQQ&expiration=2026-10-11",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(occ_status, StatusCode::BAD_GATEWAY);
+    assert_eq!(occ_body["error"], "market_data_error");
+
+    for expiration in ["2026-10-12", "2026-10-13", "2026-10-14"] {
+        let path = format!("/openbb/v1/options?underlying=QQQ&expiration={expiration}");
+        let (status, body) = get_json(&app, &path, Some(&bearer)).await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY, "{expiration}");
+        assert_eq!(body["error"], "market_data_error", "{expiration}");
+    }
+
+    let (mismatch_status, mismatch_body) = get_json(
+        &app,
+        "/openbb/v1/options?underlying=QQQ&expiration=2026-10-15",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(mismatch_status, StatusCode::BAD_GATEWAY);
+    assert_eq!(mismatch_body["error"], "market_data_error");
+
     upstream.stop();
 }
 
