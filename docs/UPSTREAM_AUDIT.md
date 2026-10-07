@@ -1,11 +1,11 @@
 # OpenTerminal upstream file audit
 
-- EqoBoard audit head: `debf0f47edbaec4546f0de91e4f191ba4d98712a`
+- EqoBoard audit head: `b7167fe9da990323eb783c069e47bf3f0ff6f0c2`
 - OpenTerminal upstream commit: `aed097c680cd8ec1c391ae06966babe7d6d91fc6`
 - Repository: `ErTasselli/OpenTerminal`
 - License: `MIT`
 - Verified Git archive SHA-256: `1e10d60a7ea0662d1e84704850a73b531e1a26f69337814f443458d9070a918b` (computed from git archive after the fetched Git object matched the locked commit)
-- Audit date (UTC): `2026-10-07 21:06:54 UTC`
+- Audit date (UTC): `2026-10-07 21:22:51 UTC`
 - Comparison: tracked files below `apps/openterminal` against the verified Git tree at the locked commit; files such as `node_modules` and `.next` are excluded.
 
 ## Summary
@@ -17,7 +17,6 @@
 - E · domain, security, and integration files: 68
 - Deleted upstream files: 14
 - D · duplicated mature upstream implementations: none identified in this comparison. EqoBoard routes U.S. SIP/OPRA prices through Rust; retained Yahoo/TradingView providers serve research, non-U.S. symbols, or metadata. The native OpenTerminal Workspace, charts, screener, heatmap, watchlist, and general research widgets remain reused.
-- Documentation follow-up: the OpenTerminal README still references five deleted screenshot files under `docs/screenshots/`; those image links are currently unresolved and are recorded below for a later asset/reference decision.
 
 C and E are both listed in the EqoBoard-only table. C marks product widgets; E marks data, identity, execution-preview, and integration-specific code. A newly modified or added path without a curated note is labeled `待人工审核` to make drift fail visibly in review.
 
@@ -67,7 +66,7 @@ C and E are both listed in the EqoBoard-only table. C marks product widgets; E m
 
 | Category | upstream file | EqoBoard file | upstream commit | modification reason | retain | adapter/extension | duplicate wheel |
 |---|---|---|---|---|---|---|---|
-| B | `README.md` | `apps/openterminal/README.md` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 记录 EqoBoard 的数据、安全和部署边界。 | 保留 | 无需抽 adapter | 否 |
+| B | `README.md` | `apps/openterminal/README.md` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 记录 EqoBoard 的数据、安全和部署边界，并移除固定上游未随归档提供的截图引用。 | 保留 | 无需抽 adapter | 否 |
 | B | `package-lock.json` | `apps/openterminal/package-lock.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 锁定 EqoBoard 认证和运行时依赖。 | 保留 | 无需抽 adapter | 否 |
 | B | `package.json` | `apps/openterminal/package.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 增加现有 OpenTerminal package 中的 research E2E 命令入口；不创建第二套终端。 | 保留 | 测试脚本留在仓库级集成边界 | 否 |
 | B | `server/package.json` | `apps/openterminal/server/package.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 加入短时委托 JWT 验证依赖。 | 保留 | 认证职责已在 server/src/auth.ts | 否 |
@@ -204,11 +203,11 @@ C and E are both listed in the EqoBoard-only table. C marks product widgets; E m
 | deleted | `.gitignore` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 忽略规则由 EqoBoard 仓库根管理。 | 当前不保留 | 不适用 | 否 |
 | deleted | `data/readme.md` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 上游本地数据目录未随终端 vendoring；Portfolio 存储由容器卷配置。 | 当前不保留 | 不适用 | 否 |
 | deleted | `docker-compose.yml` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 容器拓扑由 EqoBoard 根 compose 管理。 | 当前不保留 | 不适用 | 否 |
-| deleted | `docs/screenshots/chart.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。 | 当前不保留 | 不适用 | 否 |
-| deleted | `docs/screenshots/crypto.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。 | 当前不保留 | 不适用 | 否 |
-| deleted | `docs/screenshots/dashboard.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。 | 当前不保留 | 不适用 | 否 |
-| deleted | `docs/screenshots/heatmap.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。 | 当前不保留 | 不适用 | 否 |
-| deleted | `docs/screenshots/news.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。 | 当前不保留 | 不适用 | 否 |
+| deleted | `docs/screenshots/chart.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 固定上游归档未提供该截图；README 中对应的失效图片引用已删除，图表功能说明保留。 | 当前不保留 | 不适用 | 否 |
+| deleted | `docs/screenshots/crypto.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 固定上游归档未提供该截图；README 中对应的失效图片引用已删除，Crypto 功能说明保留。 | 当前不保留 | 不适用 | 否 |
+| deleted | `docs/screenshots/dashboard.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 固定上游归档未提供该截图；README 中对应的失效图片引用已删除，Workspace 功能说明保留。 | 当前不保留 | 不适用 | 否 |
+| deleted | `docs/screenshots/heatmap.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 固定上游归档未提供该截图；README 中对应的失效图片引用已删除，heatmap 功能说明保留。 | 当前不保留 | 不适用 | 否 |
+| deleted | `docs/screenshots/news.png` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 固定上游归档未提供该截图；README 中对应的失效图片引用已删除，news 功能说明保留。 | 当前不保留 | 不适用 | 否 |
 | deleted | `server/Dockerfile` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 镜像构建由 apps/openterminal/Dockerfile 集中管理。 | 当前不保留 | 不适用 | 否 |
 | deleted | `web/Dockerfile` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Next.js 与 server 构建由 apps/openterminal/Dockerfile 集中管理。 | 当前不保留 | 不适用 | 否 |
 | deleted | `web/next.config.ts` | — | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 由 EqoBoard 的 next.config.mjs 替代以配置 BFF 安全头。 | 当前不保留 | 不适用 | 否 |
