@@ -339,9 +339,9 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   expect(browserCalls.some((url) => /\/orders?(\/|\?|$)|\/submit(\/|\?|$)/i.test(url))).toBe(false);
 
   const marketAsOfHeaders = page.getByRole("columnheader", { name: "Market as of", exact: true });
-  await expect(marketAsOfHeaders).toHaveCount(2);
+  await expect(marketAsOfHeaders).toHaveCount(1);
   await expect(marketAsOfHeaders.last()).toBeVisible();
-  await expect(page.getByText(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/).first()).toBeVisible();
+  await expect(page.getByText(String(bars[0].market_as_of), { exact: true }).filter({ visible: true }).first()).toBeVisible();
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-market-time.png"), fullPage: true });
 
   const horizontalViewports = page.locator(".ag-body-horizontal-scroll-viewport");
