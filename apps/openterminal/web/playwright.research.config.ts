@@ -1,4 +1,7 @@
 import { defineConfig } from "@playwright/test";
+import { assertHostE2eEnvironmentIsIsolated } from "./e2e/isolated-env";
+
+assertHostE2eEnvironmentIsIsolated();
 
 const oidcUrl = "http://127.0.0.1:4320";
 const webUrl = "http://127.0.0.1:3320";

@@ -86,6 +86,19 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   expect((await request.get(`${WEB_ORIGIN}/%61pi/eqo/orders/preview`)).status()).toBe(404);
   expect((await request.post(`${WEB_ORIGIN}/api/openbb/openbb/v1/options`, { data: {} })).status()).toBe(404);
   expect((await request.post(`${WEB_ORIGIN}/api/research/auth-check`)).status()).toBe(404);
+  for (const path of [
+    "/api/portfolios",
+    "/api/ai/chat",
+    "/api/eqo/orders/preview",
+    "/api/eqo/orders/submit",
+    "/api/eqo/stocks/subscribe",
+    "/api/eqo/options/subscribe",
+  ]) {
+    expect((await request.post(`${WEB_ORIGIN}${path}`, { data: { symbol: "QQQ" } })).status(), path).toBe(404);
+  }
+  expect((await request.get(`${WEB_ORIGIN}/api/portfolios`)).status()).toBe(404);
+  expect((await request.get(`${WEB_ORIGIN}/api/eqo/stocks/subscribe`)).status()).toBe(404);
+  expect((await request.get(`${WEB_ORIGIN}/api/eqo/options/subscribe`)).status()).toBe(404);
 
   const sameHostnameReadiness = await request.get(`${SAME_HOSTNAME_WEB_ORIGIN}/api/readyz`);
   expect(sameHostnameReadiness.status()).toBe(503);

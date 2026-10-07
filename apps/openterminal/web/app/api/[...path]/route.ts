@@ -166,6 +166,9 @@ function researchPolicy(method: Method, path: string[]): ProxyPolicy | null {
 
 async function proxy(request: NextRequest, path: string[]): Promise<NextResponse> {
   const method = request.method.toUpperCase() as Method;
+  if (process.env.EQO_BFF_MODE === "research" && (method !== "GET" || path[0] === "portfolios")) {
+    return NextResponse.json({ error: "route_not_available" }, { status: 404, headers: { "Cache-Control": "no-store" } });
+  }
   if (method === "GET" && path.length === 1 && path[0] === "quotes") {
     return quoteProxy(request);
   }

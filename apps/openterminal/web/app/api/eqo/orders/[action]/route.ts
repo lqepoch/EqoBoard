@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authorizeBffRequest, readBoundedJson } from "@/lib/eqo-auth";
+import { authorizeBffRequest, readBoundedJson, researchModeRouteUnavailable } from "@/lib/eqo-auth";
 import { readLimitedResponse } from "@/lib/http-response";
 
 export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ action: string }> };
 
+export async function GET() {
+  const unavailable = researchModeRouteUnavailable();
+  if (unavailable) return unavailable;
+  return NextResponse.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: "POST" } });
+}
+
 export async function POST(req: NextRequest, context: RouteContext) {
+  const unavailable = researchModeRouteUnavailable();
+  if (unavailable) return unavailable;
   const { action } = await context.params;
   if (action !== "preview" && action !== "submit") {
     return NextResponse.json({ error: "route_not_available" }, { status: 404 });
