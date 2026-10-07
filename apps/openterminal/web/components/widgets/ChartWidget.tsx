@@ -13,6 +13,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { apiGet, fmt, fmtBig, type Candle } from "../../lib/api";
+import type { EqoHistory } from "../../lib/eqo-market";
 import { sma, ema, vwap, rsi, macd, bollinger, type Point } from "../../lib/indicators";
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
 
@@ -41,11 +42,12 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
-  const { data: candles, error } = useQuery({
+  const { data: history, error } = useQuery({
     queryKey: ["history", symbol, range],
-    queryFn: () => apiGet<Candle[]>(`/api/history/${encodeURIComponent(symbol)}?range=${range}`),
+    queryFn: () => apiGet<EqoHistory>(`/api/history/${encodeURIComponent(symbol)}?range=${range}`),
     refetchInterval: range === "1D" ? 8_000 : 60_000,
   });
+  const candles: Candle[] | undefined = history?.bars;
 
   // Fast time -> candle lookup for the crosshair legend, independent of chart type.
   const byTime = useMemo(() => {
@@ -252,6 +254,9 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
             {ind}
           </button>
         ))}
+      </div>
+      <div className="px-2 py-1 border-b border-[#1c1c1c] text-[9px] dim">
+        Source {history?.source??"unknown"} · as of {history?.asOf??"unknown"} · bar volume source follows the listed feed
       </div>
       {error && <div className="p-2 down">Error: {(error as Error).message}</div>}
       <div className="relative flex-1 min-h-0">

@@ -32,11 +32,11 @@ export default function IvSkewWidget({widget}:{widget:WidgetInstance}){
   const rows=[...map.values()].sort((a,b)=>a.strike-b.strike);
   return <div className="h-full flex flex-col min-h-0">
     <div className="flex items-center gap-2 px-2 py-1 text-[11px] border-b border-[#262626]">
-      <span className="amber">ALPACA OPRA IV</span>
+      <span className="amber">ALPACA REST IV MODEL</span>
       <input aria-label="IV expiry" type="date" value={expiry}
         onChange={e=>setExpiry(e.target.value)}
         className="bg-[#171717] border border-[#444] px-2 py-1 text-[#ddd]" />
-      <span className="dim ml-auto">{isFetching?"更新…":data?.asOf??"—"}</span>
+      <span className="dim ml-auto">{isFetching?"更新…":data?.asOf?`Gateway response ${data.asOf}`:"—"}</span>
     </div>
     {error&&<div className="down p-2">{(error as Error).message}</div>}
     <div className="flex-1 min-h-[180px] p-1">
@@ -53,7 +53,7 @@ export default function IvSkewWidget({widget}:{widget:WidgetInstance}){
       </ResponsiveContainer>:<div className="dim p-3">当前日期无可用 IV 快照。</div>}
     </div>
     <div className="dim text-[10px] px-2 py-1 border-t border-[#262626]">
-      单到期日 Skew；IV 来自 Alpaca 快照，合约时间可能不同步，空值保留为空。
+      单到期日 Skew；IV/Greeks 来自 Alpaca REST option snapshot model（不是 OPRA 原生字段），model as-of unknown。OPRA quote/trade event time 单独显示；Gateway response time 不代表模型计算时间。空值保留为空。
     </div>
   </div>;
 }

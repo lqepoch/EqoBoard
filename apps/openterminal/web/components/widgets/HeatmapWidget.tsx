@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
-import { apiGet } from "../../lib/api";
+import { apiGet, type MarketRowsEnvelope } from "../../lib/api";
 import { useTerminal } from "../../store/terminal";
 
 type Cell = { symbol: string; name: string | null; sector: string; marketCap: number | null; changePercent: number | null };
@@ -14,13 +14,14 @@ export default function HeatmapWidget() {
   const [market, setMarket] = useState<"us" | "eu">("us");
   const { data, error } = useQuery({
     queryKey: ["heatmap", market],
-    queryFn: () => apiGet<Cell[]>(`/api/heatmap?market=${market}`),
+    queryFn: () => apiGet<MarketRowsEnvelope<Cell>>(`/api/heatmap?market=${market}`),
     refetchInterval: 3_000,
   });
 
   useEffect(() => {
     const el = ref.current;
     if (!el || !data) return;
+    const rows=data.rows;
 
     const render = () => {
       const width = el.clientWidth;
@@ -28,7 +29,7 @@ export default function HeatmapWidget() {
       if (width === 0 || height === 0) return;
       el.innerHTML = "";
 
-      const valid = data.filter((d) => d.marketCap && d.changePercent !== null);
+      const valid = rows.filter((d) => d.marketCap && d.changePercent !== null);
       type Node = { name: string; children?: Node[]; data?: Cell };
       const root = d3
         .hierarchy<Node>({
@@ -132,13 +133,23 @@ export default function HeatmapWidget() {
           </button>
         ))}
       </div>
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 flex flex-col">
         {error ? (
           <div className="p-2 down">Error: {(error as Error).message}</div>
         ) : !data ? (
           <div className="p-2 dim">Loading heatmap…</div>
         ) : (
-          <div ref={ref} className="w-full h-full" />
+          <>
+            <div className="px-2 py-1 text-[9px] dim">
+              {data.source} · as of {data.asOf??"unknown"} · {data.coverage.priced}/{data.coverage.requested} priced
+              · {data.coverage.priceComplete?"prices complete":"prices partial"}
+              · {data.coverage.timeComplete?"timestamps complete":"timestamps partial/unknown"}
+              {data.truncated?" · truncated":""}
+            </div>
+            {market==="us"&&data.coverage.priced===0
+              ?<div className="p-2 down">US SIP prices unavailable; TradingView prices are not used as a fallback.</div>
+              :<div ref={ref} className="w-full flex-1 min-h-0" />}
+          </>
         )}
       </div>
     </div>

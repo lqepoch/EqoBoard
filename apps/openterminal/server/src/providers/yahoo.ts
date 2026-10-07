@@ -48,6 +48,8 @@ export type Quote = {
   marketState: string | null;
   time: number | null;
   source: string;
+  /** Source-side observation time. Null means the provider did not supply one. */
+  asOf?: string | null;
 };
 
 export type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
@@ -283,4 +285,3 @@ export async function options(symbol: string, date?: number): Promise<any> {
     puts: (chain.puts ?? []).map(pick),
   };
 }
-

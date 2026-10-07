@@ -51,12 +51,61 @@ export type Quote = {
   exchange: string | null;
   marketState: string | null;
   source: string;
+  /** Passed through from the trusted Gateway when present; never inferred from the feed name. */
+  source_mode?: unknown;
+  source_label?: unknown;
+  gateway_instance_id?: string | null;
+  /** Captured by the browser when a snapshot request begins; never sent over the wire. */
+  clientGatewayInstanceGeneration?: number;
+  received_at?: string | null;
   asOf?: string | null;
+  watermark?: MarketSnapshotWatermark | null;
+  watermarks?: MarketSnapshotWatermark[];
+  quoteAt?: string | null;
+  tradeAt?: string | null;
+  dailyBarAt?: string | null;
+  previousDailyBarAt?: string | null;
+  lastAsOf?: string | null;
+  lastBasis?: "trade" | "daily_bar" | "unknown" | null;
+  fundamentalSource?: string;
+  fundamentalAsOf?: string | null;
   sector?: string;
   label?: string;
 };
 
+export type MarketSnapshotWatermark = {
+  gateway_instance_id?: string;
+  feed: "stocks" | "options";
+  symbols: string[];
+  event_types: Array<"quote" | "trade">;
+  connection_epoch: number;
+  request_start_sequence?: number | null;
+  local_sequence: number;
+  as_of_by_symbol?: Record<string, string | null>;
+};
+
 export type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
+
+export type MarketCoverage = {
+  requested: number;
+  snapshots: number;
+  priced: number;
+  snapshotComplete: boolean;
+  priceComplete: boolean;
+  timeComplete: boolean;
+  complete: boolean;
+};
+export type MarketRowsEnvelope<T> = {
+  rows: T[];
+  source: string;
+  source_mode?: unknown;
+  source_label?: unknown;
+  gateway_instance_id?: string | null;
+  received_at?: string | null;
+  asOf: string | null;
+  coverage: MarketCoverage;
+  truncated: boolean;
+};
 
 export function fmt(n: number | null | undefined, digits = 2): string {
   if (n === null || n === undefined || !isFinite(n)) return "—";

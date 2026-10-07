@@ -62,7 +62,11 @@ test("quotes route U.S. symbols to SIP, named research symbols to Node, preserve
   const quotes = await response.json();
   expect(quotes.map((quote: { symbol: string }) => quote.symbol)).toEqual(["QQQ", "BTC", "BTC-USD", "VIX", "7203.T"]);
   expect(quotes.map((quote: { source: string }) => quote.source)).toEqual([
-    "Alpaca SIP", "Alpaca SIP", "mock-fixture/Binance", "mock-fixture/FRED", "mock-fixture/Yahoo",
+    "source unknown", "source unknown", "mock-fixture/Binance", "mock-fixture/FRED", "mock-fixture/Yahoo",
+  ]);
+  expect(quotes.slice(0, 2)).toMatchObject([
+    { price: 500, lastAsOf: null, lastBasis: "unknown" },
+    { price: 500, lastAsOf: null, lastBasis: "unknown" },
   ]);
   let observed = await metrics(request);
   expect(observed.gateway.calls.filter((call: { path: string }) => call.path === "/api/v1/stocks/snapshots"))

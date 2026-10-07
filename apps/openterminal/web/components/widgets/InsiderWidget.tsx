@@ -45,10 +45,12 @@ export default function InsiderWidget({ widget }: { widget: WidgetInstance }) {
 
   return (
     <div>
+      <div className="dim px-2 py-1 text-[9px]">SEC EDGAR Form 4 · filing date and transaction date are separate source dates</div>
       <table className="data-table">
         <thead>
           <tr>
-            <th>Date</th>
+            <th>Filing · SEC</th>
+            <th>Transaction</th>
             <th>Insider</th>
             <th>Title</th>
             <th>Type</th>
@@ -61,6 +63,7 @@ export default function InsiderWidget({ widget }: { widget: WidgetInstance }) {
         <tbody>
           {data.map((t, i) => (
             <tr key={`${t.ownerName}-${t.transactionDate}-${i}`}>
+              <td className="!text-left dim whitespace-nowrap">{t.filingDate}</td>
               <td className="!text-left dim whitespace-nowrap">{t.transactionDate}</td>
               <td className="!text-left">{t.ownerName}</td>
               <td className="!text-left dim truncate max-w-[140px]" title={t.ownerTitle ?? ""}>
@@ -77,7 +80,7 @@ export default function InsiderWidget({ widget }: { widget: WidgetInstance }) {
           ))}
           {data.length === 0 && (
             <tr>
-              <td colSpan={8} className="dim p-3">
+              <td colSpan={9} className="dim p-3">
                 No recent open-market insider transactions for {symbol}.
               </td>
             </tr>
