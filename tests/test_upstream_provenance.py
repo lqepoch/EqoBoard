@@ -32,6 +32,11 @@ class ProvenanceTests(unittest.TestCase):
         for widget in widgets.values():
             self.assertTrue(widget["endpoint"].startswith("openbb/v1/"))
             self.assertFalse(widget["exportable"])
+            self.assertIsInstance(widget["source"], list)
+            self.assertTrue(widget["source"])
+            self.assertIn("dataKey", widget["data"])
+            self.assertGreaterEqual(widget["refetchInterval"], 1000)
+            self.assertGreaterEqual(widget["staleTime"], 1000)
 
 if __name__=="__main__":
     unittest.main()
