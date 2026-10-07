@@ -32,8 +32,8 @@ pub fn parse_occ(symbol: &str) -> Result<OccContract, ContractError> {
     if root.is_empty() || root.len() > 6 || !root.chars().all(|c| c.is_ascii_alphanumeric()) {
         return Err(ContractError::InvalidOcc);
     }
-    let expiration = NaiveDate::parse_from_str(&suffix[..6], "%y%m%d")
-        .map_err(|_| ContractError::InvalidOcc)?;
+    let expiration =
+        NaiveDate::parse_from_str(&suffix[..6], "%y%m%d").map_err(|_| ContractError::InvalidOcc)?;
     let right = match &suffix[6..7] {
         "C" => Right::Call,
         "P" => Right::Put,
@@ -101,11 +101,37 @@ pub struct OptionSnapshot {
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MarketEvent {
-    StockQuote { symbol: String, bid: Option<f64>, ask: Option<f64>, timestamp: String },
-    StockTrade { symbol: String, price: f64, size: f64, timestamp: String },
-    OptionQuote { symbol: String, bid: Option<f64>, ask: Option<f64>, bid_size: Option<f64>, ask_size: Option<f64>, timestamp: String },
-    OptionTrade { symbol: String, price: f64, size: f64, timestamp: String },
-    FeedStatus { feed: String, state: String, timestamp: String },
+    StockQuote {
+        symbol: String,
+        bid: Option<f64>,
+        ask: Option<f64>,
+        timestamp: String,
+    },
+    StockTrade {
+        symbol: String,
+        price: f64,
+        size: f64,
+        timestamp: String,
+    },
+    OptionQuote {
+        symbol: String,
+        bid: Option<f64>,
+        ask: Option<f64>,
+        bid_size: Option<f64>,
+        ask_size: Option<f64>,
+        timestamp: String,
+    },
+    OptionTrade {
+        symbol: String,
+        price: f64,
+        size: f64,
+        timestamp: String,
+    },
+    FeedStatus {
+        feed: String,
+        state: String,
+        timestamp: String,
+    },
 }
 
 #[cfg(test)]
@@ -126,7 +152,12 @@ mod tests {
 
     #[test]
     fn rejects_bad_occ() {
-        for s in ["QQQ", "QQQ261007X00600000", "QQQ261032P00600000", "QQQ261007P00000000"] {
+        for s in [
+            "QQQ",
+            "QQQ261007X00600000",
+            "QQQ261032P00600000",
+            "QQQ261007P00000000",
+        ] {
             assert_eq!(parse_occ(s).unwrap_err(), ContractError::InvalidOcc);
         }
     }
