@@ -1,4 +1,5 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type RequestHandler } from "express";
+import { rateLimit } from "express-rate-limit";
 import { cached } from "../cache.js";
 import { getGatewayAuthorization, type VerifiedPrincipal } from "../auth.js";
 import { withFallback } from "../providers/registry.js";
@@ -20,7 +21,18 @@ import { latestRfc3339Nanos } from "../providers/market-time.js";
 import { splitSnapshotWatermarks } from "../providers/snapshot-watermarks.js";
 import { resolveMarketSource } from "../providers/market-source.js";
 
-export const marketRouter = Router();
+export type MarketRateLimitOptions = {
+  windowMs?: number;
+  ownerLimit?: number;
+  serviceLimit?: number;
+};
+
+type MarketRoute = { path: string; handler: RequestHandler };
+const marketRoutes: MarketRoute[] = [];
+
+function defineMarketRoute(path: string, handler: RequestHandler): void {
+  marketRoutes.push({ path, handler });
+}
 
 const QUOTE_TTL = 1_000;
 const RESEARCH_HISTORY_TTL = 300_000;
@@ -250,7 +262,7 @@ async function getQuotes(symbols: string[], authorization: string): Promise<Sour
   return unique.map((symbol) => resolved.get(symbol) ?? unavailableQuote(symbol, "source unavailable"));
 }
 
-marketRouter.get("/quotes", async (req, res) => {
+defineMarketRoute("/quotes", async (req, res) => {
   const symbols = String(req.query.symbols ?? "")
     .split(",")
     .map((s) => s.trim().toUpperCase())
@@ -268,7 +280,7 @@ marketRouter.get("/quotes", async (req, res) => {
 
 // ---- history / candles ----
 
-marketRouter.get("/history/:symbol", async (req, res) => {
+defineMarketRoute("/history/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const rangeKey = String(req.query.range ?? "6M");
   try {
@@ -379,7 +391,7 @@ function yahooRange(rangeKey: string): { range: string; interval: string } {
 
 // ---- search ----
 
-marketRouter.get("/search", async (req, res) => {
+defineMarketRoute("/search", async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   if (!q) return res.json([]);
   try {
@@ -397,7 +409,7 @@ marketRouter.get("/search", async (req, res) => {
 
 // ---- news ----
 
-marketRouter.get("/news", async (req, res) => {
+defineMarketRoute("/news", async (req, res) => {
   const symbol = req.query.symbol ? String(req.query.symbol).toUpperCase() : null;
   try {
     const data = await cached(`news:${symbol ?? "top"}`, NEWS_TTL, async () => {
@@ -423,7 +435,7 @@ marketRouter.get("/news", async (req, res) => {
 
 // ---- economic calendar (Fed / ECB / CPI / NFP with forecast + actual) ----
 
-marketRouter.get("/econ-calendar", async (req, res) => {
+defineMarketRoute("/econ-calendar", async (req, res) => {
   try {
     const data = await cached("econ-calendar", 900_000, () => econcalendar.weeklyEvents());
     res.json(data.map((event) => ({
@@ -440,7 +452,7 @@ marketRouter.get("/econ-calendar", async (req, res) => {
 
 // ---- options ----
 
-marketRouter.get("/options/:symbol", async (req, res) => {
+defineMarketRoute("/options/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const expiry = req.query.expiry ? String(req.query.expiry) : undefined;
   if (usesSIPEquitySymbol(symbol)) {
@@ -480,7 +492,7 @@ marketRouter.get("/options/:symbol", async (req, res) => {
 
 // ---- crypto ----
 
-marketRouter.get("/crypto", async (req, res) => {
+defineMarketRoute("/crypto", async (req, res) => {
   try {
     const data = await cached("crypto:markets", 5_000, () =>
       withFallback([
@@ -494,7 +506,7 @@ marketRouter.get("/crypto", async (req, res) => {
   }
 });
 
-marketRouter.get("/crypto/global", async (req, res) => {
+defineMarketRoute("/crypto/global", async (req, res) => {
   try {
     const data = await cached("crypto:global", 120_000, () =>
       withFallback([["coingecko", () => coingecko.globalStats()]])
@@ -505,7 +517,7 @@ marketRouter.get("/crypto/global", async (req, res) => {
   }
 });
 
-marketRouter.get("/crypto/orderbook/:symbol", async (req, res) => {
+defineMarketRoute("/crypto/orderbook/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   if (!binance.CRYPTO_SYMBOLS.has(symbol)) {
     return res.status(400).json({ error: "unsupported crypto symbol" });
@@ -566,7 +578,7 @@ const EU_INDEX_PROXIES: Record<string, string> = {
   EWI: "Italy (EWI)",
 };
 
-marketRouter.get("/macro", async (req, res) => {
+defineMarketRoute("/macro", async (req, res) => {
   try {
     const authorization = await sipAuthorization(req);
     if (req.query.region === "eu") {
@@ -785,7 +797,7 @@ async function marketRows(market: "us" | "eu", authorization: string): Promise<M
   };
 }
 
-marketRouter.get("/heatmap", async (req, res) => {
+defineMarketRoute("/heatmap", async (req, res) => {
   try {
     const authorization = marketParam(req) === "us" ? await sipAuthorization(req) : "";
     const data = await marketRows(marketParam(req), authorization);
@@ -796,7 +808,7 @@ marketRouter.get("/heatmap", async (req, res) => {
   }
 });
 
-marketRouter.get("/screener", async (req, res) => {
+defineMarketRoute("/screener", async (req, res) => {
   try {
     const authorization = marketParam(req) === "us" ? await sipAuthorization(req) : "";
     const data = await marketRows(marketParam(req), authorization);
@@ -831,7 +843,7 @@ marketRouter.get("/screener", async (req, res) => {
   }
 });
 
-marketRouter.get("/sectors", async (req, res) => {
+defineMarketRoute("/sectors", async (req, res) => {
   try {
     const rows = await marketMetadata(marketParam(req));
     res.json([...new Set(rows.map((row) => row.sector))].sort());
@@ -885,7 +897,7 @@ function buildRecapSummary(d: {
   return parts.join(" ");
 }
 
-marketRouter.get("/recap", async (req, res) => {
+defineMarketRoute("/recap", async (req, res) => {
   try {
     const authorization = await sipAuthorization(req);
     const [quotes, vix, market, headlines] = await Promise.all([
@@ -957,7 +969,7 @@ marketRouter.get("/recap", async (req, res) => {
 
 // ---- earnings calendar for a list of symbols ----
 
-marketRouter.get("/calendar", async (req, res) => {
+defineMarketRoute("/calendar", async (req, res) => {
   const symbols = String(req.query.symbols ?? "")
     .split(",")
     .map((s) => s.trim().toUpperCase())
@@ -974,7 +986,7 @@ marketRouter.get("/calendar", async (req, res) => {
 
 // ---- earnings history: forecast vs actual per quarter, plus next-day price move ----
 
-marketRouter.get("/earnings-history/:symbol", async (req, res) => {
+defineMarketRoute("/earnings-history/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
     type EarningsPriceResult = {
@@ -1036,7 +1048,7 @@ marketRouter.get("/earnings-history/:symbol", async (req, res) => {
 
 // ---- short sale volume (FINRA Reg SHO daily file) ----
 
-marketRouter.get("/short-volume/:symbol", async (req, res) => {
+defineMarketRoute("/short-volume/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
     const day = await cached("finra-shortvol-day", 6 * 3_600_000, () => finra.latestDay());
@@ -1050,7 +1062,7 @@ marketRouter.get("/short-volume/:symbol", async (req, res) => {
 
 // ---- insider transactions (SEC EDGAR Form 4) ----
 
-marketRouter.get("/insider/:symbol", async (req, res) => {
+defineMarketRoute("/insider/:symbol", async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
     const data = await cached(`insider:${symbol}`, 3_600_000, () => secedgar.insiderTransactions(symbol));
@@ -1059,3 +1071,39 @@ marketRouter.get("/insider/:symbol", async (req, res) => {
     fail(req, res, err);
   }
 });
+
+export function createMarketRouter(options: MarketRateLimitOptions = {}): Router {
+  const router = Router();
+  const windowMs = options.windowMs ?? 60_000;
+  const serviceRateLimit = rateLimit({
+    windowMs,
+    limit: options.serviceLimit ?? 1_200,
+    keyGenerator: () => "market-service",
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "rate_limit_exceeded" },
+    passOnStoreError: false,
+  });
+  const ownerRateLimit = rateLimit({
+    windowMs,
+    limit: options.ownerLimit ?? 120,
+    keyGenerator: (req) => req.verifiedPrincipal!.ownerId,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "rate_limit_exceeded" },
+    passOnStoreError: false,
+  });
+  const requireVerifiedMarketOwner: RequestHandler = (req, res, next) => {
+    if (!req.verifiedPrincipal?.ownerId) {
+      return res.status(401).json({ error: "verified_identity_required" });
+    }
+    next();
+  };
+
+  for (const route of marketRoutes) {
+    router.get(route.path, requireVerifiedMarketOwner, ownerRateLimit, serviceRateLimit, route.handler);
+  }
+  return router;
+}
+
+export const marketRouter = createMarketRouter();

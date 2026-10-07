@@ -3,26 +3,30 @@ import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SignJWT, jwtVerify } from "jose";
 import { requireDelegatedPrincipal, requireResearchScopeForPath, requireResearchServiceKey } from "../auth.js";
-import { marketRouter } from "./market.js";
+import { createMarketRouter, marketRouter } from "./market.js";
 
 const secret = "test-market-data-signing-secret-with-at-least-sixty-four-characters";
 const serviceKey = "test-research-service-key-at-least-thirty-two-characters";
 const observed: string[] = [];
 
-async function delegatedJwt(scopes: string[] = ["market:read"]): Promise<string> {
+async function delegatedJwt(scopes: string[] = ["market:read"], subject = "market-reader-1"): Promise<string> {
   return new SignJWT({ idp_iss: "https://idp.test/", scope: scopes, jti: crypto.randomUUID() })
     .setProtectedHeader({ alg: "HS256", kid: "research-bff" })
     .setIssuer("eqoboard-openterminal")
     .setAudience("openterminal-research")
-    .setSubject("market-reader-1")
+    .setSubject(subject)
     .setIssuedAt()
     .setExpirationTime("60s")
     .sign(new TextEncoder().encode(secret));
 }
 
-async function startServer(): Promise<{ server: Server; url: string }> {
+async function startServer(router = marketRouter, authenticate = true): Promise<{ server: Server; url: string }> {
   const app = express();
-  app.use("/api", requireResearchServiceKey, requireDelegatedPrincipal, requireResearchScopeForPath, marketRouter);
+  if (authenticate) {
+    app.use("/api", requireResearchServiceKey, requireDelegatedPrincipal, requireResearchScopeForPath, router);
+  } else {
+    app.use("/api", router);
+  }
   const server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -30,9 +34,13 @@ async function startServer(): Promise<{ server: Server; url: string }> {
   return { server, url: `http://127.0.0.1:${address.port}` };
 }
 
-async function getJson(url: string, token?: string): Promise<{ status: number; body: any }> {
+async function getJson(
+  url: string,
+  token?: string,
+  additionalHeaders: Record<string, string> = {},
+): Promise<{ status: number; body: any; retryAfter: string | undefined }> {
   return new Promise((resolve, reject) => {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...additionalHeaders };
     if (token) {
       headers.authorization = `Bearer ${token}`;
       headers["x-api-key"] = serviceKey;
@@ -42,7 +50,11 @@ async function getJson(url: string, token?: string): Promise<{ status: number; b
       response.on("data", (chunk: Buffer) => chunks.push(chunk));
       response.on("end", () => {
         const text = Buffer.concat(chunks).toString("utf8");
-        resolve({ status: response.statusCode ?? 0, body: text ? JSON.parse(text) : null });
+        resolve({
+          status: response.statusCode ?? 0,
+          body: text ? JSON.parse(text) : null,
+          retryAfter: response.headers["retry-after"],
+        });
       });
     });
     request.on("error", reject);
@@ -318,6 +330,20 @@ describe("GET /api/quotes upstream SIP authorization and throttling", () => {
     observed.length = 0;
   });
 
+  it("rejects a request without a verified owner before calling a provider", async () => {
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+    const { server, url } = await startServer(createMarketRouter(), false);
+    try {
+      const response = await getJson(`${url}/api/quotes?symbols=QQQ`);
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({ error: "verified_identity_required" });
+      expect(upstream).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
   it.each([
     { upstreamStatus: 401, symbol: "EQA401" },
     { upstreamStatus: 429, symbol: "EQA429" },
@@ -358,6 +384,51 @@ describe("GET /api/quotes upstream SIP authorization and throttling", () => {
       });
       expect(upstream).toHaveBeenCalledTimes(1);
       expect(observed).toEqual(["rust-mock.test/api/v1/stocks/snapshots"]);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it("limits SIP HTTP routes by verified owner and service, not forwarded headers, before extra Rust dispatch", async () => {
+    vi.stubEnv("EQO_RESEARCH_API_KEY", serviceKey);
+    vi.stubEnv("EQO_RESEARCH_JWT_SECRET", secret);
+    vi.stubEnv("EQO_RUST_URL", "http://rust-mock.test");
+    const ownerA = `market-owner-a-${crypto.randomUUID()}`;
+    const ownerB = `market-owner-b-${crypto.randomUUID()}`;
+    const tokenA = await delegatedJwt(["market:read"], ownerA);
+    const tokenB = await delegatedJwt(["market:read"], ownerB);
+    const upstream = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      observed.push(`${url.hostname}${url.pathname}`);
+      expect(url.hostname).toBe("rust-mock.test");
+      expect(url.pathname).toBe("/api/v1/stocks/snapshots");
+      return Response.json({ feed: "sip", snapshots: [] });
+    });
+    vi.stubGlobal("fetch", upstream);
+    const router = createMarketRouter({ windowMs: 60_000, ownerLimit: 2, serviceLimit: 3 });
+    const { server, url } = await startServer(router);
+    const ticker = (index: number) => `R${crypto.randomUUID().replaceAll("-", "").slice(0, 4)}${index}`;
+    try {
+      const first = await getJson(`${url}/api/quotes?symbols=${ticker(1)}`, tokenA, { "x-forwarded-for": "198.51.100.1" });
+      const second = await getJson(`${url}/api/quotes?symbols=${ticker(2)}`, tokenA, { "x-forwarded-for": "198.51.100.2" });
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+
+      const ownerLimited = await getJson(`${url}/api/quotes?symbols=${ticker(3)}`, tokenA, { "x-forwarded-for": "198.51.100.3" });
+      expect(ownerLimited.status).toBe(429);
+      expect(ownerLimited.body).toMatchObject({ error: "rate_limit_exceeded" });
+      expect(Number(ownerLimited.retryAfter)).toBeGreaterThan(0);
+
+      // A different verified owner gets a separate user bucket despite using
+      // the same forwarded address; the process cap still applies to all users.
+      const otherOwner = await getJson(`${url}/api/quotes?symbols=${ticker(4)}`, tokenB, { "x-forwarded-for": "198.51.100.1" });
+      expect(otherOwner.status).toBe(200);
+      const serviceLimited = await getJson(`${url}/api/quotes?symbols=${ticker(5)}`, tokenB, { "x-forwarded-for": "203.0.113.99" });
+      expect(serviceLimited.status).toBe(429);
+      expect(serviceLimited.body).toMatchObject({ error: "rate_limit_exceeded" });
+      expect(Number(serviceLimited.retryAfter)).toBeGreaterThan(0);
+      expect(upstream).toHaveBeenCalledTimes(3);
+      expect(observed).toHaveLength(3);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
