@@ -66,7 +66,13 @@ pub struct StockSnapshot {
     pub bid: Option<f64>,
     pub ask: Option<f64>,
     pub volume: Option<f64>,
+    /// Legacy trade-only timestamp retained for existing clients.
     pub updated_at: Option<String>,
+    pub last_basis: Option<String>,
+    pub last_as_of: Option<String>,
+    pub quote_at: Option<String>,
+    pub daily_bar_at: Option<String>,
+    pub previous_daily_bar_at: Option<String>,
     pub feed: String,
 }
 
@@ -97,7 +103,12 @@ pub struct OptionSnapshot {
     pub gamma: Option<f64>,
     pub theta: Option<f64>,
     pub vega: Option<f64>,
+    /// Legacy quote-first timestamp retained for existing clients.
     pub updated_at: Option<String>,
+    pub quote_at: Option<String>,
+    pub trade_at: Option<String>,
+    /// Alpaca does not currently provide a dedicated IV/Greeks model timestamp.
+    pub model_as_of: Option<String>,
     pub feed: String,
 }
 

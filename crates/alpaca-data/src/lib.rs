@@ -14,6 +14,10 @@ use tokio_tungstenite::{
 };
 use tracing::{error, info, warn};
 
+const ALPACA_MARKET_DATA_BASE: &str = "https://data.alpaca.markets";
+const MAX_BAR_PAGES: usize = 5;
+const MAX_OPTION_PAGES: usize = 5;
+
 #[derive(Debug, Error)]
 pub enum DataError {
     #[error("missing Alpaca API credentials")]
@@ -52,7 +56,18 @@ pub struct AlpacaData {
 
 pub struct ChainPage {
     pub contracts: Vec<OptionSnapshot>,
+    pub pages_fetched: usize,
+    pub has_more: bool,
     pub truncated: bool,
+    pub limit: usize,
+}
+
+pub struct BarsPage {
+    pub bars: Vec<Bar>,
+    pub pages_fetched: usize,
+    pub has_more: bool,
+    pub truncated: bool,
+    pub limit: usize,
 }
 
 fn number(value: &Value, key: &str) -> Option<f64> {
@@ -66,6 +81,21 @@ fn text(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::to_string)
 }
 
+fn timestamp(value: &Value, key: &str) -> Option<String> {
+    text(value, key).filter(|time| chrono::DateTime::parse_from_rfc3339(time).is_ok())
+}
+
+fn parse_bar(value: &Value) -> Result<Bar, DataError> {
+    Ok(Bar {
+        time: timestamp(value, "t").ok_or(DataError::InvalidResponse)?,
+        open: number(value, "o").ok_or(DataError::InvalidResponse)?,
+        high: number(value, "h").ok_or(DataError::InvalidResponse)?,
+        low: number(value, "l").ok_or(DataError::InvalidResponse)?,
+        close: number(value, "c").ok_or(DataError::InvalidResponse)?,
+        volume: number(value, "v").ok_or(DataError::InvalidResponse)?,
+    })
+}
+
 impl AlpacaData {
     pub fn from_env() -> Result<Self, DataError> {
         let key = std::env::var("ALPACA_KEY").unwrap_or_default();
@@ -75,7 +105,7 @@ impl AlpacaData {
         }
         let stock_feed = std::env::var("EQO_STOCK_FEED").unwrap_or_else(|_| "sip".into());
         let option_feed = std::env::var("EQO_OPTION_FEED").unwrap_or_else(|_| "opra".into());
-        // Explicit override only for controlled tests. Reject mismatched feed labels.
+        // Keep feeds explicit; source provenance is unknown for any endpoint override.
         if !["sip", "delayed_sip", "iex"].contains(&stock_feed.as_str())
             || !["opra", "indicative"].contains(&option_feed.as_str())
         {
@@ -85,6 +115,7 @@ impl AlpacaData {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(12))
                 .pool_max_idle_per_host(8)
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .map_err(|_| DataError::Transport)?,
             key,
@@ -92,13 +123,48 @@ impl AlpacaData {
             stock_feed,
             option_feed,
             base: std::env::var("EQO_MARKET_DATA_BASE_URL")
-                .unwrap_or_else(|_| "https://data.alpaca.markets".into())
+                .unwrap_or_else(|_| ALPACA_MARKET_DATA_BASE.into())
                 .trim_end_matches('/')
                 .to_owned(),
             stream_base: std::env::var("EQO_MARKET_STREAM_BASE_URL")
                 .unwrap_or_else(|_| "wss://stream.data.alpaca.markets".into())
                 .trim_end_matches('/')
                 .to_owned(),
+        })
+    }
+
+    /// Reports the provider only when the built-in Alpaca endpoint is in use.
+    /// Any endpoint override is unverified and must not be labeled Alpaca.
+    pub fn source_mode(&self) -> &'static str {
+        if self.base == ALPACA_MARKET_DATA_BASE {
+            "alpaca"
+        } else {
+            "unknown"
+        }
+    }
+
+    #[cfg(feature = "test-utils")]
+    /// Creates a credential-free client for local mock HTTP tests.
+    pub fn with_test_endpoint(base: impl Into<String>) -> Result<Self, DataError> {
+        let base = base.into().trim_end_matches('/').to_owned();
+        if !(base.starts_with("http://127.0.0.1:")
+            || base.starts_with("http://localhost:")
+            || base.starts_with("http://[::1]:"))
+        {
+            return Err(DataError::InvalidResponse);
+        }
+        Ok(Self {
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(3))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|_| DataError::Transport)?,
+            key: "test-key".into(),
+            secret: "test-secret".into(),
+            stock_feed: "sip".into(),
+            option_feed: "opra".into(),
+            base,
+            stream_base: "ws://127.0.0.1:0".into(),
         })
     }
 
@@ -143,7 +209,23 @@ impl AlpacaData {
             let Some(snap) = map.get(symbol) else {
                 continue;
             };
-            let last = number(&snap["latestTrade"], "p").or_else(|| number(&snap["dailyBar"], "c"));
+            let trade_price = number(&snap["latestTrade"], "p");
+            let daily_close = number(&snap["dailyBar"], "c");
+            let last = trade_price.or(daily_close);
+            let last_basis = if trade_price.is_some() {
+                Some("trade".into())
+            } else if daily_close.is_some() {
+                Some("daily_bar".into())
+            } else {
+                None
+            };
+            let trade_at = timestamp(&snap["latestTrade"], "t");
+            let daily_bar_at = timestamp(&snap["dailyBar"], "t");
+            let last_as_of = match last_basis.as_deref() {
+                Some("trade") => trade_at.clone(),
+                Some("daily_bar") => daily_bar_at.clone(),
+                _ => None,
+            };
             let previous_close = number(&snap["prevDailyBar"], "c");
             let change_percent = last
                 .zip(previous_close)
@@ -159,7 +241,12 @@ impl AlpacaData {
                 bid: number(&snap["latestQuote"], "bp"),
                 ask: number(&snap["latestQuote"], "ap"),
                 volume: number(&snap["dailyBar"], "v"),
-                updated_at: text(&snap["latestTrade"], "t"),
+                updated_at: trade_at,
+                last_basis,
+                last_as_of,
+                quote_at: timestamp(&snap["latestQuote"], "t"),
+                daily_bar_at,
+                previous_daily_bar_at: timestamp(&snap["prevDailyBar"], "t"),
                 feed: self.stock_feed.clone(),
             });
         }
@@ -173,39 +260,83 @@ impl AlpacaData {
         limit: usize,
         days: i64,
     ) -> Result<Vec<Bar>, DataError> {
-        // Descending order allows a useful recent window across weekends; result is then reversed.
+        Ok(self
+            .stock_bars_page(symbol, timeframe, limit, days)
+            .await?
+            .bars)
+    }
+
+    /// Fetches a bounded, chronologically ordered bar window and preserves whether
+    /// Alpaca returned a continuation token after the requested limit/page budget.
+    pub async fn stock_bars_page(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        limit: usize,
+        days: i64,
+    ) -> Result<BarsPage, DataError> {
+        if limit == 0 {
+            return Err(DataError::InvalidResponse);
+        }
+        // Descending order lets the bounded response contain the newest bars across weekends.
         let start = (Utc::now() - ChronoDuration::days(days)).to_rfc3339();
-        let data = self
-            .get(
-                &format!("/v2/stocks/{symbol}/bars"),
-                &[
-                    ("timeframe", timeframe.into()),
-                    ("limit", limit.to_string()),
-                    ("sort", "desc".into()),
-                    ("start", start),
-                    ("feed", self.stock_feed.clone()),
-                ],
-            )
-            .await?;
-        let rows = data
-            .get("bars")
-            .and_then(Value::as_array)
-            .ok_or(DataError::InvalidResponse)?;
-        let mut out: Vec<Bar> = rows
-            .iter()
-            .filter_map(|r| {
-                Some(Bar {
-                    time: r.get("t")?.as_str()?.to_owned(),
-                    open: number(r, "o")?,
-                    high: number(r, "h")?,
-                    low: number(r, "l")?,
-                    close: number(r, "c")?,
-                    volume: number(r, "v").unwrap_or(0.0),
-                })
-            })
-            .collect();
+        let path = format!("/v2/stocks/{symbol}/bars");
+        let mut out = Vec::with_capacity(limit);
+        let mut page_token: Option<String> = None;
+        let mut seen_page_tokens = HashSet::new();
+        let mut pages_fetched = 0;
+        let mut has_more = false;
+        for _ in 0..MAX_BAR_PAGES {
+            let remaining = limit.saturating_sub(out.len());
+            if remaining == 0 {
+                break;
+            }
+            if page_token
+                .as_ref()
+                .is_some_and(|token| !seen_page_tokens.insert(token.clone()))
+            {
+                return Err(DataError::InvalidResponse);
+            }
+            let mut params = vec![
+                ("timeframe", timeframe.to_owned()),
+                ("limit", remaining.min(1000).to_string()),
+                ("sort", "desc".into()),
+                ("start", start.clone()),
+                ("feed", self.stock_feed.clone()),
+            ];
+            if let Some(token) = &page_token {
+                params.push(("page_token", token.clone()));
+            }
+            let data = self.get(&path, &params).await?;
+            let rows = data
+                .get("bars")
+                .and_then(Value::as_array)
+                .ok_or(DataError::InvalidResponse)?;
+            pages_fetched += 1;
+            let overflow = rows.len() > remaining;
+            let mut page_bars = Vec::with_capacity(rows.len().min(remaining));
+            for row in rows.iter().take(remaining) {
+                page_bars.push(parse_bar(row)?);
+            }
+            out.extend(page_bars);
+            page_token = data
+                .get("next_page_token")
+                .and_then(Value::as_str)
+                .filter(|token| !token.is_empty())
+                .map(str::to_owned);
+            has_more = page_token.is_some() || overflow;
+            if !has_more || out.len() >= limit {
+                break;
+            }
+        }
         out.reverse();
-        Ok(out)
+        Ok(BarsPage {
+            bars: out,
+            pages_fetched,
+            has_more,
+            truncated: has_more,
+            limit,
+        })
     }
 
     pub async fn option_chain(
@@ -216,9 +347,18 @@ impl AlpacaData {
         strike_lte: Option<f64>,
     ) -> Result<ChainPage, DataError> {
         let mut token: Option<String> = None;
+        let mut seen_page_tokens = HashSet::new();
         let mut contracts = Vec::new();
         let mut truncated = false;
-        for page in 0..5 {
+        let mut pages_fetched = 0;
+        let mut has_more = false;
+        for page in 0..MAX_OPTION_PAGES {
+            if token
+                .as_ref()
+                .is_some_and(|token| !seen_page_tokens.insert(token.clone()))
+            {
+                return Err(DataError::InvalidResponse);
+            }
             let mut params = vec![
                 ("feed", self.option_feed.clone()),
                 ("expiration_date", expiration.to_owned()),
@@ -236,6 +376,7 @@ impl AlpacaData {
             let response = self
                 .get(&format!("/v1beta1/options/snapshots/{underlying}"), &params)
                 .await?;
+            pages_fetched += 1;
             let snapshots = response
                 .get("snapshots")
                 .and_then(Value::as_object)
@@ -263,7 +404,10 @@ impl AlpacaData {
                     gamma: number(g, "gamma"),
                     theta: number(g, "theta"),
                     vega: number(g, "vega"),
-                    updated_at: text(q, "t").or_else(|| text(&s["latestTrade"], "t")),
+                    updated_at: timestamp(q, "t").or_else(|| timestamp(&s["latestTrade"], "t")),
+                    quote_at: timestamp(q, "t"),
+                    trade_at: timestamp(&s["latestTrade"], "t"),
+                    model_as_of: None,
                     feed: self.option_feed.clone(),
                 });
             }
@@ -272,10 +416,11 @@ impl AlpacaData {
                 .and_then(Value::as_str)
                 .filter(|s| !s.is_empty())
                 .map(str::to_string);
-            if token.is_none() {
+            has_more = token.is_some();
+            if !has_more {
                 break;
             }
-            if page == 4 {
+            if page + 1 == MAX_OPTION_PAGES {
                 truncated = true
             }
         }
@@ -286,7 +431,10 @@ impl AlpacaData {
         });
         Ok(ChainPage {
             contracts,
+            pages_fetched,
+            has_more,
             truncated,
+            limit: MAX_OPTION_PAGES * 1000,
         })
     }
 

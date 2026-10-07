@@ -1,4 +1,9 @@
 //! HTTP/WS gateway. Credentials and broker execution remain server-side.
+mod openbb;
+
+#[cfg(test)]
+mod openbb_tests;
+
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -603,7 +608,13 @@ async fn openbb_stocks(
         );
     }
     match data.stock_snapshots(&symbols).await {
-        Ok(rows) => Json(json!(rows)).into_response(),
+        Ok(rows) => Json(json!(openbb::stock_rows(
+            &symbols,
+            rows,
+            data.source_mode(),
+            &data.stock_feed
+        )))
+        .into_response(),
         Err(err) => data_failure(err),
     }
 }
@@ -639,20 +650,12 @@ async fn openbb_options(
         .option_chain(&symbol, &query.expiration, None, None)
         .await
     {
-        Ok(page) => {
-            let rows: Vec<Value> = page
-                .contracts
-                .into_iter()
-                .map(|contract| {
-                    let mut row = serde_json::to_value(contract).expect("serialized contract");
-                    if let Some(map) = row.as_object_mut() {
-                        map.insert("truncated".into(), json!(page.truncated));
-                    }
-                    row
-                })
-                .collect();
-            Json(json!(rows)).into_response()
-        }
+        Ok(page) => Json(json!(openbb::option_rows(
+            page,
+            data.source_mode(),
+            &data.option_feed
+        )))
+        .into_response(),
         Err(err) => data_failure(err),
     }
 }
@@ -690,17 +693,14 @@ async fn openbb_bars(
             "OpenBB SIP widget requires SIP entitlement",
         );
     }
-    match data.stock_bars(&symbol, &timeframe, limit, days).await {
-        Ok(bars) => {
-            let rows: Vec<Value> = bars
-                .into_iter()
-                .map(|bar| {
-                    json!({"time":bar.time,"open":bar.open,"high":bar.high,"low":bar.low,
-                    "close":bar.close,"volume":bar.volume,"symbol":symbol,"feed":"sip"})
-                })
-                .collect();
-            Json(json!(rows)).into_response()
-        }
+    match data.stock_bars_page(&symbol, &timeframe, limit, days).await {
+        Ok(page) => Json(json!(openbb::bar_rows(
+            &symbol,
+            page,
+            data.source_mode(),
+            &data.stock_feed
+        )))
+        .into_response(),
         Err(err) => data_failure(err),
     }
 }
