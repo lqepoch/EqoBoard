@@ -158,8 +158,11 @@ function latestStatusesByContext(statuses) {
   return { valid: true, statuses: [...latest.values()].map(({ status }) => status) };
 }
 
-function validateReviewPolicy({ reviews, permissions, authorLogin, headSha, sensitive, requiredApprovalCount = 0 }) {
+function validateReviewPolicy({ reviews, permissions, authorLogin, headSha, sensitive, requiredApprovalCount = 1 }) {
   const reasons = [];
+  if (!Number.isSafeInteger(requiredApprovalCount) || requiredApprovalCount < 0) {
+    return ['pull-request-required-approval-count-invalid'];
+  }
   const result = latestSubmittedReviews(reviews);
   if (!result.valid) return ['review-history-invalid'];
   const author = normalizeLogin(authorLogin);
@@ -187,7 +190,7 @@ function validateReviewPolicy({ reviews, permissions, authorLogin, headSha, sens
     }
   }
 
-  const requiredApprovals = Math.max(0, requiredApprovalCount, sensitive ? 1 : 0);
+  const requiredApprovals = Math.max(1, requiredApprovalCount, sensitive ? 1 : 0);
   if (validApprovals.size < requiredApprovals) {
     reasons.push('required-current-head-approvals-not-met');
     if (sensitive && validApprovals.size === 0) reasons.push('sensitive-change-needs-independent-current-head-approval');
@@ -210,9 +213,11 @@ const PULL_REQUEST_RULE_PARAMETERS = new Set([
 function rulesetRequiredApprovals(rules) {
   if (!Array.isArray(rules)) return { valid: false, count: 0, reason: 'branch-rules-response-invalid' };
   let count = 0;
+  let foundPullRequestRule = false;
   for (const rule of rules) {
     if (!rule || typeof rule.type !== 'string') return { valid: false, count: 0, reason: 'branch-rule-invalid' };
     if (rule.type !== 'pull_request') continue;
+    foundPullRequestRule = true;
     const parameters = rule.parameters;
     if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
       return { valid: false, count: 0, reason: 'pull-request-rule-parameters-invalid' };
@@ -249,7 +254,10 @@ function rulesetRequiredApprovals(rules) {
     }
     count = Math.max(count, required);
   }
-  return { valid: true, count };
+  if (!foundPullRequestRule) {
+    return { valid: false, count: 0, reason: 'pull-request-review-policy-missing' };
+  }
+  return { valid: true, count: Math.max(1, count) };
 }
 
 function rulesetRequiredChecks(rules) {

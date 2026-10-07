@@ -114,13 +114,13 @@ function makePolicyInput(overrides = {}) {
       'independent-reviewer': { permission: 'write', role_name: 'write' },
     },
     files: [{ filename: 'README.md', status: 'modified' }],
-    reviews: [],
+    reviews: [makeReview('APPROVED', { commit_id: pr.head.sha })],
     unresolvedThreads: [],
     checkRuns: makeCheckRuns(pr.head.sha),
     statuses: [],
     manifestChecks: manifest.required_checks,
     guardChecks: manifest.guard_checks,
-    rules: [],
+    rules: [{ type: 'pull_request', parameters: { required_approving_review_count: 1 } }],
     ...overrides,
   };
 }
@@ -156,14 +156,14 @@ function createGithubMock(overrides = {}) {
     return { data: rows, headers: {} };
   };
   const files = overrides.files || [{ filename: 'README.md', status: 'modified' }];
-  const reviews = overrides.reviews || [];
+  const reviews = overrides.reviews ?? [makeReview('APPROVED', { commit_id: pr.head.sha })];
   const checkRuns = overrides.checkRuns || makeCheckRuns(pr.head.sha);
   const statuses = overrides.statuses || [];
   const combinedStatuses = latestStatusesByContext(statuses);
   const combinedStatusTotalCount = overrides.combinedStatusTotalCount ?? combinedStatuses.statuses.length;
   const runs = overrides.runs || [run];
   const threadsPages = overrides.threadsPages || [{ nodes: [], pageInfo: { hasNextPage: false, endCursor: null } }];
-  const rules = overrides.rules || [];
+  const rules = overrides.rules ?? [{ type: 'pull_request', parameters: { required_approving_review_count: 1 } }];
   const permissions = {
     'lq-epoch': { permission: 'admin', role_name: 'admin' },
     'independent-reviewer': { permission: 'write', role_name: 'write' },
@@ -427,6 +427,38 @@ test('active pull-request ruleset approval count applies to every PR and unknown
       assert.ok(result.reasons.includes('pull-request-required-approval-count-invalid'));
     }
   });
+
+  await t.test('zero configured approvals still requires the trusted minimum of one current-head approval', async () => {
+    const pr = makePr();
+    const run = makeRun(pr);
+    const mock = createGithubMock({
+      pr,
+      run,
+      rules: [{ type: 'pull_request', parameters: { required_approving_review_count: 0 } }],
+      reviews: [],
+    });
+    const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+    assert.equal(result.state, 'blocked');
+    assert.equal(mock.state.mergeCalls.length, 0);
+    assert.ok(result.reasons.includes('required-current-head-approvals-not-met'));
+  });
+
+  await t.test('missing active pull-request review rule blocks even with a valid approval', async (t) => {
+    for (const rules of [
+      [],
+      [{ type: 'required_status_checks', parameters: { required_status_checks: [] } }],
+    ]) {
+      await t.test(rules.length === 0 ? 'empty rules response' : 'other rules but no pull-request rule', async () => {
+        const pr = makePr();
+        const run = makeRun(pr);
+        const mock = createGithubMock({ pr, run, rules, reviews: [makeReview()] });
+        const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+        assert.equal(result.state, 'blocked');
+        assert.equal(mock.state.mergeCalls.length, 0);
+        assert.ok(result.reasons.includes('pull-request-review-policy-missing'));
+      });
+    }
+  });
 });
 
 test('legacy counterexamples all become sensitive and cannot merge without a valid current-head human approval', async (t) => {
@@ -633,7 +665,10 @@ test('paginated commit-status history finds hidden contexts and uses only the la
     const pr = makePr();
     const run = makeRun(pr);
     const names = Array.from({ length: 30 }, (_value, index) => `Ruleset Gate ${index + 1}`);
-    const rules = [{ type: 'required_status_checks', parameters: { required_status_checks: names.map((context) => ({ context })) } }];
+    const rules = [
+      { type: 'pull_request', parameters: { required_approving_review_count: 1 } },
+      { type: 'required_status_checks', parameters: { required_status_checks: names.map((context) => ({ context })) } },
+    ];
     const statuses = [
       ...names.map((context, index) => makeStatus(index + 1, context, 'success')),
       makeStatus(31, 'Unmanifested Gate 31', 'success'),
