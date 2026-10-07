@@ -40,6 +40,85 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
         for record in syft["archives"].values():
             self.assertRegex(record["sha256"], r"^[0-9a-f]{64}$")
 
+    def test_stable_sbom_scan_repeats_with_full_javascript_lock_graph(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            output = root / "source.spdx.json"
+            outside = root / "outside"
+            outside.write_text("leave untouched", encoding="utf-8")
+            output.symlink_to(outside)
+            scan_result = {
+                "spdxVersion": "SPDX-2.3",
+                "packages": [
+                    {"SPDXID": "SPDXRef-DocumentRoot-fixture", "name": "fixture", "versionInfo": "commit"},
+                    {"name": "react", "versionInfo": "19.0.0"},
+                    {"name": "vite", "versionInfo": "7.0.0"},
+                ],
+            }
+
+            def scan(command, check, env):
+                destination = pathlib.Path(command[-1].removeprefix("spdx-json="))
+                destination.write_text(json.dumps(scan_result), encoding="utf-8")
+                self.assertTrue(check)
+                self.assertEqual(command[command.index("--parallelism") + 1], "1")
+                self.assertEqual(command[command.index("--override-default-catalogers") + 1], "all")
+                self.assertEqual(env["SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES"], "true")
+                self.assertEqual(env["SYFT_CACHE_TTL"], "0")
+                self.assertEqual(env["SYFT_CHECK_FOR_APP_UPDATE"], "false")
+                self.assertFalse(any(key.startswith("SYFT_") for key in env if key not in {
+                    "SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES",
+                    "SYFT_CACHE_TTL",
+                    "SYFT_CHECK_FOR_APP_UPDATE",
+                }))
+
+            with mock.patch.object(upstream.subprocess, "run", side_effect=scan) as run:
+                result = upstream.stable_sbom_scan(
+                    pathlib.Path("/pinned/syft"),
+                    "dir:/pinned/source",
+                    output,
+                    "fixture",
+                    "commit",
+                )
+
+            self.assertEqual(run.call_count, 3)
+            self.assertEqual(result["packages"], scan_result["packages"])
+            self.assertFalse(output.is_symlink())
+            self.assertEqual(outside.read_text(encoding="utf-8"), "leave untouched")
+            self.assertEqual(
+                upstream.normalized_sbom_packages(result),
+                frozenset({("react", "19.0.0"), ("vite", "7.0.0")}),
+            )
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8")), scan_result)
+
+    def test_stable_sbom_scan_marks_unstable_package_sets_unverified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            output = root / "source.spdx.json"
+            scan_index = 0
+
+            def scan(command, check, env):
+                nonlocal scan_index
+                scan_index += 1
+                packages = [{"name": "react", "versionInfo": "19.0.0"}]
+                if scan_index == 2:
+                    packages.append({"name": "missing-production-package", "versionInfo": "1.2.3"})
+                destination = pathlib.Path(command[-1].removeprefix("spdx-json="))
+                destination.write_text(
+                    json.dumps({"spdxVersion": "SPDX-2.3", "packages": packages}),
+                    encoding="utf-8",
+                )
+
+            with mock.patch.object(upstream.subprocess, "run", side_effect=scan):
+                with self.assertRaisesRegex(upstream.SupplyChainError, "SBOM_UNVERIFIED"):
+                    upstream.stable_sbom_scan(
+                        pathlib.Path("/pinned/syft"),
+                        "dir:/pinned/source",
+                        output,
+                        "fixture",
+                        "commit",
+                    )
+            self.assertFalse(output.exists())
+
     def test_safe_extractor_rejects_parent_traversal(self):
         with tempfile.TemporaryDirectory() as directory:
             archive = pathlib.Path(directory) / "bad.tar.gz"
