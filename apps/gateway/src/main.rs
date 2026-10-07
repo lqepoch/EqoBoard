@@ -739,7 +739,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .fallback_service(ServeDir::new(web_dist).append_index_html_on_directories(true))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
-    if let Ok(raw) = std::env::var("EQO_OPENBB_ALLOWED_ORIGIN") {
+    if let Some(raw) = std::env::var("EQO_OPENBB_ALLOWED_ORIGIN")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
         // Restrict cross-origin access to exactly one trusted OpenBB Workspace.
         // A public unencrypted HTTP origin can leak the session token.
         let local_http = raw.starts_with("http://127.0.0.1:")
