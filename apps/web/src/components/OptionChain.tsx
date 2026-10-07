@@ -43,7 +43,7 @@ function columns():Array<ColDef<OptionRow>|ColGroupDef<OptionRow>>{
       metric('call','delta','Δ',65),metric('call','iv','IV %',80),
       metric('call','last','最新',76),metric('call','bid','Bid',80),metric('call','ask','Ask',80)
     ]},
-    {headerName:'执行价',field:'strike',colId:'strike',width:90,pinned:'left',
+    {headerName:'执行价',field:'strike',colId:'strike',width:90,
       cellClass:'strike-cell',valueFormatter:p=>money(p.value,0)},
     {headerName:'PUT · 看跌',headerClass:'puts-header',children:[
       metric('put','bid','Bid',80),metric('put','ask','Ask',80),

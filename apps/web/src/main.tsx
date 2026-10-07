@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 import './styles.css';
 
 const client = new QueryClient({
