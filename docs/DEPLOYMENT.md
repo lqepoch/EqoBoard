@@ -27,7 +27,30 @@ OpenBB research runtime 还必须设置 `EQO_TERMINAL_PUBLIC_ORIGIN`，指向主
 
 Research-mode Next runtime 也会因任一非空 `ALPACA_KEY` 或 `ALPACA_SECRET` 而返回未就绪；市场凭据只由 Rust Gateway 持有。部署研究 BFF 时只映射其 OIDC 配置、独立 session/research signer 和 Gateway URL，不使用整份 `.env` 文件注入容器。
 
-OpenBB 反向代理使用内部 `/api/research/auth-check` 子请求校验登录和 `market:read` role：成功时返回 204、匿名时 401、role 不足时 403，且不签发 Gateway token。部署配置必须将该路径设为内部代理调用且不允许用户直接访问。页面导航可把 401 导向 OIDC 登录；`/api/` 数据请求应保留 JSON 401/403，不能重写为登录 HTML。代理给 Lite 上游的 Cookie 必须按 OpenBB 自身登录协议精确 allowlist，不能转发 Terminal 或 Next research session Cookie。
+OpenBB 反向代理使用内部 `/api/research/auth-check` 子请求校验登录和 `market:read` role：成功时返回 204、匿名时 401、role 不足时 403，且不签发 Gateway token。部署配置必须将该路径设为内部代理调用且不允许用户直接访问。页面导航可把 401 导向 OIDC 登录；`/api/` 数据请求应保留 JSON 401/403，不能重写为登录 HTML。传给 Lite 的请求必须清除 Cookie 并保留其原生 `Authorization` bearer；Research session cookie 只供 BFF 与内部 auth-check 使用。
+
+## 可选原生 OpenBB Lite Compose profile
+
+`compose.openbb.yaml` 增加独立的 `openbb` profile：固定上游的原生 Lite Workspace、隔离的 Research Next BFF 和受控 Nginx ingress。默认 `docker compose up` 不启用它；启用 profile 不替换主 OpenTerminal，也不使用 `compose.e2e.yaml` 中的 Node mock Gateway。Lite 的 3000 端口只在 Compose 网络内可见，`/data` 使用单独的 `openbb-data` volume，外部入口默认只绑定 `127.0.0.1:8088`。Lite `/api/health` 仅是进程探针，BFF `/api/readyz` 检查 research 身份配置，二者都不代表行情已连接。
+
+为启用本机 profile，在 `.env` 中设置独立的 `EQO_OPENBB_NEXTAUTH_SECRET`、已有 Gateway 验证所需的 `EQO_RESEARCH_JWT_SECRET`、research OIDC issuer/client，以及 `OPENBB_ADMIN_EMAIL` 和 `OPENBB_ADMIN_PASSWORD`。Research BFF 只投影 research 模式需要的变量，不读取整份 `.env`，也不接收 Gateway signer、Node API key 或 Alpaca 凭据。`EQO_RESEARCH_PUBLIC_ORIGIN` 默认使用 `http://127.0.0.1:8088`；如果更改宿主端口，或用于部署环境，必须同步设置成用户实际访问的精确 origin。Research origin 与主 Terminal 的 `EQO_PUBLIC_ORIGIN` 必须使用不同 hostname；HTTP 仅允许精确 loopback hostname，公网使用 HTTPS。OIDC 客户端需登记该 origin 下的 `${EQO_RESEARCH_PUBLIC_ORIGIN}/api/auth/callback/eqo-oidc` 回调。主 Terminal 的 Research 导航只在 `EQO_RESEARCH_PUBLIC_ORIGIN` 显式设置且通过 origin 校验后显示。
+
+profile 的 Lite 登录仍是上游原生邮箱/密码登录，OIDC 只控制是否可进入 Research hostname，不构成 OpenBB SSO。管理员凭据和 Research OIDC 会话互不替代。ingress 将 `/api/auth/*`、health/readiness 与精确 OpenBB BFF 路径送往 Research Next；所有其他 Lite 页面、静态文件和 API 都先经过内部 `auth_request`。匿名页面转到 OIDC 登录，匿名 API 保持 JSON 401，缺少 market-reader role 返回 403。转给 Lite 的请求清除 Cookie，只允许其原生 `Authorization` bearer；浏览器中的 Research session cookie 只送至内部 auth-check 与 BFF。ingress 为请求体大小、客户端读入、代理连接和读写设置了明确上限。
+
+本机启动命令：
+
+```bash
+docker compose -f compose.yaml -f compose.openbb.yaml --profile openbb build
+docker compose -f compose.yaml -f compose.openbb.yaml --profile openbb up --wait
+```
+
+停止 profile 服务时，主 Terminal、Rust Gateway 和既有 research Node 服务继续运行：
+
+```bash
+docker compose -f compose.yaml -f compose.openbb.yaml --profile openbb stop openbb-research-ingress openbb-research-bff openbb-lite
+```
+
+Compose 的本地 image tag 只用于选择构建 recipe，不能当作不可变 artifact digest。正式部署/回滚必须记录实际 OCI manifest digest 和可恢复镜像归档或 registry RepoDigest；Profile 的浏览器、路由与停止/重启验收状态以本任务后续记录的实测结果为准。
 
 | OIDC role | 授权范围 |
 |---|---|
