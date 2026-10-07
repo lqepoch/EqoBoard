@@ -374,10 +374,7 @@ async fn openbb_stocks(
     }
 }
 
-async fn openbb_bars(
-    State(state): State<AppState>,
-    Query(query): Query<BarsQuery>,
-) -> Response {
+async fn openbb_bars(State(state): State<AppState>, Query(query): Query<BarsQuery>) -> Response {
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -416,21 +413,35 @@ async fn openbb_options(
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
-    let underlying = query.underlying.unwrap_or_else(|| "QQQ".to_owned()).to_uppercase();
+    let underlying = query
+        .underlying
+        .unwrap_or_else(|| "QQQ".to_owned())
+        .to_uppercase();
     if !safe_symbol(&underlying) {
-        return fail(StatusCode::BAD_REQUEST, "invalid_underlying", "invalid US equity");
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_underlying",
+            "invalid US equity",
+        );
     }
     // Only a UI default. Exchange holidays/actual series availability are not guessed.
     let today = Utc::now().date_naive();
-    let friday_offset = (5_i64 - i64::from(today.weekday().number_from_monday()))
-        .rem_euclid(7);
-    let expiration = query.expiration
+    let friday_offset = (5_i64 - i64::from(today.weekday().number_from_monday())).rem_euclid(7);
+    let expiration = query
+        .expiration
         .filter(|date| !date.is_empty())
         .unwrap_or_else(|| (today + chrono::Duration::days(friday_offset)).to_string());
     if NaiveDate::parse_from_str(&expiration, "%Y-%m-%d").is_err() {
-        return fail(StatusCode::BAD_REQUEST, "invalid_expiration", "ISO YYYY-MM-DD required");
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_expiration",
+            "ISO YYYY-MM-DD required",
+        );
     }
-    match data.option_chain(&underlying, &expiration, None, None).await {
+    match data
+        .option_chain(&underlying, &expiration, None, None)
+        .await
+    {
         Ok(page) => Json(json!({
             "underlying": underlying,
             "expiration": expiration,
@@ -745,8 +756,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         // Restrict cross-origin access to exactly one trusted OpenBB Workspace.
         // A public unencrypted HTTP origin can leak the session token.
-        let local_http = raw.starts_with("http://127.0.0.1:")
-            || raw.starts_with("http://localhost:");
+        let local_http =
+            raw.starts_with("http://127.0.0.1:") || raw.starts_with("http://localhost:");
         if raw == "*" || !(raw.starts_with("https://") || local_http) {
             return Err("EQO_OPENBB_ALLOWED_ORIGIN requires HTTPS or loopback HTTP".into());
         }
