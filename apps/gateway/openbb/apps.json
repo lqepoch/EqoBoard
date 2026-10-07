@@ -28,8 +28,7 @@
             "h": 15,
             "state": {
               "params": {
-                "underlying": "QQQ",
-                "expiration": "2026-10-09"
+                "underlying": "QQQ"
               }
             }
           },
