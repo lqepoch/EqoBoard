@@ -25,6 +25,10 @@ class UpstreamDiffTests(unittest.TestCase):
             "web/app/api/research/auth-check/route.ts",
             "web/e2e/mock-openbb-alpaca.mjs",
             "web/e2e/openbb-lite.spec.ts",
+            "web/app/api/eqo/live/route.ts",
+            "web/lib/client-abort.mjs",
+            "web/lib/client-abort.test.mjs",
+            "server/src/routes/portfolio.test.ts",
             "web/lib/research-origin.ts",
             "web/middleware.ts",
             "web/playwright.openbb.config.ts",
@@ -35,6 +39,20 @@ class UpstreamDiffTests(unittest.TestCase):
                 category, reason, keep, adapter, duplicate = _extension_note(path)
                 self.assertEqual(category, "E")
                 self.assertNotIn("待人工审核", (reason, keep, adapter, duplicate))
+
+    def test_client_abort_and_test_database_extensions_have_specific_audit_notes(self):
+        helper = _extension_note("web/lib/client-abort.mjs")
+        test = _extension_note("web/lib/client-abort.test.mjs")
+        route = _extension_note("web/app/api/eqo/live/route.ts")
+        portfolio_test = _extension_note("server/src/routes/portfolio.test.ts")
+
+        self.assertIn("授权等待", helper[1])
+        self.assertIn("客户端断连", route[1])
+        self.assertIn("不会执行授权后的下游调用", test[1])
+        self.assertIn("WAL/SHM", portfolio_test[1])
+        for note in (helper, test, route, portfolio_test):
+            self.assertEqual(note[0], "E")
+            self.assertNotIn("待人工审核", note)
 
     def test_research_navigation_upstream_diffs_have_curated_reason(self):
         pin = Pin("ErTasselli/OpenTerminal", "a" * 40, "MIT", "apps/openterminal")

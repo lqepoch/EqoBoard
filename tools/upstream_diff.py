@@ -126,6 +126,7 @@ KNOWN_E_ONLY = {
     "web/e2e/openbb-recovery.spec.ts", "web/e2e/openbb-response-capture.ts",
     "web/e2e/research-bff.spec.ts", "web/e2e/research-navigation.spec.ts", "web/e2e/research-origin.spec.ts",
     "web/lib/research-origin.ts", "web/lib/research-route-access.ts", "web/middleware.ts",
+    "web/lib/client-abort.mjs", "web/lib/client-abort.test.mjs",
     "web/playwright.openbb.config.ts", "web/playwright.research.config.ts",
 }
 
@@ -318,6 +319,14 @@ def _extension_note(path: str) -> tuple[str, str, str, str, str]:
         return ("E", "Research-only OpenBB manifest/market API allowlist；从 OIDC role 会话签发最长 60 秒 market:read Gateway 委托。", "保留", "是，作为 Next-to-Gateway market adapter", "否")
     if path == "web/app/api/research/auth-check/route.ts":
         return ("E", "供内部 Nginx auth_request 校验 research cookie/role；不签发或返回 Gateway token。", "保留", "是，作为入口认证 adapter", "否")
+    if path == "web/app/api/eqo/live/route.ts":
+        return ("E", "SSE BFF 在授权等待前建立客户端断连监听，取消后不启动 Gateway 请求，并把 AbortSignal 传递到 Rust 上游流。", "保留", "是，作为用户会话边界与 Rust SSE 的窄传输 adapter", "否")
+    if path == "web/lib/client-abort.mjs":
+        return ("E", "将客户端断连信号跨授权等待传到 BFF 下游控制器，断连时不启动后续请求，并向运行中的上游流传递 AbortSignal。", "保留", "是，作为窄的 BFF transport adapter", "否")
+    if path == "web/lib/client-abort.test.mjs":
+        return ("E", "覆盖授权等待中的断连竞态及已断开的请求，确保断连后不会执行授权后的下游调用。", "保留", "测试代码，不适用", "否")
+    if path == "server/src/routes/portfolio.test.ts":
+        return ("E", "为 Portfolio 路由测试使用独立临时 SQLite DATA_DIR，并清理数据库及 WAL/SHM 文件，避免污染源码树。", "保留", "测试代码，不适用", "否")
     if path in {"web/lib/research-origin.ts", "web/lib/research-route-access.ts", "web/middleware.ts"}:
         return ("E", "限制 Research hostname、origin、session 与精确 API allowlist；研究模式其余路径失败关闭。", "保留", "是，作为 research auth/policy adapter", "否")
     if path in {"web/e2e/mock-openbb-alpaca.mjs", "web/e2e/mock-openbb-oidc.mjs"}:
