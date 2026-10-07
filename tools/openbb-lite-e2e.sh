@@ -11,12 +11,21 @@ LITE_IMAGE="eqoboard/openbb-workspace-lite:${PROJECT_NAME}-lite"
 ENV_FILE=""
 STATE_FILE=""
 MAIN_STATE_FILE=""
+PLAYWRIGHT_REPORT_FILE=""
 ROLLBACK_TAG_MUTATED=0
 LITE_IMAGE_ID=""
 BROKEN_UPGRADE_IMAGE_ID=""
 COMPOSE_PATH="${ROOT_DIR}/compose.openbb.e2e.yaml"
 IMAGE_ARCHIVE="${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar"
 RUN_LOG="${ARTIFACT_DIR}/runtime-e2e.log"
+
+if [[ -d "${ARTIFACT_DIR}" ]]; then
+  existing_evidence="$(find "${ARTIFACT_DIR}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)"
+  if [[ -e "${ARTIFACT_DIR}/runtime-result.json" || -n "${existing_evidence}" ]]; then
+    printf 'Refusing to reuse non-empty OpenBB E2E artifact directory: %s\n' "${ARTIFACT_DIR}" >&2
+    exit 2
+  fi
+fi
 
 mkdir -p "${ARTIFACT_DIR}"
 chmod 700 "${ARTIFACT_DIR}"
@@ -106,10 +115,25 @@ cleanup() {
     printf 'rollback tag was mutated but its saved image archive or original image id is missing\n' \
       >"${ARTIFACT_DIR}/cleanup-image-restore.log"
   fi
+  if [[ -n "${PLAYWRIGHT_REPORT_FILE}" && -s "${PLAYWRIGHT_REPORT_FILE}" ]]; then
+    if ! node "${ROOT_DIR}/tools/openbb-sanitize-e2e-logs.mjs" \
+      "${PLAYWRIGHT_REPORT_FILE}" "${ARTIFACT_DIR}/openbb-lite-playwright.json" "${ENV_FILE}"; then
+      cleanup_failed=1
+      printf 'Playwright JSON report sanitization failed\n' >>"${ARTIFACT_DIR}/cleanup-residuals.txt"
+    fi
+  fi
+  if [[ -n "${PLAYWRIGHT_REPORT_FILE}" && -f "${PLAYWRIGHT_REPORT_FILE}" ]]; then rm -f "${PLAYWRIGHT_REPORT_FILE}"; fi
+  for browser_log in "${ARTIFACT_DIR}"/playwright-*.log "${RUN_LOG}"; do
+    if [[ -f "${browser_log}" ]] && ! node "${ROOT_DIR}/tools/openbb-sanitize-e2e-logs.mjs" \
+      "${browser_log}" "${browser_log}" "${ENV_FILE}"; then
+      cleanup_failed=1
+      printf 'Browser/runtime log sanitization failed: %s\n' "${browser_log}" >>"${ARTIFACT_DIR}/cleanup-residuals.txt"
+    fi
+  done
   if [[ -n "${ENV_FILE}" && -f "${ENV_FILE}" ]]; then rm -f "${ENV_FILE}"; fi
   if [[ -n "${STATE_FILE}" && -f "${STATE_FILE}" ]]; then rm -f "${STATE_FILE}"; fi
   if [[ -n "${MAIN_STATE_FILE}" && -f "${MAIN_STATE_FILE}" ]]; then rm -f "${MAIN_STATE_FILE}"; fi
-  if [[ ( -n "${ENV_FILE}" && -e "${ENV_FILE}" ) || ( -n "${STATE_FILE}" && -e "${STATE_FILE}" ) || ( -n "${MAIN_STATE_FILE}" && -e "${MAIN_STATE_FILE}" ) ]]; then
+  if [[ ( -n "${ENV_FILE}" && -e "${ENV_FILE}" ) || ( -n "${STATE_FILE}" && -e "${STATE_FILE}" ) || ( -n "${MAIN_STATE_FILE}" && -e "${MAIN_STATE_FILE}" ) || ( -n "${PLAYWRIGHT_REPORT_FILE}" && -e "${PLAYWRIGHT_REPORT_FILE}" ) ]]; then
     cleanup_failed=1
     printf 'temporary credentials/state files remain after cleanup\n' >>"${ARTIFACT_DIR}/cleanup-residuals.txt"
   fi
@@ -125,19 +149,29 @@ cleanup() {
 {
   "result": "passed",
   "cleanup_verified": true,
+  "frozen_git_head": "${GIT_HEAD}",
+  "upstream_commits": {
+    "OpenTerminal": "${OPENTERMINAL_SOURCE_COMMIT}",
+    "OpenBB Workspace": "${OPENBB_SOURCE_COMMIT}"
+  },
+  "openbb_source_archive_sha256": "${OPENBB_SOURCE_ARCHIVE_SHA256}",
+  "openbb_community_build_identity": "${OPENBB_BUILD_IDENTITY}",
+  "default_profile_smoke_executed": ${DEFAULT_PROFILE_SMOKE_EXECUTED},
   "compose_project": "${PROJECT_NAME}",
   "lite_image": "${LITE_IMAGE}",
-  "docker_image_config_id": "${LITE_IMAGE_ID}",
+  "docker_image_id_observation": "${LITE_IMAGE_ID}",
   "docker_daemon_repo_digest_observation": "$(cat "${ARTIFACT_DIR}/openbb-lite-compose-image-repodigest.txt")",
-  "artifact_identity_note": "The Compose local build is identified by its recipe inputs and saved archive SHA; the Docker image config ID is not an OCI index or manifest digest.",
+  "artifact_identity_note": "The Compose local build is identified by its recipe inputs and saved Docker archive SHA. OCI index, application manifest, config, and layer descriptors are reported separately when the daemon archive provides them; no registry publication is implied.",
   "image_archive": "${IMAGE_ARCHIVE}",
   "image_archive_sha256": "$(cut -d ' ' -f 1 "${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar.sha256")",
+  "image_archive_manifest_evidence": "openbb-lite-compose-archive-manifest.json",
   "rollback_image_id": "${BROKEN_UPGRADE_IMAGE_ID}",
   "browser_evidence": [
     "native-openbb-mock-dashboard-market-time.png",
     "native-openbb-mock-dashboard-source-feed.png",
     "native-openbb-mock-dashboard-completeness.png",
     "native-openbb-pagination-error.png",
+    "native-openbb-market-entitlement-denied.png",
     "research-role-denied.png",
     "native-openbb-gateway-offline.png",
     "native-openbb-gateway-restarted.png",
@@ -171,6 +205,33 @@ trap cleanup EXIT
 
 cd "${ROOT_DIR}"
 : >"${RUN_LOG}"
+GIT_HEAD="$(git rev-parse HEAD)"
+if [[ -n "$(git status --porcelain)" ]]; then
+  printf 'Refusing to run OpenBB E2E against a dirty source tree\n' >&2
+  exit 2
+fi
+IFS=$'\t' read -r OPENTERMINAL_SOURCE_COMMIT OPENBB_SOURCE_COMMIT OPENBB_SOURCE_ARCHIVE_SHA256 OPENBB_BUILD_IDENTITY \
+  < <(python3 - <<'PY'
+import sys
+sys.path.insert(0, "tools/openbb")
+import openbb_upstream as upstream
+
+lock = upstream.read_json(upstream.UPSTREAM_LOCK)
+terminal = next(source for source in lock["sources"] if source["name"] == "OpenTerminal")
+openbb = upstream.openbb_entry()
+identity = upstream.locked_recipe(openbb)[3]
+print("\t".join((terminal["commit"], openbb["commit"], openbb["source_archive"]["sha256"], identity)))
+PY
+)
+DEFAULT_PROFILE_SMOKE_EXECUTED=true
+if [[ "${OPENBB_E2E_SKIP_DEFAULT_PROFILE_SMOKE:-0}" == "1" ]]; then
+  DEFAULT_PROFILE_SMOKE_EXECUTED=false
+fi
+if [[ -z "${OPENBB_BUILD_IDENTITY}" || "${#OPENBB_BUILD_IDENTITY}" -ne 64 ]]; then
+  printf 'Could not derive a valid lock-pinned OpenBB build identity\n' >&2
+  exit 2
+fi
+log_phase "Frozen HEAD=${GIT_HEAD}; OpenTerminal=${OPENTERMINAL_SOURCE_COMMIT}; OpenBB=${OPENBB_SOURCE_COMMIT}; build_identity=${OPENBB_BUILD_IDENTITY}; default_profile_smoke=${DEFAULT_PROFILE_SMOKE_EXECUTED}"
 
 # The Compose env file below contains disposable test values only. Remove any
 # operator secrets inherited by this shell before invoking host test tools.
@@ -218,7 +279,8 @@ MAIN_OIDC_SECRET="$(openssl rand -hex 24)"
 RESEARCH_OIDC_SECRET="$(openssl rand -hex 24)"
 STATE_FILE="$(mktemp /tmp/eqoboard-openbb-runtime-state.XXXXXX)"
 MAIN_STATE_FILE="$(mktemp /tmp/eqoboard-openbb-main-state.XXXXXX)"
-chmod 600 "${STATE_FILE}" "${MAIN_STATE_FILE}"
+PLAYWRIGHT_REPORT_FILE="$(mktemp /tmp/eqoboard-openbb-playwright-report.XXXXXX)"
+chmod 600 "${STATE_FILE}" "${MAIN_STATE_FILE}" "${PLAYWRIGHT_REPORT_FILE}"
 
 cat >"${ENV_FILE}" <<EOF
 EQO_GATEWAY_HOST_PORT=${GATEWAY_PORT}
@@ -329,12 +391,194 @@ compose exec -T openbb-lite python -c 'import os,sys; keys=("AI_COPILOT_ENABLED"
 
 LITE_IMAGE_ID="$(docker image inspect --format '{{.Id}}' "${LITE_IMAGE}")"
 docker image inspect "${LITE_IMAGE}" >"${ARTIFACT_DIR}/openbb-lite-compose-image-inspect.json"
+docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "${LITE_IMAGE}" >"${ARTIFACT_DIR}/openbb-lite-compose-image-repodigest.txt"
 docker save "${LITE_IMAGE}" -o "${IMAGE_ARCHIVE}"
 chmod 600 "${IMAGE_ARCHIVE}"
 sha256sum "${IMAGE_ARCHIVE}" | tee "${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar.sha256"
+python3 - "${IMAGE_ARCHIVE}" "${LITE_IMAGE}" "${ARTIFACT_DIR}/openbb-lite-compose-image-inspect.json" "${ARTIFACT_DIR}/openbb-lite-compose-archive-manifest.json" <<'PY'
+import hashlib
+import json
+import sys
+import tarfile
+
+archive_path, image_tag, inspect_path, output_path = sys.argv[1:]
+with open(inspect_path, encoding="utf-8") as stream:
+    inspect = json.load(stream)[0]
+image_id = inspect["Id"]
+platform = f'{inspect["Os"]}/{inspect["Architecture"]}'
+
+def sha256_stream(stream):
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(chunk)
+    return digest.hexdigest()
+
+def digest_bytes(data):
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+def descriptor_blob(archive, descriptor):
+    digest = descriptor.get("digest", "")
+    if not digest.startswith("sha256:"):
+        raise SystemExit(f"unsupported or missing OCI descriptor digest: {digest}")
+    path = "blobs/sha256/" + digest.split(":", 1)[1]
+    item = archive.extractfile(path)
+    if item is None:
+        raise SystemExit(f"OCI descriptor points to a missing blob: {path}")
+    data = item.read()
+    if digest_bytes(data) != digest:
+        raise SystemExit(f"OCI blob digest mismatch: {digest}")
+    if len(data) != descriptor.get("size"):
+        raise SystemExit(f"OCI blob size mismatch: {digest}")
+    verified_digests.add(digest)
+    return data
+
+with tarfile.open(archive_path, "r") as archive:
+    archive_names = set(archive.getnames())
+    manifest_file = archive.extractfile("manifest.json")
+    if manifest_file is None:
+        raise SystemExit("docker save archive has no manifest.json")
+    manifests = json.load(manifest_file)
+    matches = [item for item in manifests if image_tag in (item.get("RepoTags") or [])]
+    if len(matches) != 1:
+        raise SystemExit(f"expected one docker save manifest for {image_tag}, found {len(matches)}")
+    docker_record = matches[0]
+    config_file = archive.extractfile(docker_record["Config"])
+    if config_file is None:
+        raise SystemExit("docker save manifest points to a missing config object")
+    config_bytes = config_file.read()
+    config_digest = digest_bytes(config_bytes)
+    docker_layers = []
+    for layer_path in docker_record["Layers"]:
+        layer_file = archive.extractfile(layer_path)
+        if layer_file is None:
+            raise SystemExit(f"docker save manifest points to missing layer {layer_path}")
+        layer_bytes = layer_file.read()
+        docker_layers.append({"path": layer_path, "digest": digest_bytes(layer_bytes), "size": len(layer_bytes)})
+
+    oci_evidence = None
+    id_relation = "config" if image_id == config_digest else "unresolved"
+    verified_digests = set()
+    if "index.json" in archive_names:
+        layout_file = archive.extractfile("oci-layout")
+        index_file = archive.extractfile("index.json")
+        if layout_file is None or index_file is None:
+            raise SystemExit("OCI image layout is missing oci-layout or index.json")
+        layout = json.load(layout_file)
+        if layout.get("imageLayoutVersion") != "1.0.0":
+            raise SystemExit("unsupported OCI image layout version")
+        root_index_bytes = index_file.read()
+        root_index = json.loads(root_index_bytes)
+        root_index_digest = digest_bytes(root_index_bytes)
+        root_descriptors = root_index.get("manifests", [])
+        id_descriptors = [item for item in root_descriptors if item.get("digest") == image_id]
+        if len(id_descriptors) == 1:
+            id_relation = id_descriptors[0].get("mediaType", "descriptor")
+        elif len(id_descriptors) > 1:
+            raise SystemExit("Docker image inspect ID matches multiple OCI root descriptors")
+        elif image_id != config_digest:
+            raise SystemExit("Docker image inspect ID is not linked to the OCI archive index or image config")
+
+        visited = set()
+        app_manifests = []
+        index_descriptors = []
+        def visit_descriptor(descriptor, path=()):
+            digest = descriptor.get("digest")
+            if digest in visited:
+                return
+            visited.add(digest)
+            blob = descriptor_blob(archive, descriptor)
+            media_type = descriptor.get("mediaType", "")
+            if media_type.endswith("image.index.v1+json"):
+                index_descriptors.append(descriptor)
+                nested = json.loads(blob)
+                for child in nested.get("manifests", []):
+                    child_path = path + (child,)
+                    visit_descriptor(child, child_path)
+            elif media_type.endswith("image.manifest.v1+json"):
+                manifest = json.loads(blob)
+                config = manifest.get("config")
+                if not isinstance(config, dict):
+                    raise SystemExit(f"OCI image manifest has no config descriptor: {digest}")
+                descriptor_blob(archive, config)
+                for layer in manifest.get("layers", []):
+                    descriptor_blob(archive, layer)
+                platform_descriptor = next((item.get("platform") for item in reversed(path) if item.get("platform")), {})
+                platform_value = f'{platform_descriptor.get("os", "")}/{platform_descriptor.get("architecture", "")}'
+                if platform_value == platform:
+                    app_manifests.append({"descriptor": descriptor, "manifest": manifest})
+            else:
+                raise SystemExit(f"unsupported OCI descriptor media type: {media_type}")
+
+        for descriptor in root_descriptors:
+            visit_descriptor(descriptor, (descriptor,))
+        if len(app_manifests) != 1:
+            raise SystemExit(f"expected one OCI application manifest for {platform}, found {len(app_manifests)}")
+        app = app_manifests[0]
+        app_manifest = app["manifest"]
+        app_config = app_manifest["config"]
+        app_layers = app_manifest.get("layers", [])
+        if app_config["digest"] != config_digest:
+            raise SystemExit("OCI application config does not match the Docker archive manifest config")
+        if [item["digest"] for item in app_layers] != [item["digest"] for item in docker_layers]:
+            raise SystemExit("OCI application layer descriptors do not match Docker archive manifest layers")
+        repo_digests = inspect.get("RepoDigests") or []
+        unlinked_repo_digests = [
+            value.rsplit("@", 1)[-1]
+            for value in repo_digests
+            if value.rsplit("@", 1)[-1] not in verified_digests
+        ]
+        if unlinked_repo_digests:
+            raise SystemExit("Docker RepoDigest observations are not linked to verified OCI archive descriptors")
+        candidate_indexes = [item["digest"] for item in index_descriptors]
+        observed_index = next((digest for digest in candidate_indexes if digest == image_id), None)
+        if observed_index is None:
+            observed_index = next((digest for digest in candidate_indexes if any(
+                value.rsplit("@", 1)[-1] == digest for value in repo_digests
+            )), None)
+        if observed_index is None and len(candidate_indexes) == 1:
+            observed_index = candidate_indexes[0]
+        oci_evidence = {
+            "layout_index_sha256": root_index_digest,
+            "docker_inspect_id_relation": id_relation,
+            "image_index_digest": observed_index,
+            "application_manifest_digest": app["descriptor"]["digest"],
+            "application_manifest_size": app["descriptor"]["size"],
+            "platform": platform,
+            "config_digest": app_config["digest"],
+            "config_size": app_config["size"],
+            "layer_count": len(app_layers),
+            "layers": app_layers,
+            "verified_oci_descriptors_and_blobs": len(verified_digests),
+            "docker_repo_digests_linked_to_verified_archive": True,
+            "docker_save_manifest_matches_application_config_and_layers": True,
+        }
+    elif image_id != config_digest:
+        raise SystemExit("Docker image inspect ID is neither an OCI archive descriptor nor the Docker-save config")
+    elif inspect.get("RepoDigests"):
+        raise SystemExit("Docker RepoDigest observations cannot be associated without an OCI archive index")
+
+with open(archive_path, "rb") as stream:
+    archive_sha256 = sha256_stream(stream)
+with open(output_path, "w", encoding="utf-8") as output:
+    json.dump({
+        "format": "docker-save-archive",
+        "image_tag": image_tag,
+        "docker_image_id": image_id,
+        "docker_image_id_relation": id_relation,
+        "docker_repo_digests": inspect.get("RepoDigests") or [],
+        "archive_sha256": archive_sha256,
+        "archive_manifest_file": "manifest.json",
+        "docker_manifest_record": docker_record,
+        "platform": platform,
+        "image_config_sha256": config_digest,
+        "image_config_matches_docker_inspect_id": image_id == config_digest,
+        "layer_archives": docker_layers,
+        "oci": oci_evidence,
+        "note": "OCI descriptors are included only after digest/size validation and association with the Docker-save config/layers. A daemon RepoDigest observation does not imply registry publication."
+    }, output, indent=2)
+PY
 printf '%s\n' "${LITE_IMAGE_ID}" >"${ARTIFACT_DIR}/openbb-lite-compose-image-id.txt"
 chmod 600 "${ARTIFACT_DIR}/openbb-lite-compose-image-id.txt"
-docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "${LITE_IMAGE}" >"${ARTIFACT_DIR}/openbb-lite-compose-image-repodigest.txt"
 log_phase "Saved project-scoped Compose Lite image and Docker archive for rollback; Docker image id ${LITE_IMAGE_ID}"
 
 if [[ -x "${ROOT_DIR}/apps/openterminal/node_modules/.bin/playwright" ]]; then
@@ -362,7 +606,7 @@ run_logged "Run real browser OIDC, native OpenBB email login, custom backend val
     OPENBB_E2E_STORAGE_STATE="${STATE_FILE}" \
     OPENBB_MAIN_E2E_STORAGE_STATE="${MAIN_STATE_FILE}" \
     OPENBB_E2E_ARTIFACT_DIR="${ARTIFACT_DIR}" \
-    OPENBB_E2E_JSON_REPORT="${ARTIFACT_DIR}/openbb-lite-playwright.json" \
+    OPENBB_E2E_JSON_REPORT="${PLAYWRIGHT_REPORT_FILE}" \
     npm --prefix apps/openterminal run test:e2e:openbb
 
 log_phase "Stop only the actual Rust Gateway to prove the native widgets report the outage"

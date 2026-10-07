@@ -7,7 +7,7 @@ const expectedKey = "openbb-e2e-market-key-only";
 const expectedSecret = "openbb-e2e-market-secret-only";
 const calls = [];
 const sockets = new Set();
-const control = { bars: "normal", options: "normal" };
+const control = { stocks: "normal", bars: "normal", options: "normal" };
 
 function json(res, status, body) {
   const payload = Buffer.from(JSON.stringify(body));
@@ -36,10 +36,12 @@ function record(req, url) {
     symbols: url.searchParams.get("symbols"),
     symbol: url.pathname.match(/^\/v2\/stocks\/([^/]+)\/bars$/)?.[1] ?? null,
     timeframe: url.searchParams.get("timeframe"),
+    days: url.searchParams.get("days"),
     limit: url.searchParams.get("limit"),
     sort: url.searchParams.get("sort"),
     start: url.searchParams.get("start"),
     expiration_date: url.searchParams.get("expiration_date"),
+    underlying: url.pathname.match(/^\/v1beta1\/options\/snapshots\/([A-Z0-9.]+)$/)?.[1] ?? null,
     page_token: url.searchParams.get("page_token"),
     key_id_present: req.headers["apca-api-key-id"] === expectedKey,
     secret_present: req.headers["apca-api-secret-key"] === expectedSecret,
@@ -78,11 +80,18 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === "/__test/metrics" && req.method === "GET") {
     if (!controlAllowed(req)) return json(res, 404, { error: "not_found" });
-    return json(res, 200, { calls, websocket_paths: [...sockets].map((socket) => socket.path), bars_mode: control.bars, options_mode: control.options });
+    return json(res, 200, {
+      calls,
+      websocket_paths: [...sockets].map((socket) => socket.path),
+      stocks_mode: control.stocks,
+      bars_mode: control.bars,
+      options_mode: control.options,
+    });
   }
   if (url.pathname === "/__test/reset" && req.method === "POST") {
     if (!controlAllowed(req)) return json(res, 404, { error: "not_found" });
     calls.length = 0;
+    control.stocks = "normal";
     control.bars = "normal";
     control.options = "normal";
     return json(res, 200, { ok: true });
@@ -91,13 +100,14 @@ const server = createServer(async (req, res) => {
     if (!controlAllowed(req)) return json(res, 404, { error: "not_found" });
     try {
       const requested = await readJson(req);
-      for (const key of ["bars", "options"]) {
-        if (Object.hasOwn(requested, key) && !["normal", "empty-truncated"].includes(requested[key])) {
+      for (const key of ["stocks", "bars", "options"]) {
+        const allowedModes = key === "stocks" ? ["normal", "denied"] : ["normal", "denied", "empty-truncated"];
+        if (Object.hasOwn(requested, key) && !allowedModes.includes(requested[key])) {
           return json(res, 400, { error: "invalid_mode" });
         }
         if (Object.hasOwn(requested, key)) control[key] = requested[key];
       }
-      return json(res, 200, { ok: true, bars: control.bars, options: control.options });
+      return json(res, 200, { ok: true, stocks: control.stocks, bars: control.bars, options: control.options });
     } catch {
       return json(res, 400, { error: "invalid_json" });
     }
@@ -108,6 +118,7 @@ const server = createServer(async (req, res) => {
   const feed = url.searchParams.get("feed");
   if (url.pathname === "/v2/stocks/snapshots" && req.method === "GET") {
     if (feed !== "sip") return json(res, 400, { message: "only the explicit sip fixture is available" });
+    if (control.stocks === "denied") return json(res, 403, { message: "fixture SIP entitlement denied" });
     const now = new Date().toISOString();
     const symbols = (url.searchParams.get("symbols") ?? "").split(",").filter(Boolean);
     return json(res, 200, Object.fromEntries(symbols.map((symbol) => [symbol, stockSnapshot(symbol, now)])));
@@ -116,6 +127,7 @@ const server = createServer(async (req, res) => {
   const barsMatch = url.pathname.match(/^\/v2\/stocks\/([A-Z0-9.]+)\/bars$/);
   if (barsMatch && req.method === "GET") {
     if (feed !== "sip") return json(res, 400, { message: "only the explicit sip fixture is available" });
+    if (control.bars === "denied") return json(res, 403, { message: "fixture SIP entitlement denied" });
     if (control.bars === "empty-truncated") {
       return json(res, 200, {
         bars: [],
@@ -139,6 +151,7 @@ const server = createServer(async (req, res) => {
   const optionsMatch = url.pathname.match(/^\/v1beta1\/options\/snapshots\/([A-Z0-9.]+)$/);
   if (optionsMatch && req.method === "GET") {
     if (feed !== "opra") return json(res, 400, { message: "only the explicit opra fixture is available" });
+    if (control.options === "denied") return json(res, 403, { message: "fixture OPRA entitlement denied" });
     const expiration = url.searchParams.get("expiration_date") ?? "";
     const occDate = expiration.replaceAll("-", "").slice(2);
     if (!/^\d{6}$/.test(occDate)) return json(res, 400, { message: "expiration_date is required" });

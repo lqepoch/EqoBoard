@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: tools/openbb/community/Dockerfile
-    image: eqoboard/openbb-workspace-lite:be00e950-community-local
+    image: eqoboard/openbb-workspace-lite:be00e95019a55d57af146919ee46b7e1a4859226-cfc03fb056e7c60226186f332d2dc7bf7eb6d30acd3de342fc7b7bb5efc77d47
     environment:
       OPENBB_ADMIN_EMAIL: ${OPENBB_ADMIN_EMAIL:-}
       OPENBB_ADMIN_PASSWORD: ${OPENBB_ADMIN_PASSWORD:-}

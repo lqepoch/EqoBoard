@@ -141,14 +141,17 @@ async function captureOpenbbResponses(page: Page) {
   page.on("response", (response) => {
     const url = new URL(response.url());
     if (url.origin !== RESEARCH_ORIGIN || !url.pathname.startsWith("/api/openbb/")) return;
+    const capturedResponse: CapturedResponse = {
+      path: `${url.pathname}${url.search}`,
+      status: response.status(),
+    };
+    responses.push(capturedResponse);
     pending.push((async () => {
-      let body: unknown;
       try {
-        body = await response.json();
+        capturedResponse.body = await response.json();
       } catch {
-        body = undefined;
+        capturedResponse.body = undefined;
       }
-      responses.push({ path: `${url.pathname}${url.search}`, status: response.status(), body });
     })());
   });
   return {
@@ -177,38 +180,82 @@ function latestAsOfValues(responses: CapturedResponse[], route: string) {
   return [];
 }
 
+function barsPollSignatures(responses: CapturedResponse[]) {
+  return responses.flatMap((response) => {
+    if (!response.path.startsWith("/api/openbb/openbb/v1/bars") || response.status !== 200 || !Array.isArray(response.body)) return [];
+    const times = (response.body as Record<string, unknown>[])
+      .map((row) => row.market_as_of)
+      .filter((value): value is string => typeof value === "string");
+    return times.length > 0 ? [times.join("|")] : [];
+  });
+}
+
+function latestResponseUrl(responses: CapturedResponse[], route: string) {
+  const response = [...responses].reverse().find((item) => item.path.startsWith(route) && item.status === 200);
+  expect(response, `No successful browser response URL for ${route}`).toBeDefined();
+  return new URL(response!.path, RESEARCH_ORIGIN);
+}
+
 async function revealGridColumns(page: Page, widget: Locator, columnIds: string[]) {
   const viewport = widget.locator(".ag-body-horizontal-scroll-viewport");
   await expect(viewport).toBeVisible();
-  const headers = columnIds.map((columnId) =>
-    widget.locator('.ag-header-cell[col-id="' + columnId + '"]').first(),
-  );
+  let wrappedToStart = false;
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const viewportBox = await viewport.boundingBox();
-    if (!viewportBox) throw new Error("Native AG Grid horizontal viewport is not rendered");
-    const headerBoxes = await Promise.all(headers.map((header) => header.boundingBox()));
-    if (headerBoxes.every((box) => box !== null)) {
-      const visibleLeft = viewportBox.x;
-      const visibleRight = viewportBox.x + viewportBox.width;
-      const targetLeft = Math.min(...headerBoxes.map((box) => box!.x));
-      const targetRight = Math.max(...headerBoxes.map((box) => box!.x + box!.width));
-      const delta = targetLeft < visibleLeft
-        ? targetLeft - visibleLeft
-        : targetRight > visibleRight
-          ? targetRight - visibleRight
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const position = await widget.evaluate((root, targets) => {
+      const horizontalViewport = root.querySelector<HTMLElement>(".ag-body-horizontal-scroll-viewport");
+      if (!horizontalViewport) return { missingViewport: true, missingHeader: false, delta: null, tooWide: false, scrollLeft: 0, maxScroll: 0 };
+      const viewportRect = horizontalViewport.getBoundingClientRect();
+      const headers = targets.map((target) =>
+        Array.from(root.querySelectorAll<HTMLElement>(".ag-header-cell"))
+          .find((header) => header.getAttribute("col-id") === target) ?? null,
+      );
+      const scrollLeft = horizontalViewport.scrollLeft;
+      const maxScroll = Math.max(0, horizontalViewport.scrollWidth - horizontalViewport.clientWidth);
+      if (headers.some((header) => header === null)) {
+        return { missingViewport: false, missingHeader: true, delta: null, tooWide: false, scrollLeft, maxScroll };
+      }
+      const headerRects = headers.map((header) => header!.getBoundingClientRect());
+      const left = Math.min(...headerRects.map((rect) => rect.left));
+      const right = Math.max(...headerRects.map((rect) => rect.right));
+      if (right - left > horizontalViewport.clientWidth) {
+        return { missingViewport: false, missingHeader: false, delta: null, tooWide: true, scrollLeft, maxScroll };
+      }
+      const delta = left < viewportRect.left
+        ? left - viewportRect.left
+        : right > viewportRect.right
+          ? right - viewportRect.right
           : 0;
-      if (delta === 0) return;
+      return { missingViewport: false, missingHeader: false, delta, tooWide: false, scrollLeft, maxScroll };
+    }, columnIds);
+    if (position.missingViewport) throw new Error("Native AG Grid horizontal viewport is not rendered");
+    if (position.tooWide) throw new Error("Requested native AG Grid columns exceed the viewport; scroll them individually");
+    if (position.delta === 0) return;
+    if (position.missingHeader) {
+      if (position.scrollLeft < position.maxScroll - 1) {
+        await viewport.evaluate((element) => {
+          const horizontalViewport = element as HTMLElement;
+          horizontalViewport.scrollLeft = Math.min(
+            horizontalViewport.scrollWidth - horizontalViewport.clientWidth,
+            horizontalViewport.scrollLeft + Math.max(100, horizontalViewport.clientWidth * 0.6),
+          );
+        });
+      } else if (!wrappedToStart) {
+        wrappedToStart = true;
+        await viewport.evaluate((element) => { (element as HTMLElement).scrollLeft = 0; });
+      } else {
+        throw new Error("Native AG Grid target column is not rendered: " + columnIds.join(", "));
+      }
+    } else if (position.delta !== null) {
       await viewport.evaluate((element, offset) => {
         (element as HTMLElement).scrollLeft += offset;
-      }, delta);
+      }, position.delta);
     } else {
       await viewport.evaluate((element) => {
-        const horizontalViewport = element as HTMLElement;
-        horizontalViewport.scrollLeft += Math.max(100, horizontalViewport.clientWidth * 0.6);
+        (element as HTMLElement).scrollLeft = 0;
       });
     }
-    await page.waitForTimeout(50);
+    await page.waitForTimeout(60);
   }
 
   throw new Error("Native AG Grid columns were not visible: " + columnIds.join(", "));
@@ -329,6 +376,7 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await dialog.getByRole("button", { name: "Add", exact: true }).click();
   const addToNewDashboard = page.getByRole("button", { name: "Add to new dashboard", exact: true });
   await expect(addToNewDashboard).toBeVisible();
+  const nativeDashboardResponseStart = captured.responses.length;
   await addToNewDashboard.click();
   await expect(page.getByText("EqoBoard SIP Stock Quotes", { exact: true })).toBeVisible();
   await expect(page.getByText("EqoBoard OPRA Option Chain", { exact: true })).toBeVisible();
@@ -380,7 +428,10 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   expect(dataCalls.some((call: { path: string; feed: string; symbol: string }) => call.path.endsWith("/bars") && call.feed === "sip" && call.symbol === "QQQ")).toBe(true);
   const optionRequest = dataCalls.find((call: { path: string; feed: string }) => call.path.startsWith("/v1beta1/options/snapshots/") && call.feed === "opra");
   expect(optionRequest).toBeDefined();
+  expect(optionRequest.underlying).toBe("QQQ");
   expect(optionRequest.expiration_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const barsUpstreamRequest = dataCalls.find((call: { path: string; symbol: string }) => call.path.endsWith("/bars") && call.symbol === "QQQ");
+  expect(barsUpstreamRequest).toMatchObject({ feed: "sip", timeframe: "1Day", limit: "500" });
   for (const call of dataCalls) expect(call).toMatchObject({ key_id_present: true, secret_present: true });
   expect(callMetrics.websocket_paths.sort()).toEqual(["/v1beta1/opra", "/v2/sip"]);
   expect(browserCalls.some((url) => /yahoo|iex/i.test(url))).toBe(false);
@@ -400,10 +451,23 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await expect(optionsWidget).toHaveCount(1);
   await expect(barsWidget.getByRole("columnheader", { name: "Market as of", exact: true })).toBeVisible();
   await captured.settle();
+  const dashboardResponses = () => captured.responses.slice(nativeDashboardResponseStart);
+  const stockParams = latestResponseUrl(dashboardResponses(), "/api/openbb/openbb/v1/stocks").searchParams;
+  const barsParams = latestResponseUrl(dashboardResponses(), "/api/openbb/openbb/v1/bars").searchParams;
+  const optionParams = latestResponseUrl(dashboardResponses(), "/api/openbb/openbb/v1/options").searchParams;
+  expect(stockParams.get("symbols")).toBe("QQQ,SPY,NVDA");
+  expect(barsParams.get("symbol")).toBe("QQQ");
+  expect(barsParams.get("timeframe")).toBe("1Day");
+  expect(barsParams.get("days")).toBe("30");
+  expect(barsParams.get("limit")).toBe("500");
+  expect(optionParams.get("underlying")).toBe("QQQ");
+  expect(optionParams.get("expiration")).toBe(optionRequest.expiration_date);
+  await expect.poll(() => new Set(barsPollSignatures(dashboardResponses())).size, { timeout: 50_000 })
+    .toBeGreaterThan(1);
   const visibleMarketAsOfCells = barsWidget.locator('.ag-cell[col-id="market_as_of"]').filter({ visible: true });
   await expect.poll(async () => {
     const rendered = await visibleMarketAsOfCells.allTextContents();
-    const latestBarsAsOfValues = latestAsOfValues(captured.responses, "/api/openbb/openbb/v1/bars");
+    const latestBarsAsOfValues = latestAsOfValues(dashboardResponses(), "/api/openbb/openbb/v1/bars");
     return latestBarsAsOfValues.length > 0 && latestBarsAsOfValues.some((value) => rendered.includes(value));
   }).toBe(true);
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-market-time.png"), fullPage: true });
@@ -413,36 +477,51 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
     { widget: barsWidget, feed: "sip" },
     { widget: optionsWidget, feed: "opra" },
   ] as const;
-  for (const { widget } of nativeWidgets) await revealGridColumns(page, widget, ["source_label", "feed"]);
   for (const { widget, feed } of nativeWidgets) {
-    await expect(widget.locator('.ag-header-cell[col-id="source_label"]')).toBeVisible();
-    await expect(widget.locator('.ag-header-cell[col-id="feed"]')).toBeVisible();
-    await expect(widget.locator('.ag-cell[col-id="source_label"]').filter({ visible: true }).first()).toHaveText("source unknown");
-    await expect(widget.locator('.ag-cell[col-id="feed"]').filter({ visible: true }).first()).toHaveText(feed);
+    for (const [columnId, expected] of [["source_label", "source unknown"], ["feed", feed]] as const) {
+      await revealGridColumns(page, widget, [columnId]);
+      await expect(widget.locator(`.ag-header-cell[col-id="${columnId}"]`)).toBeVisible();
+      await expect(widget.locator(`.ag-cell[col-id="${columnId}"]`).filter({ visible: true }).first()).toHaveText(expected);
+    }
   }
   await expect(page.getByText("仅演示 / MOCK SIP/OPRA", { exact: false })).toBeVisible();
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-source-feed.png"), fullPage: true });
 
-  for (const { widget } of nativeWidgets) await revealGridColumns(page, widget, ["truncated", "complete"]);
   for (const { widget } of nativeWidgets) {
-    await expect(widget.locator('.ag-header-cell[col-id="truncated"]')).toBeVisible();
-    await expect(widget.locator('.ag-header-cell[col-id="complete"]')).toBeVisible();
-    await expect(widget.locator('.ag-cell[col-id="truncated"]').filter({ visible: true }).first()).toHaveText("false");
-    await expect(widget.locator('.ag-cell[col-id="complete"]').filter({ visible: true }).first()).toHaveText("true");
+    for (const [columnId, expected] of [["truncated", "false"], ["complete", "true"]] as const) {
+      await revealGridColumns(page, widget, [columnId]);
+      await expect(widget.locator(`.ag-header-cell[col-id="${columnId}"]`)).toBeVisible();
+      const booleanCell = widget.locator(`.ag-cell[col-id="${columnId}"]`).filter({ visible: true }).first();
+      const checkbox = booleanCell.locator('input[type="checkbox"]');
+      await expect(checkbox).toBeVisible();
+      if (expected === "true") {
+        await expect(checkbox).toBeChecked();
+      } else {
+        await expect(checkbox).not.toBeChecked();
+      }
+    }
   }
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-completeness.png"), fullPage: true });
 
   await controlMock(request, { bars: "empty-truncated", options: "empty-truncated" });
+  const paginationResponseStart = captured.responses.length;
   await page.goto(dashboardUrl);
-  await expect.poll(() => captured.responses.some((item) => item.path.startsWith("/api/openbb/openbb/v1/bars") && item.status === 502), { timeout: 45_000 }).toBe(true);
-  await expect.poll(() => captured.responses.some((item) => item.path.startsWith("/api/openbb/openbb/v1/options") && item.status === 502), { timeout: 45_000 }).toBe(true);
+  const paginationResponses = () => captured.responses.slice(paginationResponseStart);
+  await expect.poll(() => paginationResponses().some((item) => item.path.startsWith("/api/openbb/openbb/v1/bars") && item.status === 502), { timeout: 45_000 }).toBe(true);
+  await expect.poll(() => paginationResponses().some((item) => item.path.startsWith("/api/openbb/openbb/v1/options") && item.status === 502), { timeout: 45_000 }).toBe(true);
+  await expect.poll(() => paginationResponses().some((item) =>
+    item.path.startsWith("/api/openbb/openbb/v1/stocks") && item.status === 200 &&
+    Array.isArray(item.body) && item.body.some((row: Record<string, unknown>) => row.symbol === "QQQ"),
+  ), { timeout: 45_000 }).toBe(true);
   await captured.settle();
   await expect(barsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
   await expect(optionsWidget.getByTestId("results-not-found")).toContainText(/status code 502/i);
   await expect(barsWidget.getByRole("gridcell")).toHaveCount(0);
   await expect(optionsWidget.getByRole("gridcell")).toHaveCount(0);
-  await revealGridColumns(page, stocksWidget, ["symbol"]);
-  await expect(stocksWidget.locator('.ag-cell[col-id="symbol"]').filter({ visible: true }).first()).toHaveText("QQQ");
+  const paginationStockSymbols = stocksWidget.locator('.ag-cell[col-id="symbol"]');
+  await expect.poll(async () =>
+    (await paginationStockSymbols.allTextContents()).some((text) => text.trim() === "QQQ"),
+  ).toBe(true);
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-pagination-error.png"), fullPage: true });
 
   const truncatedBars = await page.request.get(`${RESEARCH_ORIGIN}/api/openbb/openbb/v1/bars?symbol=QQQ&timeframe=1Day&days=30&limit=500`);
@@ -454,8 +533,55 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   const truncatedMetrics = await (await request.get(`${MOCK_ORIGIN}/__test/metrics`, { headers: { "x-e2e-control": CONTROL_TOKEN } })).json();
   expect(truncatedMetrics.calls.filter((call: { page_token?: string | null }) => call.page_token).length).toBeGreaterThanOrEqual(8);
   await controlMock(request, { bars: "normal", options: "normal" });
+
+  const metricsBeforeDenied = await (await request.get(`${MOCK_ORIGIN}/__test/metrics`, { headers: { "x-e2e-control": CONTROL_TOKEN } })).json();
+  const deniedFixtureCallStart = metricsBeforeDenied.calls.length;
+  const deniedResponseStart = captured.responses.length;
+  await controlMock(request, { stocks: "denied", bars: "denied", options: "denied" });
+  await page.goto(dashboardUrl);
+  const deniedResponses = () => captured.responses.slice(deniedResponseStart);
+  for (const route of ["stocks", "bars", "options"]) {
+    await expect.poll(() => deniedResponses().some((item) =>
+      item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 403,
+    ), { timeout: 45_000 }).toBe(true);
+  }
+  await captured.settle();
+  for (const [widget, route] of [
+    [stocksWidget, "stocks"],
+    [barsWidget, "bars"],
+    [optionsWidget, "options"],
+  ] as const) {
+    await expect(widget.getByTestId("results-not-found")).toContainText(/status code 403/i);
+    await expect(widget.getByRole("gridcell")).toHaveCount(0);
+    const response = [...deniedResponses()].reverse().find((item) =>
+      item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 403,
+    );
+    expect(response?.body).toMatchObject({ error: "market_data_error" });
+    expect((response?.body as { detail?: string } | undefined)?.detail).toContain("403");
+  }
+  const deniedMetrics = await (await request.get(`${MOCK_ORIGIN}/__test/metrics`, { headers: { "x-e2e-control": CONTROL_TOKEN } })).json();
+  const deniedFixtureCalls = deniedMetrics.calls.slice(deniedFixtureCallStart).filter((call: { path: string }) => !call.path.startsWith("/__test/"));
+  expect(deniedFixtureCalls.some((call: { path: string; feed: string }) => call.path === "/v2/stocks/snapshots" && call.feed === "sip")).toBe(true);
+  expect(deniedFixtureCalls.some((call: { path: string; feed: string; symbol: string }) => call.path.endsWith("/bars") && call.feed === "sip" && call.symbol === "QQQ")).toBe(true);
+  expect(deniedFixtureCalls.some((call: { path: string; feed: string }) => call.path.startsWith("/v1beta1/options/snapshots/") && call.feed === "opra")).toBe(true);
+  expect(deniedFixtureCalls.every((call: { key_id_present: boolean; secret_present: boolean }) =>
+    call.key_id_present && call.secret_present,
+  )).toBe(true);
+  expect(browserCalls.some((url) => /yahoo|iex/i.test(url))).toBe(false);
+  await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-market-entitlement-denied.png"), fullPage: true });
+
+  await controlMock(request, { stocks: "normal", bars: "normal", options: "normal" });
+  const restoredResponseStart = captured.responses.length;
   await page.goto(dashboardUrl);
   await expect(page).toHaveTitle(/^仅演示 \/ MOCK SIP\/OPRA \| OpenBB Lite$/);
+  await expect.poll(() => ["stocks", "bars", "options"].every((route) =>
+    captured.responses.slice(restoredResponseStart).some((item) =>
+      item.path.startsWith(`/api/openbb/openbb/v1/${route}`) && item.status === 200,
+    ),
+  ), { timeout: 45_000 }).toBe(true);
+  await expect.poll(async () =>
+    (await stocksWidget.locator('.ag-cell[col-id="symbol"]').allTextContents()).some((text) => text.trim() === "QQQ"),
+  ).toBe(true);
   expect(browserCalls.some((url) => url.includes("/assets/js/datafeeds/udf/dist/bundle.js"))).toBe(false);
   expect(diagnostics.pageErrors).toEqual([]);
   await page.context().storageState({ path: STORAGE_STATE });
