@@ -175,7 +175,8 @@ cleanup() {
   "image_archive": "${IMAGE_ARCHIVE}",
   "image_archive_sha256": "$(cut -d ' ' -f 1 "${ARTIFACT_DIR}/openbb-lite-compose-image.docker.tar.sha256")",
   "image_archive_manifest_evidence": "openbb-lite-compose-archive-manifest.json",
-  "rollback_image_id": "${BROKEN_UPGRADE_IMAGE_ID}",
+  "broken_upgrade_image_id": "${BROKEN_UPGRADE_IMAGE_ID}",
+  "restored_image_id": "${RESTORED_IMAGE_ID}",
   "browser_evidence": [
     "native-openbb-mock-dashboard-market-time.png",
     "native-openbb-mock-dashboard-source-feed.png",
