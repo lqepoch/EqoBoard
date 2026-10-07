@@ -304,6 +304,7 @@ dependencies = [
  "eqo-alpaca-data",
  "eqo-domain",
  "eqo-execution",
+ "futures-util",
  "serde",
  "serde_json",
  "tokio",
