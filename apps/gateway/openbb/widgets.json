@@ -17,7 +17,8 @@
         "type": "text",
         "label": "Stocks",
         "value": "QQQ,SPY,NVDA",
-        "description": "Comma-separated US tickers (max 50)"
+        "description": "Comma-separated US tickers (max 50)",
+        "show": true
       }
     ],
     "data": {
@@ -61,8 +62,14 @@
             "headerName": "Feed"
           }
         ]
-      }
-    }
+      },
+      "dataKey": "eqoSipStocks"
+    },
+    "source": [
+      "Alpaca SIP"
+    ],
+    "refetchInterval": 5000,
+    "staleTime": 1000
   },
   "eqo_opra_contracts": {
     "name": "EqoBoard OPRA Option Chain",
@@ -81,13 +88,17 @@
         "paramName": "underlying",
         "type": "text",
         "label": "Ticker",
-        "value": "QQQ"
+        "value": "QQQ",
+        "show": true,
+        "description": "EqoBoard parameter"
       },
       {
         "paramName": "expiration",
         "type": "date",
         "label": "Expiry",
-        "value": "2026-10-09"
+        "value": "2026-10-09",
+        "show": true,
+        "description": "EqoBoard parameter"
       }
     ],
     "data": {
@@ -154,8 +165,14 @@
             "headerName": "Incomplete"
           }
         ]
-      }
-    }
+      },
+      "dataKey": "eqoOpraChain"
+    },
+    "source": [
+      "Alpaca OPRA"
+    ],
+    "refetchInterval": 15000,
+    "staleTime": 5000
   },
   "eqo_sip_bars": {
     "name": "EqoBoard SIP OHLCV",
@@ -174,25 +191,33 @@
         "paramName": "symbol",
         "type": "text",
         "label": "Ticker",
-        "value": "QQQ"
+        "value": "QQQ",
+        "show": true,
+        "description": "EqoBoard parameter"
       },
       {
         "paramName": "timeframe",
         "type": "text",
         "label": "Timeframe",
-        "value": "1Day"
+        "value": "1Day",
+        "show": true,
+        "description": "EqoBoard parameter"
       },
       {
         "paramName": "days",
         "type": "number",
         "label": "Days back",
-        "value": 30
+        "value": 30,
+        "show": true,
+        "description": "EqoBoard parameter"
       },
       {
         "paramName": "limit",
         "type": "number",
         "label": "Max bars",
-        "value": 500
+        "value": 500,
+        "show": true,
+        "description": "EqoBoard parameter"
       }
     ],
     "data": {
@@ -232,7 +257,13 @@
             "headerName": "Feed"
           }
         ]
-      }
-    }
+      },
+      "dataKey": "eqoSipBars"
+    },
+    "source": [
+      "Alpaca SIP"
+    ],
+    "refetchInterval": 30000,
+    "staleTime": 15000
   }
 }

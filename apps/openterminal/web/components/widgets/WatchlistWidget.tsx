@@ -5,7 +5,28 @@ import { useState } from "react";
 import { apiGet, fmt, fmtBig, pctClass, type Quote } from "../../lib/api";
 import { normalizeSymbol, symbolsParam } from "../../lib/symbol";
 import { useTerminal } from "../../store/terminal";
+import { useMarket } from "../../store/market";
 import Flash from "../Flash";
+
+function LiveRow({sym,snapshot,onSelect,onRemove}:{sym:string;snapshot:Quote|undefined;onSelect:()=>void;onRemove:()=>void}) {
+  const trade=useMarket(s=>s.stockTrades[sym]);
+  const quote=useMarket(s=>s.stockQuotes[sym]);
+  const price=trade?.price??snapshot?.price??null;
+  const previous=snapshot?.previousClose??null;
+  const changePercent=price!==null&&previous?((price/previous)-1)*100:snapshot?.changePercent??null;
+  return <tr onClick={onSelect}>
+    <td className="font-bold">{sym}</td>
+    <td><Flash value={price}>{fmt(price)}</Flash></td>
+    <td className={pctClass(changePercent)}>
+      <Flash value={changePercent}>{fmt(changePercent)}%</Flash>
+    </td>
+    <td>{fmtBig(snapshot?.volume)}</td>
+    <td className="dim text-[9px]">{quote||trade?"LIVE":"SNAP"}</td>
+    <td>
+      <button onClick={e=>{e.stopPropagation();onRemove();}} className="dim hover:text-[var(--down)]">✕</button>
+    </td>
+  </tr>;
+}
 
 export default function WatchlistWidget() {
   const watchlist = useTerminal((s) => s.watchlist);
@@ -19,7 +40,7 @@ export default function WatchlistWidget() {
     queryKey: ["watchlist", watchlist.join(",")],
     queryFn: () => apiGet<Quote[]>(`/api/quotes?symbols=${symbolsParam(watchlist)}`),
     enabled: watchlist.length > 0,
-    refetchInterval: 1_000,
+    refetchInterval: 15_000,
   });
 
   return (
@@ -53,33 +74,14 @@ export default function WatchlistWidget() {
       </form>
       <table className="data-table">
         <thead>
-          <tr><th>Sym</th><th>Last</th><th>Chg%</th><th>Vol</th><th></th></tr>
+          <tr><th>Sym</th><th>Last</th><th>Chg%</th><th>Vol</th><th>Mode</th><th></th></tr>
         </thead>
         <tbody>
-          {watchlist.map((sym) => {
-            const q = data.find((d) => d.symbol === sym);
-            return (
-              <tr key={sym} onClick={() => setActiveSymbol(sym)}>
-                <td className="font-bold">{sym}</td>
-                <td><Flash value={q?.price}>{fmt(q?.price)}</Flash></td>
-                <td className={pctClass(q?.changePercent)}>
-                  <Flash value={q?.changePercent}>{fmt(q?.changePercent)}%</Flash>
-                </td>
-                <td>{fmtBig(q?.volume)}</td>
-                <td>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFromWatchlist(sym);
-                    }}
-                    className="dim hover:text-[var(--down)]"
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
+          {watchlist.map((sym) => (
+            <LiveRow key={sym} sym={sym} snapshot={data.find(d=>d.symbol===sym)}
+              onSelect={()=>setActiveSymbol(sym)}
+              onRemove={()=>removeFromWatchlist(sym)} />
+          ))}
         </tbody>
       </table>
     </div>
