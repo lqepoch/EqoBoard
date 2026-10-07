@@ -85,7 +85,7 @@ No order was submitted and the execution mode remained disabled.
 This attempt deliberately skipped the default-profile smoke to avoid repeating
 an already completed Compose config/build/up check while diagnosing the browser
 and rollback path. It is diagnostic lifecycle evidence, not the required final
-no-skip run. The subsequent attempt-21 section records the final no-skip run and
+no-skip run. The subsequent attempt-22 section records the final no-skip run and
 the separate runtime SBOM for its Compose-built image.
 
 Attempt-20 artifacts are retained at
@@ -107,70 +107,84 @@ reference.
 
 ## Final no-skip Compose and native-browser acceptance
 
-The final local acceptance ran the frozen, clean code at
-`6811ca24e451ade0c33a4fb6f0c182b3ef25993c` with no skip variable set:
+The final local acceptance used the clean code at
+`00f7aec59c6a4e67e568c9b7de8a6afb4f37fa41` and ran without a skip variable:
 
 ```sh
-env -i PATH="$PATH" HOME="$HOME" \
-  OPENBB_E2E_ARTIFACT_DIR=/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-21 \
+OPENBB_E2E_ARTIFACT_DIR=/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec \
   bash tools/openbb-lite-e2e.sh
 ```
 
-The script recorded `result=passed`, `default_profile_smoke_executed=true`, and
-`cleanup_verified=true`. The exact default `docker compose --profile openbb
-build` and `up --build --wait` path passed; the default six-service profile
-started and all six services became healthy, then the isolated E2E overlay
-started the real Rust Gateway, main OpenTerminal/Node services, native Lite,
-Research BFF, controlled ingress and loopback fixtures. Three native Lite
-Playwright tests passed, including two-layer OIDC/native-password login, native
-onboarding, actual Apps backend validation, and display of all three Workspace
-widgets. Separate tests passed for the signed-in terminal while Lite was
-stopped and for Gateway offline, Gateway restart and image rollback. The
-fixture verified SIP/OPRA request feeds and source metadata; its rows remain
-`source=unknown`. A deliberately broken ingress image made the Lite health
-check become `unhealthy` within the budget derived from the Compose health
-settings; the script restored the saved Lite archive and verified the restored
-ID plus all three native data grids. Paper/Live remained disabled and no order
-was submitted.
+The default `docker compose --profile openbb build` and
+`up --detach --build --wait` path ran first; all six default-profile services
+became healthy. The isolated browser overlay then started the actual Rust
+Gateway, main OpenTerminal and Node research services, pinned native OpenBB
+Lite, Research BFF, controlled Nginx ingress, and loopback-only test fixtures.
+The final `runtime-result.json` reports `result=passed`,
+`default_profile_smoke_executed=true`, and `cleanup_verified=true`; the project
+has no remaining containers, volumes, or networks.
 
-Artifacts are retained at
-`/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-21/`. The
-Compose-built image archive SHA-256 is
-`e63f848bc49a1277f7b605e2ab846ee90f310bfadf834c61c2c94beaa6b664e2`; the
-verified OCI index / Docker inspect ID is
-`sha256:2b6f742a9221157ef17c6fee0225cc728c95fd7127668bb23dadeeb596a04b24`,
-the `linux/amd64` image manifest is
-`sha256:297d5347c51b59df810d2a573c1c33cd7fd665b2cf6551509afdcee69cc0f33c`,
-and the config is
-`sha256:4da493b043acd65457c09dedebc9387ef02bf27d131d40e4568ef848addc665f`.
-`openbb-lite-compose-archive-manifest.json` verifies their association and
-all 35 layer descriptors against archive size and SHA-256. The pinned Syft
-1.54.1 runtime SBOM for this exact Compose image is
+Seven browser tests passed with no skips: three native Lite tests cover the
+Research origin gate, native OpenBB login/onboarding and all three loaded
+widgets, and role/ingress denial; four lifecycle tests cover the main terminal
+while Lite is stopped, Gateway offline, Gateway restart recovery, and restoring
+the exact saved image after a deliberately broken image became unhealthy. The
+native widgets displayed mock SIP/OPRA rows and their source/feed/as-of state,
+and surfaced pagination and entitlement failures. The test-only Gateway
+provider overrides produced `source=unknown`; the fixture asserted requested
+`feed=sip` and `feed=opra`. This does not verify live Alpaca market data or
+entitlement. Paper and Live remained disabled and no order was submitted.
+
+Attempt-22 artifacts are retained at
+`/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec/`.
+The primary `runtime-result.json` SHA-256 is
+`44b80d5058fee7fc0e1d5b403d221c540e996cb606159316c3e4fe5f7df6d218`. The
+saved Compose image archive SHA-256 is
+`81750a957807907565e438f1c1f3a7001baf3a4969adbf020b5bef1df742f3cb`. Its
+archive verifier associates Docker's image ID observation with OCI index
+`sha256:01c229c2a8cd9611e7767096c56ad02d7579f01eb02ad67e0c2d62b1c92f1d59`,
+`linux/amd64` application manifest
+`sha256:09e5e060a51f3621cdf0743398c4ebfe2c9c00bd35a7a6651e1bd8f57bffdc89`,
+and image config
+`sha256:44e2b2b21f04756a67af95f88376e79ac334d48115c58ab4c006657329aa39ea`;
+the manifest and all 35 layer descriptors were verified against archive
+blob sizes and digests. The deliberately broken image ID and restored image ID
+are recorded separately in the runtime result; the restored ID equals the
+saved OCI index observation.
+
+The pinned Syft 1.54.1 runtime SBOM for this exact Compose image is
 `openbb-lite-compose-image.spdx.json`, SHA-256
-`6da95c751dbad2afdda76164ea7c708fbed647b30d414d5595315ecf5d556e26`; it has
-326 SPDX package entries / 314 normalized package identities, verified stable
-across three scans. The sidecar
-`openbb-lite-compose-image-sbom-record.json` binds that SBOM to the exact image
-index, manifest, config, archive hash, source commit and recipe identity. It is
-separate from the build-helper image SBOM and the patched-source SBOM; compiled
-Vite `dist` still has no Bun/npm metadata, so the patched-source SBOM remains
-necessary to inventory the locked frontend graph.
+`0fca15c7fbe1838f2081f08ccf730d7cd48f4931c2f0826f1187840040e19afc`. It has
+326 SPDX package entries / 314 normalized package identities, stable across
+three scans. Its sidecar record SHA-256 is
+`d2a1ab3d26df4a7ad67a10c73c110a9a04c512608982ebc6dafa1b9c11932109`; it binds
+the SBOM to the exact Compose image, archive, tested source commit and recipe
+identity. The linked patched-source SBOM remains separate because the compiled
+Vite bundle does not contain Bun/npm dependency metadata.
 
-The local daemon RepoDigest observation is associated with the image index but
-does not mean that the image was pushed to a registry. The Compose local tag is
-project-scoped, there is no published release digest, and the lock's
-`image_digest` remains unset. This result proves local default-profile and
-mock-backed native browser integration for the pinned source/recipe; it does
-not prove live Alpaca SIP/OPRA entitlement or data, a production deployment,
-or trading execution.
+The versioned record [openbb-local-runtime-acceptance.json](evidence/openbb-local-runtime-acceptance.json)
+is referenced by `local_mock_evidence` in the source lock and is deliberately
+separate from `build_gate.evidence`. The lock's `runtime_acceptance` and
+`browser_e2e` values remain `not-verified` and `not-run` for the release gate;
+`deployment` remains `not-approved`, and `image_digest` remains unset. The
+local daemon RepoDigest is not evidence of a registry push. No production
+deployment, immutable published release, live Alpaca entitlement, or trading
+execution is claimed. The evidence/lock metadata change does not modify the
+locked Dockerfile, patch, runner, or runtime image build inputs.
 
-The upstream source SPDX SBOM describes the pinned archive; the patched-source
-SPDX SBOM describes the verified Community patch result and frozen Bun/Poetry
-dependency locks. Both are separate from a runtime image SBOM. The runtime
-contains a compiled Vite bundle without Bun/npm metadata, so its image SBOM does
-not enumerate the full frontend dependency graph. Keep both inventories linked
-to the source tree/build record; never use source package counts as evidence
-that a particular frontend image was built or served.
+## OpenTerminal stream cancellation and CI source-tree isolation
+
+The OpenTerminal live SSE BFF registers the client-abort listener before it
+awaits OIDC authorization. If the browser disconnects while authorization is
+pending, the request does not open a later Gateway stream; an established
+Gateway stream receives the abort signal and is closed with its client. The
+regression test cancels after the authorization callback has started, then
+resolves that callback and verifies the downstream function was never called.
+
+Portfolio route tests use a dedicated temporary SQLite `DATA_DIR`, close the
+database, and remove its database/WAL/SHM files after the test. This keeps test
+artifacts outside the checkout so the later OpenBB clean-source gate measures
+tracked source changes rather than SQLite side effects.
 
 ## License handling
 

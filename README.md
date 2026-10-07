@@ -96,13 +96,13 @@ npm run dev
 
 | 范围 | 当前状态 |
 |---|---|
-| 可选 OpenBB profile、Research 导航、受控 ingress 与原生 Workspace | attempt-21 无 skip 默认 Compose、登录、三 Widget 和故障/恢复浏览器生命周期均通过 |
+| 可选 OpenBB profile、Research 导航、受控 ingress 与原生 Workspace | attempt-22 无 skip 默认 Compose、登录、三 Widget 和故障/恢复浏览器生命周期均通过 |
 | SIP/OPRA 行情来源 | Gateway contract 和原生 Widget 使用 loopback 协议 mock 验证；source=`unknown`，真实 Alpaca entitlement/行情未验证 |
-| 离线、恢复、停 OpenBB、故障升级与回滚 | attempt-21 验证 Gateway offline/restart、OpenBB 停服时主终端可用、坏镜像 unhealthy、原归档恢复、cleanup |
+| 离线、恢复、停 OpenBB、故障升级与回滚 | attempt-22 验证 Gateway offline/restart、OpenBB 停服时主终端可用、坏镜像 unhealthy、原归档恢复、cleanup |
 | Paper / Live | BrokerAdapter 仍 disabled；没有提交订单 |
 | 集成分支 | PR #29 汇总并验收依赖 PR #22–#28；在人工审查和合并前，`main` 仍是 `621de548827bc3bfd81e509eec2da8dfee28c221` |
 
-测试行使用协议 mock 且 `source=unknown`，未验证真实 Alpaca entitlement，也没有下单。Compose 本地镜像 archive/SBOM 身份见 [OpenBB supply-chain runbook](docs/OPENBB_SUPPLY_CHAIN.md)；本地 tag 或 daemon RepoDigest 观察都不表示 registry 发布。
+测试行使用协议 mock 且 `source=unknown`，未验证真实 Alpaca entitlement，也没有下单。[本地验收记录](docs/evidence/openbb-local-runtime-acceptance.json)绑定冻结代码、Compose 镜像 archive、OCI descriptors 和 runtime SBOM；release gate 仍未批准。完整构建与回滚说明见 [OpenBB supply-chain runbook](docs/OPENBB_SUPPLY_CHAIN.md)；本地 tag 或 daemon RepoDigest 观察都不表示 registry 发布。
 
 ## 验证
 
