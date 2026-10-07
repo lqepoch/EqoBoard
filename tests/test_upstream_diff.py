@@ -82,6 +82,24 @@ class UpstreamDiffTests(unittest.TestCase):
         self.assertIn("Deleted upstream files: 1", report)
         self.assertIn("待人工审核", report)
 
+    def test_report_escapes_external_paths_and_header_values(self):
+        malicious_path = "good.ts\n## forged " + chr(96) + "<img src=x>" + chr(96) + "| injected"
+        pin = Pin("ErTasselli/OpenTerminal\n## forged", "a" * 40, "MIT\n## forged", "apps/openterminal")
+        report = render_report(
+            TreeDiff((), (), (malicious_path,), ()),
+            pin,
+            "b" * 40 + "\n## forged",
+            "2026-10-07\n# forged",
+            "c" * 64,
+        )
+
+        path_row = next(line for line in report.splitlines() if "good.ts" in line)
+
+        self.assertIn(r"\u000a", path_row)
+        self.assertIn("&#96;&lt;img src=x&gt;&#96;&#124;", path_row)
+        self.assertNotIn("<img src=x>", report)
+        self.assertNotIn("\n## forged", report)
+
     def test_lock_rejects_repository_urls_and_path_traversal(self):
         with tempfile.TemporaryDirectory() as temporary:
             lock = Path(temporary) / "upstreams.lock.json"
@@ -113,6 +131,20 @@ class UpstreamDiffTests(unittest.TestCase):
             self.assertEqual(pin.expected_git_archive_sha256, "b" * 64)
             with self.assertRaises(RuntimeError):
                 verify_git_archive_sha256(pin, "c" * 64)
+
+    def test_lock_rejects_non_mit_license_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            lock = Path(temporary) / "upstreams.lock.json"
+            lock.write_text(json.dumps({"sources": [{
+                "name": "OpenTerminal",
+                "repository": "ErTasselli/OpenTerminal",
+                "commit": "a" * 40,
+                "license": "MIT\n## forged",
+                "downstream_prefix": "apps/openterminal",
+            }]}), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "license"):
+                load_pin(lock)
 
 
 if __name__ == "__main__":

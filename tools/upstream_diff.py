@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import os
 import re
@@ -12,6 +13,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable
@@ -23,6 +25,7 @@ DOWNSTREAM_PREFIX = "apps/openterminal"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ARCHIVE_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+TICK = chr(96)
 
 
 @dataclass(frozen=True)
@@ -126,7 +129,10 @@ def load_pin(lock_path: Path = LOCK_PATH) -> Pin:
     if not isinstance(commit, str) or not SHA_RE.fullmatch(commit):
         raise ValueError("OpenTerminal commit in upstream lock must be a full lowercase SHA-1")
     repository = item.get("repository", "")
+    license_name = item.get("license")
     prefix = item.get("downstream_prefix", "")
+    if license_name != "MIT":
+        raise ValueError("OpenTerminal license must be the pinned MIT identifier")
     if not isinstance(repository, str) or not REPOSITORY_RE.fullmatch(repository) or any(
         part in {".", ".."} for part in repository.split("/")
     ):
@@ -145,7 +151,7 @@ def load_pin(lock_path: Path = LOCK_PATH) -> Pin:
         or not ARCHIVE_SHA_RE.fullmatch(expected_git_archive_sha256)
     ):
         raise ValueError("OpenTerminal git_archive_sha256 in upstream lock is invalid")
-    return Pin(repository, commit, str(item.get("license", "unknown")), prefix, expected_git_archive_sha256)
+    return Pin(repository, commit, license_name, prefix, expected_git_archive_sha256)
 
 
 def _git(args: list[str], *, cwd: Path | None = None, stdout=None) -> str:
@@ -257,6 +263,30 @@ def _note_for_modified(path: str) -> tuple[str, str, str, str]:
     )
 
 
+def _display_external_text(value: object) -> str:
+    """Keep untrusted Git/config text on one visible Markdown line."""
+    displayed: list[str] = []
+    for character in str(value):
+        category = unicodedata.category(character)
+        if category.startswith("C") or category in {"Zl", "Zp"}:
+            codepoint = ord(character)
+            displayed.append(f"\\u{codepoint:04x}" if codepoint <= 0xFFFF else f"\\U{codepoint:08x}")
+        else:
+            displayed.append(character)
+    return "".join(displayed)
+
+
+def _markdown_code(value: object) -> str:
+    escaped = html.escape(_display_external_text(value), quote=False)
+    escaped = escaped.replace(TICK, "&#96;").replace("|", "&#124;")
+    return f"{TICK}{escaped}{TICK}"
+
+
+def _markdown_cell(value: object) -> str:
+    escaped = html.escape(_display_external_text(value), quote=False)
+    return escaped.replace("|", "&#124;").replace(TICK, "&#96;")
+
+
 def _extension_note(path: str) -> tuple[str, str, str, str, str]:
     if path not in KNOWN_C_ONLY and path not in KNOWN_E_ONLY:
         return (
@@ -294,12 +324,12 @@ def render_report(diff: TreeDiff, pin: Pin, head: str, audited_at: str, archive_
     lines = [
         "# OpenTerminal upstream file audit",
         "",
-        f"- EqoBoard audit head: `{head}`",
-        f"- OpenTerminal upstream commit: `{pin.commit}`",
-        f"- Repository: `{pin.repository}`",
-        f"- License: {pin.license}",
-        f"- Verified Git archive SHA-256: `{archive_sha256}` (computed from `git archive` after the fetched Git object matched the locked commit)",
-        f"- Audit date (UTC): {audited_at}",
+        f"- EqoBoard audit head: {_markdown_code(head)}",
+        f"- OpenTerminal upstream commit: {_markdown_code(pin.commit)}",
+        f"- Repository: {_markdown_code(pin.repository)}",
+        f"- License: {_markdown_code(pin.license)}",
+        f"- Verified Git archive SHA-256: {_markdown_code(archive_sha256)} (computed from git archive after the fetched Git object matched the locked commit)",
+        f"- Audit date (UTC): {_markdown_code(audited_at)}",
         "- Comparison: tracked files below `apps/openterminal` against the verified Git tree at the locked commit; files such as `node_modules` and `.next` are excluded.",
         "",
         "## Summary",
@@ -322,8 +352,17 @@ def render_report(diff: TreeDiff, pin: Pin, head: str, audited_at: str, archive_
         ]
 
     def row(category: str, upstream: str, local: str, reason: str, keep: str, adapter: str, duplicate: str) -> str:
-        cells = (category, upstream, local, pin.commit, reason, keep, adapter, duplicate)
-        return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |"
+        cells = (
+            _markdown_cell(category),
+            _markdown_code(upstream) if upstream != "—" else "—",
+            _markdown_code(local) if local != "—" else "—",
+            _markdown_code(pin.commit),
+            _markdown_cell(reason),
+            _markdown_cell(keep),
+            _markdown_cell(adapter),
+            _markdown_cell(duplicate),
+        )
+        return "| " + " | ".join(cells) + " |"
 
     lines.extend(["## A. Exact upstream files", "", *table_header()])
     for path in diff.exact:
