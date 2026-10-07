@@ -50,6 +50,7 @@ class TreeDiff:
 # visible instead of silently inheriting an old classification.
 MODIFIED_NOTES: dict[str, tuple[str, str, str, str]] = {
     "README.md": ("记录 EqoBoard 的数据、安全和部署边界。", "保留", "无需抽 adapter", "否"),
+    "package.json": ("增加现有 OpenTerminal package 中的 research E2E 命令入口；不创建第二套终端。", "保留", "测试脚本留在仓库级集成边界", "否"),
     "package-lock.json": ("锁定 EqoBoard 认证和运行时依赖。", "保留", "无需抽 adapter", "否"),
     "server/package.json": ("加入短时委托 JWT 验证依赖。", "保留", "认证职责已在 server/src/auth.ts", "否"),
     "server/src/auth.ts": ("以 OIDC 用户委托和独立研究服务凭据替代自动生成的共享 API key。", "保留", "可抽成认证 adapter", "否"),
@@ -67,6 +68,8 @@ MODIFIED_NOTES: dict[str, tuple[str, str, str, str]] = {
     "web/app/layout.tsx": ("设置 EqoBoard 产品名称。", "保留", "无需抽 adapter", "否"),
     "web/app/page.tsx": ("以服务端 OIDC 会话门禁包裹上游终端。", "保留", "Workspace 本体继续复用上游", "否"),
     "web/components/Sidebar.tsx": ("将 EqoBoard 专属期权与风险 widget 注册到上游 Sidebar。", "保留", "Widget registry 后续可外置", "否"),
+    "web/components/CommandPalette.tsx": ("在原生命令面板增加校验后的 Research 外链；不改变 ticker/search 路由。", "保留", "仅传入公开 origin 的窄 UI adapter", "否"),
+    "web/components/Terminal.tsx": ("把服务端验证的 Research origin 传给上游 Sidebar 与 Command Palette。", "保留", "仅传入公开 origin 的窄 UI adapter", "否"),
     "web/components/TopBar.tsx": ("展示 EqoBoard feed/source/授权状态，同时保留上游搜索和时间栏。", "保留", "行情状态可作为独立 extension", "否"),
     "web/components/Workspace.tsx": ("在上游 react-grid-layout Workspace 中注册 EqoBoard widgets 与 ticker linking。", "保留", "widget 注册表可外置", "否"),
     "web/components/widgets/CalendarWidget.tsx": ("呈现研究日历和财报字段的来源与观察时间。", "保留", "无需抽 adapter", "否"),
@@ -116,6 +119,14 @@ KNOWN_E_ONLY = {
     "web/lib/http-response.ts", "web/lib/order-api.ts", "web/lib/order-contract.ts",
     "web/lib/permissions.ts", "web/next-auth.d.ts", "web/next.config.mjs",
     "web/playwright.compose.config.ts", "web/playwright.config.ts", "web/store/market.ts",
+    "openbb-research-ingress.conf",
+    "web/app/api/openbb/[...path]/route.ts", "web/app/api/research/auth-check/route.ts",
+    "web/e2e/isolated-env.ts", "web/e2e/mock-openbb-alpaca.mjs", "web/e2e/mock-openbb-oidc.mjs",
+    "web/e2e/openbb-core-availability.spec.ts", "web/e2e/openbb-lite.spec.ts",
+    "web/e2e/openbb-recovery.spec.ts", "web/e2e/openbb-response-capture.ts",
+    "web/e2e/research-bff.spec.ts", "web/e2e/research-navigation.spec.ts", "web/e2e/research-origin.spec.ts",
+    "web/lib/research-origin.ts", "web/lib/research-route-access.ts", "web/middleware.ts",
+    "web/playwright.openbb.config.ts", "web/playwright.research.config.ts",
 }
 
 
@@ -301,6 +312,20 @@ def _extension_note(path: str) -> tuple[str, str, str, str, str]:
         return ("C", reason, "保留", "是，继续作为 EqoBoard UI extension", "否")
     if path in {"web/components/MarketStreamProvider.tsx", "web/store/market.ts"}:
         return ("E", "EqoBoard Rust MarketEvent、订阅租约和行情状态扩展。", "保留", "是，继续作为行情 domain/extension", "否")
+    if path == "openbb-research-ingress.conf":
+        return ("E", "仅 Research origin 使用的内部 auth_request 入口；将受控 Lite UI 与精确 BFF 路由隔离。", "保留", "部署边界适配，不重写 OpenBB UI", "否")
+    if path == "web/app/api/openbb/[...path]/route.ts":
+        return ("E", "Research-only OpenBB manifest/market API allowlist；从 OIDC role 会话签发最长 60 秒 market:read Gateway 委托。", "保留", "是，作为 Next-to-Gateway market adapter", "否")
+    if path == "web/app/api/research/auth-check/route.ts":
+        return ("E", "供内部 Nginx auth_request 校验 research cookie/role；不签发或返回 Gateway token。", "保留", "是，作为入口认证 adapter", "否")
+    if path in {"web/lib/research-origin.ts", "web/lib/research-route-access.ts", "web/middleware.ts"}:
+        return ("E", "限制 Research hostname、origin、session 与精确 API allowlist；研究模式其余路径失败关闭。", "保留", "是，作为 research auth/policy adapter", "否")
+    if path in {"web/e2e/mock-openbb-alpaca.mjs", "web/e2e/mock-openbb-oidc.mjs"}:
+        return ("E", "仅 E2E 的有控制 token fixture；市场响应显式模拟，Gateway source 保持 unknown，不作真实行情声明。", "保留", "仅测试 fixture，不进入产品运行路径", "否")
+    if path.startswith("web/e2e/openbb-") or path in {"web/e2e/isolated-env.ts", "web/e2e/research-bff.spec.ts", "web/e2e/research-navigation.spec.ts", "web/e2e/research-origin.spec.ts"}:
+        return ("E", "Research 身份、OpenBB 原生 Lite、Gateway 数据与回滚的隔离浏览器/契约验证；不实现另一套 Workspace。", "保留", "无需抽 adapter", "否")
+    if path in {"web/playwright.openbb.config.ts", "web/playwright.research.config.ts"}:
+        return ("E", "将原生 OpenBB 与 Research BFF 浏览器套件限制在各自目标服务和环境 allowlist。", "保留", "测试配置，不适用", "否")
     if "/e2e/" in path or path.endswith("/auth.test.ts") or path.endswith("/order-outcome/page.tsx"):
         return ("E", "EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。", "保留", "无需抽 adapter", "否")
     if path == "AGENTS.md":
@@ -337,6 +362,8 @@ def render_report(diff: TreeDiff, pin: Pin, head: str, audited_at: str, archive_
         f"- A · exact upstream files: {len(diff.exact)}",
         f"- B · modified upstream files: {len(diff.modified)}",
         f"- C/E · EqoBoard-only files: {len(diff.eqoboard_only)}",
+        f"- C · product extension widgets: {sum(path in KNOWN_C_ONLY for path in diff.eqoboard_only)}",
+        f"- E · domain, security, and integration files: {sum(path not in KNOWN_C_ONLY for path in diff.eqoboard_only)}",
         f"- Deleted upstream files: {len(diff.deleted)}",
         "- D · duplicated mature upstream implementations: none identified in this comparison. EqoBoard routes U.S. SIP/OPRA prices through Rust; retained Yahoo/TradingView providers serve research, non-U.S. symbols, or metadata. The native OpenTerminal Workspace, charts, screener, heatmap, watchlist, and general research widgets remain reused.",
         "- Documentation follow-up: the OpenTerminal README still references five deleted screenshot files under `docs/screenshots/`; those image links are currently unresolved and are recorded below for a later asset/reference decision.",

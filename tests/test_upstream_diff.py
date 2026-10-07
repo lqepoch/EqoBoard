@@ -8,6 +8,7 @@ from pathlib import Path
 from tools.upstream_diff import (
     Pin,
     TreeDiff,
+    _extension_note,
     compare_trees,
     load_pin,
     render_report,
@@ -17,6 +18,33 @@ from tools.upstream_diff import (
 
 
 class UpstreamDiffTests(unittest.TestCase):
+    def test_research_and_native_lite_extensions_have_curated_e_classification(self):
+        paths = (
+            "openbb-research-ingress.conf",
+            "web/app/api/openbb/[...path]/route.ts",
+            "web/app/api/research/auth-check/route.ts",
+            "web/e2e/mock-openbb-alpaca.mjs",
+            "web/e2e/openbb-lite.spec.ts",
+            "web/lib/research-origin.ts",
+            "web/middleware.ts",
+            "web/playwright.openbb.config.ts",
+        )
+
+        for path in paths:
+            with self.subTest(path=path):
+                category, reason, keep, adapter, duplicate = _extension_note(path)
+                self.assertEqual(category, "E")
+                self.assertNotIn("待人工审核", (reason, keep, adapter, duplicate))
+
+    def test_research_navigation_upstream_diffs_have_curated_reason(self):
+        pin = Pin("ErTasselli/OpenTerminal", "a" * 40, "MIT", "apps/openterminal")
+        diff = TreeDiff((), ("web/components/CommandPalette.tsx", "web/components/Terminal.tsx"), (), ())
+
+        report = render_report(diff, pin, "b" * 40, "2026-10-08 00:00:00 UTC", "c" * 64)
+
+        self.assertIn("校验后的 Research 外链", report)
+        self.assertNotIn("未登记的上游差异", report)
+
     def test_classifies_exact_modified_only_deleted_and_symlink_paths(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -79,6 +107,8 @@ class UpstreamDiffTests(unittest.TestCase):
         self.assertIn("A · exact upstream files: 1", report)
         self.assertIn("B · modified upstream files: 1", report)
         self.assertIn("C/E · EqoBoard-only files: 1", report)
+        self.assertIn("C · product extension widgets: 0", report)
+        self.assertIn("E · domain, security, and integration files: 1", report)
         self.assertIn("Deleted upstream files: 1", report)
         self.assertIn("待人工审核", report)
 
