@@ -33,4 +33,4 @@ EqoBoard 保留其 Workspace、widgets、charts、research provider 和状态管
 
 ## 版本锁
 
-机器可读版本记录见 `third_party/upstreams.lock.json`。OpenTerminal、AG Grid Community 和 OpenBB 的固定版本及许可证副本由 `tests/test_upstream_provenance.py`、`tests/test_openbb_supply_chain.py` 和 `tools/openbb/verify-upstream.sh` 校验。升级必须经显式 PR 更新 source commit、归档 SHA、许可证副本、SBOM 和构建审查记录；禁止跟踪 upstream 分支。
+机器可读版本记录见 `third_party/upstreams.lock.json`。OpenTerminal、AG Grid Community 和 OpenBB 的固定版本及许可证副本由 `tests/test_upstream_provenance.py`、`tests/test_openbb_supply_chain.py` 和 `tools/openbb/verify-upstream.sh` 校验。现有 `market-contracts` CI job 获取并校验固定 OpenBB archive、许可证及 Syft 二进制 SHA，然后上传 source-only SPDX artifact；不构建 OpenBB 镜像，也不宣称 image SBOM。升级必须经显式 PR 更新 source commit、归档 SHA、许可证副本、SBOM 和构建审查记录；禁止跟踪 upstream 分支。
