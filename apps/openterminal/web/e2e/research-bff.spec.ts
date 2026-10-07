@@ -71,6 +71,10 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   await page.goto(`${WEB_ORIGIN}/api/healthz`);
   expect(researchCookieHeader).not.toContain("terminal-session-must-not-cross-hostnames");
 
+  const anonymousAuthCheck = await request.get(`${WEB_ORIGIN}/api/research/auth-check`);
+  expect(anonymousAuthCheck.status()).toBe(401);
+  expect(await anonymousAuthCheck.json()).toEqual({ error: "authentication_required" });
+
   for (const path of [
     "/", "/login", "/api/eqo/orders/preview", "/api/portfolios", "/api/quotes",
     "/api/auth/not-a-nextauth-endpoint", "/_next/static/chunks/app.js",
@@ -80,6 +84,7 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   }
   expect((await request.get(`${WEB_ORIGIN}/%61pi/eqo/orders/preview`)).status()).toBe(404);
   expect((await request.post(`${WEB_ORIGIN}/api/openbb/openbb/v1/options`, { data: {} })).status()).toBe(404);
+  expect((await request.post(`${WEB_ORIGIN}/api/research/auth-check`)).status()).toBe(404);
 
   const sameHostnameReadiness = await request.get(`${SAME_HOSTNAME_WEB_ORIGIN}/api/readyz`);
   expect(sameHostnameReadiness.status()).toBe(503);
@@ -104,6 +109,9 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
 
 test("market-reader OIDC session reaches SIP and OPRA only through short research delegation", async ({ page, request }) => {
   await signIn(page, request, ["eqoboard-market-reader"]);
+  const authCheck = await page.context().request.get(`${WEB_ORIGIN}/api/research/auth-check`);
+  expect(authCheck.status()).toBe(204);
+  expect(await authCheck.text()).toBe("");
   const cookies = await page.context().cookies(WEB_ORIGIN);
   const cookieNames = cookies.map((cookie) => cookie.name);
   expect(cookieNames).toContain("eqo-research-session-token");
@@ -165,6 +173,9 @@ test("market-reader OIDC session reaches SIP and OPRA only through short researc
 
 test("wrong role, feed denial, invalid input, and unknown paths fail without fallback", async ({ page, request }) => {
   await signIn(page, request, ["eqoboard-workspace-editor"]);
+  const authCheck = await page.context().request.get(`${WEB_ORIGIN}/api/research/auth-check`);
+  expect(authCheck.status()).toBe(403);
+  expect(await authCheck.json()).toEqual({ error: "action_forbidden" });
   const forbidden = await page.context().request.get(`${WEB_ORIGIN}/api/openbb/openbb/v1/stocks?symbols=QQQ`);
   expect(forbidden.status()).toBe(403);
   expect(await metrics(request)).toMatchObject({ gateway: { requests: {}, authorized: 0 } });

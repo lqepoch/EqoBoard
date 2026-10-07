@@ -58,7 +58,7 @@ type PrincipalResult =
   | { ok: true; principal: VerifiedWebPrincipal }
   | { ok: false; response: NextResponse };
 
-async function authorizeOidcPrincipal(request: Request, requiredScope: ActionScope): Promise<PrincipalResult> {
+async function authorizeOidcPrincipal(requiredScope: ActionScope): Promise<PrincipalResult> {
   if (!isOidcConfigured()) return { ok: false, response: jsonError(503, "identity_service_unavailable") };
 
   let session;
@@ -99,7 +99,7 @@ export async function authorizeBffRequest(
   const boundaryError = validRequestHeaders(request);
   if (boundaryError) return { ok: false, response: boundaryError };
   if (!isAuthRuntimeConfigured()) return { ok: false, response: jsonError(503, "identity_service_unavailable") };
-  const identity = await authorizeOidcPrincipal(request, requiredScope);
+  const identity = await authorizeOidcPrincipal(requiredScope);
   if (!identity.ok) return identity;
 
   const secret = audience === "eqoboard-gateway"
@@ -147,7 +147,7 @@ export async function authorizeResearchGatewayRequest(request: Request): Promise
     return { ok: false, response: jsonError(503, "identity_service_unavailable") };
   }
 
-  const identity = await authorizeOidcPrincipal(request, "market:read");
+  const identity = await authorizeOidcPrincipal("market:read");
   if (!identity.ok) return identity;
   const secret = process.env.EQO_RESEARCH_JWT_SECRET;
   if (!secret || secret.length < 64) {
@@ -169,6 +169,18 @@ export async function authorizeResearchGatewayRequest(request: Request): Promise
     .sign(new TextEncoder().encode(secret));
 
   return { ok: true, principal, token };
+}
+
+/**
+ * Internal reverse-proxy auth_request check for the isolated Lite ingress.
+ * It validates the user's research session and market role without minting a
+ * Gateway token; only the OpenBB data route may create that delegation.
+ */
+export async function authorizeResearchSession(): Promise<NextResponse> {
+  if (!isResearchAuthRuntimeConfigured()) return jsonError(503, "identity_service_unavailable");
+  const identity = await authorizeOidcPrincipal("market:read");
+  if (!identity.ok) return identity.response;
+  return new NextResponse(null, { status: 204, headers: { "Cache-Control": "no-store" } });
 }
 
 export type JsonBodyResult =

@@ -17,6 +17,7 @@ function researchPathAllowed(request: NextRequest): boolean {
   if (pathname === "/api/healthz" || pathname === "/api/readyz") {
     return method === "GET" || method === "HEAD";
   }
+  if (pathname === "/api/research/auth-check") return method === "GET";
   if (pathname.startsWith("/api/auth/")) {
     const endpoint = pathname.slice("/api/auth/".length);
     return AUTH_ENDPOINT.test(endpoint) && ["GET", "POST"].includes(method);
