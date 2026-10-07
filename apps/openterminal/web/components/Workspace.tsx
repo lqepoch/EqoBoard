@@ -15,6 +15,9 @@ import ScreenerWidget from "./widgets/ScreenerWidget";
 import CryptoWidget from "./widgets/CryptoWidget";
 import MacroWidget from "./widgets/MacroWidget";
 import OptionsWidget from "./widgets/OptionsWidget";
+import IvSkewWidget from "./widgets/IvSkewWidget";
+import OptionTapeWidget from "./widgets/OptionTapeWidget";
+import VerticalSpreadWidget from "./widgets/VerticalSpreadWidget";
 import PortfolioWidget from "./widgets/PortfolioWidget";
 import AiWidget from "./widgets/AiWidget";
 import CalendarWidget from "./widgets/CalendarWidget";
@@ -36,6 +39,9 @@ function WidgetBody({ widget }: { widget: WidgetInstance }) {
     case "crypto": return <CryptoWidget />;
     case "macro": return <MacroWidget />;
     case "options": return <OptionsWidget widget={widget} />;
+    case "ivskew": return <IvSkewWidget widget={widget} />;
+    case "optiontape": return <OptionTapeWidget widget={widget} />;
+    case "vertical": return <VerticalSpreadWidget widget={widget} />;
     case "portfolio": return <PortfolioWidget />;
     case "ai": return <AiWidget />;
     case "calendar": return <CalendarWidget />;
@@ -94,7 +100,8 @@ function SymbolTag({ widget, activeSymbol }: { widget: WidgetInstance; activeSym
 const TITLES: Record<string, string> = {
   quote: "Quote", chart: "Chart", watchlist: "Watchlist", news: "News",
   heatmap: "Heatmap", screener: "Screener", crypto: "Crypto",
-  macro: "Macro / Indexes", options: "Option Chain", portfolio: "Portfolio", ai: "AI Assistant",
+  macro: "Macro / Indexes", options: "Option Chain", ivskew: "IV Skew",
+  optiontape: "OPRA Tape", vertical: "Vertical Spread", portfolio: "Portfolio", ai: "AI Assistant",
   calendar: "Calendar", insider: "Insider Transactions", tv: "Live TV", recap: "Market Recap",
 };
 
@@ -106,7 +113,7 @@ export default function Workspace() {
   const toggleLinked = useTerminal((s) => s.toggleLinked);
   const activeSymbol = useTerminal((s) => s.activeSymbol);
 
-  const symbolAware = new Set(["quote", "chart", "news", "options", "insider"]);
+  const symbolAware = new Set(["quote", "chart", "news", "options", "ivskew", "optiontape", "vertical", "insider"]);
 
   return (
     <Grid

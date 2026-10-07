@@ -5,7 +5,7 @@ import {useQuery,useQueryClient} from "@tanstack/react-query";
 import {AgGridReact} from "ag-grid-react";
 import {AllCommunityModule,ModuleRegistry,themeQuartz,type CellClickedEvent,type ColDef,type ColGroupDef} from "ag-grid-community";
 import {apiGet,fmt} from "../../lib/api";
-import {useWidgetSymbol,type WidgetInstance} from "../../store/terminal";
+import {useTerminal,useWidgetSymbol,type WidgetInstance} from "../../store/terminal";
 import type {EqoChain} from "../../lib/eqo-market";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -68,6 +68,7 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const [connected,setConnected]=useState(false);
   const [subscriptionError,setSubscriptionError]=useState<string|null>(null);
   const [selected,setSelected]=useState<Contract|null>(null);
+  const selectOptionLeg=useTerminal(s=>s.selectOptionLeg);
   const consumerId=useRef<string|null>(null);
   const grid=useRef<AgGridReact<Row>>(null);
   const queryClient=useQueryClient();
@@ -140,7 +141,11 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   },[index,queryClient,symbol,expiry]);
   function onCellClick(e:CellClickedEvent<Row>){
     const side=e.column.getColId().split(".")[0];
-    if((side==="call"||side==="put")&&e.data?.[side])setSelected(e.data[side]);
+    if((side==="call"||side==="put")&&e.data?.[side]){
+      const contract=e.data[side]!;
+      setSelected(contract);
+      selectOptionLeg({symbol:contract.symbol,strike:contract.strike,right:contract.right});
+    }
   }
   return <div className="h-full min-h-0 flex flex-col">
     <div className="flex items-center gap-2 flex-wrap px-2 py-1 border-b border-[#262626] text-[11px]">

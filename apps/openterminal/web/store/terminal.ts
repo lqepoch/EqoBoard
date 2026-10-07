@@ -14,6 +14,9 @@ export type WidgetType =
   | "crypto"
   | "macro"
   | "options"
+  | "ivskew"
+  | "optiontape"
+  | "vertical"
   | "portfolio"
   | "ai"
   | "calendar"
@@ -29,6 +32,12 @@ export type WidgetInstance = {
 };
 
 export type LayoutItem = { i: string; x: number; y: number; w: number; h: number };
+export type OptionLeg = {
+  symbol: string;
+  side: "buy" | "sell";
+  strike: number;
+  right: "call" | "put";
+};
 
 type TerminalState = {
   activeSymbol: string;
@@ -36,8 +45,12 @@ type TerminalState = {
   layout: LayoutItem[];
   watchlist: string[];
   commandOpen: boolean;
+  optionLegs: OptionLeg[];
   setActiveSymbol: (s: string) => void;
   setCommandOpen: (open: boolean) => void;
+  selectOptionLeg: (contract: Omit<OptionLeg, "side">) => void;
+  setOptionLegSide: (symbol: string, side: OptionLeg["side"]) => void;
+  clearOptionLegs: () => void;
   addWidget: (type: WidgetType, symbol?: string) => void;
   removeWidget: (id: string) => void;
   setWidgetSymbol: (id: string, symbol: string) => void;
@@ -53,6 +66,9 @@ const DEFAULT_WIDGETS: WidgetInstance[] = [
   { id: "w-options", type: "options", linked: true },
   { id: "w-quote", type: "quote", linked: true },
   { id: "w-watchlist", type: "watchlist", linked: false },
+  { id: "w-ivskew", type: "ivskew", linked: true },
+  { id: "w-optiontape", type: "optiontape", linked: true },
+  { id: "w-vertical", type: "vertical", linked: true },
   { id: "w-news", type: "news", linked: true },
   { id: "w-macro", type: "macro", linked: false },
 ];
@@ -62,8 +78,11 @@ const DEFAULT_LAYOUT: LayoutItem[] = [
   { i: "w-quote", x: 7, y: 0, w: 5, h: 6 },
   { i: "w-watchlist", x: 7, y: 6, w: 5, h: 6 },
   { i: "w-options", x: 0, y: 12, w: 12, h: 11 },
-  { i: "w-news", x: 0, y: 23, w: 7, h: 7 },
-  { i: "w-macro", x: 7, y: 23, w: 5, h: 7 },
+  { i: "w-ivskew", x: 0, y: 23, w: 5, h: 8 },
+  { i: "w-optiontape", x: 5, y: 23, w: 3, h: 8 },
+  { i: "w-vertical", x: 8, y: 23, w: 4, h: 8 },
+  { i: "w-news", x: 0, y: 31, w: 7, h: 7 },
+  { i: "w-macro", x: 7, y: 31, w: 5, h: 7 },
 ];
 
 const SIZE_BY_TYPE: Record<WidgetType, { w: number; h: number }> = {
@@ -76,6 +95,9 @@ const SIZE_BY_TYPE: Record<WidgetType, { w: number; h: number }> = {
   crypto: { w: 6, h: 9 },
   macro: { w: 5, h: 7 },
   options: { w: 12, h: 9 },
+  ivskew: { w: 5, h: 8 },
+  optiontape: { w: 4, h: 8 },
+  vertical: { w: 4, h: 9 },
   portfolio: { w: 7, h: 8 },
   ai: { w: 5, h: 10 },
   calendar: { w: 12, h: 11 },
@@ -92,11 +114,26 @@ export const useTerminal = create<TerminalState>()(
       layout: DEFAULT_LAYOUT,
       watchlist: ["QQQ", "SPY", "IWM", "NVDA", "TSLA", "AAPL", "MSFT", "GLD"],
       commandOpen: false,
+      optionLegs: [],
       setActiveSymbol: (s) => {
         const sym = normalizeSymbol(s);
         if (sym) set({ activeSymbol: sym });
       },
       setCommandOpen: (open) => set({ commandOpen: open }),
+      selectOptionLeg: (contract) => set((st) => {
+        if (st.optionLegs.some((leg) => leg.symbol === contract.symbol)) {
+          return { optionLegs: st.optionLegs.filter((leg) => leg.symbol !== contract.symbol) };
+        }
+        const leg: OptionLeg = {
+          ...contract,
+          side: st.optionLegs.length === 0 ? "buy" : "sell",
+        };
+        return { optionLegs: st.optionLegs.length >= 2 ? [leg] : [...st.optionLegs, leg] };
+      }),
+      setOptionLegSide: (symbol, side) => set((st) => ({
+        optionLegs: st.optionLegs.map((leg) => leg.symbol === symbol ? { ...leg, side } : leg),
+      })),
+      clearOptionLegs: () => set({ optionLegs: [] }),
       addWidget: (type, symbol) =>
         set((st) => {
           const id = `w-${type}-${Date.now()}`;
