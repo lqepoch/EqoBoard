@@ -85,7 +85,7 @@ test("[dev-only] typed UNKNOWN browser outcome keeps the client order ID and for
       detail: `The response was lost while reconciling preview ${previewId}.`,
     }),
   }));
-  await page.goto("/__e2e__/order-outcome");
+  await page.goto("/e2e/order-outcome");
   await page.getByRole("button", { name: "Confirm existing preview fixture" }).click();
   const outcome = page.getByTestId("order-outcome");
   await expect(outcome).toContainText("Order outcome: UNKNOWN");
@@ -97,6 +97,6 @@ test("[dev-only] typed UNKNOWN browser outcome keeps the client order ID and for
 
 test("production build does not expose the order-outcome fixture route", async ({ request }) => {
   test.skip(process.env.E2E_PRODUCTION !== "1", "Production route assertion runs in the container browser suite");
-  const response = await request.get("/__e2e__/order-outcome");
+  const response = await request.get("/e2e/order-outcome");
   expect(response.status()).toBe(404);
 });
