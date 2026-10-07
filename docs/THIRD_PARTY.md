@@ -23,3 +23,7 @@ EqoBoard 保留其 Workspace、widgets、charts、research provider 和状态管
 - Workspace source repository在 2026-10-01 已归档；OpenBB 官方同日公布公司业务收尾、OpenBQ 资产承接和 Workspace/FINOS 治理计划。
 
 因此 OpenBB connector 保持松耦合，Rust API 才是稳定数据契约。未来 Workspace/OpenBQ/FINOS spec 变化只影响兼容层。
+
+## 版本锁
+
+机器可读版本记录见 `third_party/upstreams.lock.json`；CI 会验证 OpenTerminal SHA、MIT 许可、AG Grid 版本、OpenBB Workspace Apache-2.0 基线和已归档状态。

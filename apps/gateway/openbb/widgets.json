@@ -2,7 +2,7 @@
   "eqo_sip_watchlist": {
     "name": "EqoBoard SIP Stock Quotes",
     "description": "US equities SIP quote snapshots from Alpaca Plus; source and as-of timestamp preserved. Fails explicitly if SIP access is unavailable.",
-    "endpoint": "openbb/stocks",
+    "endpoint": "openbb/v1/stocks",
     "category": "EqoBoard",
     "subCategory": "Stocks",
     "type": "table",
@@ -67,7 +67,7 @@
   "eqo_opra_contracts": {
     "name": "EqoBoard OPRA Option Chain",
     "description": "Alpaca Plus OPRA contract snapshots with IV and Greeks; null metrics remain missing. Date is in New York market calendar.",
-    "endpoint": "openbb/options",
+    "endpoint": "openbb/v1/options",
     "category": "EqoBoard",
     "subCategory": "Options",
     "type": "table",
@@ -160,7 +160,7 @@
   "eqo_sip_bars": {
     "name": "EqoBoard SIP OHLCV",
     "description": "Alpaca SIP historical bars, exact market timestamp; requested timeframe and window must fit the current page bound.",
-    "endpoint": "openbb/bars",
+    "endpoint": "openbb/v1/bars",
     "category": "EqoBoard",
     "subCategory": "Stocks",
     "type": "table",

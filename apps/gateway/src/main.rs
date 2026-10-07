@@ -4,7 +4,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Query, Request, State,
     },
-    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
+    http::{header, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
     response::{
         sse::{Event, KeepAlive, Sse},
@@ -798,11 +798,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(prune_leases(state.clone()));
     let api = Router::new()
         .route("/api/v1/status", get(status))
-        .route("/widgets.json", get(openbb_widgets))
-        .route("/apps.json", get(openbb_apps))
-        .route("/openbb/stocks", get(openbb_stocks))
-        .route("/openbb/options", get(openbb_options))
-        .route("/openbb/bars", get(openbb_bars))
         .route("/api/v1/stream/sse", get(live_sse))
         .route("/api/v1/stocks/snapshots", get(stock_snapshots))
         .route("/api/v1/stocks/bars", get(stock_bars))
@@ -812,20 +807,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/orders/preview", post(order_preview))
         .route("/api/v1/orders/submit", post(order_submit))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
-    let web_dist = std::env::var("EQO_WEB_DIST").unwrap_or_else(|_| "./apps/web/dist".into());
-    let app = Router::new()
+    let web_dist = std::env::var("EQO_WEB_DIST").unwrap_or_else(|_| "./apps/gateway/empty".into());
+    let openbb_api = Router::new()
+        .route("/openbb/v1/stocks", get(openbb_stocks))
+        .route("/openbb/v1/options", get(openbb_options))
+        .route("/openbb/v1/bars", get(openbb_bars))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+    let mut app = Router::new()
+        .route("/widgets.json", get(openbb_widgets))
+        .route("/apps.json", get(openbb_apps))
         .route("/healthz", get(healthz))
         .route("/api/v1/stream", get(market_ws))
         .merge(api)
+        .merge(openbb_api)
         .fallback_service(ServeDir::new(web_dist).append_index_html_on_directories(true))
         .layer(TraceLayer::new_for_http())
-        .layer(
-            CorsLayer::new()
-                .allow_origin(HeaderValue::from_static("https://pro.openbb.co"))
-                .allow_methods([Method::GET, Method::OPTIONS])
-                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]),
-        )
         .with_state(state);
+    if let Some(raw) = std::env::var("EQO_OPENBB_ALLOWED_ORIGIN")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
+        let local_http =
+            raw.starts_with("http://127.0.0.1:") || raw.starts_with("http://localhost:");
+        if raw == "*" || !(raw.starts_with("https://") || local_http) {
+            return Err("EQO_OPENBB_ALLOWED_ORIGIN requires HTTPS or loopback HTTP".into());
+        }
+        let origin: axum::http::HeaderValue = raw.parse()?;
+        app = app.layer(
+            CorsLayer::new()
+                .allow_origin(origin)
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+                .allow_methods([Method::GET, Method::OPTIONS]),
+        );
+    }
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!(addr=%addr,"EqoBoard listening");
     axum::serve(listener, app).await?;
