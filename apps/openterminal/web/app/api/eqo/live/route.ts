@@ -1,29 +1,92 @@
-import {NextRequest,NextResponse} from "next/server";
-export const runtime="nodejs";
-export const dynamic="force-dynamic";
+import { NextRequest, NextResponse } from "next/server";
+import { authorizeBffRequest } from "@/lib/eqo-auth";
 
-/** SSE relay: only the Next.js server knows the Rust gateway's access token. */
-export async function GET(req:NextRequest) {
-  const base=(process.env.EQO_RUST_URL??"http://127.0.0.1:8080").replace(/\/+$/,"");
-  const headers:Record<string,string>={Accept:"text/event-stream"};
-  if(process.env.EQO_ACCESS_TOKEN)headers.Authorization="Bearer "+process.env.EQO_ACCESS_TOKEN;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/** The browser receives a user-authorized stream; only the BFF signs Gateway credentials. */
+export async function GET(req: NextRequest) {
+  const auth = await authorizeBffRequest(req, "market:stream", "eqoboard-gateway");
+  if (!auth.ok) return auth.response;
+
+  const base = (process.env.EQO_RUST_URL ?? "http://127.0.0.1:8080").replace(/\/+$/, "");
+  const upstreamAbort = new AbortController();
+  let connectDeadline: ReturnType<typeof setTimeout> | undefined;
+  let sessionDeadline: ReturnType<typeof setTimeout> | undefined;
+  const cleanup = () => {
+    if (connectDeadline) clearTimeout(connectDeadline);
+    if (sessionDeadline) clearTimeout(sessionDeadline);
+    req.signal.removeEventListener("abort", abortForClient);
+  };
+  const abortForClient = () => {
+    upstreamAbort.abort(req.signal.reason);
+    cleanup();
+  };
+  req.signal.addEventListener("abort", abortForClient, { once: true });
+  connectDeadline = setTimeout(() => upstreamAbort.abort(new Error("gateway_connect_timeout")), 5_000);
   try {
-    const upstream=await fetch(base+"/api/v1/stream/sse",{
-      method:"GET",cache:"no-store",headers,signal:req.signal
+    const upstream = await fetch(`${base}/api/v1/stream/sse`, {
+      method: "GET",
+      cache: "no-store",
+      redirect: "manual",
+      headers: { accept: "text/event-stream", authorization: `Bearer ${auth.token}` },
+      signal: upstreamAbort.signal,
     });
-    if(!upstream.ok||!upstream.body){
-      return NextResponse.json({error:"Rust SSE feed unavailable",status:upstream.status},
-        {status:upstream.ok?502:upstream.status});
+    if (connectDeadline) clearTimeout(connectDeadline);
+    if (!upstream.ok || !upstream.body) {
+      cleanup();
+      return NextResponse.json(
+        { error: "market_stream_unavailable", status: upstream.status },
+        { status: upstream.ok ? 502 : upstream.status, headers: { "Cache-Control": "no-store" } },
+      );
     }
-    return new Response(upstream.body,{
-      status:200,
-      headers:{
-        "Content-Type":"text/event-stream",
-        "Cache-Control":"no-cache, no-transform",
-        "X-Accel-Buffering":"no"
-      }
+    const remainingSessionMs = auth.principal.sessionExpiresAt - Date.now();
+    if (remainingSessionMs <= 0) {
+      cleanup();
+      upstreamAbort.abort(new Error("session_expired"));
+      return NextResponse.json({ error: "authentication_required" }, { status: 401 });
+    }
+    sessionDeadline = setTimeout(
+      () => upstreamAbort.abort(new Error("session_expired")),
+      remainingSessionMs,
+    );
+
+    const reader = upstream.body.getReader();
+    const authorizedStream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            cleanup();
+            controller.close();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch {
+          cleanup();
+          controller.close();
+        }
+      },
+      async cancel(reason) {
+        cleanup();
+        upstreamAbort.abort(reason);
+        await reader.cancel(reason).catch(() => undefined);
+      },
     });
-  }catch{
-    return NextResponse.json({error:"Cannot connect to Rust live data feed"},{status:502});
+
+    return new Response(authorizedStream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch {
+    cleanup();
+    return NextResponse.json(
+      { error: "market_stream_unavailable" },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }

@@ -15,6 +15,7 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "fast-xml-parser": "^4.5.1",
+    "jose": "6.2.12",
     "zod": "^3.24.1"
   },
   "devDependencies": {

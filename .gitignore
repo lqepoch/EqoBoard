@@ -6,6 +6,10 @@ node_modules/
 dist/
 target/
 coverage/
+apps/openterminal/web/.next/
+apps/openterminal/web/playwright-report/
+apps/openterminal/web/test-results/
+*.tsbuildinfo
 *.log
 *.db
 .DS_Store

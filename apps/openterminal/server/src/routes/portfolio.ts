@@ -4,15 +4,32 @@ import { db } from "../db.js";
 
 export const portfolioRouter = Router();
 
-portfolioRouter.get("/", (_req, res) => {
-  res.json(db.prepare("SELECT * FROM portfolios ORDER BY id").all());
+function getOwner(req: import("express").Request, res: import("express").Response): string | null {
+  const owner = req.verifiedPrincipal?.ownerId;
+  if (!owner) {
+    res.status(401).json({ error: "authentication_required" });
+    return null;
+  }
+  return owner;
+}
+
+function ownsPortfolio(portfolioId: string, owner: string): boolean {
+  return Boolean(db.prepare("SELECT 1 FROM portfolios WHERE id = ? AND owner_sub = ?").get(portfolioId, owner));
+}
+
+portfolioRouter.get("/", (req, res) => {
+  const owner = getOwner(req, res);
+  if (!owner) return;
+  res.json(db.prepare("SELECT id, name, created_at FROM portfolios WHERE owner_sub = ? ORDER BY id").all(owner));
 });
 
 portfolioRouter.post("/", (req, res) => {
+  const owner = getOwner(req, res);
+  if (!owner) return;
   const parsed = z.object({ name: z.string().min(1).max(64) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
   try {
-    const info = db.prepare("INSERT INTO portfolios (name) VALUES (?)").run(parsed.data.name);
+    const info = db.prepare("INSERT INTO portfolios (name, owner_sub) VALUES (?, ?)").run(parsed.data.name, owner);
     res.status(201).json({ id: info.lastInsertRowid, name: parsed.data.name });
   } catch {
     res.status(409).json({ error: "portfolio name already exists" });
@@ -20,8 +37,10 @@ portfolioRouter.post("/", (req, res) => {
 });
 
 portfolioRouter.delete("/:id", (req, res) => {
-  db.prepare("DELETE FROM transactions WHERE portfolio_id = ?").run(req.params.id);
-  db.prepare("DELETE FROM portfolios WHERE id = ?").run(req.params.id);
+  const owner = getOwner(req, res);
+  if (!owner) return;
+  if (!ownsPortfolio(req.params.id, owner)) return res.status(404).json({ error: "portfolio_not_found" });
+  db.prepare("DELETE FROM portfolios WHERE id = ? AND owner_sub = ?").run(req.params.id, owner);
   res.status(204).end();
 });
 
@@ -34,6 +53,9 @@ const txSchema = z.object({
 });
 
 portfolioRouter.get("/:id/transactions", (req, res) => {
+  const owner = getOwner(req, res);
+  if (!owner) return;
+  if (!ownsPortfolio(req.params.id, owner)) return res.status(404).json({ error: "portfolio_not_found" });
   res.json(
     db
       .prepare("SELECT * FROM transactions WHERE portfolio_id = ? ORDER BY executed_at DESC, id DESC")
@@ -42,6 +64,9 @@ portfolioRouter.get("/:id/transactions", (req, res) => {
 });
 
 portfolioRouter.post("/:id/transactions", (req, res) => {
+  const owner = getOwner(req, res);
+  if (!owner) return;
+  if (!ownsPortfolio(req.params.id, owner)) return res.status(404).json({ error: "portfolio_not_found" });
   const parsed = txSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
   const t = parsed.data;
@@ -58,12 +83,18 @@ portfolioRouter.post("/:id/transactions", (req, res) => {
 });
 
 portfolioRouter.delete("/:id/transactions/:txId", (req, res) => {
+  const owner = getOwner(req, res);
+  if (!owner) return;
+  if (!ownsPortfolio(req.params.id, owner)) return res.status(404).json({ error: "portfolio_not_found" });
   db.prepare("DELETE FROM transactions WHERE id = ? AND portfolio_id = ?").run(req.params.txId, req.params.id);
   res.status(204).end();
 });
 
 /** Aggregated positions with average cost and realized PnL (FIFO-free, average-cost method). */
 portfolioRouter.get("/:id/positions", (req, res) => {
+  const owner = getOwner(req, res);
+  if (!owner) return;
+  if (!ownsPortfolio(req.params.id, owner)) return res.status(404).json({ error: "portfolio_not_found" });
   const txs = db
     .prepare("SELECT * FROM transactions WHERE portfolio_id = ? ORDER BY executed_at, id")
     .all(req.params.id) as Array<{ symbol: string; side: string; quantity: number; price: number }>;

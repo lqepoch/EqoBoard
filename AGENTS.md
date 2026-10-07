@@ -7,6 +7,7 @@
 3. OpenBB 位于 Rust Gateway 的兼容接口层：`/widgets.json`、`/apps.json`、`/openbb/*`。修改前核对当前官方 Workspace spec。
 4. Rust 领域模型在 `crates/domain`，Alpaca 在 `crates/alpaca-data`，执行适配在 `crates/execution`，HTTP/WS 在 `apps/gateway`。
 5. ALPACA_KEY / ALPACA_SECRET 只能进入服务端环境；PR CI 不读取组织交易凭据。任何 mock 数据必须显式标识，不能伪装行情。
-6. live 委托保持拒绝；Paper 也必须经过一次性 preview、限额、原子多腿、幂等、审计与对账。
+6. live 委托保持拒绝；当前 Gateway 的 effective execution 固定为 disabled，即使配置请求 Paper 也只保留只读和离线 preview。Paper 还需一次性服务端锁定 preview、限额、原子多腿、幂等、持久 outbox、账户身份、审计和对账后才可单独启用。
 7. 上游依赖固定版本/commit，保留许可证和变更记录；OpenTerminal 升级先做 diff、契约测试、构建和回滚计划。
 8. 变更前阅读所属目录 AGENTS.md 和匹配的 `.agents/skills/**/SKILL.md`。
+9. 浏览器只通过 OpenTerminal BFF；由受信 OIDC issuer 建立会话并映射 allowlist roles。服务委托 JWT 必须短时、区分用户与服务身份；Gateway 不信任身份头或静态 `EQO_ACCESS_TOKEN`。

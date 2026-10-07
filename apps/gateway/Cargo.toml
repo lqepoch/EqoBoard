@@ -19,3 +19,7 @@ tracing.workspace = true
 uuid.workspace = true
 dotenvy = "0.15"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+jsonwebtoken = { version = "=10.2.0", default-features = false, features = ["rust_crypto"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

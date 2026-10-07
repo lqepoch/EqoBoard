@@ -4,7 +4,13 @@ import { marketRouter } from "./routes/market.js";
 import { portfolioRouter } from "./routes/portfolio.js";
 import { aiRouter } from "./routes/ai.js";
 import { allStats } from "./providers/registry.js";
-import { requireApiKey } from "./auth.js";
+import {
+  requireDelegatedPrincipal,
+  requirePortfolioScope,
+  requireResearchScopeForPath,
+  requireResearchServiceKey,
+  requireScopes,
+} from "./auth.js";
 import { rateLimit } from "./rateLimit.js";
 
 const app = express();
@@ -27,30 +33,48 @@ if (process.env.TRUST_PROXY === "1") {
 // origin.
 const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
 app.use(cors({ origin: webOrigin }));
-app.use(express.json());
+app.use(express.json({ limit: "64kb", strict: true }));
 
-// No API key here by design (market.ts routes proxy free, keyless public data),
-// but still bounded per-IP: unlike /api/ai and /api/portfolios, an unauthenticated
-// caller could otherwise repeat the multi-provider fan-out in market.ts (up to
-// hundreds of outbound calls per request — see getQuotes) fast enough to get
-// this deployment's IP rate-limited or banned by Nasdaq/Yahoo/Stooq/SEC.
-app.use("/api", rateLimit({ windowMs: 60_000, max: 240 }), marketRouter);
-// Portfolio data and the paid AI endpoint require a shared secret; see auth.ts.
-app.use("/api/portfolios", requireApiKey, portfolioRouter);
+app.get("/healthz", (_req, res) => res.json({ status: "ok", service: "openterminal-research" }));
+app.get("/readyz", (_req, res) => {
+  const ready = Boolean(
+    process.env.EQO_RESEARCH_API_KEY && process.env.EQO_RESEARCH_API_KEY.length >= 32 &&
+    process.env.EQO_RESEARCH_JWT_SECRET && process.env.EQO_RESEARCH_JWT_SECRET.length >= 64,
+  );
+  res.status(ready ? 200 : 503).json({
+    ready,
+    identity_validation_configured: ready,
+    execution_enabled: false,
+  });
+});
+
+// Every API call comes from the private Next BFF and carries both its service
+// key and a short-lived, user-bound delegation JWT. These credentials are
+// independent and neither is sent to the browser.
+app.use("/api", requireResearchServiceKey, requireDelegatedPrincipal);
+app.use("/api", requireResearchScopeForPath, rateLimit({ windowMs: 60_000, max: 240 }), marketRouter);
+app.use("/api/portfolios", requirePortfolioScope, portfolioRouter);
 app.use(
   "/api/ai",
-  requireApiKey,
+  requireScopes("research:ai"),
   rateLimit({ windowMs: 60_000, max: 10 }),
   aiRouter
 );
 
-app.get("/api/status", (_req, res) => {
+app.get("/api/status", requireScopes("research:read"), (_req, res) => {
   res.json({
     ok: true,
     time: new Date().toISOString(),
     providers: allStats(),
     ai: Boolean(process.env.ANTHROPIC_API_KEY),
   });
+});
+
+app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = typeof error === "object" && error !== null && "type" in error && error.type === "entity.too.large"
+    ? 413
+    : error instanceof SyntaxError ? 400 : 500;
+  res.status(status).json({ error: status === 413 ? "request_too_large" : status === 400 ? "invalid_json" : "request_failed" });
 });
 
 const PORT = Number(process.env.API_PORT ?? 4000);
