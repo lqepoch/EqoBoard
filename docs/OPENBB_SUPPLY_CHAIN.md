@@ -38,9 +38,21 @@ image: its SQLite 3.40 does not provide the `concat()` function used by the
 upstream user display-name query. The patch uses SQLAlchemy string operations
 (SQLite/PostgreSQL `||`, MySQL `concat()`) and the Docker build runs a SQLite
 regression before Cython compilation. A prior browser attempt against the old
-r3 candidate returned an API 500 on this query. That candidate used the
-previous patch and has a different build identity; it is not evidence for the
-currently locked recipe. The r4 image and browser retest remain pending.
+r3 candidate returned an API 500 on this query. The patch also removes one
+unused UDF script registration from `terminalpro/index.html`; the source change
+is SHA-locked and removes an unconsumed script reference rather than replacing
+or rewriting the upstream UI. The current recipe identity is
+`cfc03fb056e7c60226186f332d2dc7bf7eb6d30acd3de342fc7b7bb5efc77d47`.
+
+The previous identity `09028c906e342e873dce99693ff119e3382d4e600ec1a55d5370b9712caca3f8`
+has a successful r4 Docker build, 3/3 SQLite regressions, healthy container and
+HTTP 200 `/api/health`. Its OCI archive was recursively checked for every
+descriptor digest/size and successfully imported under an isolated rollback
+tag, where health reached `healthy`. This is historical evidence for the prior
+recipe only. Its build log, health record, OCI archive, image SBOM and rollback
+smoke are retained in the external artifact bundle; they do not establish the
+current recipe's image or browser behavior. The current identity's Lite image
+build and browser E2E must be recorded separately.
 
 The upstream source SPDX SBOM describes the pinned archive; the patched-source
 SPDX SBOM describes the verified Community patch result and frozen Bun/Poetry
@@ -92,11 +104,11 @@ patched-source SBOM records the locked frontend dependency graph absent from
 the compiled Vite bundle. Do not call an image config ID a RepoDigest. Keep the
 complete build record with the deployment reference. No image digest or
 deployment rollback target is established until those artifacts exist. The
-lock's release `image_digest` remains unset. The previous r3 candidate's OCI
-index and archive digests are host-local evidence for the previous patch, not
-the current recipe, a registry publication, or a deployed rollback reference.
+lock's release `image_digest` remains unset. Earlier candidate OCI index and
+archive digests are host-local evidence for their recorded patch, not the
+current recipe, a registry publication, or a deployed rollback reference.
 Generate a new OCI artifact and SBOM only from the current recipe; do not reuse
-the r3 inventory for the changed patch.
+an earlier inventory for a changed patch.
 
 For an image rollback, redeploy the last known healthy immutable OCI or
 registry reference recorded by the deployment. Do not rebuild the failed
