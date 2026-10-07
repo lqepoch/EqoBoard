@@ -87,9 +87,11 @@ Headlines aggregated and de‑duplicated across multiple sources, filterable per
 
 ## 🗂️ Data sources
 
-U.S. equity/ETF price, change, volume, history and earnings price-move fields use Alpaca SIP through the Rust Gateway. Option quote/trade fields use Alpaca OPRA. SIP/OPRA access depends on server-side credentials and account entitlement. A denied or unavailable feed is an explicit error; no IEX, indicative or research-price fallback is used.
+U.S. equity/ETF price, change, volume, history and earnings price-move fields request SIP through the Rust Gateway. Option quote/trade fields request OPRA. The Web/Node layer accepts and preserves matching Gateway `source_mode`/`source_label`; protocol configuration alone does not prove Alpaca data or entitlement. The current Gateway baseline omits some of this metadata, so legacy REST prices remain visible with source/time unknown and never qualify as `LIVE`. Isolated Next/browser fixtures show `OFFLINE MOCK — NOT MARKET DATA` and never count as live market evidence. A denied or unavailable feed is an explicit error; no IEX, indicative or research-price fallback is used.
 
 Option IV and Greeks come from Alpaca REST snapshot vendor/model fields, not OPRA itself. Until Alpaca supplies a separate model timestamp, the UI reports `model as-of unknown`; Gateway response time and quote/trade event time are not treated as model time. Research providers retain their own source and observation dates.
+
+The Gateway retains OpenBB-compatible `widgets.json`, `apps.json`, and research endpoints, but the OpenBB Workspace UI is not embedded in this OpenTerminal screen. Its authenticated Workspace/Lite entry remains a separate #13 integration task; these OpenTerminal browser fixtures do not claim an OpenBB session or Rust protocol integration.
 
 See [`../../docs/MARKET_SOURCES.md`](../../docs/MARKET_SOURCES.md) for the field-by-field source, as-of, coverage and failure contract. In particular, metadata timestamps may be unavailable, FRED/ECB dates are observation dates, and a connected browser is not proof that an upstream feed is ready.
 

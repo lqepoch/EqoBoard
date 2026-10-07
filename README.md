@@ -1,6 +1,6 @@
 # EqoBoard
 
-可二次开发的美股股票 + 期权终端。默认本地 UI 直接复用 **OpenTerminal** 的 MIT Workspace/Widget/Chart 体系；期权链使用 **AG Grid Community**；市场数据统一由 Rust/Tokio 网关读取 Alpaca Plus 的股票 **SIP** 与期权 **OPRA**；**OpenBB Workspace** 通过同一 Rust 后端作为研究/AI 第二工作台。
+可二次开发的美股股票 + 期权终端。默认本地 UI 直接复用 **OpenTerminal** 的 MIT Workspace/Widget/Chart 体系；期权链使用 **AG Grid Community**；美股/期权数据路径请求 Alpaca Plus 的 **SIP/OPRA**。仓库保留 OpenBB Workspace 兼容清单与 Gateway 研究 API；OpenBB UI 尚未嵌入主终端，认证 Workspace/Lite 联调属于后续 #13。
 
 ## 核心组合
 
@@ -10,10 +10,12 @@
 | 表格 | AG Grid Community 36.2 | 高频 async transaction、双边期权链 |
 | 图表 | OpenTerminal Lightweight Charts + Recharts | Alpaca SIP K线、OPRA IV |
 | 行情 | Rust + Tokio + Axum | SIP/OPRA REST/WS、50ms 批处理、租约、来源/时间戳 |
-| 研究工作台 | OpenBB Workspace custom backend | widgets.json、apps.json、SIP/OPRA 表格 |
+| 研究兼容入口 | Gateway 中的 OpenBB Workspace manifests/API | `widgets.json`、`apps.json`、受保护研究 API；#13 客户端认证联调未完成 |
 | 执行 | Rust BrokerAdapter | 当前版本 effective mode 固定为 disabled；Paper 和 Live 均不提交 |
 
 OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定提交见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。旧的自研 Vite 终端已退出仓库，防止两套 UI 长期分叉。
+
+OpenBB 兼容资源位于 `apps/gateway/openbb/` 与现有 Gateway 路由；当前 OpenTerminal 页面没有 OpenBB Workspace 导航入口。该兼容面不是已验收的第二套可登录终端，真实 OpenBB Lite/OIDC 委托联调继续由 #13 跟踪。
 
 浏览器只建立 **1 条 EqoBoard SSE 行情连接**。Quote、Watchlist、AG Grid Option Chain、OPRA Tape 共用这条 50ms 批量流；股票 Watchlist/活动 Widget 通过租约合并为一条 Alpaca SIP 上游订阅。REST 快照用于初始状态与周期校准。
 

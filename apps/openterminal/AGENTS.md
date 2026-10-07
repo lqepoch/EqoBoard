@@ -4,14 +4,15 @@
 
 - 上游基线见 `docs/THIRD_PARTY.md`。
 - 股票/期权价格、K线、Option Chain 只能通过 `web/lib/eqo-market.ts` → Rust Gateway。
+- Web/Node 只消费 Gateway 提供的可信来源/时间/状态字段，不推断 `feed=sip|opra` 就代表 Alpaca。当前 Gateway 基线缺少部分来源身份、实例和typed ACK字段：legacy REST 数值可以展示，但 source/as-of 必须标 unknown；legacy SSE 不得显示 LIVE。#3 Rust协议验收未由 Web/Node 测试代替。
 - FRED/SEC/FINRA/新闻等补充研究 Provider 可沿用上游 server。
 - EqoBoard 自有 widget 放在 `web/components/widgets`，优先复用当前依赖，避免再引入同类 UI 框架。
 - Option Chain 固定 AG Grid Community；空 IV/Greeks 不转换成 0。
-- 所有 U.S. 股票/ETF 的价格、涨跌、成交量、历史 bars、财报价格变动必须由 `Alpaca SIP` 提供；TradingView 只用于市场元数据和明确标注的研究字段。SIP 403/缺失时显示 unavailable，不回退到免费行情源。
-- 期权 quote/trade 使用 `Alpaca OPRA`。IV/Greeks 是 Alpaca REST snapshot 的 vendor/model 字段，不是 OPRA 原生字段；没有独立模型时间就显示 `model as-of unknown`，不能继承 quote/trade 或 Gateway response 时间。
-- Widget 将浏览器 SSE、上游认证、订阅 ACK、覆盖率和逐事件新鲜度分开显示。只有 Gateway ACK 能确认订阅；浏览器连接或 REST lease accepted 不能代表上游 ready/live。缺失 event time 保持 unknown。
-- Gateway `fresh_until` 存在时 UI 用共享时钟按该期限使 freshness 过期；旧投影没有该字段时使用有文档的五秒客户端显示保护阈值，不能称作 Gateway freshness policy。空闲 SSE 不得让旧 tick 永久保持 LIVE。
-- 同一行情状态由 `web/store/market.ts` 持有；REST watermark 按 feed/symbol/event type 防旧响应与旧 tick，epoch 变化/resync 会清理旧 live 值。订阅清理使用递增 generation tombstone。
+- 所有 U.S. 股票/ETF 的价格、涨跌、成交量、历史 bars、财报价格变动请求 `Alpaca SIP`；TradingView 只用于市场元数据和明确标注的研究字段。SIP 403/缺失时显示 unavailable，不回退到免费行情源；缺少可信来源字段的 legacy 数值需显示 source/as-of unknown。
+- 期权 quote/trade 请求 `Alpaca OPRA`。IV/Greeks 是 Alpaca REST snapshot 的 vendor/model 字段，不是 OPRA 原生字段；没有独立模型时间就显示 `model as-of unknown`，不能继承 quote/trade 或 Gateway response 时间。
+- Widget 将浏览器 SSE、上游认证、订阅 ACK、覆盖率和逐事件新鲜度分开显示。只有 Gateway ACK 能确认订阅；浏览器连接或 REST lease accepted 不能代表上游 ready/live。当前 Gateway 未发布 ACK 时显示 unknown/pending。缺失 event time 保持 unknown。
+- UI 用共享时钟同时执行 Gateway `fresh_until` 与独立五秒客户端保护阈值，较早者生效；服务器期限不能延长客户端上限。事件时间晚于同一发布的 `received_at` 时保持 unknown。五秒是显示保护，不是 Gateway freshness policy。空闲 SSE 不得让旧 tick 永久保持 LIVE。
+- 同一行情状态由 `web/store/market.ts` 持有；REST watermark 按 feed/symbol/event type 防旧响应与旧 tick，Gateway instance/epoch 变化或 resync 会清理旧 live 值。订阅客户端在 membership 更新和释放时发送递增 generation/tombstone；在 Gateway 返回可核验的 active generation/集合之前，不得宣称服务器已防止旧 cleanup/renew 竞态。
 - 行情来源、as-of 与 coverage 定义见 [`docs/MARKET_SOURCES.md`](../../docs/MARKET_SOURCES.md)。
 - 新交易 UI 只能调用服务端 `/api/eqo/orders/*`，浏览器不得接触券商/Alpaca密钥。
 - 所有 `/api` BFF 路由（含通用代理、订单、订阅和 SSE）必须要求当前 OIDC 会话及 action scope；写请求校验同源 Origin 和 bounded JSON。角色只来自受信 OIDC claims allowlist，不能由浏览器/session update 提升。
