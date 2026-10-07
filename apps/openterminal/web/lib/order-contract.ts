@@ -16,9 +16,19 @@ export type LockedOrderIntent = {
   quantity: number;
   limit_price: number;
   net_effect: "debit" | "credit";
-  legs: Array<{ symbol: string; side: "buy" | "sell" }>;
+  legs: ReadonlyArray<{ symbol: string; side: "buy" | "sell" }>;
   account_id?: string | null;
 };
+
+/** A server preview may bind an account, but its executable order fields must match the submitted intent. */
+export function orderIntentMatches(actual: LockedOrderIntent, requested: LockedOrderIntent): boolean {
+  return actual.broker === requested.broker && actual.environment === requested.environment &&
+    actual.kind === requested.kind && actual.symbol === requested.symbol &&
+    actual.quantity === requested.quantity && actual.limit_price === requested.limit_price &&
+    actual.net_effect === requested.net_effect && actual.legs.length === requested.legs.length &&
+    actual.legs.every((leg, index) =>
+      leg.symbol === requested.legs[index]?.symbol && leg.side === requested.legs[index]?.side);
+}
 
 export type LockedPreview = {
   preview_id: string;

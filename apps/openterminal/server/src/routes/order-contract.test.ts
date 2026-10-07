@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { OrderRequestError, postOrderJson } from "../../../web/lib/order-api.js";
 import {
   isLockedPreview,
+  orderIntentMatches,
   orderErrorFromResponse,
 } from "../../../web/lib/order-contract.js";
 
@@ -40,6 +41,15 @@ describe("locked order preview contract", () => {
       ...lockedPreview.intent,
       legs: [{ symbol: "QQQ261009P00600000", side: "buy" }, { symbol: "not-occ", side: "sell" }],
     } })).toBe(false);
+  });
+
+  it("requires the server-locked executable intent to match the submitted intent", () => {
+    expect(orderIntentMatches(lockedPreview.intent, lockedPreview.intent)).toBe(true);
+    expect(orderIntentMatches({ ...lockedPreview.intent, limit_price: 0.2 }, lockedPreview.intent)).toBe(false);
+    expect(orderIntentMatches({
+      ...lockedPreview.intent,
+      legs: [lockedPreview.intent.legs[1], lockedPreview.intent.legs[0]],
+    }, lockedPreview.intent)).toBe(false);
   });
 });
 

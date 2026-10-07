@@ -6,6 +6,7 @@ import { apiGet, fmt } from "../../lib/api";
 import { OrderRequestError, postOrderJson } from "../../lib/order-api";
 import {
   isLockedPreview,
+  orderIntentMatches,
   type LockedOrderIntent,
   type LockedPreview,
   type OrderErrorContract,
@@ -124,9 +125,12 @@ export default function VerticalSpreadWidget({ widget }: { widget: WidgetInstanc
     activePreviewRequests.current += 1;
     setPreviewing(true);
     try {
+      const requestedIntent = makeIntent(formSnapshot, legsSnapshot);
       const result = await postOrderJson<{ preview?: unknown }>(
-        "/api/eqo/orders/preview", makeIntent(formSnapshot, legsSnapshot), "preview");
-      if (!isLockedPreview(result.preview)) throw new Error("Order preview response did not include a valid locked intent");
+        "/api/eqo/orders/preview", requestedIntent, "preview");
+      if (!isLockedPreview(result.preview) || !orderIntentMatches(result.preview.intent, requestedIntent)) {
+        throw new Error("Order preview response did not lock the submitted order intent");
+      }
       if (requestGeneration !== generation.current ||
           requestFingerprint !== intentFingerprint(formRef.current, useTerminal.getState().optionLegs)) return;
       setPreview({ ...result.preview, fingerprint: requestFingerprint });
