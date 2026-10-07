@@ -14,9 +14,11 @@
 
 系统五层关系：**OpenTerminal 主终端 + 可选 OpenBB Lite → 分离的 OIDC/BFF → Rust Gateway 行情契约 → Alpaca SIP/OPRA 市场来源；订单只能经 BrokerAdapter，当前保持 disabled。** AG Grid Community 用于期权链与 OpenBB Community 组合；OpenTerminal Lightweight Charts / Recharts 负责终端图表。
 
+**EqoBoard = OpenTerminal Trading Terminal + OpenBB Research Workspace + AG Grid Options + Rust SIP/OPRA Gateway + BrokerAdapter Execution Layer**
+
 OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定提交见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。旧的自研 Vite 终端已退出仓库，防止两套 UI 长期分叉。
 
-OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 hostname、host-only OIDC cookies 和 `market:read` 短时委托访问它们。不同端口仍共享 hostname Cookie 边界。可选服务由默认 Compose 自动包含的 `openbb` profile 与原生 OpenTerminal Research 入口提供。浏览器测试使用真实 Rust Gateway 和仅测试用 loopback SIP/OPRA 协议 mock；mock 行的来源为 `unknown`，不代表真实 Alpaca entitlement 或市场数据。诊断全生命周期已通过，但默认 profile smoke 尚待无 skip 最终验收，因此此处不把状态称为完整 OpenBB Web 验收。
+OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 hostname、host-only OIDC cookies 和 `market:read` 短时委托访问它们。不同端口仍共享 hostname Cookie 边界。可选服务由默认 Compose 自动包含的 `openbb` profile 与原生 OpenTerminal Research 入口提供。无 skip 的 Compose + native Lite 浏览器生命周期验收已通过，测试使用真实 Rust Gateway 和仅测试用 loopback SIP/OPRA 协议 mock；mock 行的来源为 `unknown`，不代表真实 Alpaca entitlement 或市场数据。
 
 浏览器只建立 **1 条 EqoBoard SSE 行情连接**。Quote、Watchlist、AG Grid Option Chain、OPRA Tape 共用这条 50ms 批量流；股票 Watchlist/活动 Widget 通过租约合并为一条 Alpaca SIP 上游订阅。REST 快照用于初始状态与周期校准。
 
@@ -59,7 +61,7 @@ Research 入口默认绑定本机 `127.0.0.1:8088`。关闭该 profile 不影响
 
 入口：
 
-- `http://127.0.0.1:3000`：OpenTerminal 主终端。
+- `http://localhost:3000`：OpenTerminal 主终端（与本地 `EQO_PUBLIC_ORIGIN` / `NEXTAUTH_URL` 配置一致；研究入口必须使用不同 hostname）。
 - `http://127.0.0.1:8080`：仅本机可访问的 Rust Gateway API；research Node API 不发布宿主端口。
 - 浏览器只访问 OpenTerminal BFF。Rust API 不接受静态用户 token，也不把客户端身份头当作身份凭证。
 
@@ -94,13 +96,13 @@ npm run dev
 
 | 范围 | 当前状态 |
 |---|---|
-| 可选 OpenBB profile、Research 导航、受控 ingress 与原生 Workspace | 已实现；诊断生命周期浏览器矩阵通过，完整默认 profile smoke 待最终无 skip 验收 |
+| 可选 OpenBB profile、Research 导航、受控 ingress 与原生 Workspace | attempt-21 无 skip 默认 Compose、登录、三 Widget 和故障/恢复浏览器生命周期均通过 |
 | SIP/OPRA 行情来源 | Gateway contract 和原生 Widget 使用 loopback 协议 mock 验证；source=`unknown`，真实 Alpaca entitlement/行情未验证 |
-| 离线、恢复、停 OpenBB、故障升级与回滚 | attempt-20 诊断生命周期通过并验证 cleanup；attempt-20 跳过了默认 profile smoke，不能当完整验收 |
+| 离线、恢复、停 OpenBB、故障升级与回滚 | attempt-21 验证 Gateway offline/restart、OpenBB 停服时主终端可用、坏镜像 unhealthy、原归档恢复、cleanup |
 | Paper / Live | BrokerAdapter 仍 disabled；没有提交订单 |
 | 集成分支 | PR #29 汇总并验收依赖 PR #22–#28；在人工审查和合并前，`main` 仍是 `621de548827bc3bfd81e509eec2da8dfee28c221` |
 
-最终完整验收结果与 Compose 本地镜像 archive/SBOM 身份会在 [OpenBB supply-chain runbook](docs/OPENBB_SUPPLY_CHAIN.md) 中追加；本地 tag、source SBOM 或 mock 浏览器结果都不表示 registry 发布。
+测试行使用协议 mock 且 `source=unknown`，未验证真实 Alpaca entitlement，也没有下单。Compose 本地镜像 archive/SBOM 身份见 [OpenBB supply-chain runbook](docs/OPENBB_SUPPLY_CHAIN.md)；本地 tag 或 daemon RepoDigest 观察都不表示 registry 发布。
 
 ## 验证
 

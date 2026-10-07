@@ -45,6 +45,21 @@ class UpstreamDiffTests(unittest.TestCase):
         self.assertIn("校验后的 Research 外链", report)
         self.assertNotIn("未登记的上游差异", report)
 
+    def test_removed_upstream_screenshots_are_not_reported_as_dangling_readme_links(self):
+        pin = Pin("ErTasselli/OpenTerminal", "a" * 40, "MIT", "apps/openterminal")
+
+        report = render_report(
+            TreeDiff((), (), (), ("docs/screenshots/dashboard.png",)),
+            pin,
+            "b" * 40,
+            "2026-10-08 00:00:00 UTC",
+            "c" * 64,
+        )
+
+        self.assertIn("失效图片引用已删除", report)
+        self.assertNotIn("仍引用该路径", report)
+        self.assertNotIn("Documentation follow-up:", report)
+
     def test_classifies_exact_modified_only_deleted_and_symlink_paths(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

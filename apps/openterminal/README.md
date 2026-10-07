@@ -15,8 +15,6 @@ Dark. Dense. Keyboard-driven. Provider entitlements and source timestamps remain
 
 <br/>
 
-<img src="docs/screenshots/dashboard.png" alt="OpenTerminal dashboard — live chart, quote panel, watchlist, news and macro indexes" width="100%" />
-
 <sub>⭐ If this is useful to you, consider starring the repo — it genuinely helps other people find it.</sub>
 
 </div>
@@ -57,15 +55,11 @@ Research sources such as FRED, ECB, SEC, FINRA, news and selected international-
 
 Candlesticks, bars, line, or area — 8 timeframes, six technical indicators, and a live legend under your cursor showing OHLC, volume, and every active indicator's value for the candle you're pointing at.
 
-<img src="docs/screenshots/chart.png" alt="Candlestick chart with SMA/RSI/MACD indicators and hover legend" width="100%" />
-
 <br/>
 
 ### Live sector heatmap
 
 The whole US equity market as a treemap — sized by market cap, colored by daily % change, refreshing every few seconds so nothing you're watching ever goes stale.
-
-<img src="docs/screenshots/heatmap.png" alt="Live sector heatmap of the US equity market" width="100%" />
 
 <br/>
 
@@ -73,15 +67,11 @@ The whole US equity market as a treemap — sized by market cap, colored by dail
 
 Top assets with 7‑day sparklines and BTC/ETH dominance — click through to full OHLCV candlestick charting for any listed coin, same charting engine as stocks.
 
-<img src="docs/screenshots/crypto.png" alt="Crypto board with sparklines and dominance" width="100%" />
-
 <br/>
 
 ### News
 
 Headlines aggregated and de‑duplicated across multiple sources, filterable per‑symbol or global, so you're never digging through five tabs to catch up.
-
-<img src="docs/screenshots/news.png" alt="Per-symbol and global news feed, aggregated and de-duplicated" width="100%" />
 
 <br/>
 
@@ -91,7 +81,7 @@ U.S. equity/ETF price, change, volume, history and earnings price-move fields re
 
 Option IV and Greeks come from Alpaca REST snapshot vendor/model fields, not OPRA itself. Until Alpaca supplies a separate model timestamp, the UI reports `model as-of unknown`; Gateway response time and quote/trade event time are not treated as model time. Research providers retain their own source and observation dates.
 
-The Gateway exposes OpenBB-compatible `widgets.json`, `apps.json`, and read-only market endpoints. A separate research-mode Next BFF validates its own OIDC session and delegates only `market:read` to Rust. OpenBB Workspace is not embedded in this screen: a valid `EQO_RESEARCH_PUBLIC_ORIGIN` adds an external link to the native Sidebar and Command Palette, opening a new tab without forwarding the OpenTerminal session or credentials. The link accepts a pure HTTPS origin (or exact loopback HTTP for local development) on a hostname different from `EQO_PUBLIC_ORIGIN`; unset or invalid values hide it without disabling OpenTerminal. The BFF component tests do not start Lite; the optional Compose profile and native browser acceptance are documented in the root deployment guide.
+The Gateway exposes OpenBB-compatible `widgets.json`, `apps.json`, and read-only market endpoints. A separate research-mode Next BFF validates its own OIDC session and delegates only `market:read` to Rust. OpenBB Workspace is not embedded in this screen: a valid `EQO_RESEARCH_PUBLIC_ORIGIN` adds an external link to the native Sidebar and Command Palette, opening a new tab without forwarding the OpenTerminal session or credentials. The link accepts a pure HTTPS origin (or exact loopback HTTP for local development) on a hostname different from `EQO_PUBLIC_ORIGIN`; unset or invalid values hide it without disabling OpenTerminal. The BFF component tests do not start Lite; the optional Compose profile and native Lite acceptance are documented in the root deployment and supply-chain guides. The native browser fixture simulates SIP/OPRA protocols and reports source `unknown`, so it does not establish real Alpaca data entitlement.
 
 See [`../../docs/MARKET_SOURCES.md`](../../docs/MARKET_SOURCES.md) for the field-by-field source, as-of, coverage and failure contract. In particular, metadata timestamps may be unavailable, FRED/ECB dates are observation dates, and a connected browser is not proof that an upstream feed is ready.
 

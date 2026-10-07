@@ -49,7 +49,7 @@ class TreeDiff:
 # paths intentionally receive a "review required" note so upstream drift is
 # visible instead of silently inheriting an old classification.
 MODIFIED_NOTES: dict[str, tuple[str, str, str, str]] = {
-    "README.md": ("记录 EqoBoard 的数据、安全和部署边界。", "保留", "无需抽 adapter", "否"),
+    "README.md": ("记录 EqoBoard 的数据、安全和部署边界，并移除固定上游未随归档提供的截图引用。", "保留", "无需抽 adapter", "否"),
     "package.json": ("增加现有 OpenTerminal package 中的 research E2E 命令入口；不创建第二套终端。", "保留", "测试脚本留在仓库级集成边界", "否"),
     "package-lock.json": ("锁定 EqoBoard 认证和运行时依赖。", "保留", "无需抽 adapter", "否"),
     "server/package.json": ("加入短时委托 JWT 验证依赖。", "保留", "认证职责已在 server/src/auth.ts", "否"),
@@ -366,7 +366,6 @@ def render_report(diff: TreeDiff, pin: Pin, head: str, audited_at: str, archive_
         f"- E · domain, security, and integration files: {sum(path not in KNOWN_C_ONLY for path in diff.eqoboard_only)}",
         f"- Deleted upstream files: {len(diff.deleted)}",
         "- D · duplicated mature upstream implementations: none identified in this comparison. EqoBoard routes U.S. SIP/OPRA prices through Rust; retained Yahoo/TradingView providers serve research, non-U.S. symbols, or metadata. The native OpenTerminal Workspace, charts, screener, heatmap, watchlist, and general research widgets remain reused.",
-        "- Documentation follow-up: the OpenTerminal README still references five deleted screenshot files under `docs/screenshots/`; those image links are currently unresolved and are recorded below for a later asset/reference decision.",
         "",
         "C and E are both listed in the EqoBoard-only table. C marks product widgets; E marks data, identity, execution-preview, and integration-specific code. A newly modified or added path without a curated note is labeled `待人工审核` to make drift fail visibly in review.",
         "",
@@ -426,11 +425,11 @@ def render_report(diff: TreeDiff, pin: Pin, head: str, audited_at: str, archive_
         ".gitignore": "忽略规则由 EqoBoard 仓库根管理。",
         "data/readme.md": "上游本地数据目录未随终端 vendoring；Portfolio 存储由容器卷配置。",
         "docker-compose.yml": "容器拓扑由 EqoBoard 根 compose 管理。",
-        "docs/screenshots/chart.png": "未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。",
-        "docs/screenshots/crypto.png": "未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。",
-        "docs/screenshots/dashboard.png": "未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。",
-        "docs/screenshots/heatmap.png": "未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。",
-        "docs/screenshots/news.png": "未复制上游截图；apps/openterminal/README.md 仍引用该路径，链接当前失效，需后续恢复资源或删除引用。",
+        "docs/screenshots/chart.png": "固定上游归档未提供该截图；README 中对应的失效图片引用已删除，图表功能说明保留。",
+        "docs/screenshots/crypto.png": "固定上游归档未提供该截图；README 中对应的失效图片引用已删除，Crypto 功能说明保留。",
+        "docs/screenshots/dashboard.png": "固定上游归档未提供该截图；README 中对应的失效图片引用已删除，Workspace 功能说明保留。",
+        "docs/screenshots/heatmap.png": "固定上游归档未提供该截图；README 中对应的失效图片引用已删除，heatmap 功能说明保留。",
+        "docs/screenshots/news.png": "固定上游归档未提供该截图；README 中对应的失效图片引用已删除，news 功能说明保留。",
         "server/Dockerfile": "镜像构建由 apps/openterminal/Dockerfile 集中管理。",
         "web/Dockerfile": "Next.js 与 server 构建由 apps/openterminal/Dockerfile 集中管理。",
         "web/next.config.ts": "由 EqoBoard 的 next.config.mjs 替代以配置 BFF 安全头。",
