@@ -29,7 +29,7 @@ async function revealGridColumns(page: Page, widget: Locator, columnIds: string[
       if (!horizontalViewport) return { missingViewport: true, missingHeader: false, delta: null, tooWide: false, scrollLeft: 0, maxScroll: 0 };
       const viewportRect = horizontalViewport.getBoundingClientRect();
       const headers = targets.map((target) =>
-        Array.from(root.querySelectorAll<HTMLElement>(".ag-header-cell"))
+        Array.from(root.querySelectorAll<HTMLElement>('.ag-header-cell[role="columnheader"]'))
           .find((header) => header.getAttribute("col-id") === target) ?? null,
       );
       const scrollLeft = horizontalViewport.scrollLeft;
@@ -160,7 +160,7 @@ test("openbb-recovery native workspace reflects Gateway state and restores all t
   await expect.poll(async () => (await stockSymbols.allTextContents()).some((text) => text.trim() === "QQQ")).toBe(true);
   for (const field of ["open", "high", "low", "close", "volume"] as const) {
     await revealGridColumns(page, barsWidget, [field]);
-    await expect(barsWidget.locator(`.ag-header-cell[col-id="${field}"]`)).toBeVisible();
+    await expect(barsWidget.locator(`.ag-header-cell[role="columnheader"][col-id="${field}"]`)).toBeVisible();
     const visibleCells = barsWidget.locator(`.ag-cell[col-id="${field}"]`).filter({ visible: true });
     await expect.poll(async () => {
       const rendered = await visibleCells.allTextContents();
