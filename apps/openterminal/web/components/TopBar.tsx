@@ -9,6 +9,9 @@ type Status = {
   ok: boolean;
   providers: Array<{ name: string; ok: number; failed: number; lastLatencyMs: number | null }>;
   ai: boolean;
+  stockFeed?: string;
+  optionFeed?: string;
+  executionMode?: string;
 };
 
 function Clock({ tz, label }: { tz: string; label: string }) {
@@ -48,10 +51,13 @@ export default function TopBar() {
 
   const market = marketStateNY();
   const healthy = status?.providers.filter((p) => p.ok > 0) ?? [];
+  const label = status?.stockFeed && status?.optionFeed
+    ? "ALPACA " + status.stockFeed.toUpperCase() + " / " + status.optionFeed.toUpperCase()
+    : (healthy.length ? healthy.map(p => p.name).join(" · ") : "Alpaca gateway unavailable");
 
   return (
     <header className="flex items-center gap-4 px-3 h-8 bg-[var(--panel-2)] border-b border-[var(--border)] text-[11px] shrink-0">
-      <span className="amber font-bold tracking-widest">OPENTERMINAL</span>
+      <span className="amber font-bold tracking-widest">EqoBoard / OpenTerminal</span>
       <span className={market.open ? "up" : "down"}>● {market.label}</span>
       <Clock tz="America/New_York" label="NY" />
       <Clock tz="Europe/Rome" label="MIL" />
@@ -65,11 +71,9 @@ export default function TopBar() {
       </button>
       <span className="dim ml-auto">
         feeds:{" "}
-        {healthy.length > 0
-          ? healthy.map((p) => `${p.name} ${p.lastLatencyMs ?? "—"}ms`).join(" · ")
-          : "connecting…"}
+        {label}
       </span>
-      <span className={status?.ai ? "up" : "dim"}>AI {status?.ai ? "●" : "○"}</span>
+      <span className="dim">Execution: {status?.executionMode ?? "disabled"}</span>
     </header>
   );
 }
