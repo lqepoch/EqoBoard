@@ -4,13 +4,13 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Query, Request, State,
     },
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
-use chrono::{NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
 use eqo_alpaca_data::{AlpacaData, DataError};
 use eqo_domain::{parse_occ, MarketEvent};
 use eqo_execution::{BrokerRouter, OrderError, OrderIntent, PreviewStore, RiskPolicy};
@@ -28,7 +28,7 @@ use tokio::{
     io::AsyncWriteExt,
     sync::{broadcast, watch, Mutex, RwLock},
 };
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -331,6 +331,119 @@ async fn prune_leases(state: AppState) {
     }
 }
 
+// OpenBB Workspace official read-only Custom Backend protocol.
+// The archived OpenBB frontend is optional; this gateway remains authoritative.
+async fn openbb_widgets() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        include_str!("../../../integrations/openbb/widgets.json"),
+    )
+}
+
+async fn openbb_apps() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        include_str!("../../../integrations/openbb/apps.json"),
+    )
+}
+
+async fn openbb_stocks(
+    State(state): State<AppState>,
+    Query(query): Query<SymbolsQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let raw = query.symbols.unwrap_or_else(|| "SPY,QQQ".to_owned());
+    let symbols: Vec<String> = raw.split(',').map(|s| s.trim().to_uppercase()).collect();
+    if symbols.is_empty() || symbols.len() > 50 || symbols.iter().any(|s| !safe_symbol(s)) {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_symbols",
+            "1..50 uppercase US stock symbols are required",
+        );
+    }
+    match data.stock_snapshots(&symbols).await {
+        Ok(snapshots) => Json(json!({
+            "feed": state.stock_feed,
+            "as_of": Utc::now().to_rfc3339(),
+            "snapshots": snapshots,
+        }))
+        .into_response(),
+        Err(err) => data_failure(err),
+    }
+}
+
+async fn openbb_bars(
+    State(state): State<AppState>,
+    Query(query): Query<BarsQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let symbol = query.symbol.to_uppercase();
+    let timeframe = query.timeframe.unwrap_or_else(|| "1Min".to_owned());
+    if !safe_symbol(&symbol)
+        || !["1Min", "5Min", "15Min", "1Hour", "1Day"].contains(&timeframe.as_str())
+    {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_bars_query",
+            "invalid symbol or timeframe",
+        );
+    }
+    match data.stock_bars(&symbol, &timeframe, 200).await {
+        Ok(bars) => Json(json!({
+            "symbol": symbol,
+            "feed": state.stock_feed,
+            "as_of": Utc::now().to_rfc3339(),
+            "bars": bars,
+        }))
+        .into_response(),
+        Err(err) => data_failure(err),
+    }
+}
+
+#[derive(Deserialize)]
+struct OpenBbOptionsQuery {
+    underlying: Option<String>,
+    expiration: Option<String>,
+}
+async fn openbb_options(
+    State(state): State<AppState>,
+    Query(query): Query<OpenBbOptionsQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let underlying = query.underlying.unwrap_or_else(|| "QQQ".to_owned()).to_uppercase();
+    if !safe_symbol(&underlying) {
+        return fail(StatusCode::BAD_REQUEST, "invalid_underlying", "invalid US equity");
+    }
+    // Only a UI default. Exchange holidays/actual series availability are not guessed.
+    let today = Utc::now().date_naive();
+    let friday_offset = (5_i64 - i64::from(today.weekday().number_from_monday()))
+        .rem_euclid(7);
+    let expiration = query.expiration
+        .filter(|date| !date.is_empty())
+        .unwrap_or_else(|| (today + chrono::Duration::days(friday_offset)).to_string());
+    if NaiveDate::parse_from_str(&expiration, "%Y-%m-%d").is_err() {
+        return fail(StatusCode::BAD_REQUEST, "invalid_expiration", "ISO YYYY-MM-DD required");
+    }
+    match data.option_chain(&underlying, &expiration, None, None).await {
+        Ok(page) => Json(json!({
+            "underlying": underlying,
+            "expiration": expiration,
+            "feed": state.option_feed,
+            "as_of": Utc::now().to_rfc3339(),
+            "truncated": page.truncated,
+            "contracts": page.contracts,
+        }))
+        .into_response(),
+        Err(err) => data_failure(err),
+    }
+}
+
 async fn create_ticket(State(state): State<AppState>) -> Response {
     let mut tickets = state.tickets.lock().await;
     tickets.retain(|_, end| *end > Instant::now());
@@ -611,13 +724,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/v1/orders/submit", post(order_submit))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
     let web_dist = std::env::var("EQO_WEB_DIST").unwrap_or_else(|_| "./apps/web/dist".into());
-    let app = Router::new()
+    let openbb_api = Router::new()
+        .route("/openbb/v1/stocks", get(openbb_stocks))
+        .route("/openbb/v1/bars", get(openbb_bars))
+        .route("/openbb/v1/options", get(openbb_options))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+    let mut app = Router::new()
+        .route("/widgets.json", get(openbb_widgets))
+        .route("/apps.json", get(openbb_apps))
         .route("/healthz", get(healthz))
         .route("/api/v1/stream", get(market_ws))
         .merge(api)
+        .merge(openbb_api)
         .fallback_service(ServeDir::new(web_dist).append_index_html_on_directories(true))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
+    if let Ok(raw) = std::env::var("EQO_OPENBB_ALLOWED_ORIGIN") {
+        // Restrict cross-origin access to exactly one trusted OpenBB Workspace.
+        // A public unencrypted HTTP origin can leak the session token.
+        let local_http = raw.starts_with("http://127.0.0.1:")
+            || raw.starts_with("http://localhost:");
+        if raw == "*" || !(raw.starts_with("https://") || local_http) {
+            return Err("EQO_OPENBB_ALLOWED_ORIGIN requires HTTPS or loopback HTTP".into());
+        }
+        let origin: axum::http::HeaderValue = raw.parse()?;
+        app = app.layer(
+            CorsLayer::new()
+                .allow_origin(origin)
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+                .allow_methods([Method::GET, Method::OPTIONS]),
+        );
+    }
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!(addr=%addr,"EqoBoard listening");
     axum::serve(listener, app).await?;
