@@ -4,16 +4,17 @@
 
 ## 当前状态
 
-截至 2026-10-07，策略模块及其 mock GitHub API 测试已经实现。它尚未接入 `.github/workflows/pr-auto-merge.yml`；在集成 PR 替换旧内联判断、测试通过并完成权限配置前，不得把本模块描述为已启用的自动合并保护。
+截至 2026-10-07，策略模块、mock GitHub API 测试和受信 `.github/workflows/pr-auto-merge.yml` 已集成。工作流只在仓库 `main` 上运行，并通过受保护的 `auto-merge` environment 取得专用 App 密钥；当前 `EQO_AUTOMERGE_APP_CLIENT_ID` 仓库变量尚未配置，因此 job 会跳过，自动合并尚未运行验收。
 
 已核对的仓库状态：
 
 - 仓库 `allow_auto_merge` 为 `false`。
-- `EQO_AUTOMERGE_APP_ID` 等 Actions Variables 未配置；最近一次 `Trusted PR Auto Merge` 工作流运行被跳过。
+- `EQO_AUTOMERGE_APP_CLIENT_ID` Actions Variable 未配置，因而 token 和 auto-merge job 不会运行。专用 App 私钥从未被读取；本任务未向该 environment 写入任何 Secret。
+- GitHub environments `market-data-readonly`（ID `23677247498`）和 `auto-merge`（ID `23677256884`）已设为仅允许 `main` 分支部署；于 2026-10-07T11:55Z 通过环境 API 核验。该设置没有写入或读取任何 Secret。
 - `main` 当前组织规则要求一个有效审批，Team 是已配置的 bypass actor。没有证据表明专用 App 已安装或能够通过该规则。
 - 实读 `GET /repos/lqepoch/EqoBoard/rules/branches/main` 时，`pull_request.parameters.required_approving_review_count` 为 `1`，并同时返回 REST/OpenAPI schema 当前未列出的 `require_extra_approval_for_unattributed_changes: false`。GitHub 官方 ruleset 文档说明清除“unattributed Copilot PR”额外审批设置后只要求配置的审批数；策略因此只接受该字段为布尔 `false`，布尔 `true` 暂时阻断（尚未实现该额外身份条件），类型错误与其它未知参数也阻断。
 - 历史 CI run `37588824743` 已关联合并 PR；当前 REST 响应的 `pull_requests` 为空。该数据不能用于候选合并，策略会因无法确认唯一 PR 绑定而拒绝。
-- 最近已观察到的 required CI job context 是 `Rust data / gateway / execution`、`Offline market-data contract tests` 和 `OpenTerminal / AG Grid / Next.js`。实际验收 CI 增加或改名 job 时，必须先更新受信清单和对应 fixture。
+- 最近已观察到的 required CI job context 是 `Rust data / gateway / execution`、`Offline market-data contract tests` 和 `OpenTerminal / AG Grid / Next.js`。CI 增加了 auto-merge 策略离线测试但不增加 job 或改名，因此 manifest 仍是这三个 context。实际验收 CI 增加或改名 job 时，必须先更新受信清单和对应 fixture。
 
 这些事实说明策略测试已通过，不代表自动合并 App、Ruleset bypass 或 GitHub 工作流已经完成运行验收。管理员配置缺失时保持阻止状态，不伪造 review 或降低分支保护。
 
@@ -23,7 +24,7 @@
 
 自动触发只接受当前受信 CI workflow 的最新成功 `pull_request` run。PR 必须开放、非 draft、目标为同仓库 `main`、head 来自同仓库、作者为可信 allowlist 用户，并且 GitHub 返回的 run 必须恰好关联一个 PR。PR head、base SHA、分支、仓库、workflow id/path 和 run 的 `check_suite_id` 都要与当前证据一致。找不到 PR 关联、历史合并 run 已丢失关联、fork、字段缺失或未知状态都 fail closed。
 
-审核完成后可由 `workflow_dispatch` 在 `main` 上传入 PR 编号重新评估；它复用绑定当前 head/base 的最新成功 CI run，不启动新的 CI。写入前重新读取全部关键证据，若 PR head/base、CI run、审批、线程、文件、检查或规则有变化则拒绝。最终 merge API 必须传 `sha: current_head_sha`；冲突不自动重试。收到合并成功后再读取 PR 核验 merged 状态和 merge SHA。
+审核完成后可由 `workflow_dispatch` 在 `main` 上传入 PR 编号重新评估；它复用绑定当前 head/base 的最新成功 CI run，不启动新的 CI。分支字段仅由特权 workflow 的 `github.ref == refs/heads/main` job guard 控制；不得给 `workflow_run` 添加 `branches: [main]`，该字段会按上游 PR head 分支过滤并漏掉分支名不是 main 的 PR。写入前重新读取全部关键证据，若 PR head/base、CI run、审批、线程、文件、检查或规则有变化则拒绝。最终 merge API 必须传 `sha: current_head_sha`；冲突不自动重试。收到合并成功后再读取 PR 核验 merged 状态和 merge SHA。
 
 GitHub 官方接口参考：[workflow_run 事件](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run)、[特权 workflow 防不可信代码说明](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target)、[Actions workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs)、[Pull request reviews API](https://docs.github.com/en/rest/pulls/reviews)、[Check runs API](https://docs.github.com/en/rest/checks/runs)、[commit statuses API](https://docs.github.com/en/rest/commits/statuses)、[branch rules API](https://docs.github.com/en/rest/repos/rules)、[merge pull request API](https://docs.github.com/en/rest/pulls/pulls)。
 
@@ -47,12 +48,30 @@ node --test tests/auto_merge_policy.test.cjs
 
 ## 专用 GitHub App 启用要求
 
-只有策略和特权 workflow 都由受信 `main` 提供并通过审查后，组织管理员才能配置专用 GitHub App。限制安装范围为 `lqepoch/EqoBoard`。按所调用 GitHub REST API 的官方权限表授予所需最小权限：
+只有策略和特权 workflow 都由受信 `main` 提供并通过审查后，组织管理员才能配置专用 GitHub App。限制安装范围为 `lqepoch/EqoBoard`。Actions Variable `EQO_AUTOMERGE_APP_CLIENT_ID` 必须填写 GitHub App 的字符串 Client ID，并传给 `client-id` 输入；不要填数字 App ID。Actions Secret `EQO_AUTOMERGE_APP_PRIVATE_KEY` 放在 main-only 的 `auto-merge` environment 中。当前 Client ID 尚未配置，App 安装和私钥不属于已验收范围。按所调用 GitHub REST API 的官方权限表授予所需最小权限：
 
 - `Contents: write`、`Pull requests: write`：读取 PR 内容和执行 merge。
 - `Actions: read`、`Checks: read`、`Commit statuses: read`：核验工作流、checks 和完整 commit status。
 - `Metadata: read`：读取 branch rules 与 collaborator permissions。
 
-管理员还必须按现有组织规则添加该专用 App 的 bypass actor；不得替换规则、关闭审批要求、降低 required checks 或伪造批准。私钥放 Actions Secret `EQO_AUTOMERGE_APP_PRIVATE_KEY`，App ID 放 Actions Variable `EQO_AUTOMERGE_APP_ID`。PR CI 不可访问这两项 Secrets。App 安装、Ruleset bypass、当前开放 PR 的 run 关联和端到端 merge 成功均须保留实际证据后，才能宣布自动合并运行验收完成。
+管理员还必须按现有组织规则添加该专用 App 的 bypass actor；不得替换规则、关闭审批要求、降低 required checks 或伪造批准。PR CI 不可访问 App 凭据。手工使用组织现有 bypass 合并某个 PR，不等于专用 App 已安装或自动合并验收通过。App 安装、Ruleset bypass、当前开放 PR 的 run 关联和端到端 merge 成功均须保留实际证据后，才能宣布自动合并运行验收完成。
+
+## Actions 与工具链固定版本
+
+CI 运行在 `ubuntu-24.04`，并固定 Rust `1.99.0`、Node `22.23.3`、Python `3.12.15`。OpenTerminal build/runtime 两个 Dockerfile stage 使用相同的官方 multi-arch Node 镜像索引 `sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392`，避免浮动 `node:22` tag。Python 3.12.15 在 `actions/python-versions` 的 Ubuntu 24.04 x64 manifest 中可用。
+
+所有 workflow Action 均以完整 commit SHA 固定：
+
+- `actions/checkout` v6.1.0：`d23441a48e516b6c34aea4fa41551a30e30af803`
+- `actions/setup-node` v7.0.0：`820762786026740c76f36085b0efc47a31fe5020`
+- `actions/setup-python` v7.0.0：`5fda3b95a4ea91299a34e894583c3862153e4b97`
+- `actions/github-script` v9.0.0：`3a2844b7e9c422d3c10d287c895573f7108da1b3`
+- `actions/create-github-app-token` v3.2.0：`bcd2ba49218906704ab6c1aa796996da409d3eb1`
+- `Swatinem/rust-cache` v2.9.2：`6323deb102c322ba6fcbdcafc7e3dddab59af2b6`
+- `dtolnay/rust-toolchain`：`7e38f4b43b4db5c8dd498af069a4f6196df1d067`，显式 toolchain `1.99.0`
+
+版本依据：官方 [Node.js v22.23.3 release](https://github.com/nodejs/node/releases/tag/v22.23.3)、[Python 3.12.15 release](https://www.python.org/downloads/release/python-31215/)、[Python Actions build manifest](https://github.com/actions/python-versions/blob/main/versions-manifest.json) 和 Docker Hub [`node:22.23.3-bookworm-slim`](https://hub.docker.com/layers/library/node/22.23.3-bookworm-slim/images/sha256-c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392)。
+
+本地集成验证在 2026-10-07 完成：`node --test tests/auto_merge_policy.test.cjs` 46/46；Python 离线契约 7/7；Compose production/offline/E2E 配置、`bash -n tools/container-e2e.sh` 和 `actionlint v1.7.12` 通过。固定 Node 镜像实际报告 Node `v22.23.3`、npm `10.9.9`。执行 `npm ci --no-audit --no-fund` 后，`bash tools/container-e2e.sh` 完整通过：生产容器浏览器 11 passed、1 个仅开发态 UNKNOWN 用例按设计 skipped，开发态真实 Next/OIDC 的订单 race/过期/UNKNOWN 用例 3/3。生产 runtime 同一 OpenTerminal Image ID 为 `sha256:8018b23ed9054315f5c1cac9df4d4424e9090351d74582a6fa723b3c4400bdea`；Gateway Image ID 为 `sha256:9bb4c3f3ae91a778586a2a801d5422f2675dac3224d4309965ad6bc9c399bf28`。容器验收仅用离线 mock 和测试身份，无 Alpaca 密钥或委托。
 
 自动合并只改变 GitHub PR 状态；它不启用交易、不触发真实券商委托，也不部署服务。Live 委托仍必须由独立交易安全边界拒绝。

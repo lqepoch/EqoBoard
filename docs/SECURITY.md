@@ -1,6 +1,6 @@
 # 安全边界
 
-- **组织 Actions Secrets**：ALPACA_KEY / ALPACA_SECRET。CI pull_request 工作流从不读取；独立 smoke 定时或手工在受信主分支运行，只发 GET，无任何订单接口访问。
+- **组织 Actions Secrets**：ALPACA_KEY / ALPACA_SECRET。CI pull_request 工作流从不读取；独立 smoke 只在 `lqepoch/EqoBoard` 的 `main` 引用并经 main-only `market-data-readonly` environment 运行，触发来源为受信 main 数据路径变更、定时或手工运行，只发 GET，无任何订单接口访问。手工 dispatch 的其他分支被 job guard 拒绝。
 - **本机密钥**：后端进程环境变量或受管 Secret Store。前端 bundle 不含 Alpaca 凭据；README、样例、测试用无真实 Key。
 - **用户身份**：OpenTerminal 使用固定 OIDC issuer 的 PKCE + state 登录和 NextAuth 加密 HttpOnly/SameSite=Lax cookie；HTTPS 部署启用 Secure cookie。`EQO_SESSION_TTL_SECONDS` 默认 3600 秒、范围 5..86400 秒，是滚动会话的空闲期限；SSE 使用建立连接时签发的短时委托，并在该委托/会话到期时断开，不会靠后台刷新延长旧流。角色只从已验证的 issuer `roles` claim allowlist 映射，浏览器 session update 不可提升权限。写请求校验同源 Origin、Fetch Metadata、JSON 类型、64 KiB 上限和 5 秒 body deadline。
 - **服务身份**：Next BFF 将用户身份与 action scope 换成 60 秒签名 token。Gateway `bff` key 只放在 Next 与 Rust；独立的 research key 供 Next/Node/Rust 使用，Node 签发的 Gateway 子 token 只能是 `market:read`。Rust 按 kid、issuer、audience、算法、有效期和 scope 验证，不接受客户端身份头。Node 同时要求私有服务 key 与用户委托 token。
