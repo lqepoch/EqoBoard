@@ -1,24 +1,34 @@
-# EqoBoard PR 自动合并治理
+# EqoBoard PR 合并与自动合并治理
 
-本文描述自动合并的策略边界、证据来源和当前启用状态。策略代码位于 `tools/auto_merge/`，离线 API 反例测试位于 `tests/auto_merge_policy.test.cjs`。
+本文区分受信 GitHub App 自动合并与用户授权的 owner operator 自合并，并记录两条路径的证据要求和当前状态。策略代码位于 `tools/auto_merge/`，离线 API 反例测试位于 `tests/auto_merge_policy.test.cjs`。
 
 ## 当前状态
 
-截至 2026-10-07，策略模块、mock GitHub API 测试和受信 `.github/workflows/pr-auto-merge.yml` 已集成。工作流只在仓库 `main` 上运行，并通过受保护的 `auto-merge` environment 取得专用 App 密钥；当前 `EQO_AUTOMERGE_APP_CLIENT_ID` 仓库变量尚未配置，因此 job 会跳过，自动合并尚未运行验收。
+截至 2026-10-08，策略模块、mock GitHub API 测试和受信 `.github/workflows/pr-auto-merge.yml` 已集成。该工作流只在仓库 `main` 上运行；仓库 `allow_auto_merge=true` 只表示 GitHub 仓库允许使用其 auto-merge 能力，不代表专用 App 已配置或通过验收。当前 `EQO_AUTOMERGE_APP_CLIENT_ID` 仓库变量仍未配置，所以 App job 会跳过，App 自动合并尚未运行验收。
 
-已核对的仓库状态：
+已核对的仓库与组织状态：
 
-- 仓库 `allow_auto_merge` 为 `false`。
-- `EQO_AUTOMERGE_APP_CLIENT_ID` Actions Variable 未配置，因而 token 和 auto-merge job 不会运行。专用 App 私钥从未被读取；本任务未向该 environment 写入任何 Secret。
+- 仓库 `allow_auto_merge` 为 `true`；这是 GitHub 仓库设置，不会自行创建 App token 或启动未满足 workflow gate 的 job。
+- `EQO_AUTOMERGE_APP_CLIENT_ID` Actions Variable 未配置，因而 token 和 App auto-merge job 不会运行。没有专用 App 已安装、具备 bypass 或完成运行验收的证据；专用 App 私钥未被读取，本任务未向该 environment 写入 Secret。
 - GitHub environments `market-data-readonly`（ID `23677247498`）和 `auto-merge`（ID `23677256884`）已设为仅允许 `main` 分支部署；于 2026-10-07T11:55Z 通过环境 API 核验。该设置没有写入或读取任何 Secret。
-- `main` 当前组织规则要求一个有效审批，Team 是已配置的 bypass actor。没有证据表明专用 App 已安装或能够通过该规则。
+- 组织活动 ruleset `24149994` 要求一个有效审批，并配置 Team `19774274` 为 always bypass actor。本次只使用仓库现有 Owner/Admin/Team 权限处理已授权任务的形式审批门槛，没有更改组织通用 ruleset、降低审批或 required checks，也没有生成虚假的 GitHub review。
 - 实读 `GET /repos/lqepoch/EqoBoard/rules/branches/main` 时，`pull_request.parameters.required_approving_review_count` 为 `1`，并同时返回 REST/OpenAPI schema 当前未列出的 `require_extra_approval_for_unattributed_changes: false`。GitHub 官方 ruleset 文档说明清除“unattributed Copilot PR”额外审批设置后只要求配置的审批数；策略因此只接受该字段为布尔 `false`，布尔 `true` 暂时阻断（尚未实现该额外身份条件），类型错误与其它未知参数也阻断。
 - 历史 CI run `37588824743` 已关联合并 PR；当前 REST 响应的 `pull_requests` 为空。该数据不能用于候选合并，策略会因无法确认唯一 PR 绑定而拒绝。
 - 最近已观察到的 required CI job context 是 `Rust data / gateway / execution`、`Offline market-data contract tests` 和 `OpenTerminal / AG Grid / Next.js`。CI 增加了 auto-merge 策略离线测试但不增加 job 或改名，因此 manifest 仍是这三个 context。实际验收 CI 增加或改名 job 时，必须先更新受信清单和对应 fixture。
 
-这些事实说明策略测试已通过，不代表自动合并 App、Ruleset bypass 或 GitHub 工作流已经完成运行验收。管理员配置缺失时保持阻止状态，不伪造 review 或降低分支保护。
+PR #29 已在明确的 owner 自合并授权下完成，合并时间为 `2026-10-07T23:27:31Z`（上海时间 `2026-10-08 07:27:31`）。候选 head 为 `e3d596ab6f9dda57c1688bd98f8f7c2eca5b2f09`，该 head 的树为 `b5d04be01f032e029cf5a65e3701420577892bd4`；CI run `37698557986` 和 CodeQL run `37698553366` 对应检查全部 8/8 成功，独立非作者最终 diff 复核没有 P1/P2 阻断，review thread 为 0。通过现有 Owner/Admin/Team 权限后，PR 已合并；远程 `main` 为 `e1b73c1347ce79d9b86d4e4fe3d1c5942b20ab97`，树与已测 head 一致。相关真实 native 检查为 7/7，default profile 与 cleanup 检查通过。此证据记录的是 PR #29 的一次 owner 自合并，不代表 App 自动合并已启用，也不部署服务或启用 Paper/Live execution。
 
-## 受信触发与 PR/CI 绑定
+后续已明确授权的当前任务可沿用此 owner operator 路径，不要求每个 PR 再次请求相同授权。策略测试通过不代表专用 App、App bypass 或其 GitHub 工作流已完成运行验收；App 配置缺失时 App 路径仍保持阻止，不能伪造 review 或降低分支保护。
+
+## Owner 授权的 operator 自合并
+
+用户明确授权 owner 在当前任务自合并后，授权在该任务及其 PR 范围内持续有效。owner 可以在正式审批是唯一剩余 ruleset 门槛时，使用仓库已有 Owner/Admin/Team 权限例外完成合并。此操作不是独立审查，不能创建、冒称或要求 GitHub `APPROVED` 记录；最终 diff 必须由非 PR 作者独立复核并无阻断问题。
+
+每次写入前重新读取 PR 和 `origin/main`，确保 base 指向最新 `main`，固定候选 head SHA，并确认没有冲突。要求当前 head 上受信 manifest required checks 与生效 ruleset required checks 的并集全部成功，且 CodeQL 当前 head 检查成功；pending、失败、陈旧、未知、无法匹配 head 的任何检查都会阻止合并。review threads 必须全部解决。若更新 head 或 base，则重新完成最终 diff 复核并等待自然触发的检查结果；不以空提交或手工 rerun 伪造新证据。
+
+调用 merge 接口时将固定 head SHA 作为 expected SHA；收到结果后复读 PR，核验其已合并以及 merge SHA，再 fetch 远程 `main` 核对合并提交与目标树。若 head、base、规则、review、thread 或检查在最终读取中有变化，停止并重新审查。此流程只用当前仓库已有权限，不改组织通用 ruleset、不降低 required checks、不扩大到其它仓库，也不触发部署或券商操作。
+
+## 专用 App：受信触发与 PR/CI 绑定
 
 特权工作流只允许在受信 `main` 引用上运行。`workflow_run` 处理器必须运行仓库 `main` 上的工作流定义，不得 checkout、执行或加载 PR head 的代码、脚本或 artifact。它只通过 GitHub API 读取 PR 元数据、文件、review、checks、status、ruleset 和权限。
 
@@ -28,15 +38,15 @@
 
 GitHub 官方接口参考：[workflow_run 事件](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run)、[特权 workflow 防不可信代码说明](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target)、[Actions workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs)、[Pull request reviews API](https://docs.github.com/en/rest/pulls/reviews)、[Check runs API](https://docs.github.com/en/rest/checks/runs)、[commit statuses API](https://docs.github.com/en/rest/commits/statuses)、[branch rules API](https://docs.github.com/en/rest/repos/rules)、[merge pull request API](https://docs.github.com/en/rest/pulls/pulls)。
 
-## 审查、路径与检查策略
+## 专用 App：审查、路径与检查策略
 
-当前分支规则中的 `pull_request.parameters.required_approving_review_count` 应用于所有 PR；策略从 GitHub 活跃分支规则 API 读取审批数并要求对应数量的独立人类审查者，其最新已提交 review 必须是绑定当前 head SHA 的 `APPROVED`。策略的受信最低审批数固定为 1，配置数为 0 时仍要求一名审查者；配置数大于 1 时按更高数量执行。活跃规则响应必须包含至少一个有效 `pull_request` rule；空规则列表或仅有其他规则会以 `pull-request-review-policy-missing` 阻止合并，避免 App bypass 在规则误删或不匹配时降低审批要求。未知 pull-request 参数、缺少或无效的审批数也拒绝。敏感文件还至少需要一名这样的审查者；PR 作者、GitHub App、Bot、无写权限用户和旧 head 上的审批不计入。`CHANGES_REQUESTED` 和未解决 review thread 阻止合并。为避免沿用含义不清的旧批准，较新的 `COMMENTED` 或 `DISMISSED` review 也会使对应审查者的旧批准失效。
+专用 App 策略从 GitHub 活跃分支规则 API 读取 `pull_request.parameters.required_approving_review_count`，并要求配置数量的独立人类审查者；其最新已提交 review 必须是绑定当前 head SHA 的 `APPROVED`。策略的受信最低审批数固定为 1，配置数为 0 时仍要求一名审查者；配置数大于 1 时按更高数量执行。活跃规则响应必须包含至少一个有效 `pull_request` rule；空规则列表或仅有其他规则会以 `pull-request-review-policy-missing` 阻止 App 合并，避免 App bypass 在规则误删或不匹配时降低审批要求。未知 pull-request 参数、缺少或无效的审批数也拒绝。敏感文件还至少需要一名这样的审查者；PR 作者、GitHub App、Bot、无写权限用户和旧 head 上的审批不计入。`CHANGES_REQUESTED` 和未解决 review thread 阻止 App 合并。为避免沿用含义不清的旧批准，较新的 `COMMENTED` 或 `DISMISSED` review 也会使对应审查者的旧批准失效。
 
-GitHub 文档说明，未归属 Copilot PR 的额外审批默认启用；清除该设置后，PR 只需要配置的审批数。官方 REST/OpenAPI 和 Octokit generated schema 目前没有列出 API 返回的 `require_extra_approval_for_unattributed_changes` 扩展字段。策略只支持经官方文档确认的布尔 `false`；`true`、`require_code_owner_review` / `require_last_push_approval` 为 `true`、非空 `required_reviewers`、类型错误及其它未知参数都 fail closed。当前这项 API 字段不再阻塞，额外审批或特定审查规则尚未实现时仍阻止自动合并；GitHub App/Secrets 配置也仍未完成。参考：[ruleset 审批规则](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#additional-approval-for-unattributed-copilot-pull-requests)、[GitHub changelog](https://github.blog/changelog/2026-08-21-shared-agentic-work-with-github-copilot-in-microsoft-teams/)、[REST/OpenAPI schema at `734bc9c`](https://github.com/github/rest-api-description/blob/734bc9c1030b774eb3fc909cce477aceea21cf77/descriptions/api.github.com/api.github.com.2026-03-10.json)、[Octokit generated schema at `83df989`](https://github.com/octokit/openapi-types.ts/blob/83df9890720ab7d64bbaf8e07e57751f1b23ed59/packages/openapi-types/types.d.ts)。
+GitHub 文档说明，未归属 Copilot PR 的额外审批默认启用；清除该设置后，PR 只需要配置的审批数。官方 REST/OpenAPI 和 Octokit generated schema 目前没有列出 API 返回的 `require_extra_approval_for_unattributed_changes` 扩展字段。专用 App 策略只支持经官方文档确认的布尔 `false`；`true`、`require_code_owner_review` / `require_last_push_approval` 为 `true`、非空 `required_reviewers`、类型错误及其它未知参数都 fail closed。当前这项 API 字段不再阻塞，额外审批或特定审查规则尚未实现时仍阻止 App 自动合并；GitHub App/Secrets 配置也仍未完成。owner operator 流程使用前一节的单独门槛，不改此 App 策略。参考：[ruleset 审批规则](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#additional-approval-for-unattributed-copilot-pull-requests)、[GitHub changelog](https://github.blog/changelog/2026-08-21-shared-agentic-work-with-github-copilot-in-microsoft-teams/)、[REST/OpenAPI schema at `734bc9c`](https://github.com/github/rest-api-description/blob/734bc9c1030b774eb3fc909cce477aceea21cf77/descriptions/api.github.com/api.github.com.2026-03-10.json)、[Octokit generated schema at `83df989`](https://github.com/octokit/openapi-types.ts/blob/83df9890720ab7d64bbaf8e07e57751f1b23ed59/packages/openapi-types/types.d.ts)。
 
 敏感范围覆盖 BFF/API、身份和安全、domain、Alpaca、execution、gateway、根和子项目配置、Docker/Compose、所有 workflow、AGENTS/skills、自动合并策略及其文档。重命名同时检查 `filename` 和 `previous_filename`；文件列表缺失、截断、路径不合法或 rename 来源缺失均拒绝。
 
-检查清单是仓库受信 required job manifest 与 `main` 生效 ruleset required status check 的并集。三个 CI job 必须完成成功，且它们的 check run `check_suite_id` 必须匹配候选的最新受信 CI workflow run；相同名称、不同 check suite 的新成功结果不能冒充目标 job。CodeQL 和四个已登记的 Analyze context 是非 required guard：可以缺席，但出现后必须在当前 head 上成功且 provider 匹配。当前 head 的未知 check/status context、缺失必需 context、pending/failure/error、未知结论或未知 provider 都拒绝。正在运行的自动合并工作流自身不按显示名称跳过；只有绑定候选 PR head 的检查才参与判断。
+App 检查清单是仓库受信 required job manifest 与 `main` 生效 ruleset required status check 的并集。三个 CI job 必须完成成功，且它们的 check run `check_suite_id` 必须匹配候选的最新受信 CI workflow run；相同名称、不同 check suite 的新成功结果不能冒充目标 job。CodeQL 和四个已登记的 Analyze context 是 App 路径的非 required guard：可以缺席，但出现后必须在当前 head 上成功且 provider 匹配。owner operator 路径另要求 CodeQL 当前 head 成功。当前 head 的未知 check/status context、缺失必需 context、pending/failure/error、未知结论或未知 provider 都拒绝。正在运行的自动合并工作流自身不按显示名称跳过；只有绑定候选 PR head 的检查才参与判断。
 
 Commit statuses 从 GitHub `List commit statuses for a reference` 接口完整分页，并按不区分大小写的 context 使用最新 `updated_at`、再以 `id` 打破并列；旧 status 不覆盖较新 status。combined-status 只核验 SHA 和 context `total_count`，不把其默认第一页当完整状态集。分页错误、数量不一致、无效时间/ID或超过安全页数都会拒绝。GitHub merge API 仍须服从现有分支保护。
 

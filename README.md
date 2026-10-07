@@ -100,7 +100,7 @@ npm run dev
 | SIP/OPRA 行情来源 | Gateway contract 和原生 Widget 使用 loopback 协议 mock 验证；source=`unknown`，真实 Alpaca entitlement/行情未验证 |
 | 离线、恢复、停 OpenBB、故障升级与回滚 | attempt-22 验证 Gateway offline/restart、OpenBB 停服时主终端可用、坏镜像 unhealthy、原归档恢复、cleanup |
 | Paper / Live | BrokerAdapter 仍 disabled；没有提交订单 |
-| 集成分支 | PR #29 汇总并验收依赖 PR #22–#28；在人工审查和合并前，`main` 仍是 `621de548827bc3bfd81e509eec2da8dfee28c221` |
+| 集成分支 | PR #29 已由 owner 在非作者最终 diff 复核和 8/8 当前 head 检查通过后合并；`main` 为 `e1b73c1347ce79d9b86d4e4fe3d1c5942b20ab97`，交易仍 disabled |
 
 测试行使用协议 mock 且 `source=unknown`，未验证真实 Alpaca entitlement，也没有下单。[本地验收记录](docs/evidence/openbb-local-runtime-acceptance.json)绑定冻结代码、Compose 镜像 archive、OCI descriptors 和 runtime SBOM；release gate 仍未批准。完整构建与回滚说明见 [OpenBB supply-chain runbook](docs/OPENBB_SUPPLY_CHAIN.md)；本地 tag 或 daemon RepoDigest 观察都不表示 registry 发布。
 
@@ -118,4 +118,4 @@ npx tsc --noEmit -p web/tsconfig.json
 npm run build -w web
 ```
 
-安全、BrokerAdapter、行情与演进说明见 `docs/` 与 `.agents/skills/`。
+安全、BrokerAdapter、行情与演进说明见 `docs/` 与 `.agents/skills/`。Owner 自合并授权与自动合并 App 的边界、检查要求和当前验收状态见 [PR 合并与自动合并治理](docs/AUTOMERGE.md)。
