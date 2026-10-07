@@ -16,7 +16,9 @@ use axum::{
 use chrono::{NaiveDate, Utc};
 use eqo_alpaca_data::{AlpacaData, DataError};
 use eqo_domain::{parse_occ, MarketEvent};
-use eqo_execution::{BrokerRouter, OrderError, OrderIntent, PreviewStore, RiskPolicy};
+use eqo_execution::{
+    BrokerRouter, OrderError, OrderIntent, PreviewOwner, PreviewStore, RiskPolicy,
+};
 use futures_util::stream;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -99,6 +101,10 @@ impl GatewayPrincipal {
     fn has_scope(&self, scope: &str) -> bool {
         self.scopes.contains(scope)
     }
+
+    fn preview_owner(&self) -> PreviewOwner {
+        PreviewOwner::new(self.identity_issuer.clone(), self.subject.clone())
+    }
 }
 
 #[derive(Clone)]
@@ -144,17 +150,63 @@ fn fail(status: StatusCode, error: &'static str, detail: impl Into<String>) -> R
 fn data_failure(err: DataError) -> Response {
     fail(err.status_code(), "market_data_error", err.to_string())
 }
-fn order_failure(err: OrderError) -> Response {
-    let status = match err {
+#[derive(Debug, Serialize)]
+struct OrderOutcomeError {
+    state: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_order_id: Option<String>,
+    retryable: bool,
+    recovery_required: bool,
+    detail: String,
+}
+
+fn order_outcome_error(
+    status: StatusCode,
+    state: &'static str,
+    client_order_id: Option<Uuid>,
+    recovery_required: bool,
+    detail: impl Into<String>,
+) -> Response {
+    (
+        status,
+        Json(OrderOutcomeError {
+            state,
+            client_order_id: client_order_id.map(|id| id.to_string()),
+            retryable: false,
+            recovery_required,
+            detail: detail.into(),
+        }),
+    )
+        .into_response()
+}
+
+fn order_failure(err: OrderError, client_order_id: Option<Uuid>) -> Response {
+    let (status, state, recovery_required) = match &err {
         OrderError::LiveForbidden | OrderError::Invalid(_) | OrderError::RiskLimit => {
-            StatusCode::UNPROCESSABLE_ENTITY
+            (StatusCode::UNPROCESSABLE_ENTITY, "rejected", false)
         }
-        OrderError::Disabled | OrderError::MissingAdapter => StatusCode::SERVICE_UNAVAILABLE,
-        OrderError::Expired => StatusCode::CONFLICT,
-        OrderError::Rejected => StatusCode::UNPROCESSABLE_ENTITY,
-        OrderError::UnknownState => StatusCode::BAD_GATEWAY,
+        OrderError::Disabled | OrderError::MissingAdapter => {
+            (StatusCode::SERVICE_UNAVAILABLE, "blocked", false)
+        }
+        OrderError::Expired | OrderError::NotOwner => (StatusCode::NOT_FOUND, "blocked", false),
+        OrderError::Rejected => (StatusCode::UNPROCESSABLE_ENTITY, "rejected", false),
+        OrderError::UnknownState => (StatusCode::BAD_GATEWAY, "unknown", true),
     };
-    fail(status, "order_error", err.to_string())
+    order_outcome_error(
+        status,
+        state,
+        client_order_id,
+        recovery_required,
+        err.to_string(),
+    )
+}
+
+fn disabled_execution_capabilities() -> Value {
+    json!({
+        "alpaca":{"paper":{"enabled":false,"implementation":"disabled"},"live":{"enabled":false,"implementation":"disabled"}},
+        "ibkr":{"paper":{"enabled":false,"implementation":"disabled"},"live":{"enabled":false,"implementation":"disabled"}},
+        "schwab":{"paper":{"enabled":false,"implementation":"disabled"},"live":{"enabled":false,"implementation":"disabled"}}
+    })
 }
 fn safe_symbol(s: &str) -> bool {
     !s.is_empty()
@@ -340,7 +392,8 @@ async fn status(
         "requested_execution_mode":state.requested_execution_mode,
         "execution_mode":"disabled",
         "execution_enabled":false,
-        "configured_adapters":state.brokers.configured(),
+        "broker_capabilities":disabled_execution_capabilities(),
+        "adapter_endpoints_configured":state.brokers.configured(),
         "max_stock_subscriptions":state.max_stock_subscriptions,
         "active_stock_subscriptions":state.stock_tx.borrow().len(),
         "max_option_subscriptions":state.max_option_subscriptions,
@@ -975,10 +1028,14 @@ async fn order_preview(
     if let Some(response) = require_scope(&principal, "orders:preview") {
         return response;
     }
-    match state.previews.create(order, state.risk).await {
+    match state
+        .previews
+        .create(principal.preview_owner(), order, state.risk)
+        .await
+    {
         Ok(preview) => Json(json!({"preview":preview,"execution_enabled":state.execution_enabled}))
             .into_response(),
-        Err(err) => order_failure(err),
+        Err(err) => order_failure(err, None),
     }
 }
 
@@ -1014,40 +1071,45 @@ async fn order_submit(
     if let Some(response) = require_scope(&principal, "paper:submit") {
         return response;
     }
-    if !state.execution_enabled {
-        return (
-            StatusCode::CONFLICT,
-            Json(json!({
-                "state":"blocked",
-                "retryable":false,
-                "recovery_required":false,
-                "detail":"Paper execution is disabled until persistent preview, outbox, and account-binding gates are complete."
-            })),
-        )
-            .into_response();
-    }
     if !body.confirm {
-        return fail(
+        return order_outcome_error(
             StatusCode::BAD_REQUEST,
-            "confirmation_required",
+            "rejected",
+            None,
+            false,
             "explicit confirm=true required",
         );
     }
-    let intent = match state.previews.consume(body.preview_id).await {
+    let owner = principal.preview_owner();
+    if let Err(err) = state.previews.authorize(body.preview_id, &owner).await {
+        return order_failure(err, None);
+    }
+    if !state.execution_enabled {
+        return order_outcome_error(
+            StatusCode::CONFLICT,
+            "blocked",
+            None,
+            false,
+            "Paper execution is disabled until persistent preview, outbox, and account-binding gates are complete.",
+        );
+    }
+    let intent = match state.previews.consume(body.preview_id, &owner).await {
         Ok(o) => o,
-        Err(err) => return order_failure(err),
+        Err(err) => return order_failure(err, None),
     };
     if let Err(err) = eqo_execution::validate_order(&intent, state.risk) {
-        return order_failure(err);
+        return order_failure(err, None);
     }
     let broker = intent.broker.name();
     let id = Uuid::new_v4();
     // Fail-closed if audit cannot be durably appended.
     if let Err(err) = audit(&state, id, broker, "attempted").await {
         error!(error=%err,"audit write failed - order blocked");
-        return fail(
+        return order_outcome_error(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "audit_unavailable",
+            "blocked",
+            Some(id),
+            false,
             "order blocked",
         );
     }
@@ -1059,26 +1121,16 @@ async fn order_submit(
             Json(json!({"client_order_id":id,"ack":ack})).into_response()
         }
         Err(err) => {
-            let state_name = if matches!(err, OrderError::UnknownState) {
-                "unknown"
-            } else {
-                "rejected"
+            let state_name = match &err {
+                OrderError::UnknownState => "unknown",
+                OrderError::Rejected => "rejected",
+                _ => "blocked",
             };
             if let Err(audit_err) = audit(&state, id, broker, state_name).await {
                 error!(error=%audit_err,"post-submission audit failed");
             }
             // Return id so a timeout can be reconciled; never silently retry.
-            let status = if matches!(err, OrderError::UnknownState) {
-                StatusCode::BAD_GATEWAY
-            } else {
-                StatusCode::UNPROCESSABLE_ENTITY
-            };
-            (
-                status,
-                Json(json!({"error":"order_failed","detail":err.to_string(),
-                "client_order_id":id})),
-            )
-                .into_response()
+            order_failure(err, Some(id))
         }
     }
 }
@@ -1255,24 +1307,351 @@ mod tests {
     }
 
     fn test_token(secret: &[u8], kid: &str, issuer: &str, scope: Vec<&str>) -> String {
+        test_token_for(
+            secret,
+            kid,
+            issuer,
+            scope,
+            "subject-1",
+            "https://identity.example",
+        )
+    }
+
+    fn test_token_for(
+        secret: &[u8],
+        kid: &str,
+        issuer: &str,
+        scope: Vec<&str>,
+        subject: &str,
+        identity_issuer: &str,
+    ) -> String {
         let now = Utc::now().timestamp().max(0) as usize;
         let mut header = Header::new(Algorithm::HS256);
         header.kid = Some(kid.to_owned());
         encode(
             &header,
             &TestClaims {
-                sub: "subject-1",
+                sub: subject,
                 iss: issuer,
                 aud: GATEWAY_AUDIENCE,
                 iat: now,
                 exp: now + 60,
                 jti: "test-token-id",
-                idp_iss: "https://identity.example",
+                idp_iss: identity_issuer,
                 scope,
             },
             &EncodingKey::from_secret(secret),
         )
         .expect("test token encodes")
+    }
+
+    fn order_test_state(brokers: BrokerRouter, keys: AuthKeyring) -> AppState {
+        let (stock_tx, _) = watch::channel(Vec::<String>::new());
+        let (option_tx, _) = watch::channel(Vec::<String>::new());
+        let (broadcasts, _) = broadcast::channel(16);
+        AppState {
+            data: None,
+            stock_feed: "sip".into(),
+            option_feed: "opra".into(),
+            requested_execution_mode: "paper".into(),
+            execution_enabled: false,
+            auth_keys: keys,
+            stock_symbols: Vec::new(),
+            max_stock_subscriptions: 100,
+            stock_tx,
+            stock_leases: Arc::default(),
+            max_option_subscriptions: 500,
+            option_tx,
+            option_leases: Arc::default(),
+            broadcasts,
+            tickets: Arc::default(),
+            previews: PreviewStore::default(),
+            risk: RiskPolicy {
+                max_qty: 10,
+                max_loss: 1_000.0,
+            },
+            brokers,
+            audit_path: std::env::temp_dir()
+                .join(format!(
+                    "eqoboard-gateway-order-test-{}.jsonl",
+                    Uuid::new_v4()
+                ))
+                .to_string_lossy()
+                .into_owned(),
+            audit_lock: Arc::default(),
+            chains: Arc::default(),
+        }
+    }
+
+    fn order_test_app(state: AppState, keys: AuthKeyring) -> Router {
+        Router::new()
+            .route("/api/v1/orders/preview", post(order_preview))
+            .route("/api/v1/orders/submit", post(order_submit))
+            .route("/api/v1/status", get(status))
+            .route_layer(middleware::from_fn_with_state(Arc::new(keys), require_auth))
+            .with_state(state)
+    }
+
+    async fn post_json(app: &Router, path: &str, token: &str, body: Value) -> (StatusCode, Value) {
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(Method::POST)
+                    .uri(path)
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(axum::body::Body::from(body.to_string()))
+                    .expect("test request builds"),
+            )
+            .await
+            .expect("test router responds");
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
+            .await
+            .expect("test response body reads");
+        let body = serde_json::from_slice(&bytes).expect("response is JSON");
+        (status, body)
+    }
+
+    async fn get_json(app: &Router, path: &str, token: &str) -> (StatusCode, Value) {
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method(Method::GET)
+                    .uri(path)
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(axum::body::Body::empty())
+                    .expect("test request builds"),
+            )
+            .await
+            .expect("test router responds");
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
+            .await
+            .expect("test response body reads");
+        let body = serde_json::from_slice(&bytes).expect("response is JSON");
+        (status, body)
+    }
+
+    #[derive(Clone, Copy)]
+    enum MockAdapterResult {
+        Accepted,
+        InvalidAck,
+    }
+
+    struct CountingAdapter {
+        calls: Arc<AtomicUsize>,
+        result: MockAdapterResult,
+    }
+
+    #[async_trait::async_trait]
+    impl eqo_execution::BrokerAdapter for CountingAdapter {
+        async fn submit(
+            &self,
+            id: Uuid,
+            _intent: &OrderIntent,
+        ) -> Result<eqo_execution::AdapterAck, OrderError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            match self.result {
+                MockAdapterResult::Accepted => Ok(eqo_execution::AdapterAck {
+                    client_order_id: id.to_string(),
+                    status: "accepted".into(),
+                    broker_order_id: None,
+                    as_of: None,
+                }),
+                MockAdapterResult::InvalidAck => Ok(eqo_execution::AdapterAck {
+                    client_order_id: id.to_string(),
+                    status: "working".into(),
+                    broker_order_id: Some("broker-order-1".into()),
+                    as_of: None,
+                }),
+            }
+        }
+    }
+
+    fn valid_preview_intent() -> OrderIntent {
+        let expiration = Utc::now().date_naive() + chrono::Duration::days(30);
+        let expiration = expiration.format("%y%m%d");
+        OrderIntent {
+            broker: eqo_execution::Broker::Ibkr,
+            environment: eqo_execution::Environment::Paper,
+            kind: eqo_execution::OrderKind::Vertical,
+            symbol: None,
+            quantity: 1,
+            limit_price: 0.01,
+            net_effect: eqo_execution::NetEffect::Debit,
+            legs: vec![
+                eqo_execution::OrderLeg {
+                    symbol: format!("QQQ{expiration}P00620000"),
+                    side: eqo_execution::Side::Buy,
+                },
+                eqo_execution::OrderLeg {
+                    symbol: format!("QQQ{expiration}P00600000"),
+                    side: eqo_execution::Side::Sell,
+                },
+            ],
+        }
+    }
+
+    #[tokio::test]
+    async fn order_preview_is_identity_bound_and_paper_submit_never_reaches_adapter() {
+        let bff_secret = vec![b'b'; 64];
+        let research_secret = vec![b'r'; 64];
+        let keys = AuthKeyring {
+            bff: Some(Arc::new(bff_secret.clone())),
+            research: Some(Arc::new(research_secret)),
+        };
+        let adapter_calls = Arc::new(AtomicUsize::new(0));
+        let brokers = BrokerRouter::from_adapters(HashMap::from([(
+            eqo_execution::Broker::Ibkr,
+            Arc::new(CountingAdapter {
+                calls: adapter_calls.clone(),
+                result: MockAdapterResult::Accepted,
+            }) as Arc<dyn eqo_execution::BrokerAdapter>,
+        )]));
+        let app = order_test_app(order_test_state(brokers, keys.clone()), keys);
+        let owner_a = test_token_for(
+            &bff_secret,
+            "bff",
+            BFF_ISSUER,
+            vec!["orders:preview", "paper:submit", "market:read"],
+            "same-subject",
+            "https://identity-a.example",
+        );
+        let owner_b_same_subject = test_token_for(
+            &bff_secret,
+            "bff",
+            BFF_ISSUER,
+            vec!["paper:submit"],
+            "same-subject",
+            "https://identity-b.example",
+        );
+
+        let requested = valid_preview_intent();
+        let requested_json = serde_json::to_value(&requested).unwrap();
+        let (preview_status, preview_response) = post_json(
+            &app,
+            "/api/v1/orders/preview",
+            &owner_a,
+            requested_json.clone(),
+        )
+        .await;
+        assert_eq!(preview_status, StatusCode::OK);
+        assert_eq!(preview_response["execution_enabled"], false);
+        let preview = &preview_response["preview"];
+        assert_eq!(preview["intent"], requested_json);
+        assert_eq!(preview["estimated_max_loss"], 1.0);
+        assert_eq!(preview["currency"], "USD");
+        let preview_id = preview["preview_id"].as_str().expect("preview id");
+
+        let (other_issuer_status, other_issuer_response) = post_json(
+            &app,
+            "/api/v1/orders/submit",
+            &owner_b_same_subject,
+            json!({"preview_id":preview_id,"confirm":true}),
+        )
+        .await;
+        assert_eq!(other_issuer_status, StatusCode::NOT_FOUND);
+        assert_eq!(other_issuer_response["state"], "blocked");
+        assert_eq!(other_issuer_response["retryable"], false);
+        assert_eq!(other_issuer_response["recovery_required"], false);
+        assert_eq!(adapter_calls.load(Ordering::SeqCst), 0);
+
+        let (owner_submit_status, owner_submit_response) = post_json(
+            &app,
+            "/api/v1/orders/submit",
+            &owner_a,
+            json!({"preview_id":preview_id,"confirm":true}),
+        )
+        .await;
+        assert_eq!(owner_submit_status, StatusCode::CONFLICT);
+        assert_eq!(owner_submit_response["state"], "blocked");
+        assert_eq!(owner_submit_response["retryable"], false);
+        assert!(owner_submit_response["detail"]
+            .as_str()
+            .unwrap()
+            .contains("Paper execution is disabled"));
+        assert_eq!(adapter_calls.load(Ordering::SeqCst), 0);
+
+        let (status_code, status_response) = get_json(&app, "/api/v1/status", &owner_a).await;
+        assert_eq!(status_code, StatusCode::OK);
+        assert_eq!(status_response["execution_enabled"], false);
+        assert_eq!(
+            status_response["broker_capabilities"]["schwab"]["paper"]["enabled"],
+            false
+        );
+        assert_eq!(
+            status_response["broker_capabilities"]["schwab"]["paper"]["implementation"],
+            "disabled"
+        );
+        assert_eq!(
+            status_response["adapter_endpoints_configured"],
+            json!(["ibkr"])
+        );
+        assert_eq!(adapter_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn invalid_adapter_ack_keeps_client_order_id_and_recovery_contract() {
+        let bff_secret = vec![b'b'; 64];
+        let keys = AuthKeyring {
+            bff: Some(Arc::new(bff_secret.clone())),
+            research: Some(Arc::new(vec![b'r'; 64])),
+        };
+        let adapter_calls = Arc::new(AtomicUsize::new(0));
+        let brokers = BrokerRouter::from_adapters(HashMap::from([(
+            eqo_execution::Broker::Ibkr,
+            Arc::new(CountingAdapter {
+                calls: adapter_calls.clone(),
+                result: MockAdapterResult::InvalidAck,
+            }) as Arc<dyn eqo_execution::BrokerAdapter>,
+        )]));
+        let mut state = order_test_state(brokers, keys.clone());
+        // Test the otherwise unreachable dispatch branch with an in-memory adapter only.
+        // Production startup hard-codes this gate to false until persistence and account binding exist.
+        state.execution_enabled = true;
+        let audit_path = state.audit_path.clone();
+        let app = order_test_app(state, keys);
+        let owner = test_token_for(
+            &bff_secret,
+            "bff",
+            BFF_ISSUER,
+            vec!["orders:preview", "paper:submit"],
+            "operator-1",
+            "https://identity.example",
+        );
+        let (preview_status, preview_response) = post_json(
+            &app,
+            "/api/v1/orders/preview",
+            &owner,
+            serde_json::to_value(valid_preview_intent()).unwrap(),
+        )
+        .await;
+        assert_eq!(preview_status, StatusCode::OK);
+        let preview_id = preview_response["preview"]["preview_id"]
+            .as_str()
+            .expect("preview id");
+
+        let (submit_status, submit_response) = post_json(
+            &app,
+            "/api/v1/orders/submit",
+            &owner,
+            json!({"preview_id":preview_id,"confirm":true}),
+        )
+        .await;
+        assert_eq!(submit_status, StatusCode::BAD_GATEWAY);
+        assert_eq!(submit_response["state"], "unknown");
+        assert_eq!(submit_response["retryable"], false);
+        assert_eq!(submit_response["recovery_required"], true);
+        assert!(submit_response["client_order_id"].as_str().is_some());
+        assert!(submit_response["detail"]
+            .as_str()
+            .unwrap()
+            .contains("reconcile by client_order_id"));
+        assert_eq!(adapter_calls.load(Ordering::SeqCst), 1);
+        let _ = tokio::fs::remove_file(audit_path).await;
     }
 
     async fn protected_call_count(keys: AuthKeyring, token: Option<&str>) -> (StatusCode, usize) {

@@ -39,6 +39,7 @@ const gatewayControl = {
   sseDisconnectAfterMs: null,
   quotes: null,
   previewDelaysMs: [],
+  previewTtlMs: 60_000,
 };
 let previewSequence = 0;
 
@@ -184,6 +185,7 @@ const oidc = createServer(async (req, res) => {
       snapshotStatus: 200, snapshotFeed: "sip", snapshots: null,
       optionStatus: 200, optionFeed: "opra", contracts: [],
       sseStatus: 200, sseEvents: [], sseDisconnectAfterMs: null, quotes: null, previewDelaysMs: [],
+      previewTtlMs: 60_000,
     });
     return sendJson(res, 200, { ok: true });
   }
@@ -201,7 +203,7 @@ const oidc = createServer(async (req, res) => {
   }
   if (url.pathname === "/__test/config" && req.method === "POST") {
     const body = await readJson(req).catch(() => ({}));
-    for (const key of ["snapshotStatus", "snapshotFeed", "snapshots", "optionStatus", "optionFeed", "contracts", "sseStatus", "sseEvents", "sseDisconnectAfterMs", "quotes", "previewDelaysMs"]) {
+    for (const key of ["snapshotStatus", "snapshotFeed", "snapshots", "optionStatus", "optionFeed", "contracts", "sseStatus", "sseEvents", "sseDisconnectAfterMs", "quotes", "previewDelaysMs", "previewTtlMs"]) {
       if (Object.hasOwn(body, key)) gatewayControl[key] = body[key];
     }
     previewSequence = 0;
@@ -272,7 +274,12 @@ const gateway = createServer(async (req, res) => {
     return sendJson(res, 200, {
       service: "EqoBoard", market_credentials_present: false,
       stock_feed: "sip", option_feed: "opra", execution_mode: "disabled",
-      configured_adapters: [], as_of: new Date().toISOString(),
+      adapter_endpoints_configured: ["ibkr"],
+      broker_capabilities: Object.fromEntries(["alpaca", "ibkr", "schwab"].map((broker) => [broker, {
+        paper: { enabled: false, implementation: "disabled" },
+        live: { enabled: false, implementation: "disabled" },
+      }])),
+      as_of: new Date().toISOString(),
     });
   }
   if (url.pathname === "/api/v1/stocks/snapshots") {
@@ -306,7 +313,7 @@ const gateway = createServer(async (req, res) => {
     return sendJson(res, 200, {
       preview: {
         preview_id: randomUUID(),
-        expires_at: new Date(Date.now() + 60_000).toISOString(),
+        expires_at: new Date(Date.now() + gatewayControl.previewTtlMs).toISOString(),
         estimated_max_loss: 1.00,
         currency: "USD",
         intent: body,

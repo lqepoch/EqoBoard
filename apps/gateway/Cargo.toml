@@ -23,3 +23,4 @@ jsonwebtoken = { version = "=10.2.0", default-features = false, features = ["rus
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+async-trait = "0.1"

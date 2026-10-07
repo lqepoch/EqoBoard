@@ -139,3 +139,7 @@ E2E_WEB_ORIGIN="http://127.0.0.1:$terminal_host_port" \
 E2E_OIDC_ORIGIN="http://127.0.0.1:$oidc_host_port" \
 E2E_PRODUCTION=1 \
   npm run test:e2e -w web -- "${playwright_args[@]}"
+
+printf '%s\n' 'Running development-only preview-race and typed UNKNOWN browser checks against the real Next BFF and offline mocks.'
+env -u E2E_PRODUCTION -u E2E_REAL_GATEWAY E2E_SESSION_TTL_SECONDS=120 \
+  npm run test:e2e -w web -- --grep 'late preview|typed UNKNOWN|preview expiry'

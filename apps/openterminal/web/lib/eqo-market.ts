@@ -68,13 +68,17 @@ async function getRust<T>(path: string, authorization: string): Promise<T> {
 }
 export async function eqoStatus(authorization: string) {
   const data=await getRust<{market_credentials_present:boolean;stock_feed:string;option_feed:string;
-    execution_mode:string;configured_adapters:string[];as_of:string}>("/api/v1/status", authorization);
+    execution_mode:string;adapter_endpoints_configured:string[];
+    broker_capabilities:Record<string, {paper:{enabled:boolean;implementation:string};live:{enabled:boolean;implementation:string}}>;
+    as_of:string}>("/api/v1/status", authorization);
   return {
     ok:data.market_credentials_present, ai:false,
     providers:[{name:"Alpaca "+data.stock_feed.toUpperCase()+" (configuration)",ok:0,failed:0,lastLatencyMs:null},
       {name:"Alpaca "+data.option_feed.toUpperCase()+" (configuration)",ok:0,failed:0,lastLatencyMs:null}],
     dataSource:"Alpaca",stockFeed:data.stock_feed,optionFeed:data.option_feed,
-    executionMode:data.execution_mode, adapters:data.configured_adapters,
+    executionMode:data.execution_mode,
+    adapterEndpointsConfigured:data.adapter_endpoints_configured,
+    brokerCapabilities:data.broker_capabilities,
     note:"Configured subscription does not prove real-time entitlement; 401/403/429 are propagated",
     asOf:data.as_of
   };
