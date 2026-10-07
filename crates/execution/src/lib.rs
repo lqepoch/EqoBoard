@@ -1,7 +1,7 @@
 //! Fail-closed, broker-neutral order gateway; never places live orders.
 use async_trait::async_trait;
 use chrono::{Duration as ChronoDuration, Utc};
-use eqo_domain::{parse_occ, Right};
+use eqo_domain::parse_occ;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{

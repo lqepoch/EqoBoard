@@ -1,8 +1,8 @@
 # Do not bake Alpaca keys into image layers.
 FROM node:22-bookworm-slim AS web
 WORKDIR /app/apps/web
-COPY apps/web/package.json ./
-RUN npm install --ignore-scripts --no-audit --no-fund
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY apps/web ./
 RUN npm run build
 

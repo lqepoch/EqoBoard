@@ -4,7 +4,7 @@ use eqo_domain::{parse_occ, Bar, MarketEvent, OptionSnapshot, StockSnapshot};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::{broadcast, watch};
