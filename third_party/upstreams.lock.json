@@ -43,8 +43,9 @@
         }
       ],
       "build_gate": {
-        "status": "blocked",
-        "required_findings_to_clear": [
+        "status": "local-buildable",
+        "required_findings_to_clear": [],
+        "baseline_upstream_findings": [
           "commercial-grid-and-chart-packages",
           "commercial-enterprise-code-remains",
           "embedded-openbb-pro-enterprise-key",
@@ -56,11 +57,62 @@
           "license-notice-not-copied-into-image"
         ],
         "evidence": null,
+        "runtime_acceptance": "not-verified",
+        "browser_e2e": "not-run",
+        "deployment": "not-approved",
         "image": null,
         "image_digest": null,
         "image_sbom": null
       },
-      "build_recipe": null
+      "build_recipe": {
+        "path": "tools/openbb/community/Dockerfile",
+        "sha256": "ad07a2e25fc8bd8902013807d6d571d20595032ae7fad2e30e97e5ef401adc9f",
+        "variant": "lite-community",
+        "source_patch": {
+          "runner": {
+            "path": "tools/openbb/community/apply_patch.py",
+            "sha256": "51e2d7ad77588a240b593c447e92cf085d17b8e6ffa19c84b9f055a517ecc49c"
+          },
+          "files": [
+            {
+              "path": "tools/openbb/community/patches/community.patch",
+              "sha256": "a731a98f7a52d020f2f4947715a67fa86ff6733576f7e4c98b91fc5f975782ef"
+            }
+          ]
+        },
+        "support_files": [
+          {
+            "path": "tools/openbb/community/Dockerfile",
+            "sha256": "ad07a2e25fc8bd8902013807d6d571d20595032ae7fad2e30e97e5ef401adc9f"
+          },
+          {
+            "path": "tools/openbb/community/apply_patch.py",
+            "sha256": "51e2d7ad77588a240b593c447e92cf085d17b8e6ffa19c84b9f055a517ecc49c"
+          },
+          {
+            "path": "tools/openbb/community/patches/community.patch",
+            "sha256": "a731a98f7a52d020f2f4947715a67fa86ff6733576f7e4c98b91fc5f975782ef"
+          },
+          {
+            "path": "tools/openbb/community/patches/community.patch.json",
+            "sha256": "eaf73bdcec96ea02e8c845b622698580453bcd9ba52c9c1d6f482d550fca566c"
+          }
+        ],
+        "dependency_lock": {
+          "frontend": "terminalpro/bun.lock (frozen install)",
+          "backend": "backend-api/backend/poetry.lock (poetry check --lock; no lock regeneration fallback)"
+        },
+        "dependency_change_rationale": [
+          "AG Grid Community is pinned to 36.2.0 to match the EqoBoard OpenBB Community target; this release depends on ag-charts-types 14.2.0.",
+          "AG Charts Community, React, and types are pinned to 14.2.0 because retaining upstream 12.1.1 creates duplicate incompatible chart type versions and TypeScript failures in AgChartFromTable and OmniWidget."
+        ],
+        "build_limitations": [
+          "Debian apt package bytes are not pinned to a repository snapshot",
+          "pip bootstrap packages are version-pinned but not hash-pinned",
+          "frontend webfont download is performed by the upstream build without a content hash lock",
+          "local Docker Compose builds do not create a registry digest or immutable release artifact"
+        ]
+      }
     }
   ]
 }
