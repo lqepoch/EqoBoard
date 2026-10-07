@@ -4,7 +4,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Query, Request, State,
     },
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{sse::{Event, KeepAlive, Sse}, IntoResponse, Response},
     routing::{get, post},
@@ -30,7 +30,7 @@ use tokio::{
     io::AsyncWriteExt,
     sync::{broadcast, watch, Mutex, RwLock},
 };
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -260,6 +260,102 @@ async fn option_chain(State(state): State<AppState>, Query(query): Query<ChainQu
             cache.insert(cache_key, (Instant::now(), body.clone()));
             Json(body).into_response()
         }
+        Err(err) => data_failure(err),
+    }
+}
+
+/// OpenBB Workspace fetches these metadata descriptors via the configured data connector.
+async fn openbb_widgets() -> Json<Value> {
+    Json(serde_json::from_str(include_str!("../openbb/widgets.json"))
+        .expect("bundled OpenBB widgets.json must be valid JSON"))
+}
+async fn openbb_apps() -> Json<Value> {
+    Json(serde_json::from_str(include_str!("../openbb/apps.json"))
+        .expect("bundled OpenBB apps.json must be valid JSON"))
+}
+
+/// OpenBB AG Grid consumes flat arrays. The existing SIP source and as-of fields are preserved.
+async fn openbb_stocks(
+    State(state): State<AppState>,
+    Query(query): Query<SymbolsQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let raw = query.symbols.unwrap_or_else(|| "QQQ,SPY,NVDA".into());
+    let symbols: Vec<String> = raw.split(',').map(|x| x.trim().to_uppercase()).collect();
+    if symbols.is_empty() || symbols.len() > 50 || symbols.iter().any(|x| !safe_symbol(x)) {
+        return fail(StatusCode::BAD_REQUEST, "invalid_symbols", "1..50 valid symbols required");
+    }
+    if state.stock_feed != "sip" {
+        return fail(StatusCode::CONFLICT, "invalid_feed", "OpenBB SIP widget requires SIP entitlement");
+    }
+    match data.stock_snapshots(&symbols).await {
+        Ok(rows) => Json(json!(rows)).into_response(),
+        Err(err) => data_failure(err),
+    }
+}
+
+/// The IV and Greeks are snapshots, not synchronized executable combo prices.
+async fn openbb_options(
+    State(state): State<AppState>,
+    Query(query): Query<ChainQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let symbol = query.underlying.to_uppercase();
+    if !safe_symbol(&symbol) ||
+        NaiveDate::parse_from_str(&query.expiration, "%Y-%m-%d").is_err()
+    {
+        return fail(StatusCode::BAD_REQUEST, "invalid_options_query", "ticker or expiration invalid");
+    }
+    if state.option_feed != "opra" {
+        return fail(StatusCode::CONFLICT, "invalid_feed", "OpenBB OPRA widget requires OPRA entitlement");
+    }
+    match data.option_chain(&symbol, &query.expiration, None, None).await {
+        Ok(page) => {
+            let rows: Vec<Value> = page.contracts.into_iter().map(|contract| {
+                let mut row = serde_json::to_value(contract).expect("serialized contract");
+                if let Some(map) = row.as_object_mut() {
+                    map.insert("truncated".into(), json!(page.truncated));
+                }
+                row
+            }).collect();
+            Json(json!(rows)).into_response()
+        },
+        Err(err) => data_failure(err),
+    }
+}
+async fn openbb_bars(
+    State(state): State<AppState>,
+    Query(query): Query<BarsQuery>,
+) -> Response {
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
+    let symbol = query.symbol.to_uppercase();
+    let timeframe = query.timeframe.unwrap_or_else(|| "1Day".into());
+    let limit = query.limit.unwrap_or(500);
+    let days = query.days.unwrap_or(30);
+    if !safe_symbol(&symbol) || !(1..=1000).contains(&limit)
+        || !(1..=11000).contains(&days)
+        || !["1Min","5Min","15Min","1Hour","1Day","1Week","1Month"]
+            .contains(&timeframe.as_str())
+    {
+        return fail(StatusCode::BAD_REQUEST, "invalid_bars_query", "invalid ticker/timeframe/window");
+    }
+    if state.stock_feed != "sip" {
+        return fail(StatusCode::CONFLICT, "invalid_feed", "OpenBB SIP widget requires SIP entitlement");
+    }
+    match data.stock_bars(&symbol, &timeframe, limit, days).await {
+        Ok(bars) => {
+            let rows: Vec<Value> = bars.into_iter().map(|bar| {
+                json!({"time":bar.time,"open":bar.open,"high":bar.high,"low":bar.low,
+                    "close":bar.close,"volume":bar.volume,"symbol":symbol,"feed":"sip"})
+            }).collect();
+            Json(json!(rows)).into_response()
+        },
         Err(err) => data_failure(err),
     }
 }
@@ -655,6 +751,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(prune_leases(state.clone()));
     let api = Router::new()
         .route("/api/v1/status", get(status))
+        .route("/widgets.json", get(openbb_widgets))
+        .route("/apps.json", get(openbb_apps))
+        .route("/openbb/stocks", get(openbb_stocks))
+        .route("/openbb/options", get(openbb_options))
+        .route("/openbb/bars", get(openbb_bars))
         .route("/api/v1/stream/sse", get(live_sse))
         .route("/api/v1/stocks/snapshots", get(stock_snapshots))
         .route("/api/v1/stocks/bars", get(stock_bars))
@@ -671,6 +772,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .merge(api)
         .fallback_service(ServeDir::new(web_dist).append_index_html_on_directories(true))
         .layer(TraceLayer::new_for_http())
+        .layer(CorsLayer::new()
+            .allow_origin(HeaderValue::from_static("https://pro.openbb.co"))
+            .allow_methods([Method::GET, Method::OPTIONS])
+            .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!(addr=%addr,"EqoBoard listening");
