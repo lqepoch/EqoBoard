@@ -51,6 +51,7 @@ export type Quote = {
   exchange: string | null;
   marketState: string | null;
   source: string;
+  asOf?: string | null;
   sector?: string;
   label?: string;
 };
