@@ -156,6 +156,8 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build -w server
       - run: npm run test -w server
+      - name: Test client cancellation during BFF authorization
+        run: node --test web/lib/client-abort.test.mjs
       - run: npx tsc --noEmit -p web/tsconfig.json
       - run: npm run build -w web
       - name: Install browser for end-to-end checks

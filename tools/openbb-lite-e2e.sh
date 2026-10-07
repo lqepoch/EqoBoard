@@ -217,8 +217,10 @@ trap cleanup EXIT
 cd "${ROOT_DIR}"
 : >"${RUN_LOG}"
 GIT_HEAD="$(git rev-parse HEAD)"
-if [[ -n "$(git status --porcelain)" ]]; then
+SOURCE_STATUS="$(git status --short)"
+if [[ -n "${SOURCE_STATUS}" ]]; then
   printf 'Refusing to run OpenBB E2E against a dirty source tree\n' >&2
+  printf 'Tracked/untracked source paths at refusal:\n%s\n' "${SOURCE_STATUS}" >&2
   exit 2
 fi
 IFS=$'\t' read -r OPENTERMINAL_SOURCE_COMMIT OPENBB_SOURCE_COMMIT OPENBB_SOURCE_ARCHIVE_SHA256 OPENBB_BUILD_IDENTITY \
