@@ -31,6 +31,8 @@ type FeedStatus = {
   received_at: string | null;
   last_error: { code: number | null; class: string; message?: string } | null;
   decode_error_count: number;
+  out_of_order_count: number;
+  stale_epoch_count?: number;
   freshness?: Record<string, { state: "fresh" | "stale" | "unknown"; as_of: string | null; fresh_until?: string | null }>;
 };
 type LeaseRequest = { consumer_id: string; generation: number; symbols: string[] };
@@ -51,6 +53,8 @@ type OfflineSession = {
   trades: string[];
 };
 type OfflineState = { marker: string; rest_requests: number; sessions: OfflineSession[] };
+type ChainContract = { symbol: string; right: "call" | "put"; strike: number };
+type OptionChain = { calls: ChainContract[]; puts: ChainContract[] };
 
 function requireRustRunner() {
   test.skip(!enabled, "Requires the isolated Next → Rust Gateway → offline Alpaca runner");
@@ -171,11 +175,15 @@ function rfc3339At(offsetMs: number): string {
   return new Date(Date.now() + offsetMs).toISOString();
 }
 
-function timestamp96(offsetMs: number) {
-  const millis = BigInt(Date.now() + offsetMs);
+function timestamp96At(epochMillis: number) {
+  const millis = BigInt(Math.trunc(epochMillis));
   const seconds = millis / 1_000n;
   const nanoseconds = Number((millis % 1_000n) * 1_000_000n + 123_456n);
   return { encoding: "timestamp96" as const, seconds: Number(seconds), nanoseconds };
+}
+
+function timestamp96(offsetMs: number) {
+  return timestamp96At(Date.now() + offsetMs);
 }
 
 test.describe("real Rust Gateway market protocol", () => {
@@ -252,9 +260,11 @@ test.describe("real Rust Gateway market protocol", () => {
     await page.route("**/api/eqo/options/subscribe", holdOldCleanup);
 
     try {
-      const expiry = panels.first().getByRole("textbox", { name: "Option expiry" });
-      const changedExpiry = nextExpiry(await expiry.inputValue());
-      await expiry.fill(changedExpiry);
+      const expiries = panels.getByRole("textbox", { name: "Option expiry" });
+      const changedExpiry = nextExpiry(await expiries.first().inputValue());
+      for (let index = 0; index < await expiries.count(); index += 1) {
+        await expiries.nth(index).fill(changedExpiry);
+      }
       await cleanupArrived;
       expect(cleanupGeneration).not.toBeNull();
 
@@ -316,6 +326,13 @@ test.describe("real Rust Gateway market protocol", () => {
     await observeOneBrowserStream(page);
     await authenticateThroughOidc(page, request);
 
+    const optionChains: OptionChain[] = [];
+    page.on("response", async (response) => {
+      if (new URL(response.url()).pathname !== "/api/options/QQQ" || !response.ok()) return;
+      const value: unknown = await response.json().catch(() => null);
+      if (value && typeof value === "object" && Array.isArray((value as OptionChain).calls) &&
+          Array.isArray((value as OptionChain).puts)) optionChains.push(value as OptionChain);
+    });
     await page.getByRole("button", { name: /OPTIONS/ }).click();
     const panels = page.locator(".terminal-panel").filter({ hasText: "ALPACA OPRA QUOTES" });
     await expect(panels.first()).toBeVisible();
@@ -328,12 +345,22 @@ test.describe("real Rust Gateway market protocol", () => {
     const fullStatus = await latestFeedStatus(page, "options");
     expect(fullStatus?.desired.quotes.length).toBeGreaterThan(0);
     const symbol = fullStatus!.desired.quotes[0];
+    await expect.poll(() => optionChains.length, { timeout: 20_000 }).toBeGreaterThan(0);
+    const chain = optionChains.find((item) => [...item.calls, ...item.puts]
+      .some((contract) => contract.symbol === symbol));
+    expect(chain).toBeDefined();
+    const contract = [...chain!.calls, ...chain!.puts].find((item) => item.symbol === symbol);
+    expect(contract).toBeDefined();
+    const visibleStrikes = [...new Set([...chain!.calls, ...chain!.puts].map((item) => item.strike))]
+      .sort((left, right) => left - right);
+    const rowIndex = visibleStrikes.indexOf(contract!.strike);
+    expect(rowIndex).toBeGreaterThanOrEqual(0);
+    const bidCell = panels.first().locator(`.ag-row[row-index="${rowIndex}"] [col-id="${contract!.right}.bid"]`);
     const emitted = await alpacaControl<{ delivered: number }>(request, "/__control/emit", {
       feed: "options",
       record: { kind: "option_quote", symbol, timestamp: timestamp96(250), bid: 4.44, ask: 4.54, bid_size: 9, ask_size: 8 },
     });
     expect(emitted.delivered).toBeGreaterThan(0);
-    const bidCell = panels.first().locator('.ag-row[row-index="0"] [col-id="put.bid"]');
     await expect(bidCell).toContainText("4.44", { timeout: 10_000 });
     const liveEvent = [...await observedEvents(page)].reverse().find((event) =>
       Boolean(event && typeof event === "object" &&
@@ -344,14 +371,19 @@ test.describe("real Rust Gateway market protocol", () => {
     expect(typeof liveEvent?.received_at).toBe("string");
     expect(liveEvent?.connection_epoch).toBe(fullStatus?.connection_epoch);
     expect(liveEvent?.local_sequence).toBeGreaterThan(fullStatus?.local_sequence ?? 0);
-    const afterFresh = await latestFeedStatus(page, "options");
-    expect(afterFresh?.connection_epoch).toBe(fullStatus?.connection_epoch);
+    const statusBeforeOldTick = await latestFeedStatus(page, "options");
+    expect(statusBeforeOldTick).not.toBeNull();
+    expect(statusBeforeOldTick?.connection_epoch).toBe(fullStatus?.connection_epoch);
 
+    const oldTimestamp = timestamp96At(Date.parse(liveEvent!.event_time!) - 5_000);
     const old = await alpacaControl<{ delivered: number }>(request, "/__control/emit", {
       feed: "options",
-      record: { kind: "option_quote", symbol, timestamp: timestamp96(-750), bid: 0.22, ask: 0.32, bid_size: 1, ask_size: 1 },
+      record: { kind: "option_quote", symbol, timestamp: oldTimestamp, bid: 0.22, ask: 0.32, bid_size: 1, ask_size: 1 },
     });
     expect(old.delivered).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      return (await latestFeedStatus(page, "options"))?.out_of_order_count ?? 0;
+    }, { timeout: 10_000 }).toBeGreaterThan(statusBeforeOldTick!.out_of_order_count);
     await expect(bidCell).toContainText("4.44");
     await expect(bidCell).not.toContainText("0.22");
 
@@ -429,15 +461,26 @@ test.describe("real Rust Gateway market protocol", () => {
       const value: unknown = await response.json().catch(() => null);
       if (Array.isArray(value)) {
         const rows = value.filter((row) => row && typeof row === "object") as Array<Record<string, unknown>>;
-        if (rows.some((row) => row.symbol === "QQQ")) refreshedRows = rows;
+        const row = rows.find((item) => item.symbol === "QQQ");
+        const watermarks = row?.watermarks as Array<Record<string, unknown>> | undefined;
+        const trade = watermarks?.find((watermark) =>
+          Array.isArray(watermark.event_types) && watermark.event_types.includes("trade"));
+        if (row && Date.parse(String(row.tradeAt)) === Date.parse(snapshotTime) &&
+            typeof trade?.connection_epoch === "number" && trade.connection_epoch > initialStatus!.connection_epoch) {
+          refreshedRows = rows;
+        }
       }
     });
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect.poll(async () => {
+      const row = refreshedRows.find((item) => item.symbol === "QQQ");
+      const watermarks = row?.watermarks as Array<Record<string, unknown>> | undefined;
+      const trade = watermarks?.find((watermark) =>
+        Array.isArray(watermark.event_types) && watermark.event_types.includes("trade"));
+      return Boolean(row && Date.parse(String(row.tradeAt)) === Date.parse(snapshotTime) &&
+        typeof trade?.connection_epoch === "number" && trade.connection_epoch > initialStatus!.connection_epoch);
+    }, { timeout: 40_000 }).toBe(true);
     const refreshedQuote = page.locator(".terminal-panel").filter({ hasText: "Invesco QQQ Trust" });
-    await expect(refreshedQuote.locator(".text-xl")).toContainText("600.12", { timeout: 30_000 });
-    await expect(refreshedQuote).toContainText("REST snapshot");
-    await expect.poll(() => refreshedRows.some((row) => row.symbol === "QQQ"), { timeout: 10_000 }).toBe(true);
-    const snapshot = refreshedRows.find((row) => row.symbol === "QQQ")!;
+    const snapshot = refreshedRows.find((item) => item.symbol === "QQQ")!;
     expect(snapshot.source).toBe("Alpaca SIP");
     expect(snapshot.price).toBe(600.12);
     expect(Date.parse(String(snapshot.tradeAt))).toBe(Date.parse(snapshotTime));
@@ -450,6 +493,8 @@ test.describe("real Rust Gateway market protocol", () => {
     expect(tradeWatermark!.request_start_sequence === null ||
       Number.isSafeInteger(tradeWatermark!.request_start_sequence)).toBe(true);
     expect(tradeWatermark!.connection_epoch).toBeGreaterThan(initialStatus!.connection_epoch);
+    await expect(refreshedQuote.locator(".text-xl")).toContainText("600.12");
+    await expect(refreshedQuote).toContainText("REST snapshot");
     await expect.poll(async () => {
       const status = await latestFeedStatus(page, "stocks");
       return Boolean(status && status.connection_epoch > initialStatus!.connection_epoch &&
@@ -461,6 +506,10 @@ test.describe("real Rust Gateway market protocol", () => {
       return state.sessions.some((session) => session.feed === "stocks" && session.authenticated &&
         session.quotes.includes("QQQ") && session.trades.includes("QQQ"));
     }, { timeout: 25_000 }).toBe(true);
+    await expect(page.locator('[data-testid="market-feed-status-stocks"]'))
+      .toContainText("Browser SSE connected");
+    const statusBeforeOldTick = await latestFeedStatus(page, "stocks");
+    expect(statusBeforeOldTick).not.toBeNull();
     const old = await alpacaControl<{ delivered: number }>(request, "/__control/emit", {
       feed: "stocks",
       record: {
@@ -469,6 +518,8 @@ test.describe("real Rust Gateway market protocol", () => {
       },
     });
     expect(old.delivered).toBeGreaterThan(0);
+    await expect.poll(async () => (await latestFeedStatus(page, "stocks"))?.out_of_order_count ?? 0,
+      { timeout: 10_000 }).toBeGreaterThan(statusBeforeOldTick!.out_of_order_count);
     await expect(refreshedQuote.locator(".text-xl")).toContainText("600.12");
     await expect(refreshedQuote).not.toContainText("PRICE FRESH · LIVE");
 
