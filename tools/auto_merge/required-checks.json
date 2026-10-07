@@ -1,0 +1,44 @@
+{
+  "schema_version": 2,
+  "ci_workflow_file": ".github/workflows/ci.yml",
+  "ci_workflow_name": "EqoBoard CI",
+  "required_checks": [
+    {
+      "context": "Rust data / gateway / execution",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true
+    },
+    {
+      "context": "Offline market-data contract tests",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true
+    },
+    {
+      "context": "OpenTerminal / AG Grid / Next.js",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true
+    }
+  ],
+  "guard_checks": [
+    {
+      "context": "CodeQL",
+      "app_slug": "github-advanced-security"
+    },
+    {
+      "context": "Analyze (rust)",
+      "app_slug": "github-actions"
+    },
+    {
+      "context": "Analyze (actions)",
+      "app_slug": "github-actions"
+    },
+    {
+      "context": "Analyze (python)",
+      "app_slug": "github-actions"
+    },
+    {
+      "context": "Analyze (javascript-typescript)",
+      "app_slug": "github-actions"
+    }
+  ]
+}

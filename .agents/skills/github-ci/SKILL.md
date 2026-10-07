@@ -4,6 +4,16 @@ description: 治理 GitHub Actions、依赖构建、公共仓库组织 Secrets �
 ---
 # CI & Operations Skill
 路径：.github/workflows/**、Dockerfile、compose.yaml。
-PR 只允许无密钥 fmt/clippy/test/typecheck/build；market-data-smoke 仅在受信分支、定时、手工读取组织 Secrets ALPACA_KEY / ALPACA_SECRET，执行 GET，不能下单。
-每个 PR 必须保留日志及失败证据；引用不受信第三方 Actions 应尽可能锁 SHA，发布生产前冻结 Cargo.lock/package-lock.json 并进行漏洞扫描。
-端到端自检：Rust 与 Web build，缺密钥 503，使用授权密钥验证 SIP/OPRA，Paper 流程对账，回滚已知镜像标签。
+PR 只允许无密钥 fmt/clippy/test/typecheck/build；market-data-smoke 仅在同仓库 `main` 受保护 `market-data-readonly` environment 中读取 ALPACA_KEY / ALPACA_SECRET，执行 GET，不能下单。定时、main 数据路径变更和手工触发都必须通过 `github.ref == refs/heads/main` job guard；pull_request CI 永不读取组织市场数据 Secrets。
+每个 PR 必须保留日志及失败证据。所有第三方 Actions 必须固定完整 commit SHA 并在升级时核对 action runtime、权限输入和官方 release；Cargo.lock/package-lock.json 锁定依赖。当前 CI 固定 `ubuntu-24.04`、Rust 1.99.0、Node 22.23.3、Python 3.12.15；OpenTerminal Docker Node base 固定 tag 与完整多架构 digest。升级工具链时运行对应大模块测试并同步 `.github/workflows/ci.yml`、Dockerfile 和此处记录。
+离线端到端自检使用 mock 验证身份边界、真实容器健康/readiness、市场数据状态和执行默认关闭；Paper submit 必须被阻止且 broker adapter 调用数为零。它不证明券商 Paper 对账或账户生命周期。真实 SIP/OPRA 只读 smoke 仅在受保护主分支使用组织凭据；Paper 账户对账、持久幂等及生命周期验收属于 #2-B/C 后续门槛，在完成前不得启用执行。
+
+## PR 自动合并策略
+
+自动合并判断代码只能由受信 `main` 工作流加载。`workflow_run` 与特权 `workflow_dispatch` 不得 checkout、执行或导入 PR head、PR artifact 或 PR 提供的脚本；PR 内容只通过只读 GitHub API 读取。
+
+策略模块位于 `tools/auto_merge/`，契约测试运行 `node --test tests/auto_merge_policy.test.cjs`。修改策略时至少保留：审查者 GitHub 用户类型/权限/独立性、latest submitted review 对当前 head SHA 的绑定、当前分支规则要求的审批数且最低为一（缺少有效 `pull_request` rule、未知 pull-request 参数或无效审批数 fail closed）、敏感路径 current/previous filename、有效 ruleset required-check 并集、未知和缺失状态 fail closed、候选 CI workflow/check-suite 身份、分页边界、写入前复读及 merge SHA 前置条件。新增或改名 CI job 必须同步更新受信检查清单和 API fixture。
+
+GitHub `combined status` 默认每页 30 条，不可作为完整状态集合。读取 commit statuses 时使用带上限的 REST 分页，并按 context 取最新 `updated_at`/`id`；combined response 只校验 head SHA 和 context 数量。任何 API 分页失败、未知状态/provider 或候选关联缺失都必须阻止写操作。
+
+自动合并 App 仅可由组织管理员在策略、可信 workflow 和无密钥 PR 检查通过后配置。App 权限按被调用接口所需最小化；当前实现读 Actions、Checks、Commit statuses、Metadata，合并需 Pull requests/Contents 写权限。组织 Secrets 只进入受信 `main` 特权工作流，普通 PR CI 永不读取。App 安装、Ruleset bypass 或实测合并缺证据时，文档和 Issue 保持未完成，不降低分支保护。
