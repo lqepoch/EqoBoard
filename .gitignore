@@ -16,3 +16,4 @@ apps/openterminal/web/test-results/
 .idea/
 .vscode/
 audit/
+build/openbb/

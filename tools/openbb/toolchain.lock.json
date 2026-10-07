@@ -1,0 +1,27 @@
+{
+  "name": "OpenBB source SBOM toolchain",
+  "syft": {
+    "repository": "anchore/syft",
+    "version": "1.54.1",
+    "license": "Apache-2.0",
+    "release_base_url": "https://github.com/anchore/syft/releases/download/v1.54.1",
+    "archives": {
+      "linux/amd64": {
+        "file": "syft_1.54.1_linux_amd64.tar.gz",
+        "sha256": "c069905b391cc4c20a5ba65ad5c10be2a7ba074f8ea6ad203e24d14e303dad47"
+      },
+      "linux/arm64": {
+        "file": "syft_1.54.1_linux_arm64.tar.gz",
+        "sha256": "dfdf0537610113edbefe1f1fc6548bc957b2d77439636ec824fcf0e10d46d054"
+      },
+      "darwin/amd64": {
+        "file": "syft_1.54.1_darwin_amd64.tar.gz",
+        "sha256": "2956322838b2f64e470eea474495f0cd96be4f222b1ac037258cdc47d965064e"
+      },
+      "darwin/arm64": {
+        "file": "syft_1.54.1_darwin_arm64.tar.gz",
+        "sha256": "b4319c3abaa87a0170ab76ee83ea2260ca34b53aecfa3ab0dd5428d2319d744f"
+      }
+    }
+  }
+}
