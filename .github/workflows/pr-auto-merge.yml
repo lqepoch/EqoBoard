@@ -70,14 +70,28 @@ jobs:
             const files = await github.paginate(
               github.rest.pulls.listFiles, {owner, repo, pull_number: number, per_page: 100}
             );
+            // Any code that can read Secrets or alter execution governance
+            // requires a human approval at the current PR head.
             const restricted = [
-              '.github/workflows/', 'crates/execution/', 'apps/gateway/src/',
-              'Dockerfile', 'compose.yaml', 'docs/SECURITY.md', 'SECURITY.md'
+              '.github/', '.agents/', 'AGENTS.md', 'tools/',
+              'crates/alpaca-data/', 'crates/execution/', 'apps/gateway/',
+              'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml',
+              'Dockerfile', 'compose.yaml', 'docs/SECURITY.md',
+              'docs/AUTOMERGE.md', 'SECURITY.md'
             ];
             const sensitive = files.some(file => restricted.some(prefix =>
               file.filename === prefix || file.filename.startsWith(prefix)));
-            if (sensitive && ![...latestReviews.values()].includes('APPROVED')) {
-              core.notice('Security/trading/workflow changes require independent review');
+            // Only the latest explicit approval by an independent collaborator
+            // on this exact revision authorizes sensitive-path auto-merge.
+            const currentApproval = reviews.some(review =>
+              review.state === 'APPROVED' &&
+              review.commit_id === pr.head.sha &&
+              review.user?.login !== pr.user?.login &&
+              ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(review.author_association) &&
+              latestReviews.get(review.user.login) === 'APPROVED'
+            );
+            if (sensitive && !currentApproval) {
+              core.notice('Secret-bearing / trading / workflow paths need a current independent approval');
               return;
             }
             // GitHub still enforces org branch rules and current required checks.
