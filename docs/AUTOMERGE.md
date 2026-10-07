@@ -11,6 +11,7 @@
 - 仓库 `allow_auto_merge` 为 `false`。
 - `EQO_AUTOMERGE_APP_ID` 等 Actions Variables 未配置；最近一次 `Trusted PR Auto Merge` 工作流运行被跳过。
 - `main` 当前组织规则要求一个有效审批，Team 是已配置的 bypass actor。没有证据表明专用 App 已安装或能够通过该规则。
+- 实读 `GET /repos/lqepoch/EqoBoard/rules/branches/main` 时，`pull_request.parameters.required_approving_review_count` 为 `1`，并同时返回官方 REST schema 未列出的 `require_extra_approval_for_unattributed_changes: false`。策略对未知 pull-request 参数 fail closed，因此遇到这个实际响应会阻止合并；在确认该字段语义和兼容方式前，不得启用自动合并。
 - 历史 CI run `37588824743` 已关联合并 PR；当前 REST 响应的 `pull_requests` 为空。该数据不能用于候选合并，策略会因无法确认唯一 PR 绑定而拒绝。
 - 最近已观察到的 required CI job context 是 `Rust data / gateway / execution`、`Offline market-data contract tests` 和 `OpenTerminal / AG Grid / Next.js`。实际验收 CI 增加或改名 job 时，必须先更新受信清单和对应 fixture。
 
@@ -28,7 +29,7 @@ GitHub 官方接口参考：[workflow_run 事件](https://docs.github.com/en/act
 
 ## 审查、路径与检查策略
 
-敏感文件必须至少有一名独立的人类审查者通过 GitHub collaborator permission API 验证为 `write`、`maintain` 或 `admin`，并且最新已提交 review 是绑定当前 head SHA 的 `APPROVED`。PR 作者、GitHub App、Bot、无写权限用户和旧 head 上的审批不满足要求。`CHANGES_REQUESTED` 和未解决 review thread 阻止合并。为避免沿用含义不清的旧批准，较新的 `COMMENTED` 或 `DISMISSED` review 也会使敏感变更重新需要当前 head 的 `APPROVED`。
+当前分支规则中的 `pull_request.parameters.required_approving_review_count` 应用于所有 PR；策略从 GitHub 活跃分支规则 API 读取并要求对应数量的独立人类审查者，其最新已提交 review 必须是绑定当前 head SHA 的 `APPROVED`。未知 pull-request 参数、缺少或无效的审批数均拒绝。敏感文件还至少需要一名这样的审查者；PR 作者、GitHub App、Bot、无写权限用户和旧 head 上的审批不计入。`CHANGES_REQUESTED` 和未解决 review thread 阻止合并。为避免沿用含义不清的旧批准，较新的 `COMMENTED` 或 `DISMISSED` review 也会使对应审查者的旧批准失效。
 
 敏感范围覆盖 BFF/API、身份和安全、domain、Alpaca、execution、gateway、根和子项目配置、Docker/Compose、所有 workflow、AGENTS/skills、自动合并策略及其文档。重命名同时检查 `filename` 和 `previous_filename`；文件列表缺失、截断、路径不合法或 rename 来源缺失均拒绝。
 
