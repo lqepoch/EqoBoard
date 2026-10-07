@@ -100,6 +100,25 @@ fn safe_symbol(s: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b == b'.' || b == b'-')
 }
 
+fn stock_subscription_union(base: &[String], leases: &ConsumerLeases) -> Vec<String> {
+    let mut combined: HashSet<String> = base.iter().cloned().collect();
+    combined.extend(leases.values().flat_map(|(_, set)| set.iter().cloned()));
+    let mut sorted: Vec<String> = combined.into_iter().collect();
+    sorted.sort();
+    sorted
+}
+
+fn option_subscription_union(leases: &ConsumerLeases) -> Vec<String> {
+    let mut combined: Vec<String> = leases
+        .values()
+        .flat_map(|(_, set)| set.iter().cloned())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    combined.sort();
+    combined
+}
+
 async fn require_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
     if let Some(expected) = &state.token {
         let provided = request
@@ -436,9 +455,8 @@ async fn stock_subscribe(
         body.consumer_id,
         (Instant::now() + Duration::from_secs(90), wanted),
     );
-    let mut combined: HashSet<String> = state.stock_symbols.iter().cloned().collect();
-    combined.extend(leases.values().flat_map(|(_, set)| set.iter().cloned()));
-    if combined.len() > state.max_stock_subscriptions {
+    let sorted = stock_subscription_union(&state.stock_symbols, &leases);
+    if sorted.len() > state.max_stock_subscriptions {
         leases.remove(&body.consumer_id);
         return fail(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -446,8 +464,6 @@ async fn stock_subscribe(
             "global SIP stream capacity exceeded",
         );
     }
-    let mut sorted: Vec<String> = combined.into_iter().collect();
-    sorted.sort();
     state.stock_tx.send_replace(sorted.clone());
     Json(json!({
         "active":sorted.len(),
@@ -485,11 +501,8 @@ async fn option_subscribe(
         body.consumer_id,
         (Instant::now() + Duration::from_secs(90), wanted),
     );
-    let combined: HashSet<String> = leases
-        .values()
-        .flat_map(|(_, set)| set.iter().cloned())
-        .collect();
-    if combined.len() > state.max_option_subscriptions {
+    let sorted = option_subscription_union(&leases);
+    if sorted.len() > state.max_option_subscriptions {
         leases.remove(&body.consumer_id);
         return fail(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -497,8 +510,6 @@ async fn option_subscribe(
             "global OPRA stream capacity exceeded",
         );
     }
-    let mut sorted: Vec<String> = combined.into_iter().collect();
-    sorted.sort();
     state.option_tx.send_replace(sorted.clone());
     Json(
         json!({"active":sorted.len(),"max":state.max_option_subscriptions,
@@ -910,6 +921,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn subscription_unions_are_sorted_and_deduplicated() {
+        let now = Instant::now() + Duration::from_secs(60);
+        let mut leases = ConsumerLeases::new();
+        leases.insert(
+            Uuid::nil(),
+            (
+                now,
+                ["QQQ".to_string(), "NVDA".to_string()]
+                    .into_iter()
+                    .collect(),
+            ),
+        );
+        assert_eq!(
+            stock_subscription_union(&["SPY".into(), "QQQ".into()], &leases),
+            vec!["NVDA".to_string(), "QQQ".to_string(), "SPY".to_string()]
+        );
+        assert_eq!(
+            option_subscription_union(&leases),
+            vec!["NVDA".to_string(), "QQQ".to_string()]
+        );
+    }
     #[test]
     fn symbols_validated() {
         assert!(safe_symbol("SPY"));
