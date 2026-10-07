@@ -134,10 +134,9 @@ test("openbb-recovery native workspace reflects Gateway state and restores all t
   if (gatewayExpectedDown) {
     for (const [widget, route] of [[stocksWidget, routes[0]], [barsWidget, routes[1]], [optionsWidget, routes[2]]] as const) {
       const response = await marketResponses.latestSettled((item) => item.pathname === route && item.status === 502);
-      const detail = (response?.body as { detail?: string } | undefined)?.detail;
-      expect(typeof detail === "string" && detail.length > 0).toBe(true);
+      expect(response?.body).toMatchObject({ error: "market_gateway_unavailable" });
       await expect(widget.getByTestId("results-not-found")).toBeVisible();
-      await expect(widget.getByText(detail!, { exact: true })).toBeVisible();
+      await expect(widget.getByText("Request failed with status code 502", { exact: true })).toBeVisible();
       await expect(widget.getByRole("gridcell")).toHaveCount(0);
     }
     await page.screenshot({ path: join(ARTIFACT_DIR, `native-openbb-${scenario}.png`), fullPage: true });
