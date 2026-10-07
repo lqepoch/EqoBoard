@@ -8,3 +8,6 @@ description: 维护 Rust Axum 网关鉴权、SIP/OPRA 订阅租约、WebSocket �
 行情出错保留 HTTP 上游分类；不得降级伪造来源。
 订单前审计失败禁止发送；订单后审计失败高优先级错误日志。
 测试：无凭据可启动并返回 503；非法订阅/超额订阅拒绝；异步多 tab leases 共享；断流恢复。
+
+- 股票与期权订阅都使用共享 lease union；新增 Widget 不得新建 Alpaca 上游连接。
+- 浏览器默认只维持一个 SSE；若引入新实时 Widget，优先订阅共享 market store。
