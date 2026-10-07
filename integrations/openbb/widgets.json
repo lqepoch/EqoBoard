@@ -6,7 +6,9 @@
     "subCategory": "Stocks",
     "type": "table",
     "endpoint": "openbb/v1/stocks",
-    "source": "Alpaca SIP",
+    "source": [
+      "Alpaca SIP"
+    ],
     "exportable": false,
     "gridData": {
       "w": 20,
@@ -27,7 +29,8 @@
         "value": "SPY,QQQ,IWM,NVDA",
         "label": "US equity tickers"
       }
-    ]
+    ],
+    "refetchInterval": 15000
   },
   "eqo_opra_chain": {
     "name": "EqoBoard • Options Chain OPRA",
@@ -36,7 +39,9 @@
     "subCategory": "Options",
     "type": "table",
     "endpoint": "openbb/v1/options",
-    "source": "Alpaca OPRA",
+    "source": [
+      "Alpaca OPRA"
+    ],
     "exportable": false,
     "gridData": {
       "w": 25,
@@ -64,7 +69,8 @@
         "value": "",
         "label": "Expiration (optional, next Friday)"
       }
-    ]
+    ],
+    "refetchInterval": 15000
   },
   "eqo_sip_bars": {
     "name": "EqoBoard • Stock OHLCV SIP",
@@ -73,7 +79,9 @@
     "subCategory": "Stocks",
     "type": "table",
     "endpoint": "openbb/v1/bars",
-    "source": "Alpaca SIP",
+    "source": [
+      "Alpaca SIP"
+    ],
     "exportable": false,
     "gridData": {
       "w": 18,
@@ -100,6 +108,7 @@
         "value": "1Min",
         "label": "1Min, 5Min, 15Min, 1Hour or 1Day"
       }
-    ]
+    ],
+    "refetchInterval": 15000
   }
 }

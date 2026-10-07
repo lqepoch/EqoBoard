@@ -25,3 +25,5 @@ Stock/Options 都保持真实 SIP/OPRA feed 标识，权限不足必须返回 HT
 
 源文档：https://docs.openbb.co/workspace/developers/data-integration
 上游源码：https://github.com/OpenBB-finance/workspace
+
+Widget `source` 字段按 OpenBB 官方 widgets.json Reference 采用字符串数组，`refetchInterval=15000` 配置 15 秒轮询；真正 tick 实时链仍由原生 EqoBoard AG Grid WebSocket 展示。

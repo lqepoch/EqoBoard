@@ -21,6 +21,9 @@ class OpenBBManifestTests(unittest.TestCase):
             self.assertNotIn("orders", widget["endpoint"])
             self.assertIn("dataKey", widget["data"])
             self.assertFalse(widget["exportable"])
+            self.assertIsInstance(widget["source"], list)
+            self.assertEqual(len(widget["source"]), 1)
+            self.assertGreaterEqual(widget.get("refetchInterval", 0), 1000)
             self.assertTrue(widget["params"])
 
     def test_application_layout_references_defined_widgets(self):
