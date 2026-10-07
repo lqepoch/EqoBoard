@@ -76,7 +76,7 @@
           "files": [
             {
               "path": "tools/openbb/community/patches/community.patch",
-              "sha256": "d9513633b8a28f8c9369b9696a6455b425206da776f7baed4e1dbbe3dd4b6cb4"
+              "sha256": "b850ecc06dd9438dbb61a00756149ffb700be82c8ff3711bc1513028cb01d8ca"
             }
           ]
         },
@@ -91,11 +91,11 @@
           },
           {
             "path": "tools/openbb/community/patches/community.patch",
-            "sha256": "d9513633b8a28f8c9369b9696a6455b425206da776f7baed4e1dbbe3dd4b6cb4"
+            "sha256": "b850ecc06dd9438dbb61a00756149ffb700be82c8ff3711bc1513028cb01d8ca"
           },
           {
             "path": "tools/openbb/community/patches/community.patch.json",
-            "sha256": "bc148dda1bd690a9135754f476f209778499ee40196dabeb90aca6906f1bfe00"
+            "sha256": "a825ff64bc39f87d2e2eadd33b5aa007fbe28b30b74763b2ad75538ee4a01297"
           }
         ],
         "dependency_lock": {
