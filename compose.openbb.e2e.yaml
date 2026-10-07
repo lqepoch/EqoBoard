@@ -1,0 +1,100 @@
+# Test-only local OIDC + Alpaca protocol fixtures. This file is never included
+# in compose.yaml or the ordinary openbb profile.
+services:
+  openbb-lite:
+    image: ${E2E_LITE_IMAGE_TAG:-eqoboard/openbb-workspace-lite:e2e-local}
+
+  eqoboard:
+    environment:
+      ALPACA_KEY: openbb-e2e-market-key-only
+      ALPACA_SECRET: openbb-e2e-market-secret-only
+      EQO_MARKET_DATA_BASE_URL: http://mock-openbb-alpaca:4312
+      EQO_MARKET_STREAM_BASE_URL: ws://mock-openbb-alpaca:4312
+    networks: [default, openbb-e2e]
+
+  terminal:
+    ports:
+      - "127.0.0.1:${E2E_MAIN_OIDC_HOST_PORT:-4311}:${E2E_MAIN_OIDC_PORT:-4311}"
+
+  openbb-research-bff:
+    ports:
+      - "127.0.0.1:${E2E_OPENBB_OIDC_HOST_PORT:-4310}:${E2E_OPENBB_OIDC_PORT:-4310}"
+
+  mock-openbb-alpaca:
+    profiles: [openbb]
+    image: node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+    command: ["node", "/e2e/mock-openbb-alpaca.mjs"]
+    networks: [openbb-e2e]
+    environment:
+      E2E_ALPACA_PORT: "4312"
+      E2E_CONTROL_TOKEN: ${E2E_CONTROL_TOKEN:-}
+    ports:
+      - "127.0.0.1:${E2E_ALPACA_HOST_PORT:-4312}:4312"
+    volumes:
+      - ./apps/openterminal/web/e2e/mock-openbb-alpaca.mjs:/e2e/mock-openbb-alpaca.mjs:ro
+    depends_on:
+      eqoboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + process.env.E2E_ALPACA_PORT + '/__test/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  mock-openbb-oidc-main:
+    profiles: [openbb]
+    image: node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+    command: ["node", "/e2e/mock-openbb-oidc.mjs"]
+    network_mode: "service:terminal"
+    environment:
+      E2E_OIDC_PORT: ${E2E_MAIN_OIDC_PORT:-4311}
+      E2E_OIDC_ISSUER: http://127.0.0.1:${E2E_MAIN_OIDC_PORT:-4311}
+      E2E_OIDC_CONTROL_TOKEN: ${E2E_MAIN_OIDC_CONTROL_TOKEN:-}
+      E2E_OIDC_CLIENT_ID: eqo-terminal-e2e
+      E2E_OIDC_CLIENT_SECRET: ${E2E_MAIN_OIDC_CLIENT_SECRET:-}
+      E2E_OIDC_CALLBACK: http://localhost:${EQO_TERMINAL_HOST_PORT:-3000}/api/auth/callback/eqo-oidc
+    volumes:
+      - ./apps/openterminal/web/e2e/mock-openbb-oidc.mjs:/e2e/mock-openbb-oidc.mjs:ro
+    depends_on:
+      terminal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + process.env.E2E_OIDC_PORT + '/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  mock-openbb-oidc-research:
+    profiles: [openbb]
+    image: node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+    command: ["node", "/e2e/mock-openbb-oidc.mjs"]
+    network_mode: "service:openbb-research-bff"
+    environment:
+      E2E_OIDC_PORT: ${E2E_OPENBB_OIDC_PORT:-4310}
+      E2E_OIDC_ISSUER: http://127.0.0.1:${E2E_OPENBB_OIDC_PORT:-4310}
+      E2E_OIDC_CONTROL_TOKEN: ${E2E_RESEARCH_OIDC_CONTROL_TOKEN:-}
+      E2E_OIDC_CLIENT_ID: eqo-openbb-e2e
+      E2E_OIDC_CLIENT_SECRET: ${E2E_RESEARCH_OIDC_CLIENT_SECRET:-}
+      E2E_OIDC_CALLBACK: ${EQO_RESEARCH_PUBLIC_ORIGIN:-http://127.0.0.1:8088}/api/auth/callback/eqo-oidc
+    volumes:
+      - ./apps/openterminal/web/e2e/mock-openbb-oidc.mjs:/e2e/mock-openbb-oidc.mjs:ro
+    depends_on:
+      openbb-research-bff:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:' + process.env.E2E_OIDC_PORT + '/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+networks:
+  openbb-e2e:
+    # This test-only bridge publishes the mock control API to 127.0.0.1 for
+    # Playwright. Neither this network nor the fixture is part of production.
+    internal: false

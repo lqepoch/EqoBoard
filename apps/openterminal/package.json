@@ -10,6 +10,8 @@
     "build": "npm run build -w server && npm run build -w web",
     "start": "concurrently -n api,web \"npm run start -w server\" \"npm run start -w web\"",
     "test": "npm run test -w server",
+    "test:e2e:openbb": "playwright test -c web/playwright.openbb.config.ts",
+    "test:e2e:openbb:recovery": "OPENBB_E2E_RECOVERY_ONLY=1 playwright test -c web/playwright.openbb.config.ts",
     "lint": "npm run lint -w web"
   },
   "devDependencies": {
