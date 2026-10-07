@@ -10,4 +10,4 @@
 6. live 委托保持拒绝；当前 Gateway 的 effective execution 固定为 disabled，即使配置请求 Paper 也只保留只读和离线 preview。Paper 还需一次性服务端锁定 preview、限额、原子多腿、幂等、持久 outbox、账户身份、审计和对账后才可单独启用。
 7. 上游依赖固定版本/commit，保留许可证和变更记录；OpenTerminal 升级先做 diff、契约测试、构建和回滚计划。
 8. 变更前阅读所属目录 AGENTS.md 和匹配的 `.agents/skills/**/SKILL.md`。
-9. 主终端浏览器只通过 OpenTerminal BFF；可选 OpenBB 研究工作台使用独立 hostname 的 research-mode Next BFF。两者都通过受信 OIDC issuer 建立会话；研究 BFF 只签发短时 `market:read` Gateway 委托，不配置终端签名 key、订单 scope 或市场凭据。不同端口不隔离 host-only cookies，Gateway 不信任身份头或静态 `EQO_ACCESS_TOKEN`。
+9. 主终端浏览器只通过 OpenTerminal BFF；可选 OpenBB 研究工作台使用独立 hostname 的 research-mode Next BFF。两者都通过受信 OIDC issuer 建立会话；研究 BFF 只签发短时 `market:read` Gateway 委托，不配置终端签名 key、订单 scope 或市场凭据。`/api/research/auth-check` 只供内部反向代理做会话/market role 检查，不签 token，公共 ingress 必须隐藏此路径。不同端口不隔离 host-only cookies，Gateway 不信任身份头或静态 `EQO_ACCESS_TOKEN`。
