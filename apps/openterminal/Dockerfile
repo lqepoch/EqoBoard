@@ -1,5 +1,5 @@
 # MIT OpenTerminal Next.js workspace; Alpaca credentials remain in Rust.
-FROM node:22-bookworm-slim AS deps
+FROM node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS deps
 WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
@@ -14,7 +14,7 @@ COPY apps/openterminal/web ./web
 RUN npm run build -w server && npm run build -w web
 RUN npm prune --omit=dev --no-audit --no-fund
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
 WORKDIR /srv
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
 COPY --from=build /build/package.json /srv/package.json
