@@ -3,7 +3,7 @@ name: Alpaca SIP + OPRA read-only smoke
 on:
   workflow_dispatch:
   schedule:
-    - cron: "23 13 * * 1"
+    - cron: "23 16 * * 1"
   push:
     branches: [main]
     paths:
