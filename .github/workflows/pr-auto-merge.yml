@@ -1,0 +1,88 @@
+name: Trusted PR Auto Merge
+
+# Privileged workflow_run: never checkout or execute PR code.
+# GitHub App must be allowlisted by the existing organization branch ruleset.
+on:
+  workflow_run:
+    workflows: ["EqoBoard CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  safe-merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      vars.EQO_AUTOMERGE_APP_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Mint narrow, EqoBoard-only App token
+        id: token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.EQO_AUTOMERGE_APP_ID }}
+          private-key: ${{ secrets.EQO_AUTOMERGE_APP_PRIVATE_KEY }}
+          repositories: EqoBoard
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Check trusted author, latest SHA, security paths and reviews
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.token.outputs.token }}
+          script: |
+            const {owner, repo} = context.repo;
+            const run = context.payload.workflow_run;
+            const related = run.pull_requests ?? [];
+            if (related.length !== 1) {
+              core.notice('No unique PR bound to the verified CI workflow');
+              return;
+            }
+            const number = related[0].number;
+            const {data: pr} = await github.rest.pulls.get({
+              owner, repo, pull_number: number
+            });
+            if (
+              pr.state !== 'open' || pr.draft || pr.base.ref !== 'main' ||
+              pr.head.repo?.full_name !== owner + '/' + repo ||
+              pr.head.sha !== run.head_sha ||
+              pr.user?.login !== 'LQ-Epoch'
+            ) {
+              core.notice('PR identity, target, provenance or tested SHA mismatch');
+              return;
+            }
+            const reviews = await github.paginate(
+              github.rest.pulls.listReviews, {owner, repo, pull_number: number, per_page: 100}
+            );
+            const latestReviews = new Map();
+            for (const review of reviews) {
+              if (review.state !== 'COMMENTED' && review.user) {
+                latestReviews.set(review.user.login, review.state);
+              }
+            }
+            if ([...latestReviews.values()].includes('CHANGES_REQUESTED')) {
+              core.notice('Reviewer requested changes');
+              return;
+            }
+            const files = await github.paginate(
+              github.rest.pulls.listFiles, {owner, repo, pull_number: number, per_page: 100}
+            );
+            const restricted = [
+              '.github/workflows/', 'crates/execution/', 'apps/gateway/src/',
+              'Dockerfile', 'compose.yaml', 'docs/SECURITY.md', 'SECURITY.md'
+            ];
+            const sensitive = files.some(file => restricted.some(prefix =>
+              file.filename === prefix || file.filename.startsWith(prefix)));
+            if (sensitive && ![...latestReviews.values()].includes('APPROVED')) {
+              core.notice('Security/trading/workflow changes require independent review');
+              return;
+            }
+            // GitHub still enforces org branch rules and current required checks.
+            const merged = await github.rest.pulls.merge({
+              owner, repo, pull_number: number, sha: run.head_sha,
+              merge_method: 'squash'
+            });
+            core.notice('Sq-mrg PR #' + number + ' -> ' + merged.data.sha);

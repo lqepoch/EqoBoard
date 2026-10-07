@@ -58,3 +58,12 @@ jobs:
           name: eqoboard-web-dist
           path: apps/web/dist
           retention-days: 7
+
+  market-contracts:
+    name: Offline market-data contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify SIP/OPRA smoke error handling without credentials
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
