@@ -62,7 +62,7 @@ given a tag or an unverified digest.
 docker compose --profile openbb stop openbb-research-ingress openbb-research-bff openbb-lite
 ```
 
-Compose 的本地 image tag 只用于选择构建 recipe，不能当作不可变 artifact digest。正式部署/回滚必须记录实际 OCI manifest digest 和可恢复镜像归档或 registry RepoDigest。attempt-21 使用 no-skip 流程完成默认 profile build/up、全部六个 profile service health、真实 Rust Gateway 与 native Lite 浏览器矩阵、core-only、Gateway offline/restart、错误镜像 unhealthy 检测与原 image 恢复；`runtime-result.json` 记录 `default_profile_smoke_executed=true` 与 `cleanup_verified=true`。具体 artifact、OCI index/manifest/config、runtime SBOM 与源码/recipe 身份见 [OpenBB supply-chain runbook](OPENBB_SUPPLY_CHAIN.md)。测试市场行的来源为 `unknown`，没有验证真实 Alpaca entitlement；没有下单、registry 发布或部署。
+Compose 的本地 image tag 只用于选择构建 recipe，不能当作不可变 artifact digest。正式部署/回滚必须记录实际 OCI manifest digest 和可恢复镜像归档或 registry RepoDigest。attempt-22 在冻结代码 `00f7aec59c6a4e67e568c9b7de8a6afb4f37fa41` 上以 no-skip 流程完成默认 profile build/up、全部六个 profile service health、真实 Rust Gateway 与 native Lite 浏览器矩阵、core-only、Gateway offline/restart、错误镜像 unhealthy 检测与原 image 恢复；`runtime-result.json` 记录 `default_profile_smoke_executed=true` 与 `cleanup_verified=true`。这是本地 loopback 协议 mock 验收，市场行来源为 `unknown`，未验证真实 Alpaca entitlement；没有下单、registry 发布或部署。当前 release gate 仍未批准，OCI index/manifest/config、runtime SBOM 与源码/recipe 身份见 [OpenBB supply-chain runbook](OPENBB_SUPPLY_CHAIN.md) 和 [本地验收记录](evidence/openbb-local-runtime-acceptance.json)。
 
 | OIDC role | 授权范围 |
 |---|---|
