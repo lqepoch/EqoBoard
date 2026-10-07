@@ -16,17 +16,17 @@
 - 历史 CI run `37588824743` 已关联合并 PR；当前 REST 响应的 `pull_requests` 为空。该数据不能用于候选合并，策略会因无法确认唯一 PR 绑定而拒绝。
 - 最近已观察到的 required CI job context 是 `Rust data / gateway / execution`、`Offline market-data contract tests` 和 `OpenTerminal / AG Grid / Next.js`。CI 增加了 auto-merge 策略离线测试但不增加 job 或改名，因此 manifest 仍是这三个 context。实际验收 CI 增加或改名 job 时，必须先更新受信清单和对应 fixture。
 
-PR #29 已在明确的 owner 自合并授权下完成，合并时间为 `2026-10-07T23:27:31Z`（上海时间 `2026-10-08 07:27:31`）。候选 head 为 `e3d596ab6f9dda57c1688bd98f8f7c2eca5b2f09`，该 head 的树为 `b5d04be01f032e029cf5a65e3701420577892bd4`；CI run `37698557986` 和 CodeQL run `37698553366` 对应检查全部 8/8 成功，独立非作者最终 diff 复核没有 P1/P2 阻断，review thread 为 0。通过现有 Owner/Admin/Team 权限后，PR 已合并；远程 `main` 为 `e1b73c1347ce79d9b86d4e4fe3d1c5942b20ab97`，树与已测 head 一致。相关真实 native 检查为 7/7，default profile 与 cleanup 检查通过。此证据记录的是 PR #29 的一次 owner 自合并，不代表 App 自动合并已启用，也不部署服务或启用 Paper/Live execution。
+PR #29 已在明确的 owner 自合并授权下完成，合并时间为 `2026-10-07T23:27:31Z`（上海时间 `2026-10-08 07:27:31`）。候选 head 为 `e3d596ab6f9dda57c1688bd98f8f7c2eca5b2f09`，该 head 的树为 `b5d04be01f032e029cf5a65e3701420577892bd4`；CI run `37698557986` 和 CodeQL run `37698553366` 对应检查全部 8/8 成功，独立非作者最终 diff 复核没有 P1/P2 阻断，review thread 为 0。通过现有 Owner/Admin/Team 权限后，PR 已合并；merge commit 为 `e1b73c1347ce79d9b86d4e4fe3d1c5942b20ab97`，树与已测 head 一致。相关真实 native 检查为 7/7，default profile 与 cleanup 检查通过。此证据记录的是 PR #29 的一次 owner 自合并，不代表 App 自动合并已启用，也不部署服务或启用 Paper/Live execution。
 
 后续已明确授权的当前任务可沿用此 owner operator 路径，不要求每个 PR 再次请求相同授权。策略测试通过不代表专用 App、App bypass 或其 GitHub 工作流已完成运行验收；App 配置缺失时 App 路径仍保持阻止，不能伪造 review 或降低分支保护。
 
 ## Owner 授权的 operator 自合并
 
-用户明确授权 owner 在当前任务自合并后，授权在该任务及其 PR 范围内持续有效。owner 可以在正式审批是唯一剩余 ruleset 门槛时，使用仓库已有 Owner/Admin/Team 权限例外完成合并。此操作不是独立审查，不能创建、冒称或要求 GitHub `APPROVED` 记录；最终 diff 必须由非 PR 作者独立复核并无阻断问题。
+用户明确授权 owner 在当前任务自合并后，授权在该任务及其 PR 范围内持续有效。owner 可以在正式审批是唯一剩余 ruleset 门槛时，使用仓库已有 Owner/Admin/Team 权限例外完成合并。此操作不是独立审查，不能创建、冒称或要求 GitHub `APPROVED` 记录；任何有效 `CHANGES_REQUESTED`、未解决 thread 或其它未处理的阻断 review 都必须先由 reviewer 处理，owner 授权或权限例外不能忽略它们。最终 diff 必须由非 PR 作者独立复核并无阻断问题。
 
-每次写入前重新读取 PR 和 `origin/main`，确保 base 指向最新 `main`，固定候选 head SHA，并确认没有冲突。要求当前 head 上受信 manifest required checks 与生效 ruleset required checks 的并集全部成功，且 CodeQL 当前 head 检查成功；pending、失败、陈旧、未知、无法匹配 head 的任何检查都会阻止合并。review threads 必须全部解决。若更新 head 或 base，则重新完成最终 diff 复核并等待自然触发的检查结果；不以空提交或手工 rerun 伪造新证据。
+每次写入前重新读取 PR 和 `origin/main`，确保 base 指向最新 `main`，固定候选 head SHA，并确认没有冲突。要求当前 head 上受信 manifest required checks 与生效 ruleset required checks 的并集全部成功，且 CodeQL 当前 head 检查成功；pending、失败、陈旧、未知、无法匹配 head 的任何检查都会阻止合并。有效 `CHANGES_REQUESTED` review 与未解决 review thread 必须先由 reviewer 处理。若更新 head 或 base，则重新完成最终 diff 复核并等待自然触发的检查结果；不以空提交或手工 rerun 伪造新证据。
 
-调用 merge 接口时将固定 head SHA 作为 expected SHA；收到结果后复读 PR，核验其已合并以及 merge SHA，再 fetch 远程 `main` 核对合并提交与目标树。若 head、base、规则、review、thread 或检查在最终读取中有变化，停止并重新审查。此流程只用当前仓库已有权限，不改组织通用 ruleset、不降低 required checks、不扩大到其它仓库，也不触发部署或券商操作。
+调用 merge 接口时将固定 head SHA 作为 expected SHA；收到结果后复读 PR，核验其已合并以及 merge SHA，再 fetch 远程 `main` 核对合并提交与目标树。若 head、base、规则、review、thread 或检查在最终读取中有变化，停止并重新审查。核验后只清理本任务 worktree/branch：先检查 worktree 是否 dirty 以及私有 `.env`/`.state` 是否需保留，再删除已验证干净的本任务 worktree 与分支；保留必要审计记录，不碰其它任务的 worktree、分支或状态。此流程只用当前仓库已有权限，不改组织通用 ruleset、不降低 required checks、不扩大到其它仓库，也不触发部署或券商操作。
 
 ## 专用 App：受信触发与 PR/CI 绑定
 
