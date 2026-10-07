@@ -6,7 +6,7 @@ use axum::{
     },
     http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{sse::{Event, KeepAlive, Sse}, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -14,10 +14,12 @@ use chrono::{NaiveDate, Utc};
 use eqo_alpaca_data::{AlpacaData, DataError};
 use eqo_domain::{parse_occ, MarketEvent};
 use eqo_execution::{BrokerRouter, OrderError, OrderIntent, PreviewStore, RiskPolicy};
+use futures_util::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
+    convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
@@ -427,6 +429,51 @@ async fn stream_to_browser(mut ws: WebSocket, mut rx: broadcast::Receiver<Market
     }
 }
 
+/// Same normalized market broadcast used by the existing WebSocket terminal.
+/// Next.js serves it to the OpenTerminal browser with credentials kept server-side.
+async fn live_sse(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut timer = tokio::time::interval(Duration::from_millis(50));
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let events = stream::unfold(
+        (state.broadcasts.subscribe(), Vec::<MarketEvent>::new(), timer),
+        |(mut rx, mut batch, mut flush)| async move {
+            loop {
+                tokio::select! {
+                    event = rx.recv() => match event {
+                        Ok(event) => {
+                            if batch.len() >= 512 {
+                                batch.clear();
+                                batch.push(MarketEvent::FeedStatus {
+                                    feed: "all".into(),
+                                    state: "resync_required".into(),
+                                    timestamp: Utc::now().to_rfc3339(),
+                                });
+                            }
+                            batch.push(event);
+                        },
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            batch.clear();
+                            batch.push(MarketEvent::FeedStatus {
+                                feed: "all".into(),
+                                state: "resync_required".into(),
+                                timestamp: Utc::now().to_rfc3339(),
+                            });
+                        },
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    },
+                    _ = flush.tick(), if !batch.is_empty() => break,
+                }
+                if batch.len() >= 256 { break; }
+            }
+            let json = serde_json::to_string(&batch).unwrap_or_else(|_| "[]".into());
+            Some((Ok(Event::default().data(json)), (rx, Vec::new(), flush)))
+        },
+    );
+    Sse::new(events).keep_alive(KeepAlive::default())
+}
+
 #[derive(Deserialize)]
 struct SubmitPreview {
     preview_id: Uuid,
@@ -608,6 +655,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(prune_leases(state.clone()));
     let api = Router::new()
         .route("/api/v1/status", get(status))
+        .route("/api/v1/stream/sse", get(live_sse))
         .route("/api/v1/stocks/snapshots", get(stock_snapshots))
         .route("/api/v1/stocks/bars", get(stock_bars))
         .route("/api/v1/options/chain", get(option_chain))
