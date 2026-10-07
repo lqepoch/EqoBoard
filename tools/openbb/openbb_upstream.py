@@ -76,13 +76,13 @@ def openbb_entry() -> dict[str, Any]:
         raise SupplyChainError("OpenBB source archive must have a lowercase SHA-256 digest")
     validate_license_records(entry.get("license_files"))
     gate = entry.get("build_gate", {})
-    if gate.get("status") not in {"blocked", "approved"}:
-        raise SupplyChainError("OpenBB build_gate.status must be blocked or approved")
-    if gate.get("status") == "approved":
-        evidence = gate.get("evidence")
-        recipe = entry.get("build_recipe")
-        if not isinstance(evidence, dict) or not evidence.get("review") or not isinstance(recipe, dict):
-            raise SupplyChainError("an approved OpenBB build gate requires review evidence and a pinned build recipe")
+    if gate.get("status") not in {"blocked", "local-buildable"}:
+        raise SupplyChainError("OpenBB build_gate.status must be blocked or local-buildable")
+    if gate.get("status") == "local-buildable":
+        if not isinstance(entry.get("build_recipe"), dict):
+            raise SupplyChainError("a local-buildable OpenBB gate requires a hash-pinned build recipe")
+        if gate.get("required_findings_to_clear") != []:
+            raise SupplyChainError("a local-buildable OpenBB gate cannot retain uncleared findings")
     return entry
 
 
@@ -177,9 +177,9 @@ def fetch_archive() -> Path:
     entry = openbb_entry()
     archive = entry["source_archive"]
     path = download_verified(archive["url"], archive["sha256"], archive_path())
-    print(f"OpenBB source archive verified: {path}")
-    print(f"commit={EXPECTED_COMMIT}")
-    print(f"sha256={archive['sha256']}")
+    print(f"OpenBB source archive verified: {path}", file=sys.stderr)
+    print(f"commit={EXPECTED_COMMIT}", file=sys.stderr)
+    print(f"sha256={archive['sha256']}", file=sys.stderr)
     return path
 
 
@@ -432,7 +432,7 @@ def verify_archive(archive: Path) -> dict[str, Any]:
         "archive_sha256": actual,
         "license_files": [item["upstream_path"] for item in entry["license_files"]],
         "build_gate": entry.get("build_gate", {}).get("status", "unset"),
-        "build_findings": findings,
+        "unpatched_upstream_findings": findings,
     }
 
 
@@ -633,6 +633,60 @@ def source_sbom(output_path: Path | None, archive: Path | None) -> None:
     }, indent=2))
 
 
+def patched_source_sbom(output_path: Path | None, archive: Path | None) -> dict[str, Any]:
+    """Inventory the verified community-patched tree, including its frozen frontend lock."""
+    verified = archive or fetch_archive()
+    source_report = verify_archive(verified)
+    entry = openbb_entry()
+    recipe, _recipe_path, support_files, identity = locked_recipe(entry)
+    default_output = ROOT / "build" / "openbb" / (
+        f"workspace-patched-source-{EXPECTED_COMMIT}-{identity[:16]}.spdx.json"
+    )
+    output = (output_path or default_output).expanduser()
+    if not output.is_absolute():
+        output = ROOT / output
+
+    syft, version = syft_binary()
+    with tempfile.TemporaryDirectory(prefix="eqoboard-openbb-patched-sbom-") as temporary:
+        workspace = Path(temporary) / f"workspace-{EXPECTED_COMMIT}"
+        safe_extract(verified, workspace)
+        apply_locked_source_patch(workspace, recipe, support_files)
+        tree_sha256 = inventory_digest(inventory_source_tree(workspace))
+        source_version = f"{EXPECTED_COMMIT}+community-{identity[:16]}"
+        sbom = stable_sbom_scan(
+            syft,
+            f"dir:{workspace}",
+            output,
+            "OpenBB Workspace Community-patched source",
+            source_version,
+            base_path=workspace,
+        )
+    identities = normalized_sbom_packages(sbom)
+    package_set_digest = hashlib.sha256(
+        json.dumps(sorted(identities), separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    result = {
+        "kind": "community-patched-source-sbom",
+        "scope": "verified patched source tree and frozen dependency locks; not a runtime image SBOM",
+        "source_commit": source_report["commit"],
+        "source_archive_sha256": source_report["archive_sha256"],
+        "source_tree_sha256": tree_sha256,
+        "build_identity": identity,
+        "recipe_sha256": recipe["sha256"],
+        "syft_version": version,
+        "spdx_version": sbom["spdxVersion"],
+        "package_count": len(sbom["packages"]),
+        "normalized_package_identity_count": len(identities),
+        "normalized_package_set_sha256": package_set_digest,
+        "package_set_stability_runs": 3,
+        "javascript_dev_dependencies_included": True,
+        "output": str(output),
+        "sbom_sha256": sha256_file(output),
+    }
+    print(json.dumps(result, indent=2))
+    return result
+
+
 def validate_recipe_assets(recipe: dict[str, Any]) -> list[tuple[str, Path, str]]:
     records = recipe.get("support_files", [])
     if not isinstance(records, list):
@@ -688,6 +742,61 @@ def build_identity(recipe: dict[str, Any], support_files: list[tuple[str, Path, 
     return hashlib.sha256(canonical).hexdigest()
 
 
+def locked_recipe(entry: dict[str, Any]) -> tuple[dict[str, Any], Path, list[tuple[str, Path, str]], str]:
+    recipe = entry.get("build_recipe")
+    if not isinstance(recipe, dict):
+        raise SupplyChainError("OpenBB operation requires a lock-pinned build_recipe")
+    recipe_path = resolve_under(ROOT, recipe.get("path", ""), "OpenBB build recipe")
+    recipe_sha256 = recipe.get("sha256", "")
+    if not re.fullmatch(r"[0-9a-f]{64}", recipe_sha256) or sha256_file(recipe_path) != recipe_sha256:
+        raise SupplyChainError("OpenBB build recipe SHA-256 does not match the lock")
+    support_files = validate_recipe_assets(recipe)
+    return recipe, recipe_path, support_files, build_identity(recipe, support_files)
+
+
+def apply_locked_source_patch(
+    source: Path,
+    recipe: dict[str, Any],
+    support_files: list[tuple[str, Path, str]],
+) -> None:
+    expected_root = f"workspace-{EXPECTED_COMMIT}"
+    if source.name != expected_root:
+        raise SupplyChainError(f"OpenBB patch runner source directory must be named {expected_root}")
+    patch_record = recipe.get("source_patch")
+    if not isinstance(patch_record, dict):
+        raise SupplyChainError("OpenBB operation requires a lock-pinned source_patch")
+    support_by_path = {relative: path for relative, path, _ in support_files}
+    runner_record = patch_record.get("runner")
+    patch_records = patch_record.get("files")
+    if (
+        not isinstance(runner_record, dict)
+        or runner_record.get("path") not in support_by_path
+        or not isinstance(patch_records, list)
+        or not patch_records
+    ):
+        raise SupplyChainError("OpenBB source patch must pin a runner and at least one patch file")
+    if any(not isinstance(item, dict) or item.get("path") not in support_by_path for item in patch_records):
+        raise SupplyChainError("OpenBB source patch references an unverified patch file")
+    if len({item["path"] for item in patch_records}) != len(patch_records):
+        raise SupplyChainError("OpenBB source patch file list contains duplicates")
+    command = [
+        sys.executable,
+        str(support_by_path[runner_record["path"]]),
+        "--source",
+        str(source),
+    ]
+    for record in patch_records:
+        command.extend(["--patch", str(support_by_path[record["path"]])])
+    try:
+        subprocess.run(command, cwd=ROOT, check=True, capture_output=True, text=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        diagnostics = getattr(exc, "stderr", "")
+        message = str(exc)
+        if diagnostics:
+            message = f"{message}: {diagnostics.strip()}"
+        raise SupplyChainError(f"pinned OpenBB source patch failed: {message}") from exc
+
+
 def validate_immutable_tag(tag: str, identity: str) -> None:
     if "@" in tag or tag.endswith(":latest"):
         raise SupplyChainError("OpenBB builds require a content-specific local tag; latest and digest-only tags are rejected")
@@ -725,45 +834,196 @@ def ensure_image_tag_available(tag: str, identity: str) -> None:
     )
 
 
+def inventory_source_tree(root: Path) -> dict[str, dict[str, Any]]:
+    """Hash every regular file and mode, rejecting links and special files."""
+    if root.is_symlink() or not root.is_dir():
+        raise SupplyChainError(f"OpenBB drift tree must be a regular directory: {root}")
+    inventory: dict[str, dict[str, Any]] = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise SupplyChainError(f"OpenBB drift tree contains a symlink: {path}")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise SupplyChainError(f"OpenBB drift tree contains a special file: {path}")
+        relative = path.relative_to(root).as_posix()
+        if relative in inventory:
+            raise SupplyChainError(f"duplicate path in OpenBB drift tree: {relative}")
+        inventory[relative] = {
+            "sha256": sha256_file(path),
+            "mode": f"{path.stat().st_mode & 0o777:04o}",
+        }
+    return inventory
+
+
+def inventory_digest(inventory: dict[str, dict[str, Any]]) -> str:
+    canonical = json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def compare_source_trees(upstream: Path, patched: Path) -> dict[str, Any]:
+    """Classify file-level differences between verified source and a pinned patch result."""
+    original = inventory_source_tree(upstream)
+    adapted = inventory_source_tree(patched)
+    files: list[dict[str, Any]] = []
+    counts = {
+        "exact_upstream_files": 0,
+        "modified_upstream_files": 0,
+        "eqoboard_only_files": 0,
+        "deleted_upstream_files": 0,
+    }
+    for relative in sorted(original.keys() | adapted.keys()):
+        before = original.get(relative)
+        after = adapted.get(relative)
+        if before is None:
+            classification = "eqoboard-only"
+            counts["eqoboard_only_files"] += 1
+        elif after is None:
+            classification = "deleted-upstream"
+            counts["deleted_upstream_files"] += 1
+        elif before == after:
+            classification = "exact-upstream"
+            counts["exact_upstream_files"] += 1
+        else:
+            classification = "modified-upstream"
+            counts["modified_upstream_files"] += 1
+        files.append({
+            "path": relative,
+            "classification": classification,
+            "upstream_sha256": before["sha256"] if before else None,
+            "upstream_mode": before["mode"] if before else None,
+            "patched_sha256": after["sha256"] if after else None,
+            "patched_mode": after["mode"] if after else None,
+        })
+    return {
+        "counts": counts | {
+            "upstream_files": len(original),
+            "patched_files": len(adapted),
+        },
+        "upstream_tree_sha256": inventory_digest(original),
+        "patched_tree_sha256": inventory_digest(adapted),
+        "files": files,
+    }
+
+
+def write_json_atomically(output: Path, value: dict[str, Any]) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{output.name}.", suffix=".tmp", dir=output.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+        os.replace(temporary, output)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def openbb_upstream_diff(archive: Path | None, output: Path | None) -> dict[str, Any]:
+    """Verify and apply only the lock-pinned patch before recording upstream drift."""
+    entry = openbb_entry()
+    verified = archive or fetch_archive()
+    source_report = verify_archive(verified)
+    recipe, recipe_path, support_files, build_hash = locked_recipe(entry)
+    patch_record = recipe["source_patch"]
+    runner_record = patch_record["runner"]
+
+    with tempfile.TemporaryDirectory(prefix="eqoboard-openbb-diff-") as temporary:
+        temporary_root = Path(temporary)
+        upstream_parent = temporary_root / "upstream"
+        patched_parent = temporary_root / "patched"
+        upstream_parent.mkdir()
+        patched_parent.mkdir()
+        pinned_root = f"workspace-{EXPECTED_COMMIT}"
+        upstream = upstream_parent / pinned_root
+        patched = patched_parent / pinned_root
+        safe_extract(verified, upstream)
+        shutil.copytree(upstream, patched)
+        apply_locked_source_patch(patched, recipe, support_files)
+        comparison = compare_source_trees(upstream, patched)
+        comparison["remaining_build_findings"] = inspect_build_blockers(patched, recipe_path)
+
+    report = {
+        "schema_version": 1,
+        "kind": "openbb-upstream-diff",
+        "upstream": {
+            "repository": source_report["repository"],
+            "commit": source_report["commit"],
+            "source_archive_sha256": source_report["archive_sha256"],
+        },
+        "build_variant": recipe.get("variant", "lite"),
+        "build_identity": build_hash,
+        "recipe": {"path": recipe["path"], "sha256": recipe["sha256"]},
+        "support_files": [
+            {"path": relative, "sha256": digest}
+            for relative, _, digest in sorted(support_files, key=lambda item: item[0])
+        ],
+        "source_patch": {
+            "runner": {
+                "path": runner_record["path"],
+                "sha256": runner_record["sha256"],
+            },
+            "files": [
+                {"path": item["path"], "sha256": item["sha256"]}
+                for item in patch_record["files"]
+            ],
+        },
+        **comparison,
+    }
+    target = output.expanduser() if output is not None else (
+        ROOT / "build" / "openbb" / f"workspace-diff-{EXPECTED_COMMIT}.json"
+    )
+    if not target.is_absolute():
+        target = ROOT / target
+    write_json_atomically(target, report)
+    report["output"] = str(target)
+    return report
+
+
 def build_lite(tag: str | None, archive: Path | None) -> None:
     entry = openbb_entry()
     gate = entry.get("build_gate", {})
-    if gate.get("status") != "approved":
+    if gate.get("status") != "local-buildable":
         reasons = gate.get("required_findings_to_clear", [])
-        print("OpenBB Lite image build blocked by the pinned build gate.", file=sys.stderr)
+        print("OpenBB Lite local image build blocked by the pinned build gate.", file=sys.stderr)
         for reason in reasons:
             print(f"- {reason}", file=sys.stderr)
-        print("An explicit PR must clear the source findings, include review evidence, and pin a build recipe before this command can build.", file=sys.stderr)
+        print("An explicit source/recipe update must clear the findings and pin every build input before local construction is allowed.", file=sys.stderr)
         raise SystemExit(2)
 
-    recipe = entry.get("build_recipe")
-    if not isinstance(recipe, dict) or not recipe.get("path") or not recipe.get("sha256"):
-        raise SupplyChainError("approved OpenBB build gate has no repository-pinned build_recipe path and SHA-256")
-    recipe_path = resolve_under(ROOT, recipe["path"], "OpenBB build recipe")
-    if sha256_file(recipe_path) != recipe["sha256"]:
-        raise SupplyChainError("approved OpenBB build recipe is missing or its SHA-256 does not match the lock")
-    support_files = validate_recipe_assets(recipe)
-    identity = build_identity(recipe, support_files)
+    recipe, recipe_path, support_files, identity = locked_recipe(entry)
 
     verified = archive or fetch_archive()
     report = verify_archive(verified)
     with tempfile.TemporaryDirectory(prefix="eqoboard-openbb-build-") as temporary:
-        workspace = Path(temporary) / "source"
+        workspace = Path(temporary) / f"workspace-{EXPECTED_COMMIT}"
         safe_extract(verified, workspace)
-        patch_record = recipe.get("source_patch")
-        if patch_record:
-            runner_path = next(path for relative, path, _ in support_files if relative == patch_record["runner"]["path"])
-            patch_paths = [
-                next(path for relative, path, _ in support_files if relative == item["path"])
-                for item in patch_record["files"]
-            ]
-            command = [sys.executable, str(runner_path), "--source", str(workspace)]
-            for patch_path in patch_paths:
-                command.extend(["--patch", str(patch_path)])
-            subprocess.run(command, cwd=ROOT, check=True)
+        apply_locked_source_patch(workspace, recipe, support_files)
         findings = inspect_build_blockers(workspace, recipe_path)
         if findings:
             raise SupplyChainError("source build blockers remain: " + "; ".join(item["id"] for item in findings))
+        patched_tree_sha256 = inventory_digest(inventory_source_tree(workspace))
+        syft, syft_version = syft_binary()
+        artifact_dir = ROOT / "build" / "openbb"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        patched_source_sbom_path = artifact_dir / (
+            f"workspace-patched-source-{EXPECTED_COMMIT}-{identity[:16]}.spdx.json"
+        )
+        patched_source_sbom = stable_sbom_scan(
+            syft,
+            f"dir:{workspace}",
+            patched_source_sbom_path,
+            "OpenBB Workspace Community-patched source",
+            f"{EXPECTED_COMMIT}+community-{identity[:16]}",
+            base_path=workspace,
+        )
+        patched_source_sbom_sha256 = sha256_file(patched_source_sbom_path)
+        patched_source_identities = normalized_sbom_packages(patched_source_sbom)
+        patched_source_set_sha256 = hashlib.sha256(
+            json.dumps(sorted(patched_source_identities), separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         context = Path(temporary) / "context"
         context.mkdir()
         shutil.copytree(workspace / "lite", context, dirs_exist_ok=True)
@@ -803,9 +1063,6 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
             ["docker", "image", "inspect", "--format", "{{.Id}}", image_tag],
             check=True, capture_output=True, text=True,
         ).stdout.strip()
-        syft, syft_version = syft_binary()
-        artifact_dir = ROOT / "build" / "openbb"
-        artifact_dir.mkdir(parents=True, exist_ok=True)
         sbom_path = artifact_dir / f"workspace-image-{EXPECTED_COMMIT}-{identity[:16]}.spdx.json"
         stable_sbom_scan(
             syft,
@@ -820,9 +1077,16 @@ def build_lite(tag: str | None, archive: Path | None) -> None:
             "source_archive_sha256": report["archive_sha256"],
             "image_tag": image_tag,
             "build_identity": identity,
+            "patched_source_tree_sha256": patched_tree_sha256,
+            "patched_source_sbom": str(patched_source_sbom_path),
+            "patched_source_sbom_sha256": patched_source_sbom_sha256,
+            "patched_source_package_count": len(patched_source_sbom["packages"]),
+            "patched_source_package_identity_count": len(patched_source_identities),
+            "patched_source_package_set_sha256": patched_source_set_sha256,
             "local_image_id": image_id,
             "image_sbom": str(sbom_path),
             "image_sbom_sha256": sbom_digest,
+            "image_sbom_scope_note": "This scans the runtime image. The Vite frontend is a compiled dist bundle without Bun/npm package metadata; use the linked patched-source SBOM for the locked frontend dependency inventory.",
             "syft_version": syft_version,
         }
         record_path = artifact_dir / f"workspace-image-{EXPECTED_COMMIT}.build.json"
@@ -839,10 +1103,22 @@ def parse_args() -> argparse.Namespace:
     sbom = commands.add_parser("source-sbom", help="generate an SPDX SBOM for the pinned source archive")
     sbom.add_argument("--archive", type=Path)
     sbom.add_argument("--output", type=Path)
-    build = commands.add_parser("build-lite", help="build only after the reviewed source build gate is approved")
+    patched_sbom = commands.add_parser(
+        "patched-source-sbom",
+        help="generate an SPDX SBOM for the lock-pinned Community-patched source tree",
+    )
+    patched_sbom.add_argument("--archive", type=Path)
+    patched_sbom.add_argument("--output", type=Path)
+    build = commands.add_parser("build-lite", help="build locally only when the pinned source/recipe gate permits it")
     build.add_argument("--archive", type=Path)
     build.add_argument("--tag")
-    commands.add_parser("build-gate", help="show why image construction is currently blocked")
+    drift = commands.add_parser(
+        "upstream-diff",
+        help="compare verified OpenBB source with the source tree produced by the pinned community patch",
+    )
+    drift.add_argument("--archive", type=Path)
+    drift.add_argument("--output", type=Path)
+    commands.add_parser("build-gate", help="show local build and deployment acceptance separately")
     return parser.parse_args()
 
 
@@ -856,12 +1132,35 @@ def main() -> int:
             print(json.dumps(verify_archive(archive), indent=2))
         elif args.command == "source-sbom":
             source_sbom(args.output, args.archive)
+        elif args.command == "patched-source-sbom":
+            patched_source_sbom(args.output, args.archive)
         elif args.command == "build-lite":
             build_lite(args.tag, args.archive)
+        elif args.command == "upstream-diff":
+            report = openbb_upstream_diff(args.archive, args.output)
+            print(json.dumps({
+                "kind": report["kind"],
+                "upstream": report["upstream"],
+                "recipe": report["recipe"],
+                "counts": report["counts"],
+                "upstream_tree_sha256": report["upstream_tree_sha256"],
+                "patched_tree_sha256": report["patched_tree_sha256"],
+                "output": report.get("output"),
+            }, indent=2))
         elif args.command == "build-gate":
             entry = openbb_entry()
             gate = entry.get("build_gate", {})
-            print(json.dumps({"status": gate.get("status"), "required_findings_to_clear": gate.get("required_findings_to_clear", []), "evidence": gate.get("evidence")}, indent=2))
+            local_build = gate.get("status") == "local-buildable"
+            print(json.dumps({
+                "status": gate.get("status"),
+                "local_build_allowed": local_build,
+                "deployment_approved": gate.get("deployment") == "approved",
+                "runtime_acceptance": gate.get("runtime_acceptance", "not-verified"),
+                "browser_e2e": gate.get("browser_e2e", "not-run"),
+                "deployment": gate.get("deployment", "not-approved"),
+                "required_findings_to_clear": gate.get("required_findings_to_clear", []),
+                "evidence": gate.get("evidence"),
+            }, indent=2))
         return 0
     except SupplyChainError as exc:
         print(f"OpenBB supply-chain error: {exc}", file=sys.stderr)

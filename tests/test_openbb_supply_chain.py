@@ -7,7 +7,7 @@ import pathlib
 import tarfile
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 
@@ -24,6 +24,13 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
         entry = upstream.openbb_entry()
         self.assertEqual(entry["commit"], upstream.EXPECTED_COMMIT)
         self.assertEqual(entry["source_archive"]["sha256"], upstream.EXPECTED_ARCHIVE_SHA256)
+        gate = entry["build_gate"]
+        self.assertEqual(gate["status"], "local-buildable")
+        self.assertEqual(gate["required_findings_to_clear"], [])
+        self.assertEqual(gate["runtime_acceptance"], "not-verified")
+        self.assertEqual(gate["browser_e2e"], "not-run")
+        self.assertEqual(gate["deployment"], "not-approved")
+        self.assertIsNone(gate["evidence"])
         self.assertEqual(len(entry["license_files"]), 2)
         for item in entry["license_files"]:
             local = ROOT / item["local_path"]
@@ -119,6 +126,81 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
                     )
             self.assertFalse(output.exists())
 
+    def test_patched_source_sbom_tracks_patched_tree_and_lock_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            archive = root / "workspace.tar.gz"
+            archive.write_bytes(b"fixture archive")
+            recipe_path = root / "Dockerfile"
+            recipe_path.write_text("pinned recipe", encoding="utf-8")
+            runner_path = root / "apply_patch.py"
+            runner_path.write_text("pinned runner", encoding="utf-8")
+            patch_path = root / "community.patch"
+            patch_path.write_text("pinned patch", encoding="utf-8")
+            manifest_path = root / "community.patch.json"
+            manifest_path.write_text("{}\n", encoding="utf-8")
+            recipe = {"path": "Dockerfile", "sha256": "a" * 64}
+            support_files = [
+                ("Dockerfile", recipe_path, upstream.sha256_file(recipe_path)),
+                ("apply_patch.py", runner_path, upstream.sha256_file(runner_path)),
+                ("community.patch", patch_path, upstream.sha256_file(patch_path)),
+                ("community.patch.json", manifest_path, upstream.sha256_file(manifest_path)),
+            ]
+            identity = "b" * 64
+            sbom = {
+                "spdxVersion": "SPDX-2.3",
+                "packages": [
+                    {"SPDXID": "SPDXRef-DocumentRoot-fixture", "name": "OpenBB", "versionInfo": "commit"},
+                    {"name": "ag-grid-community", "versionInfo": "36.2.0"},
+                    {"name": "ag-charts-community", "versionInfo": "14.2.0"},
+                ],
+            }
+
+            expected_tree_sha256 = []
+
+            def extract(_archive, workspace):
+                (workspace / "terminalpro").mkdir(parents=True)
+                (workspace / "terminalpro" / "bun.lock").write_text("frozen lock", encoding="utf-8")
+
+            def apply_patch(workspace, _recipe, _support_files):
+                (workspace / "terminalpro" / "community-only.ts").write_text("community patch", encoding="utf-8")
+                expected_tree_sha256.append(
+                    upstream.inventory_digest(upstream.inventory_source_tree(workspace))
+                )
+
+            def scan(_syft, _source, output, *_args, **_kwargs):
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(json.dumps(sbom), encoding="utf-8")
+                return sbom
+
+            with (
+                mock.patch.object(upstream, "ROOT", root),
+                mock.patch.object(upstream, "verify_archive", return_value={
+                    "commit": upstream.EXPECTED_COMMIT,
+                    "archive_sha256": upstream.EXPECTED_ARCHIVE_SHA256,
+                }),
+                mock.patch.object(upstream, "openbb_entry", return_value={"build_recipe": recipe}),
+                mock.patch.object(upstream, "locked_recipe", return_value=(recipe, recipe_path, support_files, identity)),
+                mock.patch.object(upstream, "safe_extract", side_effect=extract),
+                mock.patch.object(upstream, "apply_locked_source_patch", side_effect=apply_patch),
+                mock.patch.object(upstream, "syft_binary", return_value=(root / "syft", "1.54.1")),
+                mock.patch.object(upstream, "stable_sbom_scan", side_effect=scan) as stable_scan,
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                result = upstream.patched_source_sbom(None, archive)
+
+            self.assertEqual(stable_scan.call_count, 1)
+            self.assertEqual(result["kind"], "community-patched-source-sbom")
+            self.assertIn("not a runtime image SBOM", result["scope"])
+            self.assertEqual(result["build_identity"], identity)
+            self.assertEqual(result["normalized_package_identity_count"], 2)
+            self.assertEqual(result["source_tree_sha256"], expected_tree_sha256[0])
+            output_path = pathlib.Path(result["output"])
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(result["sbom_sha256"], upstream.sha256_file(output_path))
+            printed = json.loads(output.getvalue())
+            self.assertEqual(printed["source_tree_sha256"], result["source_tree_sha256"])
+
     def test_safe_extractor_rejects_parent_traversal(self):
         with tempfile.TemporaryDirectory() as directory:
             archive = pathlib.Path(directory) / "bad.tar.gz"
@@ -181,7 +263,7 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
                 "mutable-container-base-images",
                 "license-notice-not-copied-into-image",
             }.issubset(finding_ids))
-            lock_findings = set(upstream.openbb_entry()["build_gate"]["required_findings_to_clear"])
+            lock_findings = set(upstream.openbb_entry()["build_gate"]["baseline_upstream_findings"])
             self.assertTrue(finding_ids.issubset(lock_findings))
 
     def test_inspector_accepts_a_pinned_community_recipe(self):

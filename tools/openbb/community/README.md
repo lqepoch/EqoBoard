@@ -1,6 +1,6 @@
 # OpenBB Workspace Lite Community patch
 
-This directory contains the reviewed adapter patch for OpenBB Workspace
+This directory contains the pinned adapter patch for OpenBB Workspace
 `be00e95019a55d57af146919ee46b7e1a4859226`. The source archive SHA-256 is
 `4171aa8984c7c63e171239f8cda72c4bc950f1e068de33577035dc8e5d63e6a4`.
 
@@ -69,7 +69,7 @@ python3 tools/openbb/community/apply_patch.py \
 ```
 
 `community.patch.json` is the SHA-256 manifest for the upstream preimages,
-approved results, and the license-call transform. The companion repository
+expected results, and the license-call transform. The companion repository
 test validates pinning, path confinement, exact hunk behavior, and key absence;
 the Docker build uses BuildKit's checksum-verified upstream archive, frozen
 frontend install, actual frontend bundle build, and project-reference type
@@ -81,5 +81,7 @@ The base image references and upstream source are digest/commit pinned, and the
 frontend uses its frozen Bun lockfile. The image is not claimed to be
 bit-for-bit reproducible: Debian package indexes and the pinned-version pip
 bootstrap installs are not backed by repository snapshots and per-artifact
-hash locks. Release evidence therefore records the built OCI manifest digest
-and image SBOM for rollback instead of treating a rebuild as byte-identical.
+hash locks, and the upstream build downloads webfonts without a content hash.
+The sample tag is only a local build label, not an immutable image identity.
+Release evidence therefore records the built OCI manifest digest and image
+SBOM for rollback instead of treating a rebuild as byte-identical.
