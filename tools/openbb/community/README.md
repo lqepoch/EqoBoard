@@ -35,6 +35,13 @@ Community patch adds no diagnostics against that baseline. The Docker image
 build runs `tsc -b tsconfig.node.json`; the full `bun run typecheck` is checked
 separately and remains a failing baseline check.
 
+The pinned `terminalpro/index.html` also unconditionally requests
+`/assets/js/datafeeds/udf/dist/bundle.js`, but that asset is absent from the
+source archive and the default Lite build disables the licensed Advanced
+Charts runtime. The adapter removes only that dangling script tag; it does not
+replace the asset or affect the Gateway's `/udf` API and OpenBB's own datafeed
+implementation.
+
 The pinned Bookworm runtime provides SQLite 3.40, which predates SQLite's
 built-in `concat()` function. The backend adapter builds user display names
 with SQLAlchemy string expressions so SQLite and PostgreSQL use `||` while
