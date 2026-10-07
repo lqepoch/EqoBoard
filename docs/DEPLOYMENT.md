@@ -9,7 +9,7 @@ docker compose config --quiet
 docker compose up --build --wait
 ```
 
-默认浏览器入口为 `http://127.0.0.1:3000`，Gateway 本地诊断端口为 `http://127.0.0.1:8080`。可用 `EQO_TERMINAL_HOST_PORT` 和 `EQO_GATEWAY_HOST_PORT` 更换宿主端口；两者仍只绑定 loopback。research Node API 只在 Compose 网络的 4000 端口监听，不发布到宿主机。terminal 与 research 共用同一 OpenTerminal runtime image，通过各自明确的 service command 运行；Gateway 是独立 Rust image。
+默认浏览器入口为 `http://localhost:3000`，必须与 `EQO_PUBLIC_ORIGIN` 和 `NEXTAUTH_URL` 的本机默认值保持一致；Gateway 本地诊断端口为 `http://127.0.0.1:8080`。可用 `EQO_TERMINAL_HOST_PORT` 和 `EQO_GATEWAY_HOST_PORT` 更换宿主端口；两者仍只绑定 loopback。research Node API 只在 Compose 网络的 4000 端口监听，不发布到宿主机。terminal 与 research 共用同一 OpenTerminal runtime image，通过各自明确的 service command 运行；Gateway 是独立 Rust image。
 
 默认 compose 运行在本机 Docker 网络，不是面向公网的部署配置。公网入口应由 TLS 反向代理只转发到 OpenTerminal BFF，并确保 Gateway/Node 服务不被公开。不要将 `EQO_BIND` 改为公网接口或额外发布 Gateway/Node 端口。`compose.offline.yaml` 是内网隔离验证 overlay：Compose `internal` network 下宿主端口映射不可用于浏览器访问，服务间/容器内验证才适用。
 
