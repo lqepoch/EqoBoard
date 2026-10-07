@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getResearchServiceKey } from "@/lib/api-key";
 import { authorizeBffRequest, readBoundedJson } from "@/lib/eqo-auth";
-import { eqoChain, eqoHistory, eqoQuotes, eqoStatus, EqoUpstreamError } from "@/lib/eqo-market";
+import { eqoChain, eqoHistory, eqoStatus, EqoUpstreamError } from "@/lib/eqo-market";
 import { readLimitedResponse } from "@/lib/http-response";
 import type { ActionScope } from "@/lib/permissions";
 
@@ -17,7 +17,7 @@ const RESEARCH_READ_ROOTS = new Set([
   "short-volume", "insider",
 ]);
 const MARKET_READ_ROOTS = new Set([
-  "macro", "heatmap", "screener", "sectors", "recap", "earnings-history",
+  "quotes", "history", "macro", "heatmap", "screener", "sectors", "recap", "earnings-history",
 ]);
 
 function isSafePath(parts: string[]): boolean {
@@ -64,7 +64,7 @@ function researchPolicy(method: Method, path: string[]): ProxyPolicy | null {
 async function proxy(request: NextRequest, path: string[]): Promise<NextResponse> {
   const method = request.method.toUpperCase() as Method;
   const directMarket = method === "GET" && (
-    (path.length === 1 && ["status", "quotes"].includes(path[0])) ||
+    (path.length === 1 && path[0] === "status") ||
     (path.length === 2 && ["history", "options"].includes(path[0]))
   );
   if (directMarket) {
@@ -73,9 +73,6 @@ async function proxy(request: NextRequest, path: string[]): Promise<NextResponse
     if (!auth.ok) return auth.response;
     try {
       if (path.length === 1 && path[0] === "status") return NextResponse.json(await eqoStatus(auth.token));
-      if (path.length === 1 && path[0] === "quotes") {
-        return NextResponse.json(await eqoQuotes(request.nextUrl.searchParams.get("symbols") ?? "", auth.token));
-      }
       if (path.length === 2 && path[0] === "history") {
         return NextResponse.json(await eqoHistory(path[1], request.nextUrl.searchParams.get("range") ?? "6M", auth.token));
       }

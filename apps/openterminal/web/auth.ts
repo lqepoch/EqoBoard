@@ -22,6 +22,15 @@ function validIssuer(raw: string | undefined): string | null {
   }
 }
 
+function configuredSessionLifetime(): number | null {
+  const raw = process.env.EQO_SESSION_TTL_SECONDS;
+  if (raw === undefined || raw === "") return 60 * 60;
+  const seconds = Number(raw);
+  return Number.isSafeInteger(seconds) && seconds >= 5 && seconds <= 24 * 60 * 60 ? seconds : null;
+}
+
+const sessionLifetimeSeconds = configuredSessionLifetime();
+
 export function publicAppOrigin(): string | null {
   const raw = process.env.EQO_PUBLIC_ORIGIN;
   if (!raw) return null;
@@ -44,7 +53,7 @@ export function isOidcConfigured(): boolean {
       process.env.EQO_OIDC_CLIENT_ID?.trim() &&
       process.env.EQO_OIDC_CLIENT_SECRET?.trim() &&
       process.env.NEXTAUTH_SECRET && process.env.NEXTAUTH_SECRET.length >= 32 &&
-      publicAppOrigin(),
+      publicAppOrigin() && sessionLifetimeSeconds !== null,
   );
 }
 
@@ -53,9 +62,14 @@ function validHmacSecret(value: string | undefined): value is string {
 }
 
 export function isAuthRuntimeConfigured(): boolean {
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+  const gatewaySecret = process.env.EQO_GATEWAY_JWT_SECRET;
+  const researchSecret = process.env.EQO_RESEARCH_JWT_SECRET;
+  const signingSecrets = [nextAuthSecret, gatewaySecret, researchSecret];
   return isOidcConfigured() &&
-    validHmacSecret(process.env.EQO_GATEWAY_JWT_SECRET) &&
-    validHmacSecret(process.env.EQO_RESEARCH_JWT_SECRET) &&
+    validHmacSecret(gatewaySecret) &&
+    validHmacSecret(researchSecret) &&
+    new Set(signingSecrets).size === signingSecrets.length &&
     Boolean(process.env.EQO_RESEARCH_API_KEY && process.env.EQO_RESEARCH_API_KEY.length >= 32);
 }
 
@@ -89,13 +103,15 @@ const oidcProvider: OAuthConfig<OidcProfile> | null = issuer &&
     }
   : null;
 
-const sessionLifetimeSeconds = 60 * 60;
-
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: oidcProvider ? [oidcProvider] : [],
-  session: { strategy: "jwt", maxAge: sessionLifetimeSeconds, updateAge: 5 * 60 },
-  jwt: { maxAge: sessionLifetimeSeconds },
+  session: {
+    strategy: "jwt",
+    maxAge: sessionLifetimeSeconds ?? 60 * 60,
+    updateAge: Math.min(5 * 60, sessionLifetimeSeconds ?? 60 * 60),
+  },
+  jwt: { maxAge: sessionLifetimeSeconds ?? 60 * 60 },
   useSecureCookies: publicAppOrigin()?.startsWith("https://") ?? false,
   callbacks: {
     async jwt({ token, user, account }) {
@@ -109,6 +125,7 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      session.sessionExpiresAt = typeof token.exp === "number" ? token.exp * 1000 : 0;
       if (session.user) {
         session.user.id = typeof token.sub === "string" ? token.sub : "";
         session.user.roles = allowlistedRoles(token.eqoRoles);

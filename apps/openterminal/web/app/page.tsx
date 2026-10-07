@@ -3,6 +3,7 @@ import { authOptions, isAuthRuntimeConfigured, isCurrentOidcIssuer } from "@/aut
 import { scopesForRoles } from "@/lib/permissions";
 import TerminalShell from "../components/TerminalShell";
 import SignOutButton from "../components/SignOutButton";
+import SignInButton from "../components/SignInButton";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function Home() {
 
   if (!session?.user?.id) {
     return <AuthMessage title="Sign in to EqoBoard">
-      <a className="auth-sign-in" href="/api/auth/signin/eqo-oidc">Continue with your organization identity provider</a>
+      <SignInButton />
     </AuthMessage>;
   }
 

@@ -18,6 +18,7 @@ export type AuthorizationResult =
   | { ok: false; response: NextResponse };
 
 const MAX_REQUEST_BYTES = 64 * 1024;
+const MAX_REQUEST_BODY_MS = 5_000;
 
 function jsonError(status: number, error: string): NextResponse {
   return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
@@ -67,8 +68,8 @@ export async function authorizeBffRequest(
   if (!user?.id || !user.issuer || !isCurrentOidcIssuer(user.issuer)) {
     return { ok: false, response: jsonError(401, "authentication_required") };
   }
-  const sessionExpiresAt = Date.parse(session.expires);
-  if (!Number.isFinite(sessionExpiresAt) || sessionExpiresAt <= Date.now() + 1_000) {
+  const sessionExpiresAt = session.sessionExpiresAt;
+  if (!Number.isSafeInteger(sessionExpiresAt) || sessionExpiresAt <= Date.now() + 1_000) {
     return { ok: false, response: jsonError(401, "authentication_required") };
   }
   const scopes = scopesForRoles(user.roles);
@@ -121,21 +122,31 @@ export async function readBoundedJson(request: Request): Promise<JsonBodyResult>
   if (!reader) return { ok: false, response: jsonError(400, "invalid_json") };
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    deadline = setTimeout(() => reject(new Error("request_body_timeout")), MAX_REQUEST_BODY_MS);
+  });
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([reader.read(), timedOut]);
       if (done) break;
       total += value.byteLength;
       if (total > MAX_REQUEST_BYTES) {
-        await reader.cancel();
+        void reader.cancel().catch(() => undefined);
         return { ok: false, response: jsonError(413, "request_too_large") };
       }
       chunks.push(value);
     }
     const text = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
     return { ok: true, text, value: JSON.parse(text) as unknown };
-  } catch {
+  } catch (error) {
+    void reader.cancel(error).catch(() => undefined);
+    if (error instanceof Error && error.message === "request_body_timeout") {
+      return { ok: false, response: jsonError(408, "request_body_timeout") };
+    }
     return { ok: false, response: jsonError(400, "invalid_json") };
+  } finally {
+    if (deadline) clearTimeout(deadline);
   }
 }
 

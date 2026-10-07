@@ -10,9 +10,11 @@ const ALLOWED_SCOPES = new Set([
   "market:read", "market:stream", "market:subscribe", "research:read", "research:ai",
   "workspace:read", "workspace:write", "orders:preview", "paper:submit",
 ]);
-const MARKET_SCOPED_PATHS = new Set(["heatmap", "screener", "sectors", "recap", "macro", "earnings-history"]);
+const MARKET_SCOPED_PATHS = new Set([
+  "quotes", "history", "heatmap", "screener", "sectors", "recap", "macro", "earnings-history",
+]);
 const RESEARCH_SCOPED_PATHS = new Set([
-  "quotes", "history", "search", "news", "econ-calendar", "options", "crypto", "calendar",
+  "search", "news", "econ-calendar", "options", "crypto", "calendar",
   "short-volume", "insider",
 ]);
 
@@ -21,6 +23,7 @@ export type VerifiedPrincipal = {
   identityIssuer: string;
   ownerId: string;
   scopes: readonly string[];
+  expiresAt: number;
 };
 
 declare global {
@@ -110,6 +113,7 @@ export function requireDelegatedPrincipal(req: Request, res: Response, next: Nex
         identityIssuer,
         ownerId: ownerId(identityIssuer, subject),
         scopes,
+        expiresAt: payload.exp,
       };
       next();
     } catch {
@@ -150,6 +154,10 @@ export async function getGatewayAuthorization(
   requiredScope: "market:read",
 ): Promise<string> {
   if (!principal.scopes.includes(requiredScope)) throw new Error("action_forbidden");
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(principal.expiresAt) || principal.expiresAt <= now) {
+    throw new Error("authentication_required");
+  }
   const secret = hmacSecret(process.env.EQO_RESEARCH_JWT_SECRET);
   if (!secret) throw new Error("identity_service_unavailable");
   return new SignJWT({
@@ -161,7 +169,7 @@ export async function getGatewayAuthorization(
     .setIssuer(RESEARCH_ISSUER)
     .setAudience(GATEWAY_AUDIENCE)
     .setSubject(principal.subject)
-    .setIssuedAt()
-    .setExpirationTime("60s")
+    .setIssuedAt(now)
+    .setExpirationTime(Math.min(principal.expiresAt, now + 60))
     .sign(secret);
 }

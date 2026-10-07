@@ -6,6 +6,7 @@ import { SignJWT, jwtVerify } from "jose";
 import {
   getGatewayAuthorization,
   requireDelegatedPrincipal,
+  requireResearchScopeForPath,
   requireResearchServiceKey,
   requireScopes,
 } from "./auth.js";
@@ -62,6 +63,16 @@ beforeAll(async () => {
       res.json({ subject: req.verifiedPrincipal?.subject });
     },
   );
+  app.get(
+    ["/api/quotes", "/api/history/:symbol"],
+    requireResearchServiceKey,
+    requireDelegatedPrincipal,
+    requireResearchScopeForPath,
+    (_req, res) => {
+      downstream.calls += 1;
+      res.json({ ok: true });
+    },
+  );
   server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -109,6 +120,7 @@ describe("Node delegated identity boundary", () => {
       identityIssuer: "https://identity.example",
       ownerId: "owner-hash",
       scopes: ["market:read"],
+      expiresAt: Math.floor(Date.now() / 1000) + 120,
     }, "market:read");
     const { payload, protectedHeader } = await jwtVerify(token, new TextEncoder().encode(researchKey), {
       algorithms: ["HS256"],
@@ -117,11 +129,35 @@ describe("Node delegated identity boundary", () => {
     });
     expect(protectedHeader.kid).toBe("research");
     expect(payload.scope).toEqual(["market:read"]);
+    expect(payload.exp).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 60);
+    await expect(getGatewayAuthorization({
+      subject: "subject-a",
+      identityIssuer: "https://identity.example",
+      ownerId: "owner-hash",
+      scopes: ["market:read"],
+      expiresAt: Math.floor(Date.now() / 1000),
+    }, "market:read")).rejects.toThrow("authentication_required");
     await expect(getGatewayAuthorization({
       subject: "subject-a",
       identityIssuer: "https://identity.example",
       ownerId: "owner-hash",
       scopes: ["research:read"],
+      expiresAt: Math.floor(Date.now() / 1000) + 60,
     }, "market:read")).rejects.toThrow("action_forbidden");
+  });
+
+  it("requires the market scope for quotes and history instead of the research scope", async () => {
+    const before = downstream.calls;
+    for (const path of ["quotes?symbols=QQQ", "history/QQQ?range=1D"]) {
+      const market = await fetch(`${origin}/api/${path}`, {
+        headers: { "x-api-key": serviceKey, authorization: `Bearer ${await bffToken("market:read")}` },
+      });
+      expect(market.status).toBe(200);
+      const research = await fetch(`${origin}/api/${path}`, {
+        headers: { "x-api-key": serviceKey, authorization: `Bearer ${await bffToken("research:read")}` },
+      });
+      expect(research.status).toBe(403);
+    }
+    expect(downstream.calls - before).toBe(2);
   });
 });
