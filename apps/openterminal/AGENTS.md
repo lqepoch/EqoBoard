@@ -15,7 +15,9 @@
 - 同一行情状态由 `web/store/market.ts` 持有；REST watermark 按 feed/symbol/event type 防旧响应与旧 tick，Gateway instance/epoch 变化或 resync 会清理旧 live 值。订阅客户端在 membership 更新和释放时发送递增 generation/tombstone；在 Gateway 返回可核验的 active generation/集合之前，不得宣称服务器已防止旧 cleanup/renew 竞态。
 - 行情来源、as-of 与 coverage 定义见 [`docs/MARKET_SOURCES.md`](../../docs/MARKET_SOURCES.md)。
 - 新交易 UI 只能调用服务端 `/api/eqo/orders/*`，浏览器不得接触券商/Alpaca密钥。
-- 所有 `/api` BFF 路由（含通用代理、订单、订阅和 SSE）必须要求当前 OIDC 会话及 action scope；写请求校验同源 Origin 和 bounded JSON。角色只来自受信 OIDC claims allowlist，不能由浏览器/session update 提升。
+- 终端 `/api` BFF 路由（含通用代理、订单、订阅和 SSE）必须要求当前 OIDC 会话及 action scope；写请求校验同源 Origin 和 bounded JSON。角色只来自受信 OIDC claims allowlist，不能由浏览器/session update 提升。研究模式的 `/api/openbb/widgets.json`、`apps.json` 只返回非敏感 metadata；市场 endpoints 仍必须校验 `market:read`。
 - Next→Gateway 和 Next/Node→Gateway 使用不同受众及独立 HMAC key。Node 只能签 `market:read` 子 token；不能继承 BFF 的订单 key 或权限。缺少认证配置时 UI 显示不可用且下游调用次数为零。
+- OpenBB 使用独立 origin 的 Next research-mode runtime：cookie 名称与 NextAuth secret 独立，Gateway 委托最长 60 秒且只含 `market:read`；不得配置 `EQO_GATEWAY_JWT_SECRET` 或 `EQO_RESEARCH_API_KEY`，不得代理订单/账户/管理路由。不要与主终端 origin 共享会话或将研究服务端口直接发布。
+- `npm run test:e2e:research --workspace web` 构建 production Next 并运行隔离 OIDC/Gateway mock。它只证明 BFF/API 组件行为，不启动 OpenBB Lite，也不证明 Rust Gateway、SIP/OPRA 或真实 Lite 浏览器集成；对应 profile、ingress 和 Lite E2E 必须单独验收。
 - `EQO_ACCESS_TOKEN` 已废弃；Paper/Live 在当前发布版均保持关闭。Portfolio owner 由 issuer+subject 派生，旧 `local` 数据不可自动转移给登录用户。
 - 同步上游必须保留 MIT LICENSE、固定 commit、diff 记录并运行全部构建。
