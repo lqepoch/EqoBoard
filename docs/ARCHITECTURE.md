@@ -53,7 +53,7 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 - `POST /api/v1/orders/submit`
 
 OpenBB：`/widgets.json`、`/apps.json`、`/openbb/stocks`、`/openbb/options`、`/openbb/bars`。
-OpenBB Gateway 路由也要求可验证的委托主体；OpenBB Lite 的登录/令牌交换联调属于后续 #13，当前不接受静态 bearer token。
+OpenBB 研究行情 handler 要求带 `market:read` scope 的可验证短时委托主体；`/widgets.json` 和 `/apps.json` 只返回兼容 schema metadata，不授予行情访问能力。OpenBB Workspace 的 OIDC 登录/服务委托联调属于后续 #13，当前不接受静态 bearer token，也不通过放宽 Gateway 鉴权来兼容。
 
 ## 数据原则
 
@@ -64,6 +64,8 @@ SIP/OPRA 是硬约束。关键行情不允许用 Yahoo、IEX、indicative 等源
 Foundation：OpenTerminal + Rust + AG Grid + OpenBB connector。
 
 当前基础版只开放离线订单预览，Paper 与 Live 提交固定关闭。Paper MVP 还需三券商持久订单状态机、一次性 preview/outbox、账户身份、撤改单、持仓、成交、对账与恢复后另行验收。
+
+Gateway preview 记录绑定验证后的 `(idp_iss, sub)`，相同 `sub` 但不同 issuer 不共享或消费 preview。当前 preview 仍是进程内一次性记录，不是持久 ledger。submit 的错误使用 `state/retryable/recovery_required/detail` 契约；上游结果不确定时返回 `UNKNOWN` 并保留原 `client_order_id`，不能引导换 ID 重下。status 中的 `adapter_endpoints_configured` 只描述 endpoint 配置；`broker_capabilities` 对 Alpaca、IBKR、Schwab 的 Paper 与 Live 均明确 disabled，Schwab 不映射为真实券商 Paper。
 
 Production：OIDC/RBAC、持久事件存储、OpenTelemetry/SLO、WORM 审计、行情授权、限额/Kill Switch、灰度和灾备。
 

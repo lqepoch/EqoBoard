@@ -25,6 +25,8 @@ OCC 符号尾部 8 位按千分之一美元解析为整数 `strike_millis`；不
 
 风险金额是到期 payoff 的**毛损**，不含券商佣金、交易所/监管费用、行权/指派费用或后续平仓费用；v1 没有可验证的统一 fee schedule，因此不能将该数值称为 all-in 最大损失。Paper/live 委托能力仍保持关闭，直到账户级风险和费用政策接入。
 
+Gateway 的当前 preview 进程内保存 60 秒，消费前按受信身份 `(idp_iss, sub)` 验证所有权；OIDC subject 只在 issuer 内唯一，所以不同 issuer 下相同 subject 不能共享 preview。该短时存储只支持本轮离线预览/确认一致性，不代表持久订单账本。Gateway 对所有券商的 Paper/Live capability 显示 disabled，adapter endpoint 已配置也不等于真实券商能力。submit 被阻止时不消费 preview、不调用 adapter；若未来请求已进入 adapter 后结果不确定，必须返回 `UNKNOWN`、保留原 `client_order_id` 和恢复关联，禁止建议用户换 ID 重下。
+
 ## Issue #2-A 反例
 
 输入买入 `QQQ261009P00600000` 并卖出 `QQQ261009P00620000`，quantity=1、limit_price=0.01、net_effect=debit：低执行价多头 put / 高执行价空头 put 与 debit 方向矛盾，preview 拒绝。若声明正确推导的 credit，最大毛损为 `(20.00 - 0.01) × 100 = $1,999`，超过默认 `$1,000` 风险上限而拒绝。该反例用 `validate_order_at` 的固定校验日期测试，结果不依赖测试运行当天。
