@@ -290,6 +290,18 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   expect(new URL(dashboardUrl).origin).toBe(RESEARCH_ORIGIN);
   await writeFile(DASHBOARD_URL_FILE, JSON.stringify({ url: dashboardUrl }, null, 2), { mode: 0o600 });
 
+  const generatedDashboardName = (await page.title()).split("|")[0].trim();
+  expect(generatedDashboardName).not.toBe("");
+  const dashboardTreeItem = page.getByRole("treeitem").filter({ hasText: generatedDashboardName });
+  await expect(dashboardTreeItem).toBeVisible();
+  await dashboardTreeItem.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  const renameDialog = page.getByRole("dialog").filter({ hasText: "Rename dashboard" });
+  await renameDialog.getByRole("textbox").fill("仅演示 / MOCK SIP/OPRA");
+  await renameDialog.getByRole("button", { name: "Rename", exact: true }).click();
+  await expect(page).toHaveTitle(/^仅演示 \/ MOCK SIP\/OPRA \| OpenBB Lite$/);
+  await expect(page.getByRole("treeitem").filter({ hasText: "仅演示 / MOCK SIP/OPRA" })).toBeVisible();
+
   await expect.poll(() => captured.responses.filter((item) => item.status === 200).length, { timeout: 45_000 }).toBeGreaterThanOrEqual(5);
   await captured.settle();
   const widgets = captured.responses.find((item) => item.path === "/api/openbb/widgets.json" && item.status === 200);
@@ -326,6 +338,26 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   expect(browserCalls.some((url) => /yahoo|iex/i.test(url))).toBe(false);
   expect(browserCalls.some((url) => /\/orders?(\/|\?|$)|\/submit(\/|\?|$)/i.test(url))).toBe(false);
 
+  const marketAsOfHeaders = page.getByRole("columnheader", { name: "Market as of", exact: true });
+  await expect(marketAsOfHeaders).toHaveCount(2);
+  await expect(marketAsOfHeaders.last()).toBeVisible();
+  await expect(page.getByText(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/).first()).toBeVisible();
+  await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-market-time.png"), fullPage: true });
+
+  const horizontalViewports = page.locator(".ag-body-horizontal-scroll-viewport");
+  await expect(horizontalViewports).toHaveCount(3);
+  await horizontalViewports.evaluateAll((elements) => {
+    for (const element of elements) {
+      const viewport = element as HTMLElement;
+      viewport.scrollLeft = viewport.scrollWidth;
+    }
+  });
+  await expect(page.getByRole("columnheader", { name: "Source", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Feed", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Truncated", exact: true }).first()).toBeVisible();
+  await expect(page.getByText("source unknown", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("sip", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("opra", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("仅演示 / MOCK SIP/OPRA", { exact: false })).toBeVisible();
   const dashboardText = await page.locator("body").innerText();
   expect(dashboardText).toContain("source unknown");
@@ -352,6 +384,9 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   expect(truncatedMetrics.calls.filter((call: { page_token?: string | null }) => call.page_token).length).toBeGreaterThanOrEqual(8);
   await controlMock(request, { bars: "normal", options: "normal" });
   await page.goto(dashboardUrl);
+  await expect(page).toHaveTitle(/^仅演示 \/ MOCK SIP\/OPRA \| OpenBB Lite$/);
+  expect(browserCalls.some((url) => url.includes("/assets/js/datafeeds/udf/dist/bundle.js"))).toBe(false);
+  expect(diagnostics.pageErrors).toEqual([]);
   await page.context().storageState({ path: STORAGE_STATE });
 });
 
