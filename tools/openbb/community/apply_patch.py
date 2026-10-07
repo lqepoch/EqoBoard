@@ -40,7 +40,7 @@ def safe_relative_path(value: str) -> PurePosixPath:
         raise PatchError(f"unsafe repository path: {value!r}")
     if "\\" in value or "\x00" in value:
         raise PatchError(f"unsafe repository path: {value!r}")
-    if path.parts[0] not in {"terminalpro", "lite"}:
+    if path.parts[0] not in {"backend-api", "terminalpro", "lite"}:
         raise PatchError(f"patch path is outside the supported upstream trees: {value!r}")
     return path
 
