@@ -44,15 +44,20 @@ is SHA-locked and removes an unconsumed script reference rather than replacing
 or rewriting the upstream UI. The current recipe identity is
 `cfc03fb056e7c60226186f332d2dc7bf7eb6d30acd3de342fc7b7bb5efc77d47`.
 
-The previous identity `09028c906e342e873dce99693ff119e3382d4e600ec1a55d5370b9712caca3f8`
-has a successful r4 Docker build, 3/3 SQLite regressions, healthy container and
-HTTP 200 `/api/health`. Its OCI archive was recursively checked for every
-descriptor digest/size and successfully imported under an isolated rollback
-tag, where health reached `healthy`. This is historical evidence for the prior
-recipe only. Its build log, health record, OCI archive, image SBOM and rollback
-smoke are retained in the external artifact bundle; they do not establish the
-current recipe's image or browser behavior. The current identity's Lite image
-build and browser E2E must be recorded separately.
+The current identity `cfc03fb056e7c60226186f332d2dc7bf7eb6d30acd3de342fc7b7bb5efc77d47`
+has a completed Community Lite r5 BuildKit build, 3/3 compiled-runtime SQLite
+regressions, healthy container and HTTP 200 `/api/health`. The OCI export was
+recursively checked against each descriptor size and SHA-256 blob, then
+imported under a new isolated rollback tag; that imported image also reached
+healthy and returned HTTP 200. The current `build-lite.sh` helper build has a
+separate identity-labeled index and image SBOM; its ordered RootFS layers match
+the plain r5 image. A fresh worktree sharing the same Docker daemon reran the
+helper and was refused before build because the immutable identity tag already
+existed. Build, health, scan, OCI and rollback records are kept in the external
+artifact bundle. These checks establish local image/rollback evidence, not
+OpenBB browser E2E or registry publication. The prior `09028...` r4 archive and
+SBOM remain separate historical evidence and do not identify the current
+recipe.
 
 The upstream source SPDX SBOM describes the pinned archive; the patched-source
 SPDX SBOM describes the verified Community patch result and frozen Bun/Poetry
@@ -104,11 +109,12 @@ patched-source SBOM records the locked frontend dependency graph absent from
 the compiled Vite bundle. Do not call an image config ID a RepoDigest. Keep the
 complete build record with the deployment reference. No image digest or
 deployment rollback target is established until those artifacts exist. The
-lock's release `image_digest` remains unset. Earlier candidate OCI index and
-archive digests are host-local evidence for their recorded patch, not the
-current recipe, a registry publication, or a deployed rollback reference.
-Generate a new OCI artifact and SBOM only from the current recipe; do not reuse
-an earlier inventory for a changed patch.
+lock's release `image_digest` remains unset. Current and earlier candidate OCI
+index/archive digests are local evidence for their exact build identities, not
+registry publication or a deployed rollback reference. Docker's local
+`RepoDigests` field can mirror a local index and is not proof of a registry
+push. Generate a new OCI artifact and SBOM for every source/recipe change; do
+not reuse an earlier inventory for a changed patch.
 
 For an image rollback, redeploy the last known healthy immutable OCI or
 registry reference recorded by the deployment. Do not rebuild the failed
