@@ -1,0 +1,17 @@
+[package]
+name = "eqo-execution"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+eqo-domain = { path = "../domain" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+async-trait = "0.1"
+tracing.workspace = true
