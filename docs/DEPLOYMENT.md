@@ -62,7 +62,7 @@ given a tag or an unverified digest.
 docker compose --profile openbb stop openbb-research-ingress openbb-research-bff openbb-lite
 ```
 
-Compose 的本地 image tag 只用于选择构建 recipe，不能当作不可变 artifact digest。正式部署/回滚必须记录实际 OCI manifest digest 和可恢复镜像归档或 registry RepoDigest；Profile 的浏览器、路由与停止/重启验收状态以本任务后续记录的实测结果为准。
+Compose 的本地 image tag 只用于选择构建 recipe，不能当作不可变 artifact digest。正式部署/回滚必须记录实际 OCI manifest digest 和可恢复镜像归档或 registry RepoDigest。attempt-20 已完成一次诊断生命周期：真实 Rust Gateway 与 native Lite 浏览器、身份拒绝、SIP/OPRA 协议 mock、core-only、Gateway offline/restart、错误候选升级与原 image 恢复均通过；该轮通过 `OPENBB_E2E_SKIP_DEFAULT_PROFILE_SMOKE=1` 跳过了默认 profile smoke，不能替代最终无 skip 验收。具体 artifact/OCI 关联见 [OpenBB supply-chain runbook](OPENBB_SUPPLY_CHAIN.md)。测试市场行的来源为 `unknown`，没有验证真实 Alpaca entitlement；没有下单，也没有 registry 发布或部署。
 
 | OIDC role | 授权范围 |
 |---|---|

@@ -60,7 +60,7 @@ Gateway 有界消费 bars/options continuation token；缺失/null 表示终止�
 
 隔离 research BFF 对外提供 `/api/openbb/widgets.json`、`/api/openbb/apps.json` 及 `/api/openbb/openbb/v1/{stocks,bars,options}`。重复的 `openbb` path segment 来自 pinned Workspace `createURLString(endpoint, backendUrl)` 规则：custom source URL 是 `/api/openbb`，manifest endpoint 保持 `openbb/v1/...`。BFF 只映射这三条只读路径，要求隔离 hostname 上的 OIDC/NextAuth session 和 market-reader role，再使用 research signer 签发最长 60 秒、`kid=research`、`iss=openterminal-research`、`aud=eqoboard-gateway`、单一 `market:read` scope 的 token。manifest metadata 不授予行情访问能力；source、feed、as-of 和 truncation 来自 Gateway。
 
-Research BFF 不配置主终端 Gateway signer、Node API key 或 Alpaca key/secret。现有 research BFF Playwright suite 是生产 Next 与 mock OIDC/Gateway 的组件测试；它不运行 OpenBB Lite，不能替代真实 Lite 浏览器集成验收或 SIP/OPRA 行情来源证明。
+Research BFF 不配置主终端 Gateway signer、Node API key 或 Alpaca key/secret。Research BFF Playwright suite 覆盖生产 Next 与 mock OIDC/Gateway 的 API 组件边界；独立 OpenBB Playwright suite 才启动固定 Lite、真实 Rust Gateway 和受控 SIP/OPRA 协议 mock。attempt-20 的 OpenBB 生命周期诊断通过，但跳过了默认 profile smoke，完整无 skip 验收仍待执行。测试 mock 的 Gateway 行 `source=unknown`，不作为真实 Alpaca 行情来源或 entitlement 证明。
 
 ## 数据原则
 

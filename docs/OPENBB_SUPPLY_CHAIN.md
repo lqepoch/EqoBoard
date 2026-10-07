@@ -54,10 +54,57 @@ separate identity-labeled index and image SBOM; its ordered RootFS layers match
 the plain r5 image. A fresh worktree sharing the same Docker daemon reran the
 helper and was refused before build because the immutable identity tag already
 existed. Build, health, scan, OCI and rollback records are kept in the external
-artifact bundle. These checks establish local image/rollback evidence, not
-OpenBB browser E2E or registry publication. The prior `09028...` r4 archive and
+artifact bundle. Those helper/source checks alone do not establish Compose
+browser integration or registry publication. The prior `09028...` r4 archive and
 SBOM remain separate historical evidence and do not identify the current
 recipe.
+
+## Compose and native-browser diagnostic record
+
+The frozen code at `85621eb954d8fc2666685f87f27a58c1d96d185b` completed
+attempt-20 with result `passed` and `cleanup_verified=true`:
+
+```sh
+OPENBB_E2E_SKIP_DEFAULT_PROFILE_SMOKE=1 bash tools/openbb-lite-e2e.sh
+```
+
+The diagnostic run passed three native OpenBB Playwright tests, one signed-in
+OpenTerminal core-availability test while the optional OpenBB services were
+stopped, and three Gateway offline/restart/image-restore browser recovery
+checks. The native Workspace logged into OpenBB's own seeded email/password
+account after the outer OIDC gate, completed the upstream onboarding screen,
+added the three supported EqoBoard widgets, rendered SIP/OPRA protocol-mock
+rows, showed pagination and entitlement errors, and preserved the terminal
+session boundary. The test also restarted the actual Rust Gateway and restored
+the exact saved Lite image after a deliberately broken candidate became
+unhealthy. The Rust Gateway received only loopback mock endpoints for this
+test; overridden provider endpoints yielded `source=unknown`, with requested
+`feed=sip`/`feed=opra`. This is not evidence of live Alpaca data or entitlement.
+No order was submitted and the execution mode remained disabled.
+
+This attempt deliberately skipped the default-profile smoke to avoid repeating
+an already completed Compose config/build/up check while diagnosing the browser
+and rollback path. It is diagnostic lifecycle evidence, not the required final
+no-skip run. The final no-skip default-profile run and image SBOM for its exact
+Compose-built image remain pending; the source-helper r5 image SBOM does not
+cover the Compose-built image.
+
+Attempt-20 artifacts are retained at
+`/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-20/`. The
+saved Docker archive SHA-256 is
+`b0f3ea9430d529429f3ec77fdf4323ab99539cf941cab8c275349ae485ee9203`. Its
+manifest verifier links the Docker `inspect.Id` observation
+`sha256:e3f899c7b1e1ff397097b2c77afc25a5ca21ce8ec83e530959c0293a179c934f`
+to the OCI index, the `linux/amd64` application manifest
+`sha256:2ea08ade95908cf82bc9aa2f865711cc6eb28584bd7f4db5d912605fa93a9a67`,
+and image config
+`sha256:1ca37a09b7cbb4219e225762e3c0719e762f95a7ca22b7163332bd53d16b7f09`;
+all config/layer descriptors are checked against archive blob sizes and
+digests. Docker's local `RepoDigest` observation mirrors that local image index
+and does not establish a registry publication. The Compose test tag is a
+project-specific local tag, while the normal Compose recipe tag is derived
+from upstream and recipe identities; neither is an immutable published
+reference.
 
 The upstream source SPDX SBOM describes the pinned archive; the patched-source
 SPDX SBOM describes the verified Community patch result and frozen Bun/Poetry

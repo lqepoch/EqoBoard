@@ -1,21 +1,22 @@
 # EqoBoard
 
-可二次开发的美股股票 + 期权终端。默认本地 UI 直接复用 **OpenTerminal** 的 MIT Workspace/Widget/Chart 体系；期权链使用 **AG Grid Community**；美股/期权数据路径请求 Alpaca Plus 的 **SIP/OPRA**。仓库包含隔离的 OpenBB 研究模式 BFF/API 组件，但尚未部署 pinned OpenBB Lite UI，也未完成其真实浏览器端联调。
+可二次开发的美股股票 + 期权终端。默认主 UI 复用 **OpenTerminal** 的 MIT Workspace/Widget/Chart 体系；期权链使用 **AG Grid Community**；生产美股/期权数据路径通过 Rust Gateway 请求 Alpaca **SIP/OPRA**。可选 OpenBB Lite 研究工作台由独立 Research BFF 和受控入口提供，不替代主终端。
 
 ## 核心组合
 
-| 层 | 采用组件 | EqoBoard 扩展 |
+| 层 | 采用组件 | 责任与边界 |
 |---|---|---|
-| 主终端 | OpenTerminal @ pinned upstream commit | SIP/OPRA 路由、AG Grid Option Chain、IV Skew、OPRA Tape、Vertical Spread |
-| 表格 | AG Grid Community 36.2 | 高频 async transaction、双边期权链 |
-| 图表 | OpenTerminal Lightweight Charts + Recharts | Alpaca SIP K线、OPRA IV |
-| 行情 | Rust + Tokio + Axum | SIP/OPRA REST/WS、50ms 批处理、租约、来源/时间戳 |
-| 可选研究工作台 | OpenBB Lite upstream + 独立 Next research BFF（Lite 部署待完成） | OIDC 用户会话到最长 60 秒 `market:read` Gateway 委托；仅有 BFF/API 组件测试 |
-| 执行 | Rust BrokerAdapter | 当前版本 effective mode 固定为 disabled；Paper 和 Live 均不提交 |
+| 1 · UI | OpenTerminal 主 Workspace；可选 OpenBB Lite 原生 Workspace | 主终端为默认 UI；研究工作台通过单独 Research origin 与 Compose `openbb` profile 启用 |
+| 2 · 身份与 BFF | 两个独立 Next BFF + OIDC | 各自校验会话；Research BFF 只签最长 60 秒 `market:read` 委托，Lite 仍使用原生邮箱/密码登录，不构成 SSO |
+| 3 · 行情契约 | Rust + Tokio + Axum Gateway | SIP/OPRA REST/WS、50ms 批处理、订阅租约、来源与时间戳；浏览器不直连券商数据 API |
+| 4 · 市场来源 | Alpaca SIP / OPRA | 生产市场来源边界；覆盖数据 endpoint 的测试 fixture 只模拟 SIP/OPRA 协议，Gateway 必须标 `source=unknown` |
+| 5 · 执行 | Rust BrokerAdapter | 唯一订单执行边界；当前 effective mode 固定为 disabled，Paper 与 Live 均不提交 |
+
+系统五层关系：**OpenTerminal 主终端 + 可选 OpenBB Lite → 分离的 OIDC/BFF → Rust Gateway 行情契约 → Alpaca SIP/OPRA 市场来源；订单只能经 BrokerAdapter，当前保持 disabled。** AG Grid Community 用于期权链与 OpenBB Community 组合；OpenTerminal Lightweight Charts / Recharts 负责终端图表。
 
 OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定提交见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。旧的自研 Vite 终端已退出仓库，防止两套 UI 长期分叉。
 
-OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 hostname、host-only OIDC cookies 和 `market:read` 短时委托访问它们。不同端口仍共享 hostname Cookie 边界。当前还没有可运行的 OpenBB Lite Compose service 或 OpenTerminal Research 导航入口。生产构建的 BFF/API 浏览器测试不启动 OpenBB Lite，不代表 “OpenBB Web integrated”，也不证明真实 SIP/OPRA 行情接入。
+OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 hostname、host-only OIDC cookies 和 `market:read` 短时委托访问它们。不同端口仍共享 hostname Cookie 边界。可选服务由默认 Compose 自动包含的 `openbb` profile 与原生 OpenTerminal Research 入口提供。浏览器测试使用真实 Rust Gateway 和仅测试用 loopback SIP/OPRA 协议 mock；mock 行的来源为 `unknown`，不代表真实 Alpaca entitlement 或市场数据。诊断全生命周期已通过，但默认 profile smoke 尚待无 skip 最终验收，因此此处不把状态称为完整 OpenBB Web 验收。
 
 浏览器只建立 **1 条 EqoBoard SSE 行情连接**。Quote、Watchlist、AG Grid Option Chain、OPRA Tape 共用这条 50ms 批量流；股票 Watchlist/活动 Widget 通过租约合并为一条 Alpaca SIP 上游订阅。REST 快照用于初始状态与周期校准。
 
@@ -47,6 +48,15 @@ EQO_RESEARCH_API_KEY=<独立随机值，至少32字符>
 docker compose up --build
 ```
 
+需要启用可选研究工作台时，按 [部署说明](docs/DEPLOYMENT.md) 配置独立 research OIDC/session secrets、管理员凭据与不同 hostname 的公开 origin，然后执行：
+
+```bash
+docker compose --profile openbb build
+docker compose --profile openbb up --build --wait
+```
+
+Research 入口默认绑定本机 `127.0.0.1:8088`。关闭该 profile 不影响 OpenTerminal、Gateway 或现有 Node research 服务。
+
 入口：
 
 - `http://127.0.0.1:3000`：OpenTerminal 主终端。
@@ -75,10 +85,22 @@ npm run dev
 - 股票关键行情固定请求 SIP，期权关键行情固定请求 OPRA；401/403/429 原样转为显式状态，不做隐藏回退。
 - OpenTerminal 的 FRED、SEC、FINRA、新闻、宏观等研究 Provider 保留；股票/期权价格与历史图表通过 EqoBoard Rust Gateway。
 - 所有 BFF 路由都要求 OIDC 会话和对应 action scope；写请求还要通过同源校验及有界 JSON 请求检查。`EQO_ACCESS_TOKEN` 已废弃。
-- `/api/quotes` 与美股 `/api/history/:symbol` 只把美国上市股票/ETF发往 Rust SIP；VIX、已支持 crypto、海外挂牌后缀继续走对应研究 Provider。SIP 失败显式返回，不回退到 Yahoo 等来源。OpenBB Gateway 行情路由仍要求 Gateway 委托身份；隔离 research BFF 只放行 `market:read`，不持有终端签名密钥、Node API key 或 Alpaca 市场凭据。OpenBB Lite 的 upstream build、独立服务和真实浏览器端联调尚未完成；当前研究 BFF 套件只覆盖 OIDC 与 API 组件。
+- `/api/quotes` 与美股 `/api/history/:symbol` 只把美国上市股票/ETF发往 Rust SIP；VIX、已支持 crypto、海外挂牌后缀继续走对应研究 Provider。SIP 失败显式返回，不回退到 Yahoo 等来源。OpenBB Gateway 行情路由仍要求 Gateway 委托身份；隔离 Research BFF 只放行 `market:read`，不持有终端签名密钥、Node API key 或 Alpaca 市场凭据。当前真实浏览器矩阵使用受控 mock SIP/OPRA 请求，来源标记为 unknown，不能替代真实 Alpaca 行情账户验证。
 - 登录配置缺失时页面会显示身份服务不可用，受保护 BFF 不向下游发请求。`/healthz` 是进程存活检查；`/readyz` 的身份就绪不代表 SIP/OPRA entitlement 或行情已就绪。
 - 订单预览是离线风险检查，并绑定验证后的 OIDC `(issuer, subject)`；Paper submit 当前始终 blocked，Live 始终拒绝。Gateway status 将 adapter endpoint 配置和券商执行 capability 分开报告，Alpaca/IBKR/Schwab 的 Paper 和 Live capability 均 disabled；持久 preview/outbox、账户身份和真实 broker Paper 能力完成前不会开放提交。超时结果为 `UNKNOWN` 时保留 `client_order_id` 和原 preview 恢复关联，不能换 ID 重下。
 - OpenBB 公司于 **2026-10-01** 公布业务收尾和开源/治理迁移；Workspace 代码计划由 FINOS 承接，OpenBQ 承接相关资产。EqoBoard 将 OpenBB 作为可替换研究入口，主交易终端不依赖其托管服务。
+
+## 交付矩阵与当前验收状态
+
+| 范围 | 当前状态 |
+|---|---|
+| 可选 OpenBB profile、Research 导航、受控 ingress 与原生 Workspace | 已实现；诊断生命周期浏览器矩阵通过，完整默认 profile smoke 待最终无 skip 验收 |
+| SIP/OPRA 行情来源 | Gateway contract 和原生 Widget 使用 loopback 协议 mock 验证；source=`unknown`，真实 Alpaca entitlement/行情未验证 |
+| 离线、恢复、停 OpenBB、故障升级与回滚 | attempt-20 诊断生命周期通过并验证 cleanup；attempt-20 跳过了默认 profile smoke，不能当完整验收 |
+| Paper / Live | BrokerAdapter 仍 disabled；没有提交订单 |
+| 集成分支 | PR #29 汇总并验收依赖 PR #22–#28；在人工审查和合并前，`main` 仍是 `621de548827bc3bfd81e509eec2da8dfee28c221` |
+
+最终完整验收结果与 Compose 本地镜像 archive/SBOM 身份会在 [OpenBB supply-chain runbook](docs/OPENBB_SUPPLY_CHAIN.md) 中追加；本地 tag、source SBOM 或 mock 浏览器结果都不表示 registry 发布。
 
 ## 验证
 
