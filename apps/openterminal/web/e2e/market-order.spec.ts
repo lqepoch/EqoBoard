@@ -78,6 +78,39 @@ test("a late preview cannot restore A after the form changes A to B and back to 
   expect(observed.gateway.requests["/api/v1/orders/submit"]).toBeUndefined();
 });
 
+test("preview expiry invalidates confirmation and a repeated click sends one preview", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader", "eqoboard-order-reviewer"]);
+  await configureMocks(request, { previewDelaysMs: [1_000], previewTtlMs: 5_000, contracts });
+  await page.clock.install({ time: new Date() });
+  await page.goto("/");
+  await page.getByLabel("Option expiry").fill(expirationDate);
+  await expect(page.locator('[row-id="620"]')).toBeVisible();
+  await page.locator('[row-id="620"] [col-id="put.last"]').click();
+  await page.locator('[row-id="600"] [col-id="put.last"]').click();
+  await expect(page.getByLabel("Leg 1 side")).toHaveValue("buy");
+  await expect(page.getByLabel("Leg 2 side")).toHaveValue("sell");
+  await page.getByLabel("Limit price").fill("0.01");
+
+  const previewResponse = page.waitForResponse((response) =>
+    response.url().includes("/api/eqo/orders/preview") && response.request().method() === "POST");
+  await page.getByRole("button", { name: /RISK PREVIEW/ }).dblclick({ delay: 25 });
+  const response = await previewResponse;
+  expect(response.status()).toBe(200);
+  const locked = (await response.json()).preview;
+  expect(Date.parse(locked.expires_at)).toBeGreaterThan(Date.now());
+  await expect(page.getByTestId("locked-preview")).toBeVisible();
+  await expect(page.getByTestId("locked-preview")).toContainText(locked.preview_id);
+
+  const clientNow = await page.evaluate(() => Date.now());
+  await page.clock.fastForward(Math.max(1, Date.parse(locked.expires_at) - clientNow + 1));
+  await expect(page.getByTestId("locked-preview")).toContainText("EXPIRED");
+  await expect(page.getByRole("button", { name: /PAPER SUBMIT BLOCKED/ })).toBeDisabled();
+
+  const observed = await metrics(request);
+  expect(observed.gateway.previews).toHaveLength(1);
+  expect(observed.gateway.requests["/api/v1/orders/submit"]).toBeUndefined();
+});
+
 test("[dev-only] typed UNKNOWN browser outcome keeps the client order ID and forbids replacement", async ({ page, request }) => {
   test.skip(process.env.E2E_PRODUCTION === "1", "UNKNOWN panel fixture is only exercised by the development browser suite");
   await loginWithOidc(page, request, ["eqoboard-market-reader", "eqoboard-order-reviewer"]);

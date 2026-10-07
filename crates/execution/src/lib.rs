@@ -4,13 +4,9 @@ use chrono::{Duration as ChronoDuration, NaiveDate, Utc};
 use eqo_domain::{parse_occ, Right};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, time::Instant};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Hash, Eq, PartialEq)]
@@ -964,6 +960,40 @@ mod tests {
         assert!(store.consume(preview.preview_id, &owner).await.is_ok());
         assert!(matches!(
             store.consume(preview.preview_id, &owner).await,
+            Err(OrderError::Expired)
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn preview_authorize_and_consume_reject_after_monotonic_expiry() {
+        let store = PreviewStore::default();
+        let policy = RiskPolicy {
+            max_qty: 3,
+            max_loss: 250.0,
+        };
+        let owner = PreviewOwner::new("https://identity.example".into(), "owner-a".into());
+        let intent = vertical_for(
+            Utc::now().date_naive() + ChronoDuration::days(2),
+            Right::Put,
+            600_000,
+            599_000,
+            NetEffect::Debit,
+            false,
+        );
+        let authorize_preview = store
+            .create(owner.clone(), intent.clone(), policy)
+            .await
+            .unwrap();
+        let consume_preview = store.create(owner.clone(), intent, policy).await.unwrap();
+
+        tokio::time::advance(Duration::from_secs(61)).await;
+
+        assert!(matches!(
+            store.authorize(authorize_preview.preview_id, &owner).await,
+            Err(OrderError::Expired)
+        ));
+        assert!(matches!(
+            store.consume(consume_preview.preview_id, &owner).await,
             Err(OrderError::Expired)
         ));
     }

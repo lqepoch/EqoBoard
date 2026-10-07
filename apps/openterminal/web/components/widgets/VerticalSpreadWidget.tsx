@@ -116,7 +116,8 @@ export default function VerticalSpreadWidget({ widget }: { widget: WidgetInstanc
   const remainingSeconds = !expired && activePreview ? Math.max(0, Math.ceil((expirationMs - now) / 1000)) : 0;
 
   async function createPreview() {
-    if (!validInput || (outcome?.state === "unknown" && outcome.recovery_required)) return;
+    if (!validInput || activePreviewRequests.current > 0 ||
+        (outcome?.state === "unknown" && outcome.recovery_required)) return;
     const formSnapshot = formRef.current;
     const legsSnapshot = useTerminal.getState().optionLegs;
     const requestFingerprint = intentFingerprint(formSnapshot, legsSnapshot);

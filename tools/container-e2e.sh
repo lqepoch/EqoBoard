@@ -142,4 +142,4 @@ E2E_PRODUCTION=1 \
 
 printf '%s\n' 'Running development-only preview-race and typed UNKNOWN browser checks against the real Next BFF and offline mocks.'
 env -u E2E_PRODUCTION -u E2E_REAL_GATEWAY E2E_SESSION_TTL_SECONDS=120 \
-  npm run test:e2e -w web -- --grep 'late preview|typed UNKNOWN'
+  npm run test:e2e -w web -- --grep 'late preview|typed UNKNOWN|preview expiry'
