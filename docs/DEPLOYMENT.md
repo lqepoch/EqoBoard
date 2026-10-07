@@ -25,6 +25,8 @@ ${EQO_PUBLIC_ORIGIN}/api/auth/callback/eqo-oidc
 
 OpenBB research runtime 还必须设置 `EQO_TERMINAL_PUBLIC_ORIGIN`，指向主终端的精确 origin，并与 research runtime 的 `EQO_PUBLIC_ORIGIN` 使用不同 hostname。Cookie 的 host-only 隔离不区分端口，因此 `terminal.example:443` 与 `terminal.example:8443` 不能作为两个安全边界；缺少该配置或 hostname 相同时 research readiness 返回 503。实际 OpenBB 部署必须使用独立 research hostname，且研究服务不得持有终端 Gateway signer 或 Node API key。
 
+Research-mode Next runtime 也会因任一非空 `ALPACA_KEY` 或 `ALPACA_SECRET` 而返回未就绪；市场凭据只由 Rust Gateway 持有。部署研究 BFF 时只映射其 OIDC 配置、独立 session/research signer 和 Gateway URL，不使用整份 `.env` 文件注入容器。
+
 OpenBB 反向代理使用内部 `/api/research/auth-check` 子请求校验登录和 `market:read` role：成功时返回 204、匿名时 401、role 不足时 403，且不签发 Gateway token。部署配置必须将该路径设为内部代理调用且不允许用户直接访问。页面导航可把 401 导向 OIDC 登录；`/api/` 数据请求应保留 JSON 401/403，不能重写为登录 HTML。代理给 Lite 上游的 Cookie 必须按 OpenBB 自身登录协议精确 allowlist，不能转发 Terminal 或 Next research session Cookie。
 
 | OIDC role | 授权范围 |

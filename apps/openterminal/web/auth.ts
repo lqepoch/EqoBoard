@@ -99,7 +99,8 @@ export function isAuthRuntimeConfigured(): boolean {
 
 /**
  * The isolated OpenBB BFF can sign only Gateway research tokens. It must not
- * receive the terminal BFF key or the Node research API's static service key.
+ * receive the terminal BFF key, the Node research API's static service key,
+ * or any provider market credentials.
  */
 export function isResearchAuthRuntimeConfigured(): boolean {
   const nextAuthSecret = process.env.NEXTAUTH_SECRET;
@@ -110,7 +111,9 @@ export function isResearchAuthRuntimeConfigured(): boolean {
     validHmacSecret(researchSecret) &&
     researchSecret !== nextAuthSecret &&
     !process.env.EQO_GATEWAY_JWT_SECRET &&
-    !process.env.EQO_RESEARCH_API_KEY;
+    !process.env.EQO_RESEARCH_API_KEY &&
+    !process.env.ALPACA_KEY &&
+    !process.env.ALPACA_SECRET;
 }
 
 export function isCurrentRuntimeReady(): boolean {

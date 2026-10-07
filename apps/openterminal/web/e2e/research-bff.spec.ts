@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 const WEB_ORIGIN = "http://127.0.0.1:3320";
 const OIDC_ORIGIN = "http://127.0.0.1:4320";
 const SAME_HOSTNAME_WEB_ORIGIN = "http://127.0.0.1:3321";
+const CREDENTIAL_WEB_ORIGIN = "http://127.0.0.1:3322";
 
 async function postJson(request: APIRequestContext, url: string, data: unknown) {
   const response = await request.post(url, { data });
@@ -89,6 +90,13 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   const sameHostnameReadiness = await request.get(`${SAME_HOSTNAME_WEB_ORIGIN}/api/readyz`);
   expect(sameHostnameReadiness.status()).toBe(503);
   expect(await sameHostnameReadiness.json()).toMatchObject({ ready: false, runtime_mode: "research" });
+
+  const credentialReadiness = await request.get(`${CREDENTIAL_WEB_ORIGIN}/api/readyz`);
+  expect(credentialReadiness.status()).toBe(503);
+  expect(await credentialReadiness.json()).toMatchObject({ ready: false, runtime_mode: "research" });
+  const credentialMarketRequest = await request.get(`${CREDENTIAL_WEB_ORIGIN}/api/openbb/openbb/v1/stocks?symbols=QQQ`);
+  expect(credentialMarketRequest.status()).toBe(503);
+  expect(await metrics(request)).toMatchObject({ gateway: { requests: {}, authorized: 0, rejected: 0 } });
 
   const manifests = await request.get(`${WEB_ORIGIN}/api/openbb/widgets.json`);
   expect(manifests.status()).toBe(200);
