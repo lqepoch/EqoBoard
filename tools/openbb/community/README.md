@@ -51,6 +51,15 @@ bun install --frozen-lockfile
 bun run build:runtime
 ```
 
+To build the pinned Lite image directly from the repository root with Docker
+BuildKit enabled:
+
+```sh
+docker build --pull \
+  --file tools/openbb/community/Dockerfile \
+  --tag eqoboard/openbb-workspace-lite:be00e950-community-candidate .
+```
+
 The source gate invokes the adapter with:
 
 ```sh
