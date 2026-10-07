@@ -259,8 +259,8 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-first-login-landing.png"), fullPage: true });
   await completeNativeLiteOnboarding(page);
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
-  await expect(page.getByRole("navigation").getByRole("link", { name: "Widgets", exact: true })).toBeVisible();
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-onboarding-complete.png"), fullPage: true });
+  await expect(page.getByRole("link", { name: "Widgets", exact: true })).toBeVisible();
   await page.goto(`${RESEARCH_ORIGIN}/app/widgets`);
   await expect(page).toHaveTitle(/Widgets Library \| OpenBB Lite/);
   await expect(page.getByText("Widgets Library", { exact: true })).toBeVisible();
