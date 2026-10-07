@@ -34,6 +34,10 @@ const gatewayControl = {
   optionStatus: 200,
   optionFeed: "opra",
   contracts: [],
+  openbbStocksStatus: 200,
+  openbbBarsStatus: 200,
+  openbbOptionsStatus: 200,
+  openbbOptionsTruncated: false,
   sseStatus: 200,
   sseEvents: [],
   sseDisconnectAfterMs: null,
@@ -184,6 +188,7 @@ const oidc = createServer(async (req, res) => {
     Object.assign(gatewayControl, {
       snapshotStatus: 200, snapshotFeed: "sip", snapshots: null,
       optionStatus: 200, optionFeed: "opra", contracts: [],
+      openbbStocksStatus: 200, openbbBarsStatus: 200, openbbOptionsStatus: 200, openbbOptionsTruncated: false,
       sseStatus: 200, sseEvents: [], sseDisconnectAfterMs: null, quotes: null, previewDelaysMs: [],
       previewTtlMs: 60_000,
     });
@@ -203,7 +208,7 @@ const oidc = createServer(async (req, res) => {
   }
   if (url.pathname === "/__test/config" && req.method === "POST") {
     const body = await readJson(req).catch(() => ({}));
-    for (const key of ["snapshotStatus", "snapshotFeed", "snapshots", "optionStatus", "optionFeed", "contracts", "sseStatus", "sseEvents", "sseDisconnectAfterMs", "quotes", "previewDelaysMs", "previewTtlMs"]) {
+    for (const key of ["snapshotStatus", "snapshotFeed", "snapshots", "optionStatus", "optionFeed", "contracts", "openbbStocksStatus", "openbbBarsStatus", "openbbOptionsStatus", "openbbOptionsTruncated", "sseStatus", "sseEvents", "sseDisconnectAfterMs", "quotes", "previewDelaysMs", "previewTtlMs"]) {
       if (Object.hasOwn(body, key)) gatewayControl[key] = body[key];
     }
     previewSequence = 0;
@@ -252,13 +257,37 @@ const gateway = createServer(async (req, res) => {
   metrics.gateway.calls.push({
     method: req.method,
     path: url.pathname,
+    symbol: url.searchParams.get("symbol"),
     symbols: url.searchParams.get("symbols"),
+    underlying: url.searchParams.get("underlying"),
+    expiration: url.searchParams.get("expiration"),
+    timeframe: url.searchParams.get("timeframe"),
+    days: url.searchParams.get("days"),
+    limit: url.searchParams.get("limit"),
     bearer_present: Boolean(req.headers.authorization),
   });
+  if (req.method === "GET" && url.pathname === "/widgets.json") {
+    return sendJson(res, 200, {
+      eqo_sip_watchlist: { name: "EqoBoard SIP Stock Quotes", endpoint: "openbb/v1/stocks", type: "table" },
+      eqo_opra_contracts: { name: "EqoBoard OPRA Option Chain", endpoint: "openbb/v1/options", type: "table" },
+      eqo_sip_bars: { name: "EqoBoard SIP OHLCV", endpoint: "openbb/v1/bars", type: "table" },
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/apps.json") {
+    return sendJson(res, 200, [{ name: "EqoBoard SIP + OPRA Research", tabs: {} }]);
+  }
   let payload;
   try {
     payload = await verifyGatewayRequest(req);
     metrics.gateway.authorized += 1;
+    const observed = metrics.gateway.calls.at(-1);
+    observed.subject = payload.sub;
+    observed.scope = payload.scope;
+    observed.issuer = payload.iss;
+    observed.audience = payload.aud;
+    observed.iat = payload.iat;
+    observed.exp = payload.exp;
+    observed.kid = decodeProtectedHeader(req.headers.authorization.slice("Bearer ".length)).kid;
   } catch {
     metrics.gateway.rejected += 1;
     return sendJson(res, 401, { error: "unauthorized" });
@@ -270,6 +299,30 @@ const gateway = createServer(async (req, res) => {
     : url.pathname.includes("/stream/") || url.pathname.includes("auth/ws-ticket") ? "market:stream"
     : "market:read";
   if (!scopes.includes(required)) return sendJson(res, 403, { error: "forbidden" });
+  if (url.pathname === "/openbb/v1/stocks") {
+    if (gatewayControl.openbbStocksStatus !== 200) return sendJson(res, gatewayControl.openbbStocksStatus, { error: "sip_unavailable" });
+    const symbols = (url.searchParams.get("symbols") ?? "QQQ,SPY,NVDA").split(",");
+    return sendJson(res, 200, symbols.map((symbol) => ({
+      symbol, last: 500, bid: 499.99, ask: 500.01, volume: 1000,
+      updated_at: "2026-10-07T12:00:00Z", feed: "sip",
+    })));
+  }
+  if (url.pathname === "/openbb/v1/bars") {
+    if (gatewayControl.openbbBarsStatus !== 200) return sendJson(res, gatewayControl.openbbBarsStatus, { error: "sip_unavailable" });
+    return sendJson(res, 200, [{
+      symbol: url.searchParams.get("symbol"), time: "2026-10-07T12:00:00Z",
+      open: 499, high: 501, low: 498, close: 500, volume: 1000, feed: "sip",
+    }]);
+  }
+  if (url.pathname === "/openbb/v1/options") {
+    if (gatewayControl.openbbOptionsStatus !== 200) return sendJson(res, gatewayControl.openbbOptionsStatus, { error: "opra_unavailable" });
+    return sendJson(res, 200, [{
+      symbol: "QQQ261009C00500000", underlying: url.searchParams.get("underlying"),
+      expiration: url.searchParams.get("expiration"), right: "call", strike: 500,
+      bid: 4.99, ask: 5.01, feed: "opra", updated_at: "2026-10-07T12:00:00Z",
+      truncated: gatewayControl.openbbOptionsTruncated,
+    }]);
+  }
   if (url.pathname === "/api/v1/status") {
     return sendJson(res, 200, {
       service: "EqoBoard", market_credentials_present: false,
