@@ -24,12 +24,16 @@ jobs:
           components: rustfmt
       - name: Format all Rust source
         run: cargo fmt --all
-      - name: Commit rustfmt changes, if any
+      - name: Resolve reproducible dependencies
         run: |
-          if ! git diff --quiet -- crates apps/gateway; then
+          cargo generate-lockfile
+          (cd apps/web && npm install --package-lock-only --ignore-scripts --no-audit --no-fund)
+      - name: Commit rustfmt and dependency lockfiles, if any
+        run: |
+          git add crates apps/gateway Cargo.lock apps/web/package-lock.json
+          if ! git diff --cached --quiet; then
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git config user.name 'github-actions[bot]'
-            git add crates apps/gateway
-            git commit -m 'style: apply rustfmt workspace-wide'
+            git commit -m 'build: lock Rust and JavaScript dependency resolution'
             git push origin HEAD:feat/initial-market-terminal
           fi
