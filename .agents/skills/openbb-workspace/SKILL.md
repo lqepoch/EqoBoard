@@ -15,6 +15,7 @@ description: 维护 EqoBoard 的 OpenBB Workspace custom backend、widgets.json�
 - 日期默认值必须使用 Workspace 支持的动态日期修饰符或留空，禁止在固定 manifest 中写入会过期的合约日期。
 - OpenBB Lite 使用独立 research hostname 和隔离的 Next research BFF。`EQO_TERMINAL_PUBLIC_ORIGIN` 必须指向主终端 origin 且 hostname 不同；仅使用不同端口仍会共享 host-only cookie，research readiness 会拒绝这种配置。用户先通过现有 OIDC/NextAuth session 登录，服务端再用独立 research signer 签发最长 60 秒、`kid=research`、`iss=openterminal-research`、`aud=eqoboard-gateway`、单一 `market:read` scope 的委托 JWT。research runtime 不配置终端 Gateway signer、Node API key 或市场密钥。
 - OpenBB custom source URL 为同源 `/api/openbb`。Pinned Workspace endpoint `openbb/v1/stocks` 等会拼接为 `/api/openbb/openbb/v1/...`；BFF 只映射这三条只读路径，并保留 Gateway 的错误、feed、时间戳和 truncated 元数据。不得从 manifest 描述推断实际 source。
+- `/api/research/auth-check` 是反向代理内部的 `auth_request` 端点：market-reader 返回空 204，匿名返回 JSON 401，缺少 market role 返回 JSON 403；它只检查 OIDC 会话，不签发 Gateway token。公网 ingress 必须仅在内部子请求位置使用它，不能把该路由作为普通浏览器/API 路径发布。
 - Gateway 委托通过 Authorization header 携带；静态 `EQO_ACCESS_TOKEN` 已退役，不能放宽 Gateway 验证。市场密钥不进入 Workspace。
 - `npm run test:e2e:research --workspace web` 验证 production Next research BFF/API，但不会运行 OpenBB Lite；不能将它标记为真实 Lite 浏览器 E2E 或 “OpenBB Web integrated”。
 - SIP/OPRA endpoint 必须显式检查 feed；失败返回错误，不切换数据源。
