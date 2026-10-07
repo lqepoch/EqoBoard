@@ -650,12 +650,26 @@ async fn openbb_options(
         .option_chain(&symbol, &query.expiration, None, None)
         .await
     {
-        Ok(page) => Json(json!(openbb::option_rows(
-            page,
-            data.source_mode(),
-            &data.option_feed
-        )))
-        .into_response(),
+        Ok(page) => {
+            if page.truncated && page.contracts.is_empty() {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(openbb::empty_truncated_page_error(
+                        data.source_mode(),
+                        &data.option_feed,
+                        page.pages_fetched,
+                        page.has_more,
+                    )),
+                )
+                    .into_response();
+            }
+            Json(json!(openbb::option_rows(
+                page,
+                data.source_mode(),
+                &data.option_feed
+            )))
+            .into_response()
+        }
         Err(err) => data_failure(err),
     }
 }
@@ -694,13 +708,27 @@ async fn openbb_bars(
         );
     }
     match data.stock_bars_page(&symbol, &timeframe, limit, days).await {
-        Ok(page) => Json(json!(openbb::bar_rows(
-            &symbol,
-            page,
-            data.source_mode(),
-            &data.stock_feed
-        )))
-        .into_response(),
+        Ok(page) => {
+            if page.truncated && page.bars.is_empty() {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(openbb::empty_truncated_page_error(
+                        data.source_mode(),
+                        &data.stock_feed,
+                        page.pages_fetched,
+                        page.has_more,
+                    )),
+                )
+                    .into_response();
+            }
+            Json(json!(openbb::bar_rows(
+                &symbol,
+                page,
+                data.source_mode(),
+                &data.stock_feed
+            )))
+            .into_response()
+        }
         Err(err) => data_failure(err),
     }
 }

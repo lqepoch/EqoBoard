@@ -52,7 +52,7 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 - `POST /api/v1/orders/preview`
 - `POST /api/v1/orders/submit`
 
-OpenBB：`/widgets.json`、`/apps.json`、`/openbb/v1/stocks`、`/openbb/v1/options`、`/openbb/v1/bars`。三类数据路由返回 Workspace table 使用的 flat row arrays。每行包含 `source` / `source_mode` / `source_label`、实际 `feed`、市场字段的 `market_as_of`、页数及 `has_more` / `truncated`。股票 row 另含请求覆盖及 snapshot/price/time completeness；bars 的 `market_as_of` 等于 Alpaca bar 时间；期权 quote、trade、model 时间分离，当前没有专用模型时间时 `model_as_of` 保持 null。上游页数有限制；缺失/null `next_page_token` 表示终止，非空字符串表示续页，空字符串或其他 JSON 类型使请求失败；无法解析的 OCC 符号、到期日与精确请求不一致以及错误 OHLCV 行也会使请求失败，不会静默丢弃或填入零。
+OpenBB：`/widgets.json`、`/apps.json`、`/openbb/v1/stocks`、`/openbb/v1/options`、`/openbb/v1/bars`。三类数据路由返回 Workspace table 使用的 flat row arrays。每行包含 `source` / `source_mode` / `source_label`、实际 `feed`、市场字段的 `market_as_of`、页数及 `has_more` / `truncated`。股票 row 另含请求覆盖及 snapshot/price/time completeness；bars 的 `market_as_of` 等于 Alpaca bar 时间；期权 quote、trade、model 时间分离，当前没有专用模型时间时 `model_as_of` 保持 null。上游页数有限制；缺失/null `next_page_token` 表示终止，非空字符串表示续页，空字符串或其他 JSON 类型使请求失败；无法解析的 OCC 符号、到期日与精确请求不一致以及错误 OHLCV 行也会使请求失败，不会静默丢弃或填入零。页预算耗尽且上游仍有后续页、但没有任何行情行时，OpenBB 返回带 `source`、`feed`、`pages_fetched`、`has_more`、`truncated` 的明确 502 截断错误；完整空结果仍返回 `200 []`，不添加占位行。
 
 只有使用内置 `https://data.alpaca.markets` 时，OpenBB row 才声明 `source_mode=alpaca`；任何 `EQO_MARKET_DATA_BASE_URL` 覆盖都显示来源 unknown。OpenBB 普通 table 的 `refetchInterval` 只是 HTTP polling，不构成 Live Grid。期权默认日期使用 Workspace 动态日期修饰符，不保留固定到期日。空结果保持空数组，不追加伪记录；因此无数据行时，Workspace 表格没有行可呈现分页字段。
 

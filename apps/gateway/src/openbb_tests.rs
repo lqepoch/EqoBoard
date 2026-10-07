@@ -20,6 +20,46 @@ struct MockServer {
     task: JoinHandle<()>,
 }
 
+fn query_value<'a>(query: &'a str, name: &str) -> Option<&'a str> {
+    let prefix = format!("{name}=");
+    query.split('&').find_map(|part| part.strip_prefix(&prefix))
+}
+
+fn empty_truncated_bars_page(query: &str) -> Value {
+    let next_token = match query_value(query, "page_token") {
+        None => "empty-bars-1",
+        Some("empty-bars-1") => "empty-bars-2",
+        Some("empty-bars-2") => "empty-bars-3",
+        Some("empty-bars-3") => "empty-bars-4",
+        Some("empty-bars-4") => "empty-bars-5",
+        Some(_) => "unexpected-empty-bars-page",
+    };
+    json!({"bars": [], "next_page_token": next_token})
+}
+
+fn empty_then_bar_page(query: &str) -> Value {
+    match query_value(query, "page_token") {
+        None => json!({"bars": [], "next_page_token": "empty-then-bar"}),
+        Some("empty-then-bar") => json!({
+            "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}],
+            "next_page_token": null
+        }),
+        Some(_) => json!({"bars": [], "next_page_token": null}),
+    }
+}
+
+fn empty_truncated_options_page(query: &str) -> Value {
+    let next_token = match query_value(query, "page_token") {
+        None => "empty-options-1",
+        Some("empty-options-1") => "empty-options-2",
+        Some("empty-options-2") => "empty-options-3",
+        Some("empty-options-3") => "empty-options-4",
+        Some("empty-options-4") => "empty-options-5",
+        Some(_) => "unexpected-empty-options-page",
+    };
+    json!({"snapshots": {}, "next_page_token": next_token})
+}
+
 impl MockServer {
     async fn start(status: u16, redirect: Option<String>) -> Self {
         let state = MockUpstream {
@@ -95,6 +135,15 @@ async fn mock_upstream(State(state): State<MockUpstream>, request: Request) -> R
             "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}],
             "next_page_token": null
         }),
+        "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Min") && query.contains("limit=2") => {
+            empty_truncated_bars_page(query)
+        }
+        "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Week") && query.contains("limit=3") => {
+            empty_then_bar_page(query)
+        }
+        "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Hour") && query.contains("limit=4") => {
+            json!({"bars": [], "next_page_token": null})
+        }
         "/v2/stocks/QQQ/bars" if query.contains("timeframe=1Hour") => json!({
             "bars": [{"t":"2026-10-07T12:00:00Z","o":598.0,"h":599.0,"l":597.0,"c":598.5,"v":1200}]
         }),
@@ -165,6 +214,12 @@ async fn mock_upstream(State(state): State<MockUpstream>, request: Request) -> R
             },
             "next_page_token": null
         }),
+        "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-17") => {
+            empty_truncated_options_page(query)
+        }
+        "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-18") => {
+            json!({"snapshots": {}})
+        }
         "/v1beta1/options/snapshots/QQQ" if query.contains("expiration_date=2026-10-10") => {
             truncated_option_page(query)
         }
@@ -535,6 +590,100 @@ async fn openbb_rejects_malformed_option_symbols_and_page_tokens() {
     assert_eq!(mismatch_status, StatusCode::BAD_GATEWAY);
     assert_eq!(mismatch_body["error"], "market_data_error");
 
+    upstream.stop();
+}
+
+#[tokio::test]
+async fn openbb_empty_truncated_pages_fail_closed_and_complete_empty_pages_stay_empty() {
+    let upstream = MockServer::start(200, None).await;
+    let (keys, _, research) = test_keys();
+    let bearer = token(&research, "research", RESEARCH_ISSUER, vec!["market:read"]);
+    let app = openbb_app(
+        AlpacaData::with_test_endpoint(&upstream.base).expect("mock endpoint is allowed"),
+        keys,
+    );
+
+    let (bars_error_status, bars_error) = get_json(
+        &app,
+        "/openbb/v1/bars?symbol=QQQ&timeframe=1Min&limit=2&days=1",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(bars_error_status, StatusCode::BAD_GATEWAY);
+    assert_eq!(bars_error["error"], "market_data_truncated");
+    assert!(bars_error["detail"].as_str().unwrap().contains("truncated"));
+    assert_eq!(bars_error["source"], "unknown");
+    assert_eq!(bars_error["feed"], "sip");
+    assert_eq!(bars_error["pages_fetched"], 5);
+    assert_eq!(bars_error["has_more"], true);
+    assert_eq!(bars_error["truncated"], true);
+    assert!(bars_error.get("page_token").is_none());
+
+    let (options_error_status, options_error) = get_json(
+        &app,
+        "/openbb/v1/options?underlying=QQQ&expiration=2026-10-17",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(options_error_status, StatusCode::BAD_GATEWAY);
+    assert_eq!(options_error["error"], "market_data_truncated");
+    assert!(options_error["detail"]
+        .as_str()
+        .unwrap()
+        .contains("truncated"));
+    assert_eq!(options_error["source"], "unknown");
+    assert_eq!(options_error["feed"], "opra");
+    assert_eq!(options_error["pages_fetched"], 5);
+    assert_eq!(options_error["has_more"], true);
+    assert_eq!(options_error["truncated"], true);
+    assert!(options_error.get("page_token").is_none());
+
+    let (empty_bars_status, empty_bars) = get_json(
+        &app,
+        "/openbb/v1/bars?symbol=QQQ&timeframe=1Hour&limit=4&days=1",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(empty_bars_status, StatusCode::OK);
+    assert_eq!(empty_bars, json!([]));
+
+    let (empty_options_status, empty_options) = get_json(
+        &app,
+        "/openbb/v1/options?underlying=QQQ&expiration=2026-10-18",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(empty_options_status, StatusCode::OK);
+    assert_eq!(empty_options, json!([]));
+
+    let (later_bar_status, later_bars) = get_json(
+        &app,
+        "/openbb/v1/bars?symbol=QQQ&timeframe=1Week&limit=3&days=1",
+        Some(&bearer),
+    )
+    .await;
+    assert_eq!(later_bar_status, StatusCode::OK);
+    assert_eq!(later_bars.as_array().unwrap().len(), 1);
+    assert_eq!(later_bars[0]["pages_fetched"], 2);
+    assert_eq!(later_bars[0]["has_more"], false);
+    assert_eq!(later_bars[0]["truncated"], false);
+    assert_eq!(later_bars[0]["complete"], true);
+
+    let requests = upstream.requests();
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|uri| uri.contains("timeframe=1Min") && uri.contains("limit=2"))
+            .count(),
+        5
+    );
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|uri| uri.contains("expiration_date=2026-10-17"))
+            .count(),
+        5
+    );
     upstream.stop();
 }
 
