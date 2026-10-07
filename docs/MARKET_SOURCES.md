@@ -1,0 +1,50 @@
+# Market source and timestamp contract
+
+This document describes the values shown by OpenTerminal and the evidence that may be used to call a value current. Provider response time, observation time, browser stream connectivity, and exchange event time are different facts and stay separate.
+
+## Source matrix
+
+| Data shown | Source of the value | Time shown | Coverage and failure behavior |
+|---|---|---|---|
+| U.S. stock/ETF last price | Alpaca SIP through the Rust Gateway. `last_basis` identifies `trade`, `daily_bar`, or `unknown`; TradingView's U.S. price is discarded. | `last_as_of` is the timestamp for the displayed last. `trade_at` and `daily_bar_at` are also exposed independently. Legacy `updated_at` is trade-only and is never used to infer a missing last timestamp or `LIVE` state. | SIP snapshots are requested in bounded batches. A SIP 401/403/error stays visible and does not fall back to TradingView, Yahoo Finance, Nasdaq or Stooq. Missing snapshot fields remain null. |
+| U.S. stock/ETF bid and ask | Alpaca SIP `latestQuote` through the Rust Gateway. | `quote_at`. The quote barrier and freshness check use this field only. | A missing quote remains null. |
+| U.S. stock/ETF open, high, low, previous close, daily change and volume | Alpaca SIP `dailyBar` and `prevDailyBar` through the Rust Gateway. Daily change is calculated from the available last and prior close. TradingView's price, change and volume are discarded for U.S. rows. | `daily_bar_at` and `previous_daily_bar_at` apply to their corresponding bars. Change/volume are not assigned `trade_at` or `quote_at`. | Missing bar fields remain null. |
+| U.S. stock/ETF candles and chart bars | Alpaca SIP through the Rust Gateway. | Each bar's source timestamp; chart conversion to Unix seconds is for rendering only. | U.S. history and earnings-price calculations fail visibly when SIP is unavailable; no research-price substitution. |
+| U.S. earnings surprise / reported EPS | Nasdaq earnings-surprise research endpoint. | Reported earnings date; this is not a fetch timestamp or price timestamp. | The next-session price move is separately calculated only from Alpaca SIP daily bars and labels its source/time independently. |
+| U.S. option chain, underlying and ATM location | The authenticated Next BFF calls the Rust Gateway OPRA chain and obtains the underlying from SIP. The legacy Node `/options/:symbol` route returns HTTP 410 for U.S. underlyings and makes no Nasdaq/Yahoo request. | Underlying price uses the SIP last-price field times; option `quote_at`/`trade_at` stay separate. Stream `event_time` is nullable; missing/invalid exchange time remains unknown. `received_at` is the Gateway receive time and is never substituted as exchange time. Legacy mixed `updated_at` is not used for freshness. | The primary BFF option route remains available. Only server subscription ACK adds symbols to `confirmed`; HTTP lease acceptance and browser SSE connection do not. Stale, rejected, unauthorized, partial or resync states are surfaced. |
+| Option IV and Greeks | Alpaca REST option snapshot vendor/model fields. IV/Greeks are not native OPRA fields. | `model_as_of` is unknown unless a dedicated model timestamp is returned. The Gateway chain response time and quote/trade event time do not timestamp the model. | Missing IV/Greek values stay empty. Do not imply freshness from a nearby option quote timestamp. |
+| U.S. market heatmap, screener and recap prices/change/volume | Alpaca SIP. TradingView scanner supplies metadata (for example name, sector and market cap) only. | Row `priceAsOf` derives from `last_as_of`; quote, trade, daily bar and prior daily bar times remain field-specific. TradingView metadata observation time is unavailable and labeled unknown. | Price, last-price timestamp and snapshot coverage are reported separately; data is not complete unless all requested SIP symbols have a snapshot, a finite last and a valid `last_as_of`. SIP failure is not hidden by cached scanner prices. |
+| VIX level and history | FRED `VIXCLS` daily observations. | FRED observation date, not fetch time. | Daily close is not a live tradable quote; no volume/bid/ask is asserted. |
+| U.S. Treasury yields | FRED series observations. | Observation date per tenor. | Each tenor's source and date are preserved; a current HTTP response does not imply a current market observation. |
+| Euro-area yield curve, policy rate and HICP inflation | ECB Data Portal series. | ECB observation date/period. | ECB timestamps remain independent of quote snapshots. |
+| European equity listings and metadata | TradingView scanner; quote/chart research endpoints may use Yahoo Finance or Stooq and carry their returned source. | Provider timestamp when supplied; otherwise `unknown`. | These are research values, not Alpaca SIP. They are not used as U.S. equity fallbacks. |
+| Crypto quotes, trades and candles | Binance public market-data endpoints. | Binance source event/kline time when supplied. | Crypto is not classified as a SIP equity and never uses the stock feed. |
+| Fundamentals and company metadata | TradingView scanner, Nasdaq research endpoints or Yahoo Finance, according to the field's `source`. | Usually unavailable unless the provider returns a field-specific observation time; unknown stays unknown. | Fundamental timestamps must not inherit the latest quote timestamp. |
+| News | Yahoo Finance RSS and Google News RSS. | Publisher-provided `publishedAt`, nullable. | A fetch time is not substituted for publication time. |
+| Earnings / economic calendar | TradingView earnings calendar; Forex Factory schedule; FRED actual releases for supported U.S. series. | Provider event date and period; scheduled time is not an observation time. | Forecast, previous and actual values keep their respective source semantics. |
+| FINRA short-sale volume | FINRA Reg SHO daily file. | File's trading date (published on the following day in normal operation). | This is a daily statistic, not live tape volume. |
+| SEC Form 4 insider filings | SEC EDGAR filing data. | Filing date and transaction date are distinct. | Filing/transaction dates are not quote times. |
+
+## Feed status and freshness
+
+The browser reports its SSE transport separately from upstream state. Upstream authentication, desired subscriptions, pending changes, ACK-confirmed subscriptions, coverage, and freshness are independent fields. A connected browser is not proof of an authenticated or ready SIP/OPRA connection. A confirmed subscription is not proof that a fresh event has arrived.
+
+Market data events carry nullable `event_time`, Gateway `received_at`, `connection_epoch`, and a local sequence. The sequence is for ordering events published by this Gateway connection; it is not an exchange sequence. REST barriers are split by symbol and event type, with independent quote/trade source times. UI freshness is only `LIVE` when the browser stream is open, upstream transport/authentication/readiness are valid, the symbol is ACK-confirmed with complete coverage, and the event's source time agrees with the Gateway's freshness projection. Missing source time or a legacy mixed timestamp is unknown. When the Gateway supplies `fresh_until`, the shared browser clock expires the projection at that server-provided instant; a null value means freshness is unknown. For older projections without `fresh_until`, the UI uses a conservative five-second display guard based on the event time and projection age. This is a client fail-safe, not an upstream freshness policy. A connected SSE with no new market events therefore cannot keep a quote labeled `LIVE` indefinitely.
+
+REST snapshot watermarks are scoped to feed, symbol, and event type. The request-start sequence and per-symbol observation time protect a snapshot from being overwritten by older stream events and protect a newer tick from an older REST response. Resync or a new connection epoch clears old live values while retaining timestamped REST snapshots; retained snapshots are not labeled live.
+
+## Coverage fields
+
+Market-row responses report:
+
+- `requested`: unique U.S. SIP symbols requested;
+- `snapshots`: requested symbols with a returned SIP snapshot record;
+- `priced`: requested symbols with a finite price;
+- `snapshotComplete`, `priceComplete`, and `timeComplete`: independent completeness checks; `timeComplete` means all returned last prices have a valid `last_as_of`, not that every quote and bar field has a timestamp;
+- `complete`: true only when all three checks pass.
+
+An Alpaca batch size is not an account entitlement limit. If a verified capacity value is unavailable, UI displays the limit as unknown. A snapshot object with null price or no valid source time is not complete coverage.
+
+## Verification evidence
+
+The server's loopback HTTP tests mount the actual Express auth middleware and market router. They check the delegated Gateway JWT, verify deliberately incorrect TradingView U.S. prices are replaced by SIP values, verify a SIP 403 produces no public-price fallback calls, and verify an all-null SIP snapshot is not complete coverage. They also verify U.S. history and earnings price movement use SIP bars while Nasdaq remains the EPS surprise source, and the legacy Node U.S. options route returns HTTP 410 without a public-provider call. Provider and store tests cover batching, coalescing, source classification, nanosecond/offset timestamp order, old-tick rejection, scoped REST watermarks and freshness states.

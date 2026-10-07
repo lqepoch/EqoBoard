@@ -1,27 +1,30 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiGet, fmt, fmtBig, pctClass, type Quote } from "../../lib/api";
 import { normalizeSymbol, symbolsParam } from "../../lib/symbol";
 import { useTerminal } from "../../store/terminal";
-import { useMarket } from "../../store/market";
+import { marketCondition, statusText, useMarket } from "../../store/market";
 import Flash from "../Flash";
+import MarketFeedStatus from "./MarketFeedStatus";
 
 function LiveRow({sym,snapshot,onSelect,onRemove}:{sym:string;snapshot:Quote|undefined;onSelect:()=>void;onRemove:()=>void}) {
   const trade=useMarket(s=>s.stockTrades[sym]);
-  const quote=useMarket(s=>s.stockQuotes[sym]);
-  const price=trade?.price??snapshot?.price??null;
-  const previous=snapshot?.previousClose??null;
-  const changePercent=price!==null&&previous?((price/previous)-1)*100:snapshot?.changePercent??null;
+  const latest=useMarket(s=>s.stockSnapshots[sym]);
+  const current=latest??snapshot;
+  const condition=useMarket(s=>marketCondition(s,"stocks",sym,"trade",current?.lastAsOf??undefined));
+  const price=condition==="fresh"&&trade?.event_time?trade.price:current?.price??null;
+  const previous=current?.previousClose??null;
+  const changePercent=price!==null&&previous?((price/previous)-1)*100:current?.changePercent??null;
   return <tr onClick={onSelect}>
     <td className="font-bold">{sym}</td>
     <td><Flash value={price}>{fmt(price)}</Flash></td>
     <td className={pctClass(changePercent)}>
       <Flash value={changePercent}>{fmt(changePercent)}%</Flash>
     </td>
-    <td>{fmtBig(snapshot?.volume)}</td>
-    <td className="dim text-[9px]">{quote||trade?"LIVE":"SNAP"}</td>
+    <td>{fmtBig(current?.volume)}</td>
+    <td className="dim text-[9px]" title={`${current?.source??"source unknown"} · ${current?.asOf??"as-of unknown"}`}>{statusText(condition)}</td>
     <td>
       <button onClick={e=>{e.stopPropagation();onRemove();}} className="dim hover:text-[var(--down)]">✕</button>
     </td>
@@ -36,12 +39,22 @@ export default function WatchlistWidget() {
   const [input, setInput] = useState("");
   const [invalid, setInvalid] = useState(false);
 
-  const { data = [] } = useQuery({
+  const { data = [], error } = useQuery({
     queryKey: ["watchlist", watchlist.join(",")],
     queryFn: () => apiGet<Quote[]>(`/api/quotes?symbols=${symbolsParam(watchlist)}`),
     enabled: watchlist.length > 0,
     refetchInterval: 15_000,
   });
+  const setSnapshotWatermark=useMarket(s=>s.setSnapshotWatermark);
+  const setStockSnapshot=useMarket(s=>s.setStockSnapshot);
+  useEffect(()=>{
+    for(const row of data){
+      for(const watermark of row.watermarks??[]){
+        if(watermark.feed==="stocks")setSnapshotWatermark(watermark);
+      }
+      setStockSnapshot(row);
+    }
+  },[data,setSnapshotWatermark,setStockSnapshot]);
 
   return (
     <div>
@@ -72,6 +85,10 @@ export default function WatchlistWidget() {
         />
         <button className="term-btn" type="submit">+</button>
       </form>
+      <div className="px-2 pb-1">
+        <MarketFeedStatus feed="stocks" />
+      </div>
+      {error&&<div role="alert" className="p-1 down text-[10px]">SIP snapshot unavailable: {(error as Error).message}. Last snapshot remains timestamped; it is not marked live.</div>}
       <table className="data-table">
         <thead>
           <tr><th>Sym</th><th>Last</th><th>Chg%</th><th>Vol</th><th>Mode</th><th></th></tr>
