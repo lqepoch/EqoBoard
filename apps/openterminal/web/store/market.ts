@@ -33,18 +33,33 @@ export const useMarket=create<MarketState>((set)=>({
   setConnection:(connected,connectionError=null)=>set({connected,connectionError}),
   setSubscriptionError:(subscriptionError)=>set({subscriptionError}),
   applyBatch:(batch)=>set(state=>{
-    const feedStatus={...state.feedStatus};
-    const stockQuotes={...state.stockQuotes};
-    const stockTrades={...state.stockTrades};
-    const optionQuotes={...state.optionQuotes};
+    let feedStatus=state.feedStatus;
+    let stockQuotes=state.stockQuotes;
+    let stockTrades=state.stockTrades;
+    let optionQuotes=state.optionQuotes;
     let optionTrades=state.optionTrades;
+    let feedCopied=false,stockQuotesCopied=false,stockTradesCopied=false,optionQuotesCopied=false;
     for(const event of batch){
       switch(event.kind){
-        case "stock_quote": stockQuotes[event.symbol]=event; break;
-        case "stock_trade": stockTrades[event.symbol]=event; break;
-        case "option_quote": optionQuotes[event.symbol]=event; break;
-        case "option_trade": optionTrades=[event,...optionTrades].slice(0,500); break;
-        case "feed_status": feedStatus[event.feed]=event; break;
+        case "stock_quote":
+          if(!stockQuotesCopied){stockQuotes={...stockQuotes};stockQuotesCopied=true;}
+          stockQuotes[event.symbol]=event;
+          break;
+        case "stock_trade":
+          if(!stockTradesCopied){stockTrades={...stockTrades};stockTradesCopied=true;}
+          stockTrades[event.symbol]=event;
+          break;
+        case "option_quote":
+          if(!optionQuotesCopied){optionQuotes={...optionQuotes};optionQuotesCopied=true;}
+          optionQuotes[event.symbol]=event;
+          break;
+        case "option_trade":
+          optionTrades=[event,...optionTrades].slice(0,500);
+          break;
+        case "feed_status":
+          if(!feedCopied){feedStatus={...feedStatus};feedCopied=true;}
+          feedStatus[event.feed]=event;
+          break;
       }
     }
     return {feedStatus,stockQuotes,stockTrades,optionQuotes,optionTrades,
