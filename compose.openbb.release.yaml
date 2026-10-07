@@ -1,0 +1,7 @@
+# Opt-in release deployment overlay. Use only with the digest-verifying wrapper;
+# the default compose.openbb.yaml profile remains source-buildable for local use.
+services:
+  openbb-lite:
+    build: !reset null
+    image: ${EQO_OPENBB_LITE_RELEASE_IMAGE:?set EQO_OPENBB_LITE_RELEASE_IMAGE to the approved image repository digest}
+    pull_policy: always

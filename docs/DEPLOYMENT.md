@@ -44,6 +44,16 @@ docker compose --profile openbb build
 docker compose --profile openbb up --build --wait
 ```
 
+These commands build the locked source locally. The full-identity Compose tag
+selects the source and recipe; it does not guarantee immutable image bytes.
+For an approved published image, set `EQO_OPENBB_LITE_RELEASE_IMAGE` to
+`eqoboard/openbb-workspace-lite@sha256:<64-hex-digest>` and run
+`tools/openbb/openbb-release-compose.sh up`. The wrapper pulls that exact
+repository digest, confirms Docker reports it, and uses a Compose overlay that
+removes the local build section. This repository has not published a release
+image, so the opt-in release command must not be given a tag or an unverified
+digest.
+
 停止 profile 服务时，主 Terminal、Rust Gateway 和既有 research Node 服务继续运行：
 
 ```bash
