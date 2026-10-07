@@ -522,18 +522,25 @@ async fn prune_leases(state: AppState) {
     let mut timer = tokio::time::interval(Duration::from_secs(30));
     loop {
         timer.tick().await;
-        let mut leases = state.leases.lock().await;
-        let before = leases.len();
-        leases.retain(|_, (until, _)| *until > Instant::now());
-        if before != leases.len() {
-            let mut combined: Vec<String> = leases
-                .values()
-                .flat_map(|(_, set)| set.iter().cloned())
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect();
-            combined.sort();
-            state.option_tx.send_replace(combined);
+
+        {
+            let mut leases = state.option_leases.lock().await;
+            let before = leases.len();
+            leases.retain(|_, (until, _)| *until > Instant::now());
+            if before != leases.len() {
+                state.option_tx.send_replace(option_subscription_union(&leases));
+            }
+        }
+
+        {
+            let mut leases = state.stock_leases.lock().await;
+            let before = leases.len();
+            leases.retain(|_, (until, _)| *until > Instant::now());
+            if before != leases.len() {
+                state
+                    .stock_tx
+                    .send_replace(stock_subscription_union(&state.stock_symbols, &leases));
+            }
         }
     }
 }
