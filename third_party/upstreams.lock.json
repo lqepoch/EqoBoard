@@ -35,7 +35,7 @@
         "status": "passed",
         "tested_commit": "00f7aec59c6a4e67e568c9b7de8a6afb4f37fa41",
         "path": "docs/evidence/openbb-local-runtime-acceptance.json",
-        "sha256": "e982f11643f647bf9fde9324e8d33207245a6d4a33e1b5b5584713c19e34cb35"
+        "sha256": "1cd60d2d5ba4cbb213b71cf6ec236467e9faafcb964713414921c1613082c2a9"
       },
       "license_files": [
         {

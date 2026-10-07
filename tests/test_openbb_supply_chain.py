@@ -49,6 +49,19 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
         self.assertEqual(record["scope"], "local-mock")
         self.assertEqual(record["status"], "passed")
         self.assertEqual(record["tested_commit"], pointer["tested_commit"])
+        self.assertRegex(record["runtime_sbom"]["record_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(record["upstream"]["openbb_workspace_commit"], entry["commit"])
+        self.assertEqual(
+            record["upstream"]["openbb_source_archive_sha256"], entry["source_archive"]["sha256"]
+        )
+        self.assertEqual(
+            record["upstream"]["openterminal_commit"],
+            "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+        )
+        self.assertEqual(
+            record["upstream"]["community_build_identity"],
+            upstream.locked_recipe(entry)[3],
+        )
         self.assertTrue(record["runtime_acceptance"]["default_profile_smoke_executed"])
         self.assertTrue(record["runtime_acceptance"]["cleanup_verified"])
         self.assertEqual(record["runtime_acceptance"]["browser_tests_passed"], 7)
@@ -67,6 +80,54 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
 
         recipe = (ROOT / entry["build_recipe"]["path"]).read_text(encoding="utf-8")
         self.assertNotIn("upstreams.lock.json", recipe)
+
+    def test_local_mock_evidence_can_be_absent_or_pending_during_a_source_update(self):
+        current = upstream.openbb_entry()
+        without_evidence = dict(current)
+        without_evidence.pop("local_mock_evidence")
+        lock = {"sources": [without_evidence]}
+
+        with mock.patch.object(upstream, "read_json", return_value=lock):
+            entry = upstream.openbb_entry()
+        self.assertNotIn("local_mock_evidence", entry)
+        self.assertEqual(entry["build_gate"]["status"], "local-buildable")
+        self.assertEqual(entry["build_gate"]["runtime_acceptance"], "not-verified")
+        self.assertEqual(entry["build_gate"]["browser_e2e"], "not-run")
+        self.assertEqual(entry["build_gate"]["deployment"], "not-approved")
+
+        pending = dict(current)
+        pending["local_mock_evidence"] = {"scope": "local-mock", "status": "pending"}
+        with mock.patch.object(upstream, "read_json", return_value={"sources": [pending]}):
+            pending_entry = upstream.openbb_entry()
+        self.assertEqual(pending_entry["local_mock_evidence"]["status"], "pending")
+        self.assertEqual(pending_entry["build_gate"]["runtime_acceptance"], "not-verified")
+        pending["local_mock_evidence"]["sha256"] = "a" * 64
+        with mock.patch.object(upstream, "read_json", return_value={"sources": [pending]}):
+            with self.assertRaisesRegex(upstream.SupplyChainError, "pending OpenBB local mock evidence"):
+                upstream.openbb_entry()
+
+    def test_stale_local_mock_evidence_is_rejected_when_recipe_identity_changes(self):
+        entry = upstream.openbb_entry()
+        identity = upstream.locked_recipe(entry)[3]
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record_path = root / "record.json"
+            record = json.loads((ROOT / entry["local_mock_evidence"]["path"]).read_text(encoding="utf-8"))
+            record["upstream"]["community_build_identity"] = "f" * 64
+            record_path.write_text(json.dumps(record), encoding="utf-8")
+            pointer = dict(entry["local_mock_evidence"])
+            pointer["path"] = "record.json"
+            pointer["sha256"] = upstream.sha256_file(record_path)
+            stale_entry = dict(entry)
+            stale_entry["local_mock_evidence"] = pointer
+
+            with mock.patch.object(upstream, "ROOT", root):
+                with self.assertRaisesRegex(upstream.SupplyChainError, "does not match"):
+                    upstream.validate_local_mock_evidence(
+                        stale_entry,
+                        identity,
+                        "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+                    )
 
     def test_build_gate_displays_local_evidence_without_promoting_release_status(self):
         with mock.patch.object(upstream.sys, "argv", ["openbb_upstream.py", "build-gate"]):

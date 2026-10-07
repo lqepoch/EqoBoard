@@ -56,7 +56,7 @@
     "normalized_package_identities": 314,
     "normalized_package_set_sha256": "bac53641f2bf80796346f3dbd6ac1e78fdd725b73bacc3247f7d845f1f4f8966",
     "record_path": "/root/.codex/artifacts/eqoboard-openbb-20261007/runtime/attempt-22-00f7aec/openbb-lite-compose-image-sbom-record.json",
-    "record_sha256": "d2a1ab3d26df4a7ad67a10c73c110a9a04c512608982ebc6dafa1b9c11932109",
+    "record_sha256": "e05f8b0a4b2057ec49e61450b517e1e6f0636670c97e493afa662d7686ed825c",
     "patched_source_sbom_path": "/root/.codex/artifacts/eqoboard-openbb-20261007/openbb-community/patched-source-sbom-current-cfc03fb056e7c602-build-linked.spdx.json",
     "patched_source_sbom_sha256": "4779ca362ccd0dfc745b0db1d57f1994542c79a3657030714b00006c0f168931"
   },

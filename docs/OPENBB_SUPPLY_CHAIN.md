@@ -157,9 +157,12 @@ The pinned Syft 1.54.1 runtime SBOM for this exact Compose image is
 `0fca15c7fbe1838f2081f08ccf730d7cd48f4931c2f0826f1187840040e19afc`. It has
 326 SPDX package entries / 314 normalized package identities, stable across
 three scans. Its sidecar record SHA-256 is
-`d2a1ab3d26df4a7ad67a10c73c110a9a04c512608982ebc6dafa1b9c11932109`; it binds
+`e05f8b0a4b2057ec49e61450b517e1e6f0636670c97e493afa662d7686ed825c`; it binds
 the SBOM to the exact Compose image, archive, tested source commit and recipe
-identity. The linked patched-source SBOM remains separate because the compiled
+identity, and its `test_binding` includes the complete runtime log, result,
+frozen HEAD, cleanup status, and Playwright report hashes. The former prefix-only
+record remains a separately named historical artifact and is not the canonical
+record. The linked patched-source SBOM remains separate because the compiled
 Vite bundle does not contain Bun/npm dependency metadata.
 
 The versioned record [openbb-local-runtime-acceptance.json](evidence/openbb-local-runtime-acceptance.json)

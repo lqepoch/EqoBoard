@@ -60,7 +60,7 @@ Gateway 有界消费 bars/options continuation token；缺失/null 表示终止�
 
 隔离 research BFF 对外提供 `/api/openbb/widgets.json`、`/api/openbb/apps.json` 及 `/api/openbb/openbb/v1/{stocks,bars,options}`。重复的 `openbb` path segment 来自 pinned Workspace `createURLString(endpoint, backendUrl)` 规则：custom source URL 是 `/api/openbb`，manifest endpoint 保持 `openbb/v1/...`。BFF 只映射这三条只读路径，要求隔离 hostname 上的 OIDC/NextAuth session 和 market-reader role，再使用 research signer 签发最长 60 秒、`kid=research`、`iss=openterminal-research`、`aud=eqoboard-gateway`、单一 `market:read` scope 的 token。manifest metadata 不授予行情访问能力；source、feed、as-of 和 truncation 来自 Gateway。
 
-Research BFF 不配置主终端 Gateway signer、Node API key 或 Alpaca key/secret。Research BFF Playwright suite 覆盖生产 Next 与 mock OIDC/Gateway 的 API 组件边界；独立 OpenBB Playwright suite 才启动固定 Lite、真实 Rust Gateway 和受控 SIP/OPRA 协议 mock。attempt-21 无 skip 默认 Compose build/up、native Lite 三 Widget、停服独立性、Gateway offline/restart 与错误镜像恢复矩阵已通过。测试 mock 的 Gateway 行 `source=unknown`，不作为真实 Alpaca 行情来源或 entitlement 证明。
+Research BFF 不配置主终端 Gateway signer、Node API key 或 Alpaca key/secret。Research BFF Playwright suite 覆盖生产 Next 与 mock OIDC/Gateway 的 API 组件边界；独立 OpenBB Playwright suite 才启动固定 Lite、真实 Rust Gateway 和受控 SIP/OPRA 协议 mock。attempt-22 无 skip 默认 Compose build/up、native Lite 三 Widget、停服独立性、Gateway offline/restart 与错误镜像恢复矩阵已通过。测试 mock 的 Gateway 行 `source=unknown`，不作为真实 Alpaca 行情来源或 entitlement 证明。
 
 ## 数据原则
 
