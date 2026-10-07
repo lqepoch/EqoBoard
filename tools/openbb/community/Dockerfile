@@ -57,6 +57,8 @@ COPY --from=source-patch /opt/workspace-be00e95019a55d57af146919ee46b7e1a4859226
 COPY --from=source-patch /opt/workspace-be00e95019a55d57af146919ee46b7e1a4859226/backend-api/backend/api ./api
 COPY --from=source-patch /opt/workspace-be00e95019a55d57af146919ee46b7e1a4859226/backend-api/backend/routers ./routers
 COPY --from=source-patch /opt/workspace-be00e95019a55d57af146919ee46b7e1a4859226/backend-api/backend/utilities ./utilities
+COPY --from=source-patch /opt/workspace-be00e95019a55d57af146919ee46b7e1a4859226/backend-api/backend/tests/test_sqlite_string_concat.py /tmp/test_sqlite_string_concat.py
+RUN PYTHONPATH=/opt/code /opt/.venv/bin/python /tmp/test_sqlite_string_concat.py
 RUN . /opt/.venv/bin/activate && python setup_compile.py build_ext --inplace
 RUN find api routers utilities -name '*.py' ! -name '__init__.py' | while read -r file; do \
       base="${file%.py}"; \

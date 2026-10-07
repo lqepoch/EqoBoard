@@ -35,6 +35,13 @@ Community patch adds no diagnostics against that baseline. The Docker image
 build runs `tsc -b tsconfig.node.json`; the full `bun run typecheck` is checked
 separately and remains a failing baseline check.
 
+The pinned Bookworm runtime provides SQLite 3.40, which predates SQLite's
+built-in `concat()` function. The backend adapter builds user display names
+with SQLAlchemy string expressions so SQLite and PostgreSQL use `||` while
+MySQL uses its dialect's `concat()` form. The image build runs a backend
+regression test against SQLite before Cython compilation; it verifies the
+display-name result and the existing email fallback when either name is null.
+
 From `terminalpro/`, the pinned frontend build uses the checked-in Bun lockfile
 without fallback:
 

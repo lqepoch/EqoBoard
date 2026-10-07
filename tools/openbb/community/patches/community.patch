@@ -1,3 +1,159 @@
+--- a/backend-api/backend/api/crud.py
++++ b/backend-api/backend/api/crud.py
+@@ -35,0 +36 @@
++from api.sql_expressions import user_display_name
+@@ -533 +534 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -814 +815 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -848 +849 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -907 +908 @@
+-                func.concat(User.first_name, " ", User.last_name),
++                user_display_name(User.first_name, User.last_name),
+@@ -1529 +1530 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+@@ -1562 +1563 @@
+-                    func.concat(User.first_name, " ", User.last_name),
++                    user_display_name(User.first_name, User.last_name),
+--- /dev/null
++++ b/backend-api/backend/api/sql_expressions.py
+@@ -0,0 +1,11 @@
++"""SQL expressions shared by backend queries that target multiple dialects."""
++
++from sqlalchemy import literal
++from sqlalchemy.sql.elements import ColumnElement
++
++
++def user_display_name(
++    first_name: ColumnElement[str], last_name: ColumnElement[str]
++) -> ColumnElement[str]:
++    """Concatenate non-null user name columns using dialect-native syntax."""
++    return first_name + literal(" ") + last_name
+--- a/backend-api/backend/routers/pro/helpers.py
++++ b/backend-api/backend/routers/pro/helpers.py
+@@ -16,0 +17 @@
++from api.sql_expressions import user_display_name
+@@ -1637 +1638 @@
+-                    func.concat(models.User.first_name, " ", models.User.last_name),
++                    user_display_name(models.User.first_name, models.User.last_name),
+--- /dev/null
++++ b/backend-api/backend/tests/test_sqlite_string_concat.py
+@@ -0,0 +1,110 @@
++"""Regression coverage for the pinned Lite SQLite and string expression dialects."""
++
++import sqlite3
++import unittest
++
++from sqlalchemy import (
++    Column,
++    Integer,
++    MetaData,
++    String,
++    Table,
++    and_,
++    case,
++    create_engine,
++    func,
++    literal,
++    select,
++)
++from sqlalchemy.dialects import mysql, postgresql, sqlite
++from sqlalchemy.exc import OperationalError
++
++from api.sql_expressions import user_display_name
++
++
++class UserDisplayNameExpressionTests(unittest.TestCase):
++    def setUp(self) -> None:
++        self.engine = create_engine("sqlite://")
++        self.users = Table(
++            "users",
++            MetaData(),
++            Column("id", Integer, primary_key=True),
++            Column("first_name", String),
++            Column("last_name", String),
++            Column("email", String, nullable=False),
++        )
++        self.users.create(self.engine)
++
++    def tearDown(self) -> None:
++        self.engine.dispose()
++
++    def test_sqlite_expression_preserves_name_and_email_fallback(self) -> None:
++        display_name = case(
++            (
++                and_(
++                    self.users.c.first_name.is_not(None),
++                    self.users.c.last_name.is_not(None),
++                ),
++                user_display_name(
++                    self.users.c.first_name, self.users.c.last_name
++                ),
++            ),
++            else_=self.users.c.email,
++        )
++        statement = select(self.users.c.id, display_name.label("created_by")).order_by(
++            self.users.c.id
++        )
++        with self.engine.begin() as connection:
++            connection.execute(
++                self.users.insert(),
++                [
++                    {
++                        "id": 1,
++                        "first_name": "Ada",
++                        "last_name": "Lovelace",
++                        "email": "ada@example.test",
++                    },
++                    {
++                        "id": 2,
++                        "first_name": None,
++                        "last_name": "Lovelace",
++                        "email": "fallback@example.test",
++                    },
++                ],
++            )
++            result = connection.execute(statement).all()
++
++        self.assertEqual(
++            [(row.id, row.created_by) for row in result],
++            [(1, "Ada Lovelace"), (2, "fallback@example.test")],
++        )
++
++    def test_expression_compiles_for_sqlite_postgresql_and_mysql(self) -> None:
++        statement = select(
++            user_display_name(self.users.c.first_name, self.users.c.last_name)
++        )
++        compiled = {
++            "sqlite": str(statement.compile(dialect=sqlite.dialect())),
++            "postgresql": str(statement.compile(dialect=postgresql.dialect())),
++            "mysql": str(statement.compile(dialect=mysql.dialect())),
++        }
++        self.assertIn("||", compiled["sqlite"])
++        self.assertIn("||", compiled["postgresql"])
++        self.assertIn("concat(", compiled["mysql"].lower())
++
++    def test_locked_sqlite_exposes_original_concat_incompatibility(self) -> None:
++        if sqlite3.sqlite_version_info >= (3, 44, 0):
++            self.skipTest("SQLite now provides concat(); pinned Lite is older")
++        with self.engine.connect() as connection:
++            with self.assertRaises(OperationalError):
++                connection.scalar(
++                    select(
++                        func.concat(
++                            literal("Ada"), literal(" "), literal("Lovelace")
++                        )
++                    )
++                )
++
++
++if __name__ == "__main__":
++    unittest.main()
 --- a/lite/entrypoint.sh
 +++ b/lite/entrypoint.sh
 @@ -121,0 +122 @@
