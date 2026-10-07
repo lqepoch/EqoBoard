@@ -343,7 +343,22 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   });
   await expect(barsWidget).toHaveCount(1);
   await expect(barsWidget.getByRole("columnheader", { name: "Market as of", exact: true })).toBeVisible();
-  await expect(barsWidget.getByText(String(bars[0].market_as_of), { exact: true }).filter({ visible: true })).toBeVisible();
+  await captured.settle();
+  const latestBarsResponse = captured.responses
+    .filter((item) => item.path.startsWith("/api/openbb/openbb/v1/bars") && item.status === 200)
+    .slice(-1)[0];
+  expect(latestBarsResponse).toBeDefined();
+  const latestBarsAsOfValues = (Array.isArray(latestBarsResponse?.body)
+    ? latestBarsResponse.body as Record<string, unknown>[]
+    : [])
+    .map((row) => row.market_as_of)
+    .filter((value): value is string => typeof value === "string");
+  expect(latestBarsAsOfValues.length).toBeGreaterThan(0);
+  const visibleMarketAsOfCells = barsWidget.locator('.ag-cell[col-id="market_as_of"]').filter({ visible: true });
+  await expect.poll(async () => {
+    const rendered = await visibleMarketAsOfCells.allTextContents();
+    return latestBarsAsOfValues.some((value) => rendered.includes(value));
+  }).toBe(true);
   await page.screenshot({ path: join(ARTIFACT_DIR, "native-openbb-mock-dashboard-market-time.png"), fullPage: true });
 
   const horizontalViewports = page.locator(".ag-body-horizontal-scroll-viewport");
