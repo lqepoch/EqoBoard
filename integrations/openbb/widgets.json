@@ -1,0 +1,105 @@
+{
+  "eqo_sip_equities": {
+    "name": "EqoBoard • US Equities SIP",
+    "description": "Authenticated Alpaca SIP stock snapshots; no simulated quotes, feed fallback or credentials.",
+    "category": "EqoBoard",
+    "subCategory": "Stocks",
+    "type": "table",
+    "endpoint": "openbb/v1/stocks",
+    "source": "Alpaca SIP",
+    "exportable": false,
+    "gridData": {
+      "w": 20,
+      "h": 9,
+      "minW": 12,
+      "minH": 6
+    },
+    "data": {
+      "dataKey": "snapshots",
+      "table": {
+        "enableCharts": true
+      }
+    },
+    "params": [
+      {
+        "paramName": "symbols",
+        "type": "text",
+        "value": "SPY,QQQ,IWM,NVDA",
+        "label": "US equity tickers"
+      }
+    ]
+  },
+  "eqo_opra_chain": {
+    "name": "EqoBoard • Options Chain OPRA",
+    "description": "Alpaca OPRA option chain with quote/Greeks/as-of and explicit incomplete-page indicator.",
+    "category": "EqoBoard",
+    "subCategory": "Options",
+    "type": "table",
+    "endpoint": "openbb/v1/options",
+    "source": "Alpaca OPRA",
+    "exportable": false,
+    "gridData": {
+      "w": 25,
+      "h": 13,
+      "minW": 12,
+      "minH": 7
+    },
+    "data": {
+      "dataKey": "contracts",
+      "table": {
+        "enableCharts": true,
+        "enableAdvanced": true
+      }
+    },
+    "params": [
+      {
+        "paramName": "underlying",
+        "type": "ticker",
+        "value": "QQQ",
+        "label": "Underlying"
+      },
+      {
+        "paramName": "expiration",
+        "type": "date",
+        "value": "",
+        "label": "Expiration (optional, next Friday)"
+      }
+    ]
+  },
+  "eqo_sip_bars": {
+    "name": "EqoBoard • Stock OHLCV SIP",
+    "description": "Read-only Alpaca SIP OHLCV with source timestamps.",
+    "category": "EqoBoard",
+    "subCategory": "Stocks",
+    "type": "table",
+    "endpoint": "openbb/v1/bars",
+    "source": "Alpaca SIP",
+    "exportable": false,
+    "gridData": {
+      "w": 18,
+      "h": 9,
+      "minW": 10,
+      "minH": 6
+    },
+    "data": {
+      "dataKey": "bars",
+      "table": {
+        "enableCharts": true
+      }
+    },
+    "params": [
+      {
+        "paramName": "symbol",
+        "type": "ticker",
+        "value": "QQQ",
+        "label": "US ticker"
+      },
+      {
+        "paramName": "timeframe",
+        "type": "text",
+        "value": "1Min",
+        "label": "1Min, 5Min, 15Min, 1Hour or 1Day"
+      }
+    ]
+  }
+}
