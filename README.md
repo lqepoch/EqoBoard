@@ -18,6 +18,8 @@
 
 OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定提交见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。旧的自研 Vite 终端已退出仓库，防止两套 UI 长期分叉。
 
+共享 Rust 市场契约固定复用 `trading-core/market-contracts`；`crates/domain` 仅为现有 EqoBoard 消费者保留旧 JSON DTO 的兼容重导出。旧 DTO 中的 `f64` 字段仅用于兼容展示，不是精确十进制 wire 或归档合同。
+
 OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 hostname、host-only OIDC cookies 和 `market:read` 短时委托访问它们。不同端口仍共享 hostname Cookie 边界。可选服务由默认 Compose 自动包含的 `openbb` profile 与原生 OpenTerminal Research 入口提供。无 skip 的 Compose + native Lite 浏览器生命周期验收已通过，测试使用真实 Rust Gateway 和仅测试用 loopback SIP/OPRA 协议 mock；mock 行的来源为 `unknown`，不代表真实 Alpaca entitlement 或市场数据。
 
 浏览器只建立 **1 条 EqoBoard SSE 行情连接**。Quote、Watchlist、AG Grid Option Chain、OPRA Tape 共用这条 50ms 批量流；股票 Watchlist/活动 Widget 通过租约合并为一条 Alpaca SIP 上游订阅。REST 快照用于初始状态与周期校准。

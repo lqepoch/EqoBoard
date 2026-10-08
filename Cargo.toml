@@ -5,7 +5,7 @@ members = ["crates/domain", "crates/alpaca-data", "crates/execution", "apps/gate
 [workspace.package]
 edition = "2021"
 license = "MIT"
-rust-version = "1.85"
+rust-version = "1.98.1"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -16,3 +16,4 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 tracing = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
+market-contracts = { git = "https://github.com/lqepoch/trading-core", rev = "0a2eaff08d45e8abc1a0137dab17d5d3ef5553c8", package = "market-contracts" }
