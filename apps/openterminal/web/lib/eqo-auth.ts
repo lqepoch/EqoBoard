@@ -9,6 +9,7 @@ import {
   isResearchAuthRuntimeConfigured,
   isOidcConfigured,
   mdpMarketDataSigner,
+  quantResearchSigner,
   publicAppOrigin,
 } from "@/auth";
 import { scopesForRoles, type ActionScope } from "@/lib/permissions";
@@ -220,6 +221,51 @@ export async function authorizeMdpMarketDataRequest(request: Request): Promise<A
     .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: signer.kid })
     .setIssuer(signer.issuer)
     .setAudience("lqepoch-market-data")
+    .setSubject(principal.subject)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))
+    .sign(new TextEncoder().encode(signer.secret));
+
+  return { ok: true, principal, token };
+}
+
+/** Sign a Quant-only private research lookup after its separate OIDC role check. */
+export async function authorizeQuantPredictionRequest(request: Request): Promise<AuthorizationResult> {
+  const boundaryError = validRequestHeaders(request);
+  if (boundaryError) return { ok: false, response: boundaryError };
+  const expectedOrigin = publicAppOrigin();
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  const fetchMode = request.headers.get("sec-fetch-mode");
+  if ((origin && origin !== expectedOrigin) ||
+      (fetchSite && fetchSite !== "same-origin") ||
+      (fetchMode && !["cors", "same-origin"].includes(fetchMode))) {
+    return { ok: false, response: jsonError(403, "origin_rejected") };
+  }
+
+  const runtimeMode = process.env.EQO_BFF_MODE;
+  if (runtimeMode !== undefined && runtimeMode !== "terminal" && runtimeMode !== "research") {
+    return { ok: false, response: jsonError(503, "identity_service_unavailable") };
+  }
+  const mode = runtimeMode === "research" ? "research" : "terminal";
+  if (!isOidcConfigured() || (mode === "research" && !isResearchAuthRuntimeConfigured()) ||
+      (mode === "terminal" && !isAuthRuntimeConfigured())) {
+    return { ok: false, response: jsonError(503, "identity_service_unavailable") };
+  }
+  const identity = await authorizeOidcPrincipal("research:private-read");
+  if (!identity.ok) return identity;
+  const signer = quantResearchSigner(mode);
+  if (!signer) return { ok: false, response: jsonError(503, "research_service_unavailable") };
+
+  const principal = identity.principal;
+  const token = await new SignJWT({
+    idp_iss: principal.identityIssuer,
+    scope: "research:private-read",
+    jti: randomUUID(),
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: signer.kid })
+    .setIssuer(signer.issuer)
+    .setAudience("lqepoch-quant-research")
     .setSubject(principal.subject)
     .setIssuedAt()
     .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))

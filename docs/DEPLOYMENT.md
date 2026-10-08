@@ -89,6 +89,14 @@ MDP 服务委托 key 与 Gateway key 完全分开。终端只接收 `MDP_TERMINA
 
 当前 BFF 针对 MDP revision `f7e21beb79e125bfaeaca09bda95639cd89faaea` 的 V1 只读 API；它只允许 `diagnostic` bars，并以 Core 注册的 `lqepoch.us_equity_trade_bar_1m.v1` schema 指纹验证响应。V1 不含 completion qualification，`curated` 会在请求 MDP 前拒绝。归档 API、BFF 身份 readiness 和 Gateway `/readyz` 都不证明真实 SIP/OPRA 授权、行情连接、exchange calendar 或交易能力。
 
+### 注册预测只读 API
+
+`EQO_QUANT_RESEARCH_URL` 配置只读 Quant registry origin；留空时 `/api/eqo/research/predictions/{run_id}` 返回不可用且不访问下游。允许 HTTPS、精确 loopback HTTP 开发 origin，或私有 Compose DNS `quant-research` 的 HTTP。当前 Compose 不启动 Quant 服务；若将来加入，固定服务名为 `quant-research`，服务只在 BFF 可达的私有网络内，浏览器不得直连。
+
+只有受信 OIDC `eqoboard-private-research-reader` role 可读取注册预测；`eqoboard-market-reader` 和通用 `research:read` 不授予此能力。终端 BFF 只持 `QUANT_TERMINAL_JWT_SECRET`，OpenBB research BFF 只持 `QUANT_RESEARCH_JWT_SECRET`。二者各自生成至少 32 字节随机值，与彼此、NextAuth、Gateway、MDP、OIDC client secret 及其他服务 key 都不同。短时委托固定 audience `lqepoch-quant-research`、唯一 scope `research:private-read`、TTL 最多 60 秒；终端使用 `iss=eqoboard-openterminal` / `kid=quant-terminal`，research 使用 `iss=openterminal-research` / `kid=quant-research`。不配置对应 key 或上游 origin 时功能保持不可用，不提供旧 key 回退。
+
+路由只接受固定 Quant GET 路径和单个合法 `run_id`，不接受调用者提供 origin、查询参数或请求体；关闭 redirect、限制响应大小并校验完整 schema/assessment/hash。浏览器只收到公开 ProtoJSON 投影和只读 assessment，不收到 `private_artifact_sha256` 或 private envelope。即使本地 registry 返回预测，UNKNOWN 的来源完整性/有限输入回执/point-in-time 状态仍保持 UNKNOWN，`promotion_allowed` 始终为 false；此接口不是研究资格或交易授权证明。
+
 ## 行情与 readiness
 
 `ALPACA_KEY` / `ALPACA_SECRET` 只注入 Rust Gateway 容器。无凭据时服务保留健康和只读页面，但 SIP/OPRA API 返回明确不可用状态；不得用 Yahoo、IEX、mock 或 indicative 数据替换并标成 SIP/OPRA。真实市场数据状态需单独核实账户 entitlement 与实际上游返回。
@@ -120,11 +128,13 @@ Portfolio API 对每个已验证主体限制每分钟 120 次，并对单个 res
 bash tools/container-e2e.sh
 ```
 
-此脚本会用专属 Compose project 和临时 env file；Docker Compose 清除继承的 Alpaca/OIDC/service secret，host 侧 Playwright、mock server 和开发态 Next 进程只通过 `env -i` 接收测试所需 allowlist。它使用仅供测试的身份 key 和 loopback mock，不读取真实市场 key、不向 broker 下单。脚本输出实际 image ID、entrypoint/command、端口映射、运行用户、rootfs 权限、health/readiness、重启和 cache volume 重建结果，并通过 Playwright 驱动生产模式 Next 容器。失败时会先输出本次 Compose logs，再清理该专属 project 与 volumes。
+此脚本会先在 Compose 启动前运行三个开发态预览/订单边界 smoke，再使用专属 Compose project 和临时 env file；Docker Compose 清除继承的 Alpaca/OIDC/service secret，host 侧 Playwright、mock server 和开发态 Next 进程只通过 `env -i` 接收测试所需 allowlist。它使用仅供测试的身份 key 和 loopback mock，不读取真实市场 key、不向 broker 下单。脚本输出实际 image ID、entrypoint/command、端口映射、运行用户、rootfs 权限、health/readiness、重启和 cache volume 重建结果，并通过 Playwright 驱动生产模式 Next 容器。失败时会先输出本次 Compose logs，再清理该专属 project 与 volumes。
 
 生产 Next 容器的浏览器阶段也会运行 `compose.e2e.yaml` 中的本地 MDP HTTP mock：容器只访问 loopback `E2E_MDP_PORT`（固定 14313），并使用 overlay 内独立的 MDP 测试 signer key。`tools/container-e2e.sh` 会清除宿主传入的 MDP origin、端口与 signer 变量，避免覆盖隔离配置。该 mock 只返回合成 fixture，不启动真实 MDP、rclone、Drive 或行情连接；它验证的是生产 Next BFF/容器路径，不是外部存储连通性。
 
-`E2E_ONLY=1` 只运行末尾生产模式浏览器阶段，供本地定位时使用；它不替代完整脚本，也不应在 CI 配置。离线 network overlay 配置可单独校验：
+同一隔离 overlay 的 Quant mock 只返回合成的 `LOCAL_REGISTERED_ROOT` 测试视图，使用专属 Quant 测试 signer 和 loopback `E2E_QUANT_PORT`（固定 14314）。它不启动真实 Quant registry，不读取研究产物或 finite receipt；生产 BFF/UI测试只证明受信 OIDC role 到短时只读委托的容器路径。
+
+`E2E_ONLY=1` 保留开发态 smoke 和末尾生产模式浏览器阶段，但跳过前面的生产 readiness/restart/cache-volume 检查，供本地定位浏览器问题时使用；它不替代完整脚本，也不应在 CI 配置。离线 network overlay 配置可单独校验：
 
 ```bash
 docker compose -f compose.yaml -f compose.offline.yaml config --quiet

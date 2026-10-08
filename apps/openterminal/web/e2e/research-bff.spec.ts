@@ -1,9 +1,9 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-const WEB_ORIGIN = "http://127.0.0.1:3320";
-const OIDC_ORIGIN = "http://127.0.0.1:4320";
-const SAME_HOSTNAME_WEB_ORIGIN = "http://127.0.0.1:3321";
-const CREDENTIAL_WEB_ORIGIN = "http://127.0.0.1:3322";
+const WEB_ORIGIN = process.env.E2E_WEB_ORIGIN ?? `http://127.0.0.1:${process.env.E2E_RESEARCH_WEB_PORT ?? "3320"}`;
+const OIDC_ORIGIN = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${process.env.E2E_OIDC_PORT ?? "4320"}`;
+const SAME_HOSTNAME_WEB_ORIGIN = `http://127.0.0.1:${process.env.E2E_RESEARCH_SAME_HOSTNAME_PORT ?? "3321"}`;
+const CREDENTIAL_WEB_ORIGIN = `http://127.0.0.1:${process.env.E2E_RESEARCH_CREDENTIAL_PORT ?? "3322"}`;
 const LOCAL_MDP_DATASET_ID = "synthetic-2026-10-08-four-bars-parquet-v3-bars-1m-v1";
 
 async function postJson(request: APIRequestContext, url: string, data: unknown) {
@@ -174,6 +174,73 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   expect(anonymousMarket.status()).toBe(401);
   expect(await metrics(request)).toMatchObject({ gateway: { authorized: 0, rejected: 0 } });
 });
+
+test("research BFF requires the separate private-research role and signs the research Quant identity", async ({ page, request }) => {
+  await signIn(page, request, ["eqoboard-market-reader"]);
+  const marketReader = await page.evaluate(async () => {
+    const response = await fetch("/api/eqo/research/predictions/run-e2e", { cache: "no-store" });
+    return { status: response.status, body: await response.json() };
+  });
+  expect(marketReader).toEqual({ status: 403, body: { error: "action_forbidden" } });
+  expect((await metrics(request)).quant).toMatchObject({ requests: {}, authorized: 0, rejected: 0 });
+});
+
+test("research-only role receives a private, short-lived Quant read delegation", async ({ page, request }) => {
+  await signIn(page, request, ["eqoboard-private-research-reader"]);
+  const result = await page.evaluate(async () => {
+    const response = await fetch("/api/eqo/research/predictions/run-e2e", { cache: "no-store" });
+    return { status: response.status, cache: response.headers.get("cache-control"), body: await response.json() };
+  });
+  expect(result.status).toBe(200);
+  expect(result.cache).toBe("no-store");
+  expect(result.body).toMatchObject({
+    authority: "LOCAL_REGISTERED_ROOT",
+    prediction_status: "HISTORICAL_SIMULATED_EXPIRED",
+    promotion_allowed: false,
+    assessment: { lifecycle: "UNKNOWN", point_in_time: "UNKNOWN_SOURCE_COMPLETENESS", promotion_allowed: false },
+  });
+  expect(result.body).not.toHaveProperty("private_artifact_sha256");
+  expect(result.body).not.toHaveProperty("private_envelope");
+  expect((await metrics(request)).quant.calls[0]).toMatchObject({
+    issuer: "openterminal-research",
+    audience: "lqepoch-quant-research",
+    kid: "quant-research",
+    scope: "research:private-read",
+    subject: "subject-e2e",
+  });
+});
+
+const registeredQuantRunId = process.env.E2E_QUANT_REGISTERED_RUN_ID;
+if (registeredQuantRunId) {
+  test("research-host BFF reads a real local Quant result with its isolated research signer", async ({ page, request }) => {
+    await signIn(page, request, ["eqoboard-private-research-reader"]);
+    const result = await page.evaluate(async (runId) => {
+      const response = await fetch(`/api/eqo/research/predictions/${encodeURIComponent(runId)}`, {
+        cache: "no-store",
+      });
+      return { status: response.status, cache: response.headers.get("cache-control"), body: await response.json() };
+    }, registeredQuantRunId);
+
+    expect(result.status).toBe(200);
+    expect(result.cache).toBe("no-store");
+    expect(result.body).toMatchObject({
+      schema_name: "quant-research-registered-prediction-v1",
+      authority: "LOCAL_REGISTERED_ROOT",
+      read_only: true,
+      promotion_allowed: false,
+      run_id: registeredQuantRunId,
+      prediction_status: "HISTORICAL_SIMULATED_EXPIRED",
+      assessment: {
+        lifecycle: "UNKNOWN",
+        finite_receipt_binding: "UNKNOWN",
+        point_in_time: "UNKNOWN_SOURCE_COMPLETENESS",
+        promotion_allowed: false,
+      },
+    });
+    expect(result.body).not.toHaveProperty("private_artifact_sha256");
+    expect(result.body).not.toHaveProperty("private_envelope");
+  });
+}
 
 test("market-reader OIDC session reaches SIP and OPRA only through short research delegation", async ({ page, request }) => {
   await signIn(page, request, ["eqoboard-market-reader"]);

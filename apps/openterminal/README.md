@@ -85,6 +85,10 @@ The Gateway exposes OpenBB-compatible `widgets.json`, `apps.json`, and read-only
 
 See [`../../docs/MARKET_SOURCES.md`](../../docs/MARKET_SOURCES.md) for the field-by-field source, as-of, coverage and failure contract. In particular, metadata timestamps may be unavailable, FRED/ECB dates are observation dates, and a connected browser is not proof that an upstream feed is ready.
 
+The native Chart widget can optionally query an MDP `diagnostic` archive by dataset ID through the same-origin BFF. It reuses the existing chart and validated V1 DTO; bounded finite numbers are only a visual projection and exact decimal strings remain available in the hover legend. Every archive view stays marked diagnostic/NOT LIVE, preserves synthetic or unknown provenance, and does not imply promotion or exchange-calendar validation.
+
+The native Workspace also offers a registered-prediction read-only widget. It requires the trusted `eqoboard-private-research-reader` OIDC role and uses the fixed Quant BFF route; market-reader and `research:read` do not grant private research access. The server BFF validates the bounded public ProtoJSON with the pinned `trading-core` TypeScript contract parser before returning it to the widget. The widget shows the public ProtoJSON projection and the upstream assessment only. Private envelopes are never requested for the browser, and unknown source/PIT evidence or denied promotion remains explicit. The feature stays unavailable when the Quant origin or mode-specific key is not configured.
+
 <br/>
 
 ## 🚀 Quick start

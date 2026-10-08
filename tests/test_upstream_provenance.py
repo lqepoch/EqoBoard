@@ -13,6 +13,20 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(sources["OpenTerminal"]["license"],"MIT")
         self.assertEqual(sources["AG Grid Community"]["version"],"36.2.0")
         self.assertEqual(sources["OpenBB Workspace"]["license"],"Apache-2.0")
+        self.assertEqual(
+            sources["trading-core TypeScript prediction contracts"]["commit"],
+            "290fff0cbc743928d6a7f12ac4b958b08cdff686",
+        )
+        web_package=json.loads((ROOT/"apps/openterminal/web/package.json").read_text())
+        self.assertEqual(
+            web_package["dependencies"]["@lqepoch/trading-core-contracts"],
+            "https://github.com/lqepoch/trading-core.git#290fff0cbc743928d6a7f12ac4b958b08cdff686",
+        )
+        lock=json.loads((ROOT/"apps/openterminal/package-lock.json").read_text())
+        self.assertEqual(
+            lock["packages"]["node_modules/@lqepoch/trading-core-contracts"]["resolved"],
+            "git+https://github.com/lqepoch/trading-core.git#290fff0cbc743928d6a7f12ac4b958b08cdff686",
+        )
         self.assertIn("MIT License",(ROOT/"apps/openterminal/LICENSE").read_text())
 
     def test_single_primary_terminal(self):

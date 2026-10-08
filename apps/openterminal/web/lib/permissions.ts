@@ -4,6 +4,7 @@ export const ACTION_SCOPES = [
   "market:subscribe",
   "research:read",
   "research:ai",
+  "research:private-read",
   "workspace:read",
   "workspace:write",
   "orders:preview",
@@ -21,6 +22,7 @@ const ROLE_SCOPES: Readonly<Record<string, readonly ActionScope[]>> = {
     "workspace:read",
   ],
   "eqoboard-workspace-editor": ["workspace:write"],
+  "eqoboard-private-research-reader": ["research:private-read", "workspace:read"],
   "eqoboard-order-reviewer": ["orders:preview"],
   "eqoboard-paper-operator": ["paper:submit"],
 };

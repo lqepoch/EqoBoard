@@ -48,6 +48,14 @@ OpenTerminal 可通过可选 `EQO_RESEARCH_PUBLIC_ORIGIN` 在原生 Sidebar 和 
 
 BFF 只接受最多 390 行、4 MiB 的 `lqepoch.us_equity_trade_bar_1m.v1` 响应，校验 schema fingerprint `5e761a91d880e0002aeafe6dc2083b7c8a0ff2ba486d5d93582fbb4479146cb0`、逐行来源和数值/时间语义。当前接口不含 CompletionV2，故 BFF 只放行 `diagnostic` 并在任何 MDP 请求前拒绝 `curated`。`synthetic`、`unknown`、缺失的 entitlement 或 NBBO 状态不会被改写成“行情已连接”。
 
+已校验的 diagnostic minute bars 可在原生 `ChartWidget` 中按 dataset ID 加载；图表不实现第二套 BFF 校验。UI 仅将 bounded finite decimal projection 传给 Lightweight Charts，同时保留原十进制字符串作为 tooltip；来源切换即清除旧图表 series。展示始终标为 diagnostic/NOT LIVE，附来源、completion 和 promotion unavailable 状态，数值不得进入交易、合约身份或精确金融计算。
+
+## 注册预测只读视图
+
+主终端 Workspace 的注册预测 widget 和隔离 research hostname 都只调用同源 `/api/eqo/research/predictions/{run_id}` BFF。可信 OIDC role `eqoboard-private-research-reader` 独立授予 `research:private-read`；market role、通用 `research:read` 不可替代。两种运行模式各持一把 Quant 专用 key，分别签发 `eqoboard-openterminal` / `quant-terminal` 或 `openterminal-research` / `quant-research`，audience 为 `lqepoch-quant-research`，scope 精确为 `research:private-read`，期限最多 60 秒；这些 key 与身份、Gateway、MDP 及另一运行模式分离。
+
+BFF 固定访问 `EQO_QUANT_RESEARCH_URL` 的 HTTPS、loopback 或私有 `quant-research` origin，不跟随 redirect、不接受任意 path/query/body，并校验 Quant response、assessment、SHA-256 与受限的公开 ProtoJSON。若 Quant response 带 `factor_feature`，BFF 只接受其精确摘要字段、已知 qualification/hash 状态及 `1..390` 行边界（与 Quant 注册读取器的 FactorIR 行数约束一致），校验后从浏览器 response 剥离该摘要；不接收 feature rows 或 private artifact。浏览器不接收 private envelope/artifact。LOCAL_REGISTERED_ROOT 只表明本地 registry 读取；source completeness、finite receipt 与 PIT 可继续为 UNKNOWN，promotion 始终 false。未部署/未配置 Quant 时界面显示不可用，不显示合成的 available 预测。
+
 ## Rust 数据接口
 
 共享 Rust 市场契约由固定 revision 的 `trading-core/crates/market-contracts` 持有。EqoBoard `crates/domain` 是旧 JSON DTO 的兼容 facade，保持现有 `eqo_domain::*` 消费者路径和 JSON 形状；新版本化 wire DTO 应直接复用 core 类型，不在本仓库复制。旧快照、bar 和事件中的 `f64` 是兼容投影，不保证精确十进制表示，不能作为新归档或执行合同。

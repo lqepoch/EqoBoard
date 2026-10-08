@@ -39,3 +39,4 @@ CMD ["npm", "run", "start", "-w", "server"]
 FROM runtime AS compose-e2e
 COPY --from=build --chown=node:node /build/web/e2e/mock-services.mjs /srv/e2e/mock-services.mjs
 COPY --from=build --chown=node:node /build/web/e2e/compose-e2e-server.mjs /srv/e2e/compose-e2e-server.mjs
+COPY --from=build --chown=node:node /build/web/e2e/fixtures/prediction-envelope-v1.synthetic.protojson /srv/e2e/fixtures/prediction-envelope-v1.synthetic.protojson

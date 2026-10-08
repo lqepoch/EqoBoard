@@ -43,6 +43,8 @@ OpenBB 上游差异报告、许可证检查和镜像回滚流程见 [`docs/OPENB
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `crates/domain` re-exports the pinned crate's `legacy` module to preserve existing `eqo_domain::*` consumers and JSON shape. New versioned market wire contracts should use the shared crate directly; legacy `f64` DTOs are not exact-decimal archival contracts.
 
+The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`. OpenTerminal pins it to `290fff0cbc743928d6a7f12ac4b958b08cdff686` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. The Quant BFF uses its `parsePredictionEnvelopeProtoJsonText` parser for bounded public ProtoJSON, including duplicate-key, alias, unknown-field, uint64-string, and raw-frame encoding checks. The browser receives only the public projection after this server-side validation.
+
 ## Rust JWT and trust-root data
 
 - `jsonwebtoken` is pinned to `10.3.0` in `Cargo.lock`, with `default-features = false` and only its `aws_lc_rs` crypto backend enabled in `apps/gateway/Cargo.toml`. This avoids resolving the unpatched `rsa` crate through `rust_crypto`; it does not imply that other crypto dependencies are advisory-free.

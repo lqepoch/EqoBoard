@@ -55,6 +55,8 @@ test.beforeEach(async ({ request }) => {
 
 test("quotes route U.S. symbols to SIP, named research symbols to Node, preserve mixed order, and never fall back on SIP 403", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  await page.goto(`${WEB_ORIGIN}/api/healthz`);
+  await resetDownstream(request);
   const response = await page.context().request.get(
     `${WEB_ORIGIN}/api/quotes?symbols=QQQ,BTC,BTC-USD,VIX,7203.T`,
   );
