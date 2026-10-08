@@ -92,6 +92,10 @@ npm run dev
 - 订单预览是离线风险检查，并绑定验证后的 OIDC `(issuer, subject)`；Paper submit 当前始终 blocked，Live 始终拒绝。Gateway status 将 adapter endpoint 配置和券商执行 capability 分开报告，Alpaca/IBKR/Schwab 的 Paper 和 Live capability 均 disabled；持久 preview/outbox、账户身份和真实 broker Paper 能力完成前不会开放提交。超时结果为 `UNKNOWN` 时保留 `client_order_id` 和原 preview 恢复关联，不能换 ID 重下。
 - OpenBB 公司于 **2026-10-01** 公布业务收尾和开源/治理迁移；Workspace 代码计划由 FINOS 承接，OpenBQ 承接相关资产。EqoBoard 将 OpenBB 作为可替换研究入口，主交易终端不依赖其托管服务。
 
+## GitHub Actions 与本地行情工具
+
+公共 Actions 仅运行无私密凭据的 CI、CodeQL 和源码供应链检查。真实 Alpaca 只读 smoke、配额诊断、历史 QQQ SIP 导出及专用 App 自动合并均不由 Actions 执行；对应 workflows 已从 `.github/workflows` 移除，行情脚本保留为本地入口，专用 App 自动合并当前未启用。操作者若获准，可在隔离的本机进程中显式运行这些只读脚本；输出可能受行情许可约束，必须保存在仓库之外，不能提交或上传公开 artifact。入口和限制见 [安全边界](docs/SECURITY.md)、[部署说明](docs/DEPLOYMENT.md) 与 [PR 合并治理](docs/AUTOMERGE.md)。
+
 ## 交付矩阵与当前验收状态
 
 | 范围 | 当前状态 |

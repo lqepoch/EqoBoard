@@ -27,7 +27,7 @@ def probe(path: str) -> dict:
     key = os.getenv("ALPACA_KEY", "")
     secret = os.getenv("ALPACA_SECRET", "")
     if not key or not secret:
-        raise RuntimeError("ALPACA_KEY/ALPACA_SECRET unavailable; inspect organization Secrets access")
+        raise RuntimeError("ALPACA_KEY/ALPACA_SECRET unavailable; provide them only in an authorized local process environment")
     req = urllib.request.Request(
         HOST + path,
         headers={"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret},

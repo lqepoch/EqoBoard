@@ -61,3 +61,16 @@ test("optional OpenBB Research navigation is isolated from the native terminal",
   await expect(palettePopup.getByText("External destination fixture")).toBeVisible();
   expect(await palettePopup.evaluate(() => window.opener === null)).toBe(true);
 });
+
+test("repeated OIDC login and health navigation close every authenticated market stream", async ({ browser, request }) => {
+  test.setTimeout(45_000);
+
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    const page = await browser.newPage();
+    try {
+      await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+    } finally {
+      await page.close();
+    }
+  }
+});

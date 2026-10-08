@@ -95,6 +95,10 @@ openssl rand -hex 32
 
 `docker compose up --wait` 使用容器 healthcheck 等待进程健康。应用 readiness 有意独立于 liveness；启动成功或 `/healthz` 返回 200 不能作为身份、市场数据或交易能力的证据。当前 `execution_enabled` 固定为 `false`，Paper submit 会 blocked 且不会调用券商，Live 始终拒绝。
 
+### 本机只读行情诊断
+
+公共 GitHub Actions 不运行真实行情请求。获准操作者可在受控的本机 shell 中用 `ALPACA_KEY` / `ALPACA_SECRET` 显式运行 `python3 tools/check_alpaca_feeds.py` 或 `python3 tools/qqq_sip_quota_probe.py`；它们只发只读 GET。历史导出入口为 `python3 tools/qqq_sip_weekly_export.py --week 2026-W01 --out <仓库外的受限目录>`，仅覆盖脚本列出的 2026 年日期范围。导出的 Parquet 含受数据许可约束的市场记录，目录必须留在仓库外，且不得提交、上传 Actions artifact 或向 Drive 发布。该操作不会执行下单；本仓库 CI 不验证真实 entitlement，也不代表账户当前配额。
+
 ## 容器布局与验证
 
 容器以非 root 用户运行并启用只读 root filesystem。Gateway 的审计数据使用 `eqoboard-audit` named volume；OpenTerminal Next cache 使用 `openterminal-next-cache`；research 本地 portfolio 数据使用 `openterminal-data`。维护/迁移前先对数据 volume 做一致性备份；本地旧 portfolio 的 `local` owner 不会自动转给首个 OIDC 用户。
