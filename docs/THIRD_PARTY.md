@@ -46,3 +46,5 @@ OpenBB 上游差异报告、许可证检查和镜像回滚流程见 [`docs/OPENB
 ## 版本锁
 
 机器可读版本记录见 `third_party/upstreams.lock.json`。OpenTerminal、AG Grid Community 和 OpenBB 的固定版本及许可证副本由 `tests/test_upstream_provenance.py`、`tests/test_openbb_supply_chain.py` 和 `tools/openbb/verify-upstream.sh` 校验；Rust shared contracts 通过 `Cargo.toml` 和 `Cargo.lock` 固定 Git revision。`market-contracts` CI 校验固定 OpenBB archive、许可证及 Syft 二进制 SHA，上传 upstream source SBOM、patched-source SBOM 与逐文件 upstream drift 报告；该 job 不构建镜像或证明浏览器集成。升级必须经显式 PR 更新 source commit、归档 SHA、许可证副本、community patch、SBOM、drift report 和 build record；禁止跟踪 upstream 分支。
+
+- 2026-10-08 OpenTerminal security refresh：`apps/openterminal/package-lock.json` 锁定 Next.js 15.5.27、PostCSS 8.5.28 override、fast-xml-parser 5.7.0、Vitest 4.1.11 / Vite 6.4.3，以及修补版 proxy-addr、sharp、shell-quote、source-map-js。`npm audit --package-lock-only --audit-level=low` 在锁刷新时报告 0 个已知漏洞；升级日志和测试结果以对应 PR 为准，后续发布仍须重新审计。
