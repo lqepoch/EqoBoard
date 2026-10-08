@@ -1,20 +1,20 @@
 # OpenTerminal upstream file audit
 
-- EqoBoard audit head: `d5e051ee60e4c1c0031c9806714b50675a4a66df`
+- EqoBoard audit head: `3b07bac28b5c030d4257c94ad13fdd6b3f37a996`
 - OpenTerminal upstream commit: `aed097c680cd8ec1c391ae06966babe7d6d91fc6`
 - Repository: `ErTasselli/OpenTerminal`
 - License: `MIT`
 - Verified Git archive SHA-256: `1e10d60a7ea0662d1e84704850a73b531e1a26f69337814f443458d9070a918b` (computed from git archive after the fetched Git object matched the locked commit)
-- Audit date (UTC): `2026-10-07 22:13:09 UTC`
+- Audit date (UTC): `2026-10-08 15:05:30 UTC`
 - Comparison: tracked files below `apps/openterminal` against the verified Git tree at the locked commit; files such as `node_modules` and `.next` are excluded.
 
 ## Summary
 
 - A · exact upstream files: 37
 - B · modified upstream files: 38
-- C/E · EqoBoard-only files: 75
-- C · product extension widgets: 5
-- E · domain, security, and integration files: 70
+- C/E · EqoBoard-only files: 95
+- C · product extension widgets: 7
+- E · domain, security, and integration files: 88
 - Deleted upstream files: 14
 - D · duplicated mature upstream implementations: none identified in this comparison. EqoBoard routes U.S. SIP/OPRA prices through Rust; retained Yahoo/TradingView providers serve research, non-U.S. symbols, or metadata. The native OpenTerminal Workspace, charts, screener, heatmap, watchlist, and general research widgets remain reused.
 
@@ -85,10 +85,10 @@ C and E are both listed in the EqoBoard-only table. C marks product widgets; E m
 | B | `web/app/layout.tsx` | `apps/openterminal/web/app/layout.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 设置 EqoBoard 产品名称。 | 保留 | 无需抽 adapter | 否 |
 | B | `web/app/page.tsx` | `apps/openterminal/web/app/page.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 以服务端 OIDC 会话门禁包裹上游终端。 | 保留 | Workspace 本体继续复用上游 | 否 |
 | B | `web/components/CommandPalette.tsx` | `apps/openterminal/web/components/CommandPalette.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 在原生命令面板增加校验后的 Research 外链；不改变 ticker/search 路由。 | 保留 | 仅传入公开 origin 的窄 UI adapter | 否 |
-| B | `web/components/Sidebar.tsx` | `apps/openterminal/web/components/Sidebar.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 将 EqoBoard 专属期权与风险 widget 注册到上游 Sidebar。 | 保留 | Widget registry 后续可外置 | 否 |
+| B | `web/components/Sidebar.tsx` | `apps/openterminal/web/components/Sidebar.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 将 EqoBoard 专属期权、风险和 Engine 离线预览 widget 注册到上游 Sidebar。 | 保留 | Widget registry 后续可外置 | 否 |
 | B | `web/components/Terminal.tsx` | `apps/openterminal/web/components/Terminal.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 把服务端验证的 Research origin 传给上游 Sidebar 与 Command Palette。 | 保留 | 仅传入公开 origin 的窄 UI adapter | 否 |
 | B | `web/components/TopBar.tsx` | `apps/openterminal/web/components/TopBar.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 展示 EqoBoard feed/source/授权状态，同时保留上游搜索和时间栏。 | 保留 | 行情状态可作为独立 extension | 否 |
-| B | `web/components/Workspace.tsx` | `apps/openterminal/web/components/Workspace.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 在上游 react-grid-layout Workspace 中注册 EqoBoard widgets 与 ticker linking。 | 保留 | widget 注册表可外置 | 否 |
+| B | `web/components/Workspace.tsx` | `apps/openterminal/web/components/Workspace.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 在上游 react-grid-layout Workspace 中注册 EqoBoard widgets（含只读 Engine 离线预览）与 ticker linking。 | 保留 | widget 注册表可外置 | 否 |
 | B | `web/components/widgets/CalendarWidget.tsx` | `apps/openterminal/web/components/widgets/CalendarWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 呈现研究日历和财报字段的来源与观察时间。 | 保留 | 无需抽 adapter | 否 |
 | B | `web/components/widgets/ChartWidget.tsx` | `apps/openterminal/web/components/widgets/ChartWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 保留 Lightweight Charts，实现 Rust bars 契约和 source/as-of 标签。 | 保留 | bars DTO 转换适合 adapter | 否 |
 | B | `web/components/widgets/HeatmapWidget.tsx` | `apps/openterminal/web/components/widgets/HeatmapWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 保留 D3 heatmap，消费 Gateway SIP 包络并显示 coverage/truncation。 | 保留 | 行包络转换适合 adapter | 否 |
@@ -101,18 +101,20 @@ C and E are both listed in the EqoBoard-only table. C marks product widgets; E m
 | B | `web/components/widgets/WatchlistWidget.tsx` | `apps/openterminal/web/components/widgets/WatchlistWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 保留上游 Watchlist UI，消费共享 store 与 Gateway 事件。 | 保留 | 行情 hook 可外置 | 否 |
 | B | `web/lib/api-key.ts` | `apps/openterminal/web/lib/api-key.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 移除本地自动生成的静态 API key，改用服务端研究凭据。 | 保留 | 凭据读取 adapter 已有 | 否 |
 | B | `web/lib/api.ts` | `apps/openterminal/web/lib/api.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 扩展前端 DTO 以表达 Gateway source、as-of、coverage 和 watermark。 | 保留 | Gateway DTO adapter 可独立 | 否 |
-| B | `web/package.json` | `apps/openterminal/web/package.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 加入 NextAuth、jose 与 Gateway 契约集成依赖。 | 保留 | 认证库沿用上游 Next.js 层 | 否 |
-| B | `web/store/terminal.ts` | `apps/openterminal/web/store/terminal.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 保留 Zustand Workspace 状态并增加 EqoBoard widget 类型与交易预览状态。 | 保留 | 行情/金融状态继续在独立 market/domain store | 否 |
+| B | `web/package.json` | `apps/openterminal/web/package.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 加入 NextAuth、jose 与固定 Git SHA 的 trading-core 生成契约依赖。 | 保留 | 认证库沿用上游 Next.js 层；共享 DTO 由 pinned Core 提供 | 否 |
+| B | `web/store/terminal.ts` | `apps/openterminal/web/store/terminal.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 保留 Zustand Workspace 状态并增加 EqoBoard widget 类型、交易 preview 与只读 Engine preview 状态。 | 保留 | 行情/金融状态继续在独立 market/domain store | 否 |
 | B | `web/tsconfig.json` | `apps/openterminal/web/tsconfig.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 为 EqoBoard 的跨层 DTO 类型导入启用扩展配置。 | 保留 | 无需抽 adapter | 否 |
 
 ## C. EqoBoard extension widgets
 
 | Category | upstream file | EqoBoard file | upstream commit | modification reason | retain | adapter/extension | duplicate wheel |
 |---|---|---|---|---|---|---|---|
+| C | — | `apps/openterminal/web/components/widgets/EngineOfflinePreviewWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 只读 synthetic Engine 状态预览；复用原生 Workspace，并经服务端 BFF 读取生成契约。 | 保留 | 是，继续作为 EqoBoard UI extension | 否 |
 | C | — | `apps/openterminal/web/components/widgets/IvSkewWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 专属期权分析/preview widget；复用 Workspace 与 AG Grid/图表容器。 | 保留 | 是，继续作为 EqoBoard UI extension | 否 |
 | C | — | `apps/openterminal/web/components/widgets/MarketFeedStatus.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 行情来源、授权、ACK 与 freshness 状态展示组件。 | 保留 | 是，继续作为 EqoBoard UI extension | 否 |
 | C | — | `apps/openterminal/web/components/widgets/OptionTapeWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 专属期权分析/preview widget；复用 Workspace 与 AG Grid/图表容器。 | 保留 | 是，继续作为 EqoBoard UI extension | 否 |
 | C | — | `apps/openterminal/web/components/widgets/OrderOutcomePanel.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 专属期权分析/preview widget；复用 Workspace 与 AG Grid/图表容器。 | 保留 | 是，继续作为 EqoBoard UI extension | 否 |
+| C | — | `apps/openterminal/web/components/widgets/ResearchPredictionsWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 只读展示注册研究 run 的受限公开投影；不请求私有 envelope，未知证据与禁止 promotion 状态保持可见。 | 保留 | 是，继续作为 EqoBoard UI extension | 否 |
 | C | — | `apps/openterminal/web/components/widgets/VerticalSpreadWidget.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 专属期权分析/preview widget；复用 Workspace 与 AG Grid/图表容器。 | 保留 | 是，继续作为 EqoBoard UI extension | 否 |
 
 ## D. Duplicate implementations
@@ -144,9 +146,13 @@ C and E are both listed in the EqoBoard-only table. C marks product widgets; E m
 | E | — | `apps/openterminal/server/src/routes/order-contract.test.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard Gateway/订单权限与协议集成测试。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/server/src/routes/portfolio.test.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 为 Portfolio 路由测试使用独立临时 SQLite DATA_DIR，并清理数据库及 WAL/SHM 文件，避免污染源码树。 | 保留 | 测试代码，不适用 | 否 |
 | E | — | `apps/openterminal/web/app/api/auth/[...nextauth]/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard OIDC 会话与上游终端之间的认证适配。 | 保留 | 是，继续作为 adapter | 否 |
+| E | — | `apps/openterminal/web/app/api/eqo/engine/preview/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Engine 离线读取的固定 GET BFF；仅终端专属委托可访问，复用 Core 生成契约并限制为 loopback 上游。 | 保留 | 是，作为 Next-to-Engine 只读 adapter | 否 |
+| E | — | `apps/openterminal/web/app/api/eqo/engine/status/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Engine 离线读取的固定 GET BFF；仅终端专属委托可访问，复用 Core 生成契约并限制为 loopback 上游。 | 保留 | 是，作为 Next-to-Engine 只读 adapter | 否 |
 | E | — | `apps/openterminal/web/app/api/eqo/live/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | SSE BFF 在授权等待前建立客户端断连监听，取消后不启动 Gateway 请求，并把 AbortSignal 传递到 Rust 上游流。 | 保留 | 是，作为用户会话边界与 Rust SSE 的窄传输 adapter | 否 |
+| E | — | `apps/openterminal/web/app/api/eqo/market-data/datasets/[datasetId]/bars/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 通过独立 MDP 短时委托读取受限历史 bars；保留 diagnostic/unknown 来源边界。 | 保留 | 是，作为 Next-to-MDP 只读 adapter | 否 |
 | E | — | `apps/openterminal/web/app/api/eqo/options/subscribe/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard Rust Gateway BFF 代理、市场订阅或健康状态路由。 | 保留 | 是，继续作为 adapter | 否 |
 | E | — | `apps/openterminal/web/app/api/eqo/orders/[action]/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard Rust Gateway BFF 代理、市场订阅或健康状态路由。 | 保留 | 是，继续作为 adapter | 否 |
+| E | — | `apps/openterminal/web/app/api/eqo/research/predictions/[runId]/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 通过独立 Quant research 委托读取注册 run 的公开预测投影；私有 artifact 不进入浏览器。 | 保留 | 是，作为 Next-to-Quant 只读 adapter | 否 |
 | E | — | `apps/openterminal/web/app/api/eqo/stocks/subscribe/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard Rust Gateway BFF 代理、市场订阅或健康状态路由。 | 保留 | 是，继续作为 adapter | 否 |
 | E | — | `apps/openterminal/web/app/api/healthz/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard Rust Gateway BFF 代理、市场订阅或健康状态路由。 | 保留 | 是，继续作为 adapter | 否 |
 | E | — | `apps/openterminal/web/app/api/openbb/[...path]/route.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Research-only OpenBB manifest/market API allowlist；从 OIDC role 会话签发最长 60 秒 market:read Gateway 委托。 | 保留 | 是，作为 Next-to-Gateway market adapter | 否 |
@@ -160,12 +166,19 @@ C and E are both listed in the EqoBoard-only table. C marks product widgets; E m
 | E | — | `apps/openterminal/web/components/TerminalShell.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard OIDC 会话与上游终端之间的认证适配。 | 保留 | 是，继续作为 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/access-boundary.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/compose-e2e-server.mjs` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/engine-offline-preview.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/fixtures.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/fixtures/engine-status-response-v1.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/fixtures/prediction-envelope-v1.synthetic.protojson` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/fixtures/synthetic-offline-preview-v1.json` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/isolated-env.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Research 身份、OpenBB 原生 Lite、Gateway 数据与回滚的隔离浏览器/契约验证；不实现另一套 Workspace。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/market-data-bff.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/market-data-chart.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/market-freshness.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/market-order.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/market-stream.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/market-test-data.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/mdp-upstream.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/mock-openbb-alpaca.mjs` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 仅 E2E 的有控制 token fixture；市场响应显式模拟，Gateway source 保持 unknown，不作真实行情声明。 | 保留 | 仅测试 fixture，不进入产品运行路径 | 否 |
 | E | — | `apps/openterminal/web/e2e/mock-openbb-oidc.mjs` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 仅 E2E 的有控制 token fixture；市场响应显式模拟，Gateway source 保持 unknown，不作真实行情声明。 | 保留 | 仅测试 fixture，不进入产品运行路径 | 否 |
 | E | — | `apps/openterminal/web/e2e/mock-services.mjs` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
@@ -174,17 +187,24 @@ C and E are both listed in the EqoBoard-only table. C marks product widgets; E m
 | E | — | `apps/openterminal/web/e2e/openbb-recovery.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Research 身份、OpenBB 原生 Lite、Gateway 数据与回滚的隔离浏览器/契约验证；不实现另一套 Workspace。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/openbb-response-capture.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Research 身份、OpenBB 原生 Lite、Gateway 数据与回滚的隔离浏览器/契约验证；不实现另一套 Workspace。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/order-outcome-probe.tsx` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/quant-upstream.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/research-bff.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Research 身份、OpenBB 原生 Lite、Gateway 数据与回滚的隔离浏览器/契约验证；不实现另一套 Workspace。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/research-navigation.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Research 身份、OpenBB 原生 Lite、Gateway 数据与回滚的隔离浏览器/契约验证；不实现另一套 Workspace。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/e2e/research-origin.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | Research 身份、OpenBB 原生 Lite、Gateway 数据与回滚的隔离浏览器/契约验证；不实现另一套 Workspace。 | 保留 | 无需抽 adapter | 否 |
+| E | — | `apps/openterminal/web/e2e/research-prediction.spec.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 集成/契约验证代码，不是产品 Workspace 的平行实现。 | 保留 | 无需抽 adapter | 否 |
 | E | — | `apps/openterminal/web/lib/client-abort.mjs` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 将客户端断连信号跨授权等待传到 BFF 下游控制器，断连时不启动后续请求，并向运行中的上游流传递 AbortSignal。 | 保留 | 是，作为窄的 BFF transport adapter | 否 |
 | E | — | `apps/openterminal/web/lib/client-abort.test.mjs` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 覆盖授权等待中的断连竞态及已断开的请求，确保断连后不会执行授权后的下游调用。 | 保留 | 测试代码，不适用 | 否 |
+| E | — | `apps/openterminal/web/lib/engine-preview.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 验证专属 OIDC role 并签发 Engine-only 短时委托；固定 loopback GET、响应体上限、超时及 Core strict ProtoJSON parser。 | 保留 | 是，作为认证和只读 transport adapter | 否 |
 | E | — | `apps/openterminal/web/lib/eqo-auth.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
 | E | — | `apps/openterminal/web/lib/eqo-market.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
 | E | — | `apps/openterminal/web/lib/http-response.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
+| E | — | `apps/openterminal/web/lib/mdp-market-data-contract.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
+| E | — | `apps/openterminal/web/lib/mdp-market-data.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
 | E | — | `apps/openterminal/web/lib/order-api.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
 | E | — | `apps/openterminal/web/lib/order-contract.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
 | E | — | `apps/openterminal/web/lib/permissions.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
+| E | — | `apps/openterminal/web/lib/quant-prediction-contract.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
+| E | — | `apps/openterminal/web/lib/quant-predictions.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | EqoBoard 身份、市场数据、订单 preview 或 Gateway response 契约。 | 保留 | 是，继续作为 adapter/domain | 否 |
 | E | — | `apps/openterminal/web/lib/research-origin.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 限制 Research hostname、origin、session 与精确 API allowlist；研究模式其余路径失败关闭。 | 保留 | 是，作为 research auth/policy adapter | 否 |
 | E | — | `apps/openterminal/web/lib/research-route-access.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 限制 Research hostname、origin、session 与精确 API allowlist；研究模式其余路径失败关闭。 | 保留 | 是，作为 research auth/policy adapter | 否 |
 | E | — | `apps/openterminal/web/middleware.ts` | `aed097c680cd8ec1c391ae06966babe7d6d91fc6` | 限制 Research hostname、origin、session 与精确 API allowlist；研究模式其余路径失败关闭。 | 保留 | 是，作为 research auth/policy adapter | 否 |
