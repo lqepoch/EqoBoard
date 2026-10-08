@@ -122,6 +122,8 @@ bash tools/container-e2e.sh
 
 此脚本会用专属 Compose project 和临时 env file；Docker Compose 清除继承的 Alpaca/OIDC/service secret，host 侧 Playwright、mock server 和开发态 Next 进程只通过 `env -i` 接收测试所需 allowlist。它使用仅供测试的身份 key 和 loopback mock，不读取真实市场 key、不向 broker 下单。脚本输出实际 image ID、entrypoint/command、端口映射、运行用户、rootfs 权限、health/readiness、重启和 cache volume 重建结果，并通过 Playwright 驱动生产模式 Next 容器。失败时会先输出本次 Compose logs，再清理该专属 project 与 volumes。
 
+生产 Next 容器的浏览器阶段也会运行 `compose.e2e.yaml` 中的本地 MDP HTTP mock：容器只访问 loopback `E2E_MDP_PORT`（固定 14313），并使用 overlay 内独立的 MDP 测试 signer key。`tools/container-e2e.sh` 会清除宿主传入的 MDP origin、端口与 signer 变量，避免覆盖隔离配置。该 mock 只返回合成 fixture，不启动真实 MDP、rclone、Drive 或行情连接；它验证的是生产 Next BFF/容器路径，不是外部存储连通性。
+
 `E2E_ONLY=1` 只运行末尾生产模式浏览器阶段，供本地定位时使用；它不替代完整脚本，也不应在 CI 配置。离线 network overlay 配置可单独校验：
 
 ```bash
