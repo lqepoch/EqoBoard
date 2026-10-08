@@ -1,52 +1,56 @@
-name: QQQ SIP historical weekly export (read-only)
+name: Retire public QQQ SIP artifacts
 on:
   push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/qqq-sip-weekly-export.yml
-      - tools/qqq_sip_weekly_export.py
+    branches: [main]
+    paths: [.github/workflows/qqq-sip-weekly-export.yml]
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
 
+# Intentionally cancels any still-running read-only export in the SAME group.
 concurrency:
   group: qqq-sip-weekly-2026
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  export:
+  secure-retirement:
     if: github.repository == 'lqepoch/EqoBoard' && github.ref == 'refs/heads/main'
-    name: Read-only SIP export ${{ matrix.week }}
     runs-on: ubuntu-24.04
-    environment: market-data-readonly
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        week: [2026-W02, 2026-W03, 2026-W04, 2026-W05, 2026-W06, 2026-W07, 2026-W08, 2026-W09, 2026-W10, 2026-W11, 2026-W12, 2026-W13, 2026-W14, 2026-W15, 2026-W16, 2026-W17, 2026-W18, 2026-W19, 2026-W20, 2026-W21, 2026-W22, 2026-W23, 2026-W24, 2026-W25, 2026-W26, 2026-W27, 2026-W28, 2026-W29, 2026-W30, 2026-W31, 2026-W32, 2026-W33, 2026-W34, 2026-W35, 2026-W36, 2026-W37, 2026-W38, 2026-W39, 2026-W40]
+    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-      - name: Install bounded-memory Parquet dependency
-        run: python -m pip install 'pyarrow>=17,<30'
-      - name: Download complete historical SIP trades with official page_token
+      - name: Cancel export run and remove publicly readable artifacts
         env:
-          ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
-          ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
-        run: python tools/qqq_sip_weekly_export.py --week ${{ matrix.week }} --out export
-      - name: Publish verified completed week only
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: QQQ-SIP-${{ matrix.week }}
-          path: |
-            export/QQQ_SIP_Trades_${{ matrix.week }}.parquet
-            export/QQQ_SIP_Trades_${{ matrix.week }}.parquet.manifest.json
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for rid in 37708759121 37709013092; do
+            gh api --method POST "repos/$GH_REPO/actions/runs/$rid/cancel" >/dev/null 2>&1 || true
+          done
+          for attempt in $(seq 1 120); do
+            state=$(gh api "repos/$GH_REPO/actions/runs/37709013092" --jq '.status')
+            if [ "$state" = completed ]; then break; fi
+            sleep 2
+          done
+          state=$(gh api "repos/$GH_REPO/actions/runs/37709013092" --jq '.status')
+          if [ "$state" != completed ]; then
+            echo 'Unable to confirm previous export stopped; retry retirement' >&2
+            exit 1
+          fi
+          for rid in 37708759121 37709013092; do
+            ids=$(gh api "repos/$GH_REPO/actions/runs/$rid/artifacts?per_page=100" --jq '.artifacts[].id')
+            while IFS= read -r artifact_id; do
+              [ -n "$artifact_id" ] || continue
+              gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$artifact_id" >/dev/null
+              echo "Deleted GitHub Actions public artifact from run $rid"
+            done <<< "$ids"
+            remaining=$(gh api "repos/$GH_REPO/actions/runs/$rid/artifacts?per_page=100" --jq '.total_count')
+            if [ "$remaining" != 0 ]; then
+              echo "Artifacts remain in run $rid; manual inspection required" >&2
+              exit 1
+            fi
+          done
+          echo 'Public SIP export stopped and artifacts deleted. Existing private Google Drive W01 remains untouched.'
