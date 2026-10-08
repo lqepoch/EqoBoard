@@ -35,6 +35,9 @@ export async function configureMocks(request: APIRequestContext, config: Record<
 }
 
 export async function loginWithOidc(page: Page, request: APIRequestContext, roles: string[]): Promise<number> {
+  const beforeLogin = await metrics(request);
+  const gatewayStreamsBeforeLogin = beforeLogin.gateway.streamOpened;
+  const gatewayStreamRequestsBeforeLogin = beforeLogin.gateway.requests["/api/v1/stream/sse"] ?? 0;
   await setRoles(request, roles);
   await page.goto("/");
   await page.getByRole("button", { name: /organization identity provider/i }).click();
@@ -48,11 +51,53 @@ export async function loginWithOidc(page: Page, request: APIRequestContext, role
   expect(session.body.user.roles).toEqual(roles);
   expect(session.body.user.issuer).toBe(MOCK_OIDC_ORIGIN);
   expect(session.body.sessionExpiresAt).toBeGreaterThan(Date.now() + 1_000);
+
+  const expectsMarketStream = roles.includes("eqoboard-market-reader");
+  if (expectsMarketStream) {
+    // Prove this authorized login opened a Gateway stream before navigating
+    // away. Otherwise a zero-equals-zero close count could pass before a late
+    // EventSource request reaches the Gateway.
+    await expect.poll(async () => {
+      const result = await metrics(request);
+      return {
+        openedAfterLogin: result.gateway.streamOpened > gatewayStreamsBeforeLogin,
+        activeStreams: result.gateway.activeStreams,
+      };
+    }, { timeout: 5_000 }).toEqual({ openedAfterLogin: true, activeStreams: 1 });
+  }
+
   await page.goto("/api/healthz");
   await expect.poll(async () => {
     const result = await metrics(request);
-    return result.gateway.streamClosed === result.gateway.streamOpened;
-  }, { timeout: 5_000 }).toBe(true);
+    if (!expectsMarketStream) {
+      return {
+        noGatewayStreamRequest: (result.gateway.requests["/api/v1/stream/sse"] ?? 0) === gatewayStreamRequestsBeforeLogin,
+        noGatewayStreamOpened: result.gateway.streamOpened === gatewayStreamsBeforeLogin,
+        activeStreams: result.gateway.activeStreams,
+        gatewayInFlight: result.gateway.inFlight,
+        researchInFlight: result.research.inFlight,
+      };
+    }
+    return {
+      streamsBalanced: result.gateway.streamClosed === result.gateway.streamOpened,
+      streamOpened: result.gateway.streamOpened,
+      streamClosed: result.gateway.streamClosed,
+      activeStreams: result.gateway.activeStreams,
+      gatewayInFlight: result.gateway.inFlight,
+      researchInFlight: result.research.inFlight,
+    };
+  }, { timeout: 5_000 }).toMatchObject(expectsMarketStream ? {
+    streamsBalanced: true,
+    activeStreams: 0,
+    gatewayInFlight: 0,
+    researchInFlight: 0,
+  } : {
+    noGatewayStreamRequest: true,
+    noGatewayStreamOpened: true,
+    activeStreams: 0,
+    gatewayInFlight: 0,
+    researchInFlight: 0,
+  });
   await resetDownstream(request);
   return session.body.sessionExpiresAt;
 }
