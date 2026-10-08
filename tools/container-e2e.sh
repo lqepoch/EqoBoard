@@ -25,6 +25,7 @@ dc() {
     -u E2E_OIDC_HOST_PORT -u E2E_GATEWAY_HOST_PORT -u E2E_RESEARCH_HOST_PORT \
     -u E2E_OIDC_PORT -u E2E_GATEWAY_PORT -u E2E_RESEARCH_PORT -u E2E_SESSION_TTL_SECONDS \
     -u E2E_MDP_PORT -u EQO_MDP_URL -u MDP_TERMINAL_JWT_SECRET \
+    -u E2E_QUANT_PORT -u EQO_QUANT_RESEARCH_URL -u QUANT_TERMINAL_JWT_SECRET -u QUANT_RESEARCH_JWT_SECRET \
     -u E2E_WEB_ORIGIN -u E2E_OIDC_ORIGIN \
     docker compose "${compose_args[@]}" "$@"
 }
@@ -43,6 +44,49 @@ run_host_e2e() {
     CI="${CI:-}" \
     npm_config_userconfig=/dev/null \
     "$@"
+}
+
+run_development_smoke() {
+  # Docker Compose teardown changes the host network while Chromium may keep
+  # Next's HMR websocket open. Run the development-only smoke before any
+  # Compose lifecycle operations so the network remains stable for the test.
+  printf '%s\n' 'Running development-only preview-race and typed UNKNOWN browser checks before Docker Compose starts.'
+  local dev_ports_output
+  dev_ports_output="$(env -i PATH="$PATH" HOME="${HOME:-/tmp}" node -e '
+    const net = require("node:net");
+    const servers = Array.from({ length: 4 }, () => net.createServer());
+    Promise.all(servers.map((server) => new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    }))).then(async () => {
+      for (const server of servers) console.log(server.address().port);
+      await Promise.all(servers.map((server) => new Promise((resolve, reject) =>
+        server.close((error) => error ? reject(error) : resolve()),
+      )));
+    }).catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+  ')"
+  local -a dev_ports
+  mapfile -t dev_ports <<< "$dev_ports_output"
+  test "${#dev_ports[@]}" -eq 4
+  local dev_web_port=${dev_ports[0]}
+  local dev_oidc_port=${dev_ports[1]}
+  local dev_gateway_port=${dev_ports[2]}
+  local dev_research_port=${dev_ports[3]}
+  (
+    cd "$repo_root/apps/openterminal"
+    run_host_e2e \
+      "E2E_WEB_PORT=$dev_web_port" \
+      "E2E_OIDC_PORT=$dev_oidc_port" \
+      "E2E_GATEWAY_PORT=$dev_gateway_port" \
+      "E2E_RESEARCH_PORT=$dev_research_port" \
+      "E2E_WEB_ORIGIN=http://127.0.0.1:$dev_web_port" \
+      "E2E_OIDC_ORIGIN=http://127.0.0.1:$dev_oidc_port" \
+      E2E_SESSION_TTL_SECONDS=120 \
+      npm run test:e2e --workspace web -- --grep 'late preview|typed UNKNOWN|preview expiry'
+  )
 }
 
 cleanup() {
@@ -73,10 +117,13 @@ E2E_OIDC_PORT=$oidc_host_port
 E2E_GATEWAY_PORT=$mock_gateway_host_port
 E2E_RESEARCH_PORT=$mock_research_host_port
 E2E_MDP_PORT=14313
+E2E_QUANT_PORT=14314
 E2E_SESSION_TTL_SECONDS=${E2E_SESSION_TTL_SECONDS:-30}
 EQO_PUBLIC_ORIGIN=http://127.0.0.1:$terminal_host_port
 NEXTAUTH_URL=http://127.0.0.1:$terminal_host_port
 EOF
+
+run_development_smoke
 
 if [[ ${E2E_ONLY:-0} != 1 ]]; then
 printf '%s\n' 'Checking and building production Compose services.'
@@ -162,36 +209,3 @@ run_host_e2e \
   "E2E_OIDC_ORIGIN=http://127.0.0.1:$oidc_host_port" \
   E2E_PRODUCTION=1 \
   npm run test:e2e -w web -- "${playwright_args[@]}"
-
-printf '%s\n' 'Running development-only preview-race and typed UNKNOWN browser checks against the real Next BFF and offline mocks.'
-dev_ports_output="$(env -i PATH="$PATH" HOME="${HOME:-/tmp}" node -e '
-  const net = require("node:net");
-  const servers = Array.from({ length: 4 }, () => net.createServer());
-  Promise.all(servers.map((server) => new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  }))).then(async () => {
-    for (const server of servers) console.log(server.address().port);
-    await Promise.all(servers.map((server) => new Promise((resolve, reject) =>
-      server.close((error) => error ? reject(error) : resolve()),
-    )));
-  }).catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
-')"
-mapfile -t dev_ports <<< "$dev_ports_output"
-test "${#dev_ports[@]}" -eq 4
-dev_web_port=${dev_ports[0]}
-dev_oidc_port=${dev_ports[1]}
-dev_gateway_port=${dev_ports[2]}
-dev_research_port=${dev_ports[3]}
-run_host_e2e \
-  "E2E_WEB_PORT=$dev_web_port" \
-  "E2E_OIDC_PORT=$dev_oidc_port" \
-  "E2E_GATEWAY_PORT=$dev_gateway_port" \
-  "E2E_RESEARCH_PORT=$dev_research_port" \
-  "E2E_WEB_ORIGIN=http://127.0.0.1:$dev_web_port" \
-  "E2E_OIDC_ORIGIN=http://127.0.0.1:$dev_oidc_port" \
-  E2E_SESSION_TTL_SECONDS=120 \
-  npm run test:e2e -w web -- --grep 'late preview|typed UNKNOWN|preview expiry'

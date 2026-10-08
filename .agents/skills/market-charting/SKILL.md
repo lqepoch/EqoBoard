@@ -9,4 +9,5 @@ Recharts：IV 使用真实 Alpaca REST option snapshot model impliedVolatility �
 Web/Node fixtures 可验证 Next 路由和来源标签，但不能替代 Rust wire/ACK/租约验收，也不能作为真实 SIP/OPRA 权限证据。
 管理 ResizeObserver 与 dispose；图上展示 feed 来源、数据时效和完整性。
 OpenTerminal 使用 Lightweight Charts 5.x、Recharts、D3 treemap；不要新增平行图表框架。
+MDP 归档只复用现有 `ChartWidget` 与已校验的同源 MDP BFF，不直连服务或自行重做市场 DTO 校验。诊断 bars 只能用 bounded finite 数值作为图表坐标，精确 decimal token 保留用于 hover/tooltip；无效或越界投影时整批不绘制。切换来源立即清空旧 series，并明确显示 `diagnostic`、synthetic/unknown/historical observation 与 NOT LIVE/promotion unavailable，禁止把投影数值用于交易或身份判断。
 参考：https://tradingview.github.io/lightweight-charts/docs/5.0
