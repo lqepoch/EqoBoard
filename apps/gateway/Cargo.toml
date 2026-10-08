@@ -3,6 +3,7 @@ name = "eqo-gateway"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
 eqo-domain = { path = "../../crates/domain" }
@@ -19,7 +20,7 @@ tracing.workspace = true
 uuid.workspace = true
 dotenvy = "0.15"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-jsonwebtoken = { version = "=10.3.0", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "=10.3.0", default-features = false, features = ["aws_lc_rs"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

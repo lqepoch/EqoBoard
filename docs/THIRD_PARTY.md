@@ -43,6 +43,13 @@ OpenBB 上游差异报告、许可证检查和镜像回滚流程见 [`docs/OPENB
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `crates/domain` re-exports the pinned crate's `legacy` module to preserve existing `eqo_domain::*` consumers and JSON shape. New versioned market wire contracts should use the shared crate directly; legacy `f64` DTOs are not exact-decimal archival contracts.
 
+## Rust JWT and trust-root data
+
+- `jsonwebtoken` is pinned to `10.3.0` in `Cargo.lock`, with `default-features = false` and only its `aws_lc_rs` crypto backend enabled in `apps/gateway/Cargo.toml`. This avoids resolving the unpatched `rsa` crate through `rust_crypto`; it does not imply that other crypto dependencies are advisory-free.
+- Current locked backend versions are `aws-lc-rs 1.18.1` and `aws-lc-sys 0.45.0`. The dependency graph and licenses are checked with `cargo deny check all`; the exact Git source allowlist is limited to the pinned `lqepoch/trading-core` revision and crates.io.
+- `webpki-roots 0.26.11` and `webpki-roots 1.0.9` contain trust-root data under CDLA-Permissive-2.0. Their packaged `LICENSE` files have the same SHA-256, `e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8`. The exact text is retained at `third_party/licenses/webpki-roots/CDLA-Permissive-2.0.txt` and copied into the Gateway runtime image under `/usr/share/licenses/eqoboard/` so it accompanies the distributed trust-root data.
+- `deny.toml` explicitly allows only the observed permissive SPDX identifiers and scopes CDLA-Permissive-2.0 exceptions to those two exact crate versions. Unknown licenses, unpinned Git sources, yanked packages, and known advisories fail the check; the policy contains no advisory ignores.
+
 ## 版本锁
 
 机器可读版本记录见 `third_party/upstreams.lock.json`。OpenTerminal、AG Grid Community 和 OpenBB 的固定版本及许可证副本由 `tests/test_upstream_provenance.py`、`tests/test_openbb_supply_chain.py` 和 `tools/openbb/verify-upstream.sh` 校验；Rust shared contracts 通过 `Cargo.toml` 和 `Cargo.lock` 固定 Git revision。`market-contracts` CI 校验固定 OpenBB archive、许可证及 Syft 二进制 SHA，上传 upstream source SBOM、patched-source SBOM 与逐文件 upstream drift 报告；该 job 不构建镜像或证明浏览器集成。升级必须经显式 PR 更新 source commit、归档 SHA、许可证副本、community patch、SBOM、drift report 和 build record；禁止跟踪 upstream 分支。
