@@ -198,7 +198,7 @@ Please open an issue first for anything non‑trivial so we can align on approac
 
 ## Known limitations
 
-- `npm audit` still flags two dependency advisories this project doesn't force-fix: `fast-xml-parser`'s XMLBuilder injection (moderate) doesn't apply here — only `XMLParser` is used, never `XMLBuilder` — and `postcss`'s high-severity issue is bundled inside Next.js itself, only resolved by a Next 16 major upgrade. Both are tracked, neither is silently ignored.
+- The checked-in lock pins patched `fast-xml-parser` 5.7.0, Next.js 15.5.27, PostCSS 8.5.28, Vitest 4.1.11, and Vite 6.4.3. The PostCSS override is intentional because Next.js 15 declares an older nested version. The lock also fixes affected transitive `proxy-addr`, `sharp`, `shell-quote`, and `source-map-js` packages. `npm audit --package-lock-only --audit-level=low` found no known advisories when this lock was refreshed on 2026-10-08; registry advisory status changes, so rerun it before release.
 - If you deploy behind a reverse proxy or load balancer, set `API_HOST`/`WEB_ORIGIN` to match, and terminate TLS in front of it — this project doesn't handle HTTPS itself.
 
 <br/>

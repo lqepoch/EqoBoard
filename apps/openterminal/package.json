@@ -3,7 +3,13 @@
   "private": true,
   "workspaces": ["server", "web"],
   "overrides": {
-    "qs": "^6.16.0"
+    "postcss": "8.5.28",
+    "proxy-addr": "2.0.8",
+    "qs": "^6.16.0",
+    "sharp": "0.35.5",
+    "shell-quote": "1.11.0",
+    "source-map-js": "1.2.2",
+    "vite": "6.4.3"
   },
   "scripts": {
     "dev": "concurrently -n api,web -c yellow,cyan \"npm run dev -w server\" \"npm run dev -w web\"",
