@@ -2,7 +2,7 @@ name: QQQ SIP historical weekly export (read-only)
 on:
   push:
     branches:
-      - chore/qqq-sip-weekly-export-2026
+      - main
     paths:
       - .github/workflows/qqq-sip-weekly-export.yml
       - tools/qqq_sip_weekly_export.py
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   export:
-    if: github.repository == 'lqepoch/EqoBoard' && github.ref == 'refs/heads/chore/qqq-sip-weekly-export-2026'
+    if: github.repository == 'lqepoch/EqoBoard' && github.ref == 'refs/heads/main'
     name: Read-only SIP export ${{ matrix.week }}
     runs-on: ubuntu-24.04
     environment: market-data-readonly
