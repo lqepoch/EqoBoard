@@ -80,7 +80,10 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
     `${WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
   );
   expect(anonymousMdpBars.status()).toBe(401);
+  const engineInResearchMode = await request.get(`${WEB_ORIGIN}/api/eqo/engine/status`);
+  expect(engineInResearchMode.status()).toBe(404);
   expect(await metrics(request)).toMatchObject({ mdp: { requests: {}, authorized: 0, rejected: 0 } });
+  expect((await metrics(request)).engine).toMatchObject({ requests: {}, authorized: 0, rejected: 0 });
 
   const csrfResponse = await page.context().request.get(`${WEB_ORIGIN}/api/auth/csrf`);
   expect(csrfResponse.status()).toBe(200);

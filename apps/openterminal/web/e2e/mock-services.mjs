@@ -8,6 +8,7 @@ const gatewayPort = Number(process.env.E2E_GATEWAY_PORT ?? 4311);
 const researchPort = Number(process.env.E2E_RESEARCH_PORT ?? 4312);
 const mdpPort = Number(process.env.E2E_MDP_PORT ?? 4313);
 const quantPort = Number(process.env.E2E_QUANT_PORT ?? 4314);
+const enginePort = Number(process.env.E2E_ENGINE_PORT ?? 4315);
 const bindHost = process.env.E2E_MOCK_BIND_HOST ?? "127.0.0.1";
 const webOrigin = process.env.E2E_WEB_ORIGIN ?? "http://127.0.0.1:3300";
 const issuer = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${oidcPort}`;
@@ -18,6 +19,7 @@ const mdpTerminalKey = "m".repeat(64);
 const mdpResearchKey = "q".repeat(64);
 const quantTerminalKey = "t".repeat(64);
 const quantResearchKey = "u".repeat(64);
+const engineTerminalKey = "e".repeat(64);
 const { publicKey, privateKey } = await generateKeyPair("RS256");
 const publicJwk = await exportJWK(publicKey);
 publicJwk.kid = "test-oidc-key";
@@ -35,6 +37,7 @@ const metrics = {
   research: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   mdp: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   quant: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
+  engine: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
 };
 const mdpControl = {
   status: 200,
@@ -48,6 +51,19 @@ const mdpControl = {
 const quantControl = {
   status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
   protoJsonText: null, publicProjectionBase64: null, publicProjectionSha256: null, factorFeatureSummary: null,
+};
+const defaultEngineStatus = readFileSync(
+  new URL("./fixtures/engine-status-response-v1.json", import.meta.url),
+  "utf8",
+);
+const defaultEnginePreview = readFileSync(
+  new URL("./fixtures/synthetic-offline-preview-v1.json", import.meta.url),
+  "utf8",
+);
+const engineControl = {
+  statusCode: 200, previewCode: 200, statusText: defaultEngineStatus, previewText: defaultEnginePreview,
+  statusContentType: "application/json", previewContentType: "application/json",
+  statusLocation: null, previewLocation: null, statusBodyBytes: 0, previewBodyBytes: 0, delayMs: 0,
 };
 const defaultQuantProtoJson = readFileSync(
   new URL("./fixtures/prediction-envelope-v1.synthetic.protojson", import.meta.url),
@@ -226,6 +242,11 @@ const oidc = createServer(async (req, res) => {
       status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
       protoJsonText: null, publicProjectionBase64: null, publicProjectionSha256: null, factorFeatureSummary: null,
     });
+    Object.assign(engineControl, {
+      statusCode: 200, previewCode: 200, statusText: defaultEngineStatus, previewText: defaultEnginePreview,
+      statusContentType: "application/json", previewContentType: "application/json",
+      statusLocation: null, previewLocation: null, statusBodyBytes: 0, previewBodyBytes: 0, delayMs: 0,
+    });
     return sendJson(res, 200, { ok: true });
   }
   if (url.pathname === "/__test/roles" && req.method === "POST") {
@@ -258,8 +279,13 @@ const oidc = createServer(async (req, res) => {
         quantControl[key] = body[`quant${key[0].toUpperCase()}${key.slice(1)}`];
       }
     }
+    for (const key of ["statusCode", "previewCode", "statusText", "previewText", "statusContentType", "previewContentType", "statusLocation", "previewLocation", "statusBodyBytes", "previewBodyBytes", "delayMs"]) {
+      if (Object.hasOwn(body, `engine${key[0].toUpperCase()}${key.slice(1)}`)) {
+        engineControl[key] = body[`engine${key[0].toUpperCase()}${key.slice(1)}`];
+      }
+    }
     previewSequence = 0;
-    return sendJson(res, 200, { ok: true, config: gatewayControl, mdp: mdpControl });
+    return sendJson(res, 200, { ok: true, config: gatewayControl, mdp: mdpControl, engine: { ...engineControl, statusText: undefined, previewText: undefined } });
   }
   if (url.pathname === "/evil") {
     const html = `<!doctype html><html><body>external-origin<script>
@@ -737,13 +763,73 @@ const mdp = createServer(async (req, res) => {
   res.end(bytes);
 });
 
-for (const [server, port] of [[oidc, oidcPort], [gateway, gatewayPort], [research, researchPort], [mdp, mdpPort], [quant, quantPort]]) {
+async function verifyEngineRequest(req) {
+  const raw = req.headers.authorization ?? "";
+  if (!raw.startsWith("Bearer ")) throw new Error("bearer required");
+  const token = raw.slice("Bearer ".length);
+  const header = decodeProtectedHeader(token);
+  if (header.alg !== "HS256" || header.typ !== "JWT" || header.kid !== "engine-terminal") {
+    throw new Error("Engine signer rejected");
+  }
+  const { payload } = await jwtVerify(token, new TextEncoder().encode(engineTerminalKey), {
+    algorithms: ["HS256"], issuer: "eqoboard-openterminal", audience: "lqepoch-trading-engine",
+  });
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.aud !== "lqepoch-trading-engine" || payload.scope !== "engine:offline-read" ||
+      payload.sub !== "subject-e2e" || payload.idp_iss !== issuer || typeof payload.jti !== "string" ||
+      typeof payload.iat !== "number" || typeof payload.exp !== "number" || payload.iat > now ||
+      payload.exp <= now || payload.exp - payload.iat > 60) throw new Error("Engine claims rejected");
+  return { payload, kid: header.kid };
+}
+
+const engine = createServer(async (req, res) => {
+  trackResponse(metrics.engine, res);
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${enginePort}`);
+  countRequest(metrics.engine, url.pathname);
+  const call = { method: req.method, path: url.pathname, query_present: Boolean(url.search), bearer_present: Boolean(req.headers.authorization) };
+  metrics.engine.calls.push(call);
+  const resource = url.pathname === "/v1/status" ? "status" : url.pathname === "/v1/preview" ? "preview" : null;
+  if (!resource || req.method !== "GET" || url.search) {
+    return sendJson(res, 404, { error: "not_found" });
+  }
+  let verified;
+  try {
+    verified = await verifyEngineRequest(req);
+    metrics.engine.authorized += 1;
+  } catch {
+    metrics.engine.rejected += 1;
+    return sendJson(res, 401, { error: "unauthorized" });
+  }
+  Object.assign(call, {
+    subject: verified.payload.sub, scope: verified.payload.scope, issuer: verified.payload.iss,
+    audience: verified.payload.aud, kid: verified.kid, issued_at: verified.payload.iat, expires_at: verified.payload.exp,
+  });
+  if (engineControl.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(engineControl.delayMs, 10_000)));
+  const codeKey = resource === "status" ? "statusCode" : "previewCode";
+  const locationKey = resource === "status" ? "statusLocation" : "previewLocation";
+  const typeKey = resource === "status" ? "statusContentType" : "previewContentType";
+  const textKey = resource === "status" ? "statusText" : "previewText";
+  const bytesKey = resource === "status" ? "statusBodyBytes" : "previewBodyBytes";
+  if (engineControl[locationKey]) {
+    res.writeHead(engineControl[codeKey], { location: engineControl[locationKey], "cache-control": "no-store" });
+    return res.end();
+  }
+  const bytes = Number.isSafeInteger(engineControl[bytesKey]) && engineControl[bytesKey] > 0
+    ? Buffer.alloc(engineControl[bytesKey], 0x20)
+    : Buffer.from(engineControl[textKey]);
+  res.writeHead(engineControl[codeKey], {
+    "content-type": engineControl[typeKey], "content-length": String(bytes.byteLength), "cache-control": "no-store",
+  });
+  return res.end(bytes);
+});
+
+for (const [server, port] of [[oidc, oidcPort], [gateway, gatewayPort], [research, researchPort], [mdp, mdpPort], [quant, quantPort], [engine, enginePort]]) {
   await new Promise((resolve, reject) => server.once("error", reject).listen(port, bindHost, resolve));
 }
-console.log(`E2E mock OIDC/Gateway/research/MDP/Quant listening on ${oidcPort}/${gatewayPort}/${researchPort}/${mdpPort}/${quantPort}`);
+console.log(`E2E mock OIDC/Gateway/research/MDP/Quant/Engine listening on ${oidcPort}/${gatewayPort}/${researchPort}/${mdpPort}/${quantPort}/${enginePort}`);
 
 function shutdown() {
-  for (const server of [oidc, gateway, research, mdp, quant]) server.close();
+  for (const server of [oidc, gateway, research, mdp, quant, engine]) server.close();
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

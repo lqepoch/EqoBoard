@@ -22,6 +22,7 @@ const gatewayPort = readPort("E2E_GATEWAY_PORT", 4311);
 const researchPort = readPort("E2E_RESEARCH_PORT", 4312);
 const mdpPort = readPort("E2E_MDP_PORT", 4313);
 const quantPort = readPort("E2E_QUANT_PORT", 4314);
+const enginePort = readPort("E2E_ENGINE_PORT", 4315);
 const mdpUrl = mdpUpstreamUrl(process.env.E2E_MDP_UPSTREAM_URL, mdpPort);
 const quantUrl = quantUpstreamUrl(process.env.E2E_QUANT_UPSTREAM_URL, quantPort);
 const webUrl = webOrigin;
@@ -75,10 +76,12 @@ export default defineConfig({
         EQO_RESEARCH_API_KEY: "research-service-test-key-that-is-at-least-32-bytes",
         MDP_TERMINAL_JWT_SECRET: "m".repeat(64),
         QUANT_TERMINAL_JWT_SECRET: "t".repeat(64),
+        ENGINE_TERMINAL_JWT_SECRET: "e".repeat(64),
         EQO_RESEARCH_PUBLIC_ORIGIN: process.env.E2E_RESEARCH_PUBLIC_ORIGIN ?? "",
         EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
         EQO_MDP_URL: mdpUrl,
         EQO_QUANT_RESEARCH_URL: quantUrl,
+        EQO_ENGINE_URL: `http://127.0.0.1:${enginePort}`,
         API_URL: `http://127.0.0.1:${researchPort}`,
       },
     },

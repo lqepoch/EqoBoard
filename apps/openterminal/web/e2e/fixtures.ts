@@ -18,8 +18,9 @@ export async function resetDownstream(request: APIRequestContext) {
       researchInFlight: result.research.inFlight,
       mdpInFlight: result.mdp.inFlight,
       quantInFlight: result.quant.inFlight,
+      engineInFlight: result.engine.inFlight,
     };
-  }, { timeout: 5_000 }).toEqual({ activeStreams: 0, gatewayInFlight: 0, researchInFlight: 0, mdpInFlight: 0, quantInFlight: 0 });
+  }, { timeout: 5_000 }).toEqual({ activeStreams: 0, gatewayInFlight: 0, researchInFlight: 0, mdpInFlight: 0, quantInFlight: 0, engineInFlight: 0 });
   const response = await request.post(`${MOCK_OIDC_ORIGIN}/__test/reset`);
   expect(response.ok()).toBeTruthy();
 }
@@ -79,6 +80,7 @@ export async function loginWithOidc(page: Page, request: APIRequestContext, role
         gatewayInFlight: result.gateway.inFlight,
         researchInFlight: result.research.inFlight,
         quantInFlight: result.quant.inFlight,
+        engineInFlight: result.engine.inFlight,
       };
     }
     return {
@@ -89,6 +91,7 @@ export async function loginWithOidc(page: Page, request: APIRequestContext, role
       gatewayInFlight: result.gateway.inFlight,
       researchInFlight: result.research.inFlight,
       quantInFlight: result.quant.inFlight,
+      engineInFlight: result.engine.inFlight,
     };
   }, { timeout: 5_000 }).toMatchObject(expectsMarketStream ? {
     streamsBalanced: true,
@@ -96,6 +99,7 @@ export async function loginWithOidc(page: Page, request: APIRequestContext, role
     gatewayInFlight: 0,
     researchInFlight: 0,
     quantInFlight: 0,
+    engineInFlight: 0,
   } : {
     noGatewayStreamRequest: true,
     noGatewayStreamOpened: true,
@@ -103,6 +107,7 @@ export async function loginWithOidc(page: Page, request: APIRequestContext, role
     gatewayInFlight: 0,
     researchInFlight: 0,
     quantInFlight: 0,
+    engineInFlight: 0,
   });
   await resetDownstream(request);
   return session.body.sessionExpiresAt;

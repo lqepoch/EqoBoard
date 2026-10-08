@@ -121,6 +121,9 @@ export function isResearchAuthRuntimeConfigured(): boolean {
     researchSecret !== nextAuthSecret &&
     !process.env.EQO_GATEWAY_JWT_SECRET &&
     !process.env.EQO_RESEARCH_API_KEY &&
+    !Object.hasOwn(process.env, "ENGINE_TERMINAL_JWT_SECRET") &&
+    !Object.hasOwn(process.env, "ENGINE_RESEARCH_JWT_SECRET") &&
+    !Object.hasOwn(process.env, "EQO_ENGINE_URL") &&
     !process.env.ALPACA_KEY &&
     !process.env.ALPACA_SECRET;
 }
@@ -137,6 +140,12 @@ export type QuantResearchSigner = {
   secret: string;
   issuer: "eqoboard-openterminal" | "openterminal-research";
   kid: "quant-terminal" | "quant-research";
+};
+
+export type EngineOfflinePreviewSigner = {
+  secret: string;
+  issuer: "eqoboard-openterminal";
+  kid: "engine-terminal";
 };
 
 /**
@@ -209,6 +218,35 @@ export function quantResearchSigner(mode: QuantResearchRuntimeMode): QuantResear
     return null;
   }
   return { secret, issuer: "openterminal-research", kid: "quant-research" };
+}
+
+/** Return only the terminal-only, least-privilege Engine preview key. */
+export function engineOfflinePreviewSigner(): EngineOfflinePreviewSigner | null {
+  const secret = process.env.ENGINE_TERMINAL_JWT_SECRET;
+  const signingSecrets = [
+    process.env.NEXTAUTH_SECRET,
+    process.env.EQO_GATEWAY_JWT_SECRET,
+    process.env.EQO_RESEARCH_JWT_SECRET,
+    process.env.MDP_TERMINAL_JWT_SECRET,
+    process.env.MDP_RESEARCH_JWT_SECRET,
+    process.env.QUANT_TERMINAL_JWT_SECRET,
+    process.env.QUANT_RESEARCH_JWT_SECRET,
+    process.env.EQO_OIDC_CLIENT_SECRET,
+    process.env.EQO_OPENBB_OIDC_CLIENT_SECRET,
+    process.env.EQO_RESEARCH_API_KEY,
+    process.env.ALPACA_KEY,
+    process.env.ALPACA_SECRET,
+    process.env.EQO_ADAPTER_ALPACA_TOKEN,
+    process.env.EQO_ADAPTER_IBKR_TOKEN,
+    process.env.EQO_ADAPTER_SCHWAB_TOKEN,
+  ];
+  if ((process.env.EQO_BFF_MODE !== undefined && process.env.EQO_BFF_MODE !== "terminal") ||
+      Object.hasOwn(process.env, "ENGINE_RESEARCH_JWT_SECRET") ||
+      !isAuthRuntimeConfigured() || !validHmacSecret(secret) ||
+      signingSecrets.includes(secret)) {
+    return null;
+  }
+  return { secret, issuer: "eqoboard-openterminal", kid: "engine-terminal" };
 }
 
 export function isCurrentRuntimeReady(): boolean {

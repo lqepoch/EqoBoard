@@ -97,6 +97,14 @@ MDP 服务委托 key 与 Gateway key 完全分开。终端只接收 `MDP_TERMINA
 
 路由只接受固定 Quant GET 路径和单个合法 `run_id`，不接受调用者提供 origin、查询参数或请求体；关闭 redirect、限制响应大小并校验完整 schema/assessment/hash。浏览器只收到公开 ProtoJSON 投影和只读 assessment，不收到 `private_artifact_sha256` 或 private envelope。即使本地 registry 返回预测，UNKNOWN 的来源完整性/有限输入回执/point-in-time 状态仍保持 UNKNOWN，`promotion_allowed` 始终为 false；此接口不是研究资格或交易授权证明。
 
+### Trading Engine 离线预览
+
+可选 OpenTerminal widget 通过同源 `/api/eqo/engine/status` 和 `/api/eqo/engine/preview` 读取 Engine API。默认 Compose 不启动交易引擎，也不配置 Engine URL/key；因此功能默认 unavailable。`EQO_ENGINE_URL` 仅允许精确 loopback HTTP origin `http://127.0.0.1:<port>`，Engine 必须继续绑定 loopback，且与 Next BFF 共享 host/network namespace。标准拆分容器无法通过自身 `127.0.0.1` 访问另一容器，不能把 Docker service DNS 或 `0.0.0.0` 当作 Engine 接入方案。
+
+只有受信 OIDC role `eqoboard-engine-offline-reader` 可用该功能。终端配置独立 `ENGINE_TERMINAL_JWT_SECRET`，与 OIDC、NextAuth、Gateway、MDP、Quant、market/provider key 都不同，并与 Engine owner-only delegation key 文件内容一致；不可把 key 注入 `compose.openbb.yaml` 的 Research runtime。委托固定 `iss=eqoboard-openterminal`、`kid=engine-terminal`、`aud=lqepoch-trading-engine`、scope 字符串 `engine:offline-read`、最长 60 秒。BFF 只调用固定 GET status/preview 路径，禁止 redirect，响应上限 16 KiB，deadline 3 秒。status 与 preview 是分开 best-effort 读取，不构成同一时点快照。
+
+该界面只消费 Engine 的合成 offline projection，始终显示 `synthetic_offline`、`source unknown`、非事务性与执行/订单 mutation disabled。它不能证明真实账户、券商、行情、风险预留、持久恢复或执行能力；本地联调只使用合成 mock/数据。
+
 ## 行情与 readiness
 
 `ALPACA_KEY` / `ALPACA_SECRET` 只注入 Rust Gateway 容器。无凭据时服务保留健康和只读页面，但 SIP/OPRA API 返回明确不可用状态；不得用 Yahoo、IEX、mock 或 indicative 数据替换并标成 SIP/OPRA。真实市场数据状态需单独核实账户 entitlement 与实际上游返回。
