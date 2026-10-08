@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Read-only QQQ historical SIP trades: one complete, atomic Parquet per ISO week.
+"""Local-only read-only QQQ historical SIP export: one atomic Parquet per ISO week.
 
-This is intentionally independent from any trading/order API.
-Secrets come only from protected GitHub Actions environment.
+This is independent from any trading/order API and is never run by public Actions.
+The operator supplies credentials in a local process environment. Output may be
+licensed market data; keep it outside the checkout and do not commit or publish it.
 """
 from __future__ import annotations
 

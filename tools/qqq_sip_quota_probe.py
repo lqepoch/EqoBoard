@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe diagnostic: reveal *response quota headers only*, never API credentials or raw trades."""
+"""Local-only read-only diagnostic: response quota headers only, never credentials or raw trades."""
 import os
 import sys
 import urllib.error
@@ -11,7 +11,7 @@ URL = ("https://data.alpaca.markets/v2/stocks/QQQ/trades"
 
 def main():
     key, secret = os.environ.get("ALPACA_KEY"), os.environ.get("ALPACA_SECRET")
-    print("credential_source=" + os.environ.get("ALPACA_CREDENTIAL_SOURCE", "unclassified"), flush=True)
+    print("credential_source=local_process_environment", flush=True)
     if not key or not secret:
         print("credential_presence=missing", flush=True)
         return 2
