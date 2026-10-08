@@ -43,7 +43,7 @@ OpenBB 上游差异报告、许可证检查和镜像回滚流程见 [`docs/OPENB
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `crates/domain` re-exports the pinned crate's `legacy` module to preserve existing `eqo_domain::*` consumers and JSON shape. New versioned market wire contracts should use the shared crate directly; legacy `f64` DTOs are not exact-decimal archival contracts.
 
-The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`. OpenTerminal pins it to `b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. The Quant BFF uses its `parsePredictionEnvelopeProtoJsonText` parser for bounded public ProtoJSON, including duplicate-key, alias, unknown-field, uint64-string, raw-frame encoding, and Engine offline-preview checks. The browser receives only the public projection after this server-side validation.
+The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`. OpenTerminal pins it to `b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. The Quant BFF uses `parsePredictionEnvelopeProtoJsonText` for its bounded public ProtoJSON, while the Engine BFF uses `parseEngineStatusResponseV1ProtoJsonText` and `parseSyntheticOfflinePreviewV1ProtoJsonText` for Engine status and preview. These generated parsers enforce exact fields, duplicate-key and alias rejection, and bounded numeric representations. The browser receives only public projections or generated type-only contracts after server-side validation.
 
 ## Rust JWT and trust-root data
 

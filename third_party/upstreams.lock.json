@@ -18,13 +18,16 @@
       "downstream_path": "apps/openterminal/web/components/widgets/OptionsWidget.tsx"
     },
     {
-      "name": "trading-core TypeScript prediction contracts",
+      "name": "trading-core TypeScript contracts",
       "repository": "lqepoch/trading-core",
-      "commit": "290fff0cbc743928d6a7f12ac4b958b08cdff686",
+      "commit": "b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4",
       "license": "MIT OR Apache-2.0",
       "package": "@lqepoch/trading-core-contracts",
-      "integration": "server-side PredictionEnvelopeV1 ProtoJSON validation through the supported generated TypeScript package",
-      "downstream_path": "apps/openterminal/web/lib/quant-predictions.ts"
+      "integration": "server-side PredictionEnvelopeV1 and Engine offline-preview ProtoJSON validation through the supported generated TypeScript package",
+      "downstream_paths": [
+        "apps/openterminal/web/lib/quant-predictions.ts",
+        "apps/openterminal/web/lib/engine-preview.ts"
+      ]
     },
     {
       "name": "OpenBB Workspace",

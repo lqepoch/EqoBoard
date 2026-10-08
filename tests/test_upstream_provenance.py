@@ -13,20 +13,37 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(sources["OpenTerminal"]["license"],"MIT")
         self.assertEqual(sources["AG Grid Community"]["version"],"36.2.0")
         self.assertEqual(sources["OpenBB Workspace"]["license"],"Apache-2.0")
+        core_source = sources["trading-core TypeScript contracts"]
+        expected_core_commit = "b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4"
+        self.assertEqual(core_source["repository"], "lqepoch/trading-core")
+        self.assertEqual(core_source["commit"], expected_core_commit)
+        self.assertEqual(core_source["license"], "MIT OR Apache-2.0")
+        self.assertEqual(core_source["package"], "@lqepoch/trading-core-contracts")
         self.assertEqual(
-            sources["trading-core TypeScript prediction contracts"]["commit"],
-            "290fff0cbc743928d6a7f12ac4b958b08cdff686",
+            core_source["downstream_paths"],
+            [
+                "apps/openterminal/web/lib/quant-predictions.ts",
+                "apps/openterminal/web/lib/engine-preview.ts",
+            ],
         )
         web_package=json.loads((ROOT/"apps/openterminal/web/package.json").read_text())
         self.assertEqual(
             web_package["dependencies"]["@lqepoch/trading-core-contracts"],
-            "https://github.com/lqepoch/trading-core.git#290fff0cbc743928d6a7f12ac4b958b08cdff686",
+            f"https://github.com/lqepoch/trading-core.git#{expected_core_commit}",
         )
         lock=json.loads((ROOT/"apps/openterminal/package-lock.json").read_text())
+        core_lock = lock["packages"]["node_modules/@lqepoch/trading-core-contracts"]
         self.assertEqual(
-            lock["packages"]["node_modules/@lqepoch/trading-core-contracts"]["resolved"],
-            "git+https://github.com/lqepoch/trading-core.git#290fff0cbc743928d6a7f12ac4b958b08cdff686",
+            core_lock["resolved"],
+            f"git+https://github.com/lqepoch/trading-core.git#{expected_core_commit}",
         )
+        self.assertEqual(core_lock["license"], core_source["license"])
+        third_party = (ROOT/"docs/THIRD_PARTY.md").read_text()
+        self.assertIn(expected_core_commit, third_party)
+        self.assertIn(core_source["license"], third_party)
+        self.assertIn("parsePredictionEnvelopeProtoJsonText", third_party)
+        self.assertIn("parseEngineStatusResponseV1ProtoJsonText", third_party)
+        self.assertIn("parseSyntheticOfflinePreviewV1ProtoJsonText", third_party)
         self.assertIn("MIT License",(ROOT/"apps/openterminal/LICENSE").read_text())
 
     def test_single_primary_terminal(self):
