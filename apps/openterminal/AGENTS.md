@@ -3,7 +3,7 @@
 该目录源于 OpenTerminal MIT 上游。通用功能优先保留上游实现。
 
 - 上游基线见 `docs/THIRD_PARTY.md`。
-- 股票/期权价格、K线、Option Chain 只能通过 `web/lib/eqo-market.ts` → Rust Gateway。
+- 实时股票/期权价格、K线、Option Chain 走 `web/lib/eqo-market.ts` → Rust Gateway；离线归档分钟 bars 只读入口是 `/api/eqo/market-data/datasets/{dataset_id}/bars`，由同源 Next BFF 转发到独立 MDP HTTP API，不替代 Gateway 实时接口。
 - Web/Node 只消费 Gateway 提供的可信来源/时间/状态字段，不推断 `feed=sip|opra` 就代表 Alpaca。当前 Gateway 基线缺少部分来源身份、实例和typed ACK字段：legacy REST 数值可以展示，但 source/as-of 必须标 unknown；legacy SSE 不得显示 LIVE。#3 Rust协议验收未由 Web/Node 测试代替。
 - FRED/SEC/FINRA/新闻等补充研究 Provider 可沿用上游 server。
 - EqoBoard 自有 widget 放在 `web/components/widgets`，优先复用当前依赖，避免再引入同类 UI 框架。
@@ -19,6 +19,8 @@
 - 终端 `/api` BFF 路由（含通用代理、订单、订阅和 SSE）必须要求当前 OIDC 会话及 action scope；写请求校验同源 Origin 和 bounded JSON。角色只来自受信 OIDC claims allowlist，不能由浏览器/session update 提升。研究模式的 `/api/openbb/widgets.json`、`apps.json` 只返回非敏感 metadata；市场 endpoints 仍必须校验 `market:read`。
 - Next middleware matcher 为保留 route handler 对原始请求流的大小/超时控制，会排除 `readBoundedJson` 写路由和 NextAuth body parser。每个被排除的 handler 必须在读取请求体前显式拒绝或精确 allowlist research mode；新增 body-reading route 时同步审计 matcher、research deny-by-default 和组件/E2E 测试。
 - Next→Gateway 和 Next/Node→Gateway 使用不同受众及独立 HMAC key。Node 只能签 `market:read` 子 token；不能继承 BFF 的订单 key 或权限。缺少认证配置时 UI 显示不可用且下游调用次数为零。
+- Next→MDP 使用与 Gateway/NextAuth 完全分离的短时 HMAC key、issuer、`kid` 与 audience；终端只持 `MDP_TERMINAL_JWT_SECRET`，research runtime 只持 `MDP_RESEARCH_JWT_SECRET`。仅允许精确 `market:read`，最长 60 秒；浏览器不得直连 MDP。
+- 当前 MDP BFF 只接受 V1 `diagnostic` bars，并严格校验共享 schema 指纹、行来源、时间、精确十进制和完整性事实；V1 没有 CompletionV2 资格证据，因此 `curated` 一律在下游请求前拒绝。`synthetic` / `unknown` 必须原样保留，归档读取不能显示为行情已连接或订阅已确认。
 - OpenBB 使用独立 hostname 的 Next research-mode runtime：cookie 名称与 NextAuth secret 独立，`EQO_TERMINAL_PUBLIC_ORIGIN` 必须配置且 hostname 与研究 origin 不同，换端口不能隔离 host-only cookie；Gateway 委托最长 60 秒且只含 `market:read`。readiness 拒绝非空 `ALPACA_KEY`/`ALPACA_SECRET`，行情凭据只配置在 Rust Gateway。`/api/research/auth-check` 只验证 OIDC session 和 market role，不签 token，必须由反向代理内部调用且不能公开暴露。不得配置 `EQO_GATEWAY_JWT_SECRET` 或 `EQO_RESEARCH_API_KEY`，不得代理订单/账户/管理路由。不要与主终端 origin 共享会话或将研究服务端口直接发布。
 - `npm run test:e2e:research --workspace web` 构建 production Next 并运行隔离 OIDC/Gateway mock。它只证明 BFF/API 组件行为，不启动 OpenBB Lite，也不证明 Rust Gateway、SIP/OPRA 或真实 Lite 浏览器集成；对应 profile、ingress 和 Lite E2E 必须单独验收。
 - `EQO_ACCESS_TOKEN` 已废弃；Paper/Live 在当前发布版均保持关闭。Portfolio owner 由 issuer+subject 派生，旧 `local` 数据不可自动转移给登录用户。

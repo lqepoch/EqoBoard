@@ -1,8 +1,23 @@
-import { configureMocks, loginWithOidc, metrics, resetDownstream, test, expect } from "./fixtures";
-import type { Route } from "@playwright/test";
+import { configureMocks, loginWithOidc, metrics, resetDownstream, test, expect, WEB_ORIGIN } from "./fixtures";
+import type { BrowserContext, Route } from "@playwright/test";
 import { optionPutSymbol, sipSnapshotResponse } from "./market-test-data";
 
 const contractSymbol = optionPutSymbol;
+type SessionRefreshState = {
+  timer: ReturnType<typeof setInterval> | null;
+  inFlight: Promise<void> | null;
+  failure?: string;
+};
+const sessionRefreshStates = new WeakMap<BrowserContext, SessionRefreshState>();
+
+test.afterEach(async ({ context }) => {
+  const state = sessionRefreshStates.get(context);
+  if (!state) return;
+  if (state.timer !== null) clearInterval(state.timer);
+  if (state.inFlight) await state.inFlight;
+  expect(state.failure).toBeUndefined();
+  sessionRefreshStates.delete(context);
+});
 
 function feedStatus(
   localSequence: number,
@@ -46,6 +61,21 @@ test.beforeEach(async ({ request }) => {
 test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases across widgets and tabs", async ({ page, context, request }) => {
   test.setTimeout(90_000);
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const refreshState: SessionRefreshState = { timer: null, inFlight: null };
+  refreshState.timer = setInterval(() => {
+    if (refreshState.inFlight) return;
+    refreshState.inFlight = context.request.get(`${WEB_ORIGIN}/api/auth/session`, { timeout: 5_000 })
+      .then(async (response) => {
+        if (!response.ok()) throw new Error("session refresh rejected");
+        const session = await response.json();
+        if (session.user?.id !== "subject-e2e" || session.sessionExpiresAt <= Date.now() + 1_000) {
+          throw new Error("session refresh did not return an active test principal");
+        }
+      })
+      .catch(() => { refreshState.failure = "active OIDC session refresh failed"; })
+      .finally(() => { refreshState.inFlight = null; });
+  }, 2_000);
+  sessionRefreshStates.set(context, refreshState);
 
   const baseMs = Date.now();
   const snapshotTime = new Date(baseMs - 20_000).toISOString();

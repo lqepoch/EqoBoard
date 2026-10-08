@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test";
 import { assertHostE2eEnvironmentIsIsolated } from "./e2e/isolated-env";
+import { mdpUpstreamUrl } from "./e2e/mdp-upstream";
 
 assertHostE2eEnvironmentIsIsolated();
 
@@ -18,6 +19,8 @@ const webPort = readPort("E2E_WEB_PORT", Number(new URL(webOrigin).port || 3300)
 const oidcPort = readPort("E2E_OIDC_PORT", 4310);
 const gatewayPort = readPort("E2E_GATEWAY_PORT", 4311);
 const researchPort = readPort("E2E_RESEARCH_PORT", 4312);
+const mdpPort = readPort("E2E_MDP_PORT", 4313);
+const mdpUrl = mdpUpstreamUrl(process.env.E2E_MDP_UPSTREAM_URL, mdpPort);
 const webUrl = webOrigin;
 const oidcUrl = oidcOrigin ?? `http://127.0.0.1:${oidcPort}`;
 
@@ -67,8 +70,10 @@ export default defineConfig({
         EQO_GATEWAY_JWT_SECRET: "b".repeat(64),
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
         EQO_RESEARCH_API_KEY: "research-service-test-key-that-is-at-least-32-bytes",
+        MDP_TERMINAL_JWT_SECRET: "m".repeat(64),
         EQO_RESEARCH_PUBLIC_ORIGIN: process.env.E2E_RESEARCH_PUBLIC_ORIGIN ?? "",
         EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
+        EQO_MDP_URL: mdpUrl,
         API_URL: `http://127.0.0.1:${researchPort}`,
       },
     },

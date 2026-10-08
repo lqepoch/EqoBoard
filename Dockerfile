@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && mkdir -p /var/lib/eqoboard /opt/eqoboard/empty \
  && chown -R eqo:eqo /var/lib/eqoboard /opt/eqoboard/empty
 COPY --from=backend /src/target/release/eqo-gateway /usr/local/bin/eqo-gateway
+COPY third_party/licenses/webpki-roots/CDLA-Permissive-2.0.txt /usr/share/licenses/eqoboard/CDLA-Permissive-2.0.txt
 USER eqo
 WORKDIR /home/eqo
 ENV EQO_BIND=0.0.0.0:8080

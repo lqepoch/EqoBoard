@@ -5,12 +5,15 @@ import { generateKeyPair, exportJWK, SignJWT, decodeProtectedHeader, jwtVerify }
 const oidcPort = Number(process.env.E2E_OIDC_PORT ?? 4310);
 const gatewayPort = Number(process.env.E2E_GATEWAY_PORT ?? 4311);
 const researchPort = Number(process.env.E2E_RESEARCH_PORT ?? 4312);
+const mdpPort = Number(process.env.E2E_MDP_PORT ?? 4313);
 const bindHost = process.env.E2E_MOCK_BIND_HOST ?? "127.0.0.1";
 const webOrigin = process.env.E2E_WEB_ORIGIN ?? "http://127.0.0.1:3300";
 const issuer = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${oidcPort}`;
 const bffKey = "b".repeat(64);
 const researchKey = "r".repeat(64);
 const researchServiceKey = "research-service-test-key-that-is-at-least-32-bytes";
+const mdpTerminalKey = "m".repeat(64);
+const mdpResearchKey = "q".repeat(64);
 const { publicKey, privateKey } = await generateKeyPair("RS256");
 const publicJwk = await exportJWK(publicKey);
 publicJwk.kid = "test-oidc-key";
@@ -26,6 +29,16 @@ const metrics = {
     activeStreams: 0, inFlight: 0, calls: [], subscriptions: [], previews: [],
   },
   research: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
+  mdp: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
+};
+const mdpControl = {
+  status: 200,
+  response: null,
+  contentType: "application/json",
+  cacheControl: "no-store",
+  location: null,
+  bodyBytes: 0,
+  delayMs: 0,
 };
 const gatewayControl = {
   snapshotStatus: 200,
@@ -192,6 +205,10 @@ const oidc = createServer(async (req, res) => {
       sseStatus: 200, sseEvents: [], sseDisconnectAfterMs: null, quotes: null, previewDelaysMs: [],
       previewTtlMs: 60_000,
     });
+    Object.assign(mdpControl, {
+      status: 200, response: null, contentType: "application/json", cacheControl: "no-store",
+      location: null, bodyBytes: 0, delayMs: 0,
+    });
     return sendJson(res, 200, { ok: true });
   }
   if (url.pathname === "/__test/roles" && req.method === "POST") {
@@ -211,8 +228,13 @@ const oidc = createServer(async (req, res) => {
     for (const key of ["snapshotStatus", "snapshotFeed", "snapshots", "optionStatus", "optionFeed", "contracts", "openbbStocksStatus", "openbbBarsStatus", "openbbOptionsStatus", "openbbOptionsTruncated", "sseStatus", "sseEvents", "sseDisconnectAfterMs", "quotes", "previewDelaysMs", "previewTtlMs"]) {
       if (Object.hasOwn(body, key)) gatewayControl[key] = body[key];
     }
+    for (const key of ["status", "response", "contentType", "cacheControl", "location", "bodyBytes", "delayMs"]) {
+      if (Object.hasOwn(body, `mdp${key[0].toUpperCase()}${key.slice(1)}`)) {
+        mdpControl[key] = body[`mdp${key[0].toUpperCase()}${key.slice(1)}`];
+      }
+    }
     previewSequence = 0;
-    return sendJson(res, 200, { ok: true, config: gatewayControl });
+    return sendJson(res, 200, { ok: true, config: gatewayControl, mdp: mdpControl });
   }
   if (url.pathname === "/evil") {
     const html = `<!doctype html><html><body>external-origin<script>
@@ -458,13 +480,151 @@ const research = createServer(async (req, res) => {
   return sendJson(res, 200, { path: url.pathname, scope: requiredScope, source: "mock-research" });
 });
 
-for (const [server, port] of [[oidc, oidcPort], [gateway, gatewayPort], [research, researchPort]]) {
+async function verifyMdpRequest(req) {
+  const raw = req.headers.authorization ?? "";
+  if (!raw.startsWith("Bearer ")) throw new Error("bearer required");
+  const token = raw.slice("Bearer ".length);
+  const header = decodeProtectedHeader(token);
+  if (header.alg !== "HS256" || !["mdp-terminal", "mdp-research"].includes(header.kid)) {
+    throw new Error("MDP signer rejected");
+  }
+  const isResearch = header.kid === "mdp-research";
+  const secret = isResearch ? mdpResearchKey : mdpTerminalKey;
+  const issuer = isResearch ? "openterminal-research" : "eqoboard-openterminal";
+  const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
+    algorithms: ["HS256"], issuer, audience: "lqepoch-market-data",
+  });
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.aud !== "lqepoch-market-data" || !Array.isArray(payload.scope) ||
+      payload.scope.length !== 1 || payload.scope[0] !== "market:read" ||
+      typeof payload.sub !== "string" || typeof payload.idp_iss !== "string" ||
+      typeof payload.jti !== "string" || typeof payload.iat !== "number" ||
+      typeof payload.exp !== "number" || payload.iat > now || payload.exp <= payload.iat ||
+      payload.exp - payload.iat > 60) throw new Error("MDP claims rejected");
+  return { payload, kid: header.kid };
+}
+
+function defaultMdpResponse(url) {
+  const symbol = url.searchParams.get("symbol") ?? "QQQ";
+  const datasetId = url.pathname.split("/")[3] ?? "synthetic-e2e-v1";
+  return {
+    summary: {
+      namespace: "diagnostic",
+      dataset_id: datasetId,
+      schema_id: "lqepoch.us_equity_trade_bar_1m.v1",
+      source: { provider: "synthetic", feed: "synthetic", entitlement: "unknown", numeric_encoding: "decimal_token" },
+      row_count: "1",
+      returned_rows: "1",
+      content_sha256: "0".repeat(64),
+      parquet_schema_sha256: "5e761a91d880e0002aeafe6dc2083b7c8a0ff2ba486d5d93582fbb4479146cb0",
+      cache_hit: false,
+    },
+    rows: [{
+      schema_version: 1,
+      source_provider: "synthetic",
+      source_feed: "synthetic",
+      source_entitlement: "unknown",
+      source_numeric_encoding: "decimal_token",
+      symbol,
+      bar_start_utc: "2026-10-07T13:30:00Z",
+      bar_end_exclusive_utc: "2026-10-07T13:31:00Z",
+      available_at_utc: "2026-10-07T13:31:00Z",
+      trade_date: "2026-10-07",
+      session_id: "synthetic-one-minute-session",
+      session_timezone: "UTC",
+      session_policy_id: "synthetic-fixed-session-v1",
+      session_policy_sha256: "a".repeat(64),
+      session_start_utc: "2026-10-07T13:30:00Z",
+      session_end_exclusive_utc: "2026-10-07T13:31:00Z",
+      window_start_utc: "2026-10-07T13:30:00Z",
+      window_end_exclusive_utc: "2026-10-07T13:31:00Z",
+      open: "500.00",
+      high: "501.00",
+      low: "499.00",
+      close: "500.50",
+      volume: "1",
+      trade_count: "1",
+      quote_events_excluded: "0",
+      source_timestamp_missing_rows: "0",
+      sequence_gap_count: "0",
+      late_event_count: "0",
+      window_expected_minutes: "1",
+      window_empty_trade_minutes: "0",
+      source_start_utc: "2026-10-07T13:30:30Z",
+      source_end_exclusive_utc: "2026-10-07T13:30:30.000000001Z",
+      window_input_eof: true,
+      source_pages_exhausted: null,
+      completion_mode: "synthetic_eof",
+      nbbo_input_status: "excluded",
+    }],
+  };
+}
+
+const mdp = createServer(async (req, res) => {
+  trackResponse(metrics.mdp, res);
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${mdpPort}`);
+  countRequest(metrics.mdp, url.pathname);
+  const call = {
+    method: req.method,
+    path: url.pathname,
+    dataset_id: url.pathname.split("/")[3] ?? "",
+    namespace: url.searchParams.get("namespace"),
+    symbol: url.searchParams.get("symbol"),
+    bearer_present: Boolean(req.headers.authorization),
+  };
+  metrics.mdp.calls.push(call);
+  if (req.method !== "GET" || !/^\/v1\/datasets\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\/bars$/.test(url.pathname)) {
+    return sendJson(res, 404, { error: "not_found" });
+  }
+  let verified;
+  try {
+    verified = await verifyMdpRequest(req);
+    metrics.mdp.authorized += 1;
+  } catch {
+    metrics.mdp.rejected += 1;
+    return sendJson(res, 401, { error: "unauthorized" });
+  }
+  const { payload, kid } = verified;
+  Object.assign(call, {
+    subject: payload.sub,
+    scope: payload.scope,
+    issuer: payload.iss,
+    audience: payload.aud,
+    iat: payload.iat,
+    exp: payload.exp,
+    kid,
+  });
+  if (mdpControl.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(mdpControl.delayMs, 130_000)));
+  if (mdpControl.location) {
+    res.writeHead(mdpControl.status, {
+      location: mdpControl.location,
+      "cache-control": mdpControl.cacheControl,
+      "content-length": "0",
+    });
+    return res.end();
+  }
+  let bytes;
+  if (Number.isSafeInteger(mdpControl.bodyBytes) && mdpControl.bodyBytes > 0) {
+    bytes = Buffer.alloc(mdpControl.bodyBytes, 0x20);
+  } else {
+    const response = mdpControl.response ?? defaultMdpResponse(url);
+    bytes = Buffer.from(JSON.stringify(response));
+  }
+  res.writeHead(mdpControl.status, {
+    "content-type": mdpControl.contentType,
+    "content-length": String(bytes.byteLength),
+    "cache-control": mdpControl.cacheControl,
+  });
+  res.end(bytes);
+});
+
+for (const [server, port] of [[oidc, oidcPort], [gateway, gatewayPort], [research, researchPort], [mdp, mdpPort]]) {
   await new Promise((resolve, reject) => server.once("error", reject).listen(port, bindHost, resolve));
 }
-console.log(`E2E mock OIDC/Gateway/research listening on ${oidcPort}/${gatewayPort}/${researchPort}`);
+console.log(`E2E mock OIDC/Gateway/research/MDP listening on ${oidcPort}/${gatewayPort}/${researchPort}/${mdpPort}`);
 
 function shutdown() {
-  for (const server of [oidc, gateway, research]) server.close();
+  for (const server of [oidc, gateway, research, mdp]) server.close();
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

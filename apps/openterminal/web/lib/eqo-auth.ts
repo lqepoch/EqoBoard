@@ -8,6 +8,7 @@ import {
   isCurrentOidcIssuer,
   isResearchAuthRuntimeConfigured,
   isOidcConfigured,
+  mdpMarketDataSigner,
   publicAppOrigin,
 } from "@/auth";
 import { scopesForRoles, type ActionScope } from "@/lib/permissions";
@@ -180,6 +181,49 @@ export async function authorizeResearchGatewayRequest(request: Request): Promise
     .setIssuedAt()
     .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))
     .sign(new TextEncoder().encode(secret));
+
+  return { ok: true, principal, token };
+}
+
+/** Mint an MDP-only market:read token for the key assigned to this hostname. */
+export async function authorizeMdpMarketDataRequest(request: Request): Promise<AuthorizationResult> {
+  const boundaryError = validRequestHeaders(request);
+  if (boundaryError) return { ok: false, response: boundaryError };
+  const expectedOrigin = publicAppOrigin();
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  const fetchMode = request.headers.get("sec-fetch-mode");
+  if ((origin && origin !== expectedOrigin) ||
+      (fetchSite && fetchSite !== "same-origin") ||
+      (fetchMode && !["cors", "same-origin"].includes(fetchMode))) {
+    return { ok: false, response: jsonError(403, "origin_rejected") };
+  }
+
+  const mode = process.env.EQO_BFF_MODE === "research" ? "research" : "terminal";
+  const runtimeConfigured = mode === "research"
+    ? isResearchAuthRuntimeConfigured()
+    : isAuthRuntimeConfigured();
+  if (!runtimeConfigured || !isOidcConfigured()) {
+    return { ok: false, response: jsonError(503, "identity_service_unavailable") };
+  }
+  const identity = await authorizeOidcPrincipal("market:read");
+  if (!identity.ok) return identity;
+
+  const signer = mdpMarketDataSigner(mode);
+  if (!signer) return { ok: false, response: jsonError(503, "market_data_service_unavailable") };
+  const principal = identity.principal;
+  const token = await new SignJWT({
+    idp_iss: principal.identityIssuer,
+    scope: ["market:read"],
+    jti: randomUUID(),
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: signer.kid })
+    .setIssuer(signer.issuer)
+    .setAudience("lqepoch-market-data")
+    .setSubject(principal.subject)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))
+    .sign(new TextEncoder().encode(signer.secret));
 
   return { ok: true, principal, token };
 }

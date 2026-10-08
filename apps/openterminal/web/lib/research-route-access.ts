@@ -1,5 +1,6 @@
 const AUTH_ENDPOINT = /^(providers|csrf|session|signin(?:\/[A-Za-z0-9_-]+)?|callback\/[A-Za-z0-9_-]+|signout|verify-request|error)$/;
 const OPENBB_ENDPOINT = /^\/api\/openbb\/(?:widgets\.json|apps\.json|openbb\/v1\/(?:stocks|bars|options))$/;
+const MDP_BAR_ENDPOINT = /^\/api\/eqo\/market-data\/datasets\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\/bars$/;
 
 /** Shared fail-closed research route allowlist for middleware and body-reading auth handlers. */
 export function isResearchRouteAllowed(rawUrl: string, pathname: string, method: string): boolean {
@@ -17,5 +18,5 @@ export function isResearchRouteAllowed(rawUrl: string, pathname: string, method:
     const endpoint = pathname.slice("/api/auth/".length);
     return AUTH_ENDPOINT.test(endpoint) && ["GET", "POST"].includes(normalizedMethod);
   }
-  return OPENBB_ENDPOINT.test(pathname) && normalizedMethod === "GET";
+  return (OPENBB_ENDPOINT.test(pathname) || MDP_BAR_ENDPOINT.test(pathname)) && normalizedMethod === "GET";
 }

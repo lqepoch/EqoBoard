@@ -24,6 +24,7 @@ dc() {
     -u EQO_OIDC_ISSUER -u EQO_OIDC_CLIENT_ID \
     -u E2E_OIDC_HOST_PORT -u E2E_GATEWAY_HOST_PORT -u E2E_RESEARCH_HOST_PORT \
     -u E2E_OIDC_PORT -u E2E_GATEWAY_PORT -u E2E_RESEARCH_PORT -u E2E_SESSION_TTL_SECONDS \
+    -u E2E_MDP_PORT -u EQO_MDP_URL -u MDP_TERMINAL_JWT_SECRET \
     -u E2E_WEB_ORIGIN -u E2E_OIDC_ORIGIN \
     docker compose "${compose_args[@]}" "$@"
 }
@@ -71,6 +72,7 @@ E2E_RESEARCH_HOST_PORT=$mock_research_host_port
 E2E_OIDC_PORT=$oidc_host_port
 E2E_GATEWAY_PORT=$mock_gateway_host_port
 E2E_RESEARCH_PORT=$mock_research_host_port
+E2E_MDP_PORT=14313
 E2E_SESSION_TTL_SECONDS=${E2E_SESSION_TTL_SECONDS:-30}
 EQO_PUBLIC_ORIGIN=http://127.0.0.1:$terminal_host_port
 NEXTAUTH_URL=http://127.0.0.1:$terminal_host_port
