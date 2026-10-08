@@ -22,6 +22,7 @@ const ITEMS: Array<{ type: WidgetType; label: string; key: string }> = [
   { type: "tv", label: "LIVE TV", key: "" },
   { type: "recap", label: "MARKET RECAP", key: "" },
   { type: "researchpredictions", label: "PREDICTION", key: "" },
+  { type: "enginepreview", label: "ENGINE PREVIEW", key: "" },
 ];
 
 export default function Sidebar({ researchOrigin }: { researchOrigin: string | null }) {

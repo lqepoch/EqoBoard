@@ -25,6 +25,7 @@ import InsiderWidget from "./widgets/InsiderWidget";
 import TvWidget from "./widgets/TvWidget";
 import RecapWidget from "./widgets/RecapWidget";
 import ResearchPredictionsWidget from "./widgets/ResearchPredictionsWidget";
+import EngineOfflinePreviewWidget from "./widgets/EngineOfflinePreviewWidget";
 import WidgetErrorBoundary from "./WidgetErrorBoundary";
 
 const Grid = WidthProvider(GridLayout);
@@ -50,6 +51,7 @@ function WidgetBody({ widget }: { widget: WidgetInstance }) {
     case "tv": return <TvWidget />;
     case "recap": return <RecapWidget />;
     case "researchpredictions": return <ResearchPredictionsWidget widget={widget} />;
+    case "enginepreview": return <EngineOfflinePreviewWidget />;
   }
 }
 
@@ -106,6 +108,7 @@ const TITLES: Record<string, string> = {
   optiontape: "OPRA Tape", vertical: "Vertical Spread", portfolio: "Portfolio", ai: "AI Assistant",
   calendar: "Calendar", insider: "Insider Transactions", tv: "Live TV", recap: "Market Recap",
   researchpredictions: "Registered Prediction",
+  enginepreview: "Engine Offline Preview",
 };
 
 export default function Workspace() {

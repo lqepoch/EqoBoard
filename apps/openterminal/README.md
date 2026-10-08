@@ -45,6 +45,7 @@ Research sources such as FRED, ECB, SEC, FINRA, news and selected international-
 - 📅 **Calendar** — economic events (Fed, ECB, CPI, NFP and more) with consensus forecast, previous reading and, for the major US/EU releases, the actual outcome; plus a per‑watchlist earnings calendar with click‑through history showing forecast vs. actual EPS for the last several quarters and the stock's next‑day price move
 - 🤖 **AI assistant** (optional) — ask questions about the symbol you're looking at, powered by Claude, fully context‑aware of the terminal's current data
 - ⚡ **Market status** — browser SSE, upstream authentication, ACK coverage and event freshness are separate; server `fresh_until` or a documented client fail-safe expires silent LIVE values
+- 🧭 **Engine offline preview** — optional native Workspace widget reads only the typed synthetic status/preview projection through a terminal-only, OIDC role-gated BFF; source remains unknown and execution stays disabled
 - ⌨️ **Keyboard shortcuts** everywhere — `⌘K` to search, `⌥1`–`⌥9` to add any widget
 
 <br/>

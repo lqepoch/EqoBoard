@@ -22,6 +22,7 @@ const gatewayPort = readPort("E2E_GATEWAY_PORT", 4321);
 const researchPort = readPort("E2E_RESEARCH_PORT", 4322);
 const mdpPort = readPort("E2E_MDP_PORT", 4323);
 const quantPort = readPort("E2E_QUANT_PORT", 4324);
+const enginePort = readPort("E2E_ENGINE_PORT", 4325);
 const oidcUrl = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${oidcPort}`;
 const webUrl = process.env.E2E_WEB_ORIGIN ?? `http://127.0.0.1:${webPort}`;
 const mdpUrl = mdpUpstreamUrl(process.env.E2E_MDP_UPSTREAM_URL, mdpPort);
@@ -54,6 +55,7 @@ export default defineConfig({
         E2E_RESEARCH_PORT: String(researchPort),
         E2E_MDP_PORT: String(mdpPort),
         E2E_QUANT_PORT: String(quantPort),
+        E2E_ENGINE_PORT: String(enginePort),
         E2E_WEB_ORIGIN: webUrl,
         E2E_OIDC_ORIGIN: oidcUrl,
       },

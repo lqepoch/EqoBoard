@@ -67,11 +67,11 @@ MODIFIED_NOTES: dict[str, tuple[str, str, str, str]] = {
     "web/app/globals.css": ("为登录、会话和身份错误状态提供页面样式。", "保留", "无需抽 adapter", "否"),
     "web/app/layout.tsx": ("设置 EqoBoard 产品名称。", "保留", "无需抽 adapter", "否"),
     "web/app/page.tsx": ("以服务端 OIDC 会话门禁包裹上游终端。", "保留", "Workspace 本体继续复用上游", "否"),
-    "web/components/Sidebar.tsx": ("将 EqoBoard 专属期权与风险 widget 注册到上游 Sidebar。", "保留", "Widget registry 后续可外置", "否"),
+    "web/components/Sidebar.tsx": ("将 EqoBoard 专属期权、风险和 Engine 离线预览 widget 注册到上游 Sidebar。", "保留", "Widget registry 后续可外置", "否"),
     "web/components/CommandPalette.tsx": ("在原生命令面板增加校验后的 Research 外链；不改变 ticker/search 路由。", "保留", "仅传入公开 origin 的窄 UI adapter", "否"),
     "web/components/Terminal.tsx": ("把服务端验证的 Research origin 传给上游 Sidebar 与 Command Palette。", "保留", "仅传入公开 origin 的窄 UI adapter", "否"),
     "web/components/TopBar.tsx": ("展示 EqoBoard feed/source/授权状态，同时保留上游搜索和时间栏。", "保留", "行情状态可作为独立 extension", "否"),
-    "web/components/Workspace.tsx": ("在上游 react-grid-layout Workspace 中注册 EqoBoard widgets 与 ticker linking。", "保留", "widget 注册表可外置", "否"),
+    "web/components/Workspace.tsx": ("在上游 react-grid-layout Workspace 中注册 EqoBoard widgets（含只读 Engine 离线预览）与 ticker linking。", "保留", "widget 注册表可外置", "否"),
     "web/components/widgets/CalendarWidget.tsx": ("呈现研究日历和财报字段的来源与观察时间。", "保留", "无需抽 adapter", "否"),
     "web/components/widgets/ChartWidget.tsx": ("保留 Lightweight Charts，实现 Rust bars 契约和 source/as-of 标签。", "保留", "bars DTO 转换适合 adapter", "否"),
     "web/components/widgets/HeatmapWidget.tsx": ("保留 D3 heatmap，消费 Gateway SIP 包络并显示 coverage/truncation。", "保留", "行包络转换适合 adapter", "否"),
@@ -84,8 +84,8 @@ MODIFIED_NOTES: dict[str, tuple[str, str, str, str]] = {
     "web/components/widgets/WatchlistWidget.tsx": ("保留上游 Watchlist UI，消费共享 store 与 Gateway 事件。", "保留", "行情 hook 可外置", "否"),
     "web/lib/api-key.ts": ("移除本地自动生成的静态 API key，改用服务端研究凭据。", "保留", "凭据读取 adapter 已有", "否"),
     "web/lib/api.ts": ("扩展前端 DTO 以表达 Gateway source、as-of、coverage 和 watermark。", "保留", "Gateway DTO adapter 可独立", "否"),
-    "web/package.json": ("加入 NextAuth、jose 与 Gateway 契约集成依赖。", "保留", "认证库沿用上游 Next.js 层", "否"),
-    "web/store/terminal.ts": ("保留 Zustand Workspace 状态并增加 EqoBoard widget 类型与交易预览状态。", "保留", "行情/金融状态继续在独立 market/domain store", "否"),
+    "web/package.json": ("加入 NextAuth、jose 与固定 Git SHA 的 trading-core 生成契约依赖。", "保留", "认证库沿用上游 Next.js 层；共享 DTO 由 pinned Core 提供", "否"),
+    "web/store/terminal.ts": ("保留 Zustand Workspace 状态并增加 EqoBoard widget 类型、交易 preview 与只读 Engine preview 状态。", "保留", "行情/金融状态继续在独立 market/domain store", "否"),
     "web/tsconfig.json": ("为 EqoBoard 的跨层 DTO 类型导入启用扩展配置。", "保留", "无需抽 adapter", "否"),
 }
 
@@ -95,6 +95,8 @@ KNOWN_C_ONLY = {
     "web/components/widgets/VerticalSpreadWidget.tsx",
     "web/components/widgets/OrderOutcomePanel.tsx",
     "web/components/widgets/MarketFeedStatus.tsx",
+    "web/components/widgets/ResearchPredictionsWidget.tsx",
+    "web/components/widgets/EngineOfflinePreviewWidget.tsx",
 }
 
 KNOWN_E_ONLY = {
@@ -109,21 +111,34 @@ KNOWN_E_ONLY = {
     "web/app/api/auth/[...nextauth]/route.ts", "web/app/api/eqo/live/route.ts",
     "web/app/api/eqo/options/subscribe/route.ts", "web/app/api/eqo/orders/[action]/route.ts",
     "web/app/api/eqo/stocks/subscribe/route.ts", "web/app/api/healthz/route.ts",
+    "web/app/api/eqo/market-data/datasets/[datasetId]/bars/route.ts",
+    "web/app/api/eqo/research/predictions/[runId]/route.ts",
+    "web/app/api/eqo/engine/status/route.ts", "web/app/api/eqo/engine/preview/route.ts",
     "web/app/api/readyz/route.ts", "web/app/e2e/order-outcome/page.tsx", "web/auth.ts",
     "web/components/MarketStreamProvider.tsx", "web/components/SignInButton.tsx",
     "web/components/SignOutButton.tsx", "web/components/TerminalShell.tsx",
     "web/e2e/access-boundary.spec.ts", "web/e2e/compose-e2e-server.mjs", "web/e2e/fixtures.ts",
     "web/e2e/market-freshness.spec.ts", "web/e2e/market-order.spec.ts",
     "web/e2e/market-stream.spec.ts", "web/e2e/market-test-data.ts", "web/e2e/mock-services.mjs",
+    "web/e2e/market-data-bff.spec.ts", "web/e2e/market-data-chart.spec.ts",
+    "web/e2e/research-prediction.spec.ts",
     "web/e2e/order-outcome-probe.tsx", "web/lib/eqo-auth.ts", "web/lib/eqo-market.ts",
+    "web/e2e/mdp-upstream.ts", "web/e2e/quant-upstream.ts",
+    "web/e2e/fixtures/prediction-envelope-v1.synthetic.protojson",
     "web/lib/http-response.ts", "web/lib/order-api.ts", "web/lib/order-contract.ts",
     "web/lib/permissions.ts", "web/next-auth.d.ts", "web/next.config.mjs",
+    "web/lib/engine-preview.ts",
+    "web/lib/mdp-market-data-contract.ts", "web/lib/mdp-market-data.ts",
+    "web/lib/quant-prediction-contract.ts", "web/lib/quant-predictions.ts",
     "web/playwright.compose.config.ts", "web/playwright.config.ts", "web/store/market.ts",
     "openbb-research-ingress.conf",
     "web/app/api/openbb/[...path]/route.ts", "web/app/api/research/auth-check/route.ts",
     "web/e2e/isolated-env.ts", "web/e2e/mock-openbb-alpaca.mjs", "web/e2e/mock-openbb-oidc.mjs",
     "web/e2e/openbb-core-availability.spec.ts", "web/e2e/openbb-lite.spec.ts",
     "web/e2e/openbb-recovery.spec.ts", "web/e2e/openbb-response-capture.ts",
+    "web/e2e/engine-offline-preview.spec.ts",
+    "web/e2e/fixtures/engine-status-response-v1.json",
+    "web/e2e/fixtures/synthetic-offline-preview-v1.json",
     "web/e2e/research-bff.spec.ts", "web/e2e/research-navigation.spec.ts", "web/e2e/research-origin.spec.ts",
     "web/lib/research-origin.ts", "web/lib/research-route-access.ts", "web/middleware.ts",
     "web/lib/client-abort.mjs", "web/lib/client-abort.test.mjs",
@@ -308,6 +323,10 @@ def _extension_note(path: str) -> tuple[str, str, str, str, str]:
     if path in KNOWN_C_ONLY:
         if path.endswith(("IvSkewWidget.tsx", "OptionTapeWidget.tsx", "VerticalSpreadWidget.tsx", "OrderOutcomePanel.tsx")):
             reason = "EqoBoard 专属期权分析/preview widget；复用 Workspace 与 AG Grid/图表容器。"
+        elif path == "web/components/widgets/ResearchPredictionsWidget.tsx":
+            reason = "只读展示注册研究 run 的受限公开投影；不请求私有 envelope，未知证据与禁止 promotion 状态保持可见。"
+        elif path == "web/components/widgets/EngineOfflinePreviewWidget.tsx":
+            reason = "只读 synthetic Engine 状态预览；复用原生 Workspace，并经服务端 BFF 读取生成契约。"
         else:
             reason = "EqoBoard 行情来源、授权、ACK 与 freshness 状态展示组件。"
         return ("C", reason, "保留", "是，继续作为 EqoBoard UI extension", "否")
@@ -321,6 +340,14 @@ def _extension_note(path: str) -> tuple[str, str, str, str, str]:
         return ("E", "供内部 Nginx auth_request 校验 research cookie/role；不签发或返回 Gateway token。", "保留", "是，作为入口认证 adapter", "否")
     if path == "web/app/api/eqo/live/route.ts":
         return ("E", "SSE BFF 在授权等待前建立客户端断连监听，取消后不启动 Gateway 请求，并把 AbortSignal 传递到 Rust 上游流。", "保留", "是，作为用户会话边界与 Rust SSE 的窄传输 adapter", "否")
+    if path.startswith("web/app/api/eqo/engine/"):
+        return ("E", "Engine 离线读取的固定 GET BFF；仅终端专属委托可访问，复用 Core 生成契约并限制为 loopback 上游。", "保留", "是，作为 Next-to-Engine 只读 adapter", "否")
+    if path == "web/app/api/eqo/market-data/datasets/[datasetId]/bars/route.ts":
+        return ("E", "通过独立 MDP 短时委托读取受限历史 bars；保留 diagnostic/unknown 来源边界。", "保留", "是，作为 Next-to-MDP 只读 adapter", "否")
+    if path == "web/app/api/eqo/research/predictions/[runId]/route.ts":
+        return ("E", "通过独立 Quant research 委托读取注册 run 的公开预测投影；私有 artifact 不进入浏览器。", "保留", "是，作为 Next-to-Quant 只读 adapter", "否")
+    if path == "web/lib/engine-preview.ts":
+        return ("E", "验证专属 OIDC role 并签发 Engine-only 短时委托；固定 loopback GET、响应体上限、超时及 Core strict ProtoJSON parser。", "保留", "是，作为认证和只读 transport adapter", "否")
     if path == "web/lib/client-abort.mjs":
         return ("E", "将客户端断连信号跨授权等待传到 BFF 下游控制器，断连时不启动后续请求，并向运行中的上游流传递 AbortSignal。", "保留", "是，作为窄的 BFF transport adapter", "否")
     if path == "web/lib/client-abort.test.mjs":

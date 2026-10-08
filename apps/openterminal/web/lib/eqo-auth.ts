@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import {
   authOptions,
+  engineOfflinePreviewSigner,
   isAuthRuntimeConfigured,
   isCurrentOidcIssuer,
   isResearchAuthRuntimeConfigured,
@@ -266,6 +267,44 @@ export async function authorizeQuantPredictionRequest(request: Request): Promise
     .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: signer.kid })
     .setIssuer(signer.issuer)
     .setAudience("lqepoch-quant-research")
+    .setSubject(principal.subject)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))
+    .sign(new TextEncoder().encode(signer.secret));
+
+  return { ok: true, principal, token };
+}
+
+/** Sign a terminal-only, read-only offline Engine projection request. */
+export async function authorizeEngineOfflinePreviewRequest(request: Request): Promise<AuthorizationResult> {
+  const expectedOrigin = publicAppOrigin();
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  const fetchMode = request.headers.get("sec-fetch-mode");
+  if ((origin && origin !== expectedOrigin) ||
+      (fetchSite && fetchSite !== "same-origin") ||
+      (fetchMode && !["cors", "same-origin"].includes(fetchMode))) {
+    return { ok: false, response: jsonError(403, "origin_rejected") };
+  }
+
+  if ((process.env.EQO_BFF_MODE !== undefined && process.env.EQO_BFF_MODE !== "terminal") ||
+      !isOidcConfigured() || !isAuthRuntimeConfigured()) {
+    return { ok: false, response: jsonError(503, "identity_service_unavailable") };
+  }
+  const identity = await authorizeOidcPrincipal("engine:offline-read");
+  if (!identity.ok) return identity;
+  const signer = engineOfflinePreviewSigner();
+  if (!signer) return { ok: false, response: jsonError(503, "engine_service_unavailable") };
+
+  const principal = identity.principal;
+  const token = await new SignJWT({
+    idp_iss: principal.identityIssuer,
+    scope: "engine:offline-read",
+    jti: randomUUID(),
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: signer.kid })
+    .setIssuer(signer.issuer)
+    .setAudience("lqepoch-trading-engine")
     .setSubject(principal.subject)
     .setIssuedAt()
     .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))

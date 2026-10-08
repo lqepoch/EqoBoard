@@ -56,6 +56,14 @@ BFF 只接受最多 390 行、4 MiB 的 `lqepoch.us_equity_trade_bar_1m.v1` 响�
 
 BFF 固定访问 `EQO_QUANT_RESEARCH_URL` 的 HTTPS、loopback 或私有 `quant-research` origin，不跟随 redirect、不接受任意 path/query/body，并校验 Quant response、assessment、SHA-256 与受限的公开 ProtoJSON。若 Quant response 带 `factor_feature`，BFF 只接受其精确摘要字段、已知 qualification/hash 状态及 `1..390` 行边界（与 Quant 注册读取器的 FactorIR 行数约束一致），校验后从浏览器 response 剥离该摘要；不接收 feature rows 或 private artifact。浏览器不接收 private envelope/artifact。LOCAL_REGISTERED_ROOT 只表明本地 registry 读取；source completeness、finite receipt 与 PIT 可继续为 UNKNOWN，promotion 始终 false。未部署/未配置 Quant 时界面显示不可用，不显示合成的 available 预测。
 
+## Trading Engine 离线预览
+
+原生 Workspace 的 `Engine Offline Preview` widget 使用两个同源 GET BFF 路由：`/api/eqo/engine/status` 与 `/api/eqo/engine/preview`。唯一 OIDC 授权角色为 `eqoboard-engine-offline-reader`，只映射 `engine:offline-read`；market、workspace、private-research 角色都不继承该 scope。终端使用独立 `ENGINE_TERMINAL_JWT_SECRET`，固定 `iss=eqoboard-openterminal`、`kid=engine-terminal`、`aud=lqepoch-trading-engine`、字符串 scope `engine:offline-read`、最多 60 秒。Research runtime 拒绝 Engine URL/key，且没有这些路由。
+
+BFF 只允许固定的 `http://127.0.0.1:<port>` origin、固定 GET 路径、无 query/body、禁止 redirect、16 KiB 响应上限与 3 秒 deadline。完整 ProtoJSON 文本由 pinned `@lqepoch/trading-core-contracts` strict parser 校验，随后 BFF 序列化解析得到的 generated message，向浏览器返回一致的 camelCase/`$typeName` shape 和显式默认值；浏览器仅 type-import Core DTO，不运行 Node-only parser，也不复制领域校验。Engine 服务继续只绑定 loopback，因此 BFF 与 Engine 必须共享 host/network namespace。仓库 Compose 不启动 Engine；标准分离容器默认不满足此条件，故 URL/key 留空即明确 unavailable。
+
+UI 只显示 synthetic/offline/source unknown、best-effort non-transactional 与有界 UNKNOWN 计数；两次读取不是原子快照或 reconciliation proof。任何状态都不表示账户或市场数据加载、execution readiness、交易权限或 promotion qualification。
+
 ## Rust 数据接口
 
 共享 Rust 市场契约由固定 revision 的 `trading-core/crates/market-contracts` 持有。EqoBoard `crates/domain` 是旧 JSON DTO 的兼容 facade，保持现有 `eqo_domain::*` 消费者路径和 JSON 形状；新版本化 wire DTO 应直接复用 core 类型，不在本仓库复制。旧快照、bar 和事件中的 `f64` 是兼容投影，不保证精确十进制表示，不能作为新归档或执行合同。
