@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 import { assertHostE2eEnvironmentIsIsolated } from "./e2e/isolated-env";
 import { mdpUpstreamUrl } from "./e2e/mdp-upstream";
+import { quantUpstreamUrl } from "./e2e/quant-upstream";
 
 assertHostE2eEnvironmentIsIsolated();
 
@@ -20,7 +21,9 @@ const oidcPort = readPort("E2E_OIDC_PORT", 4310);
 const gatewayPort = readPort("E2E_GATEWAY_PORT", 4311);
 const researchPort = readPort("E2E_RESEARCH_PORT", 4312);
 const mdpPort = readPort("E2E_MDP_PORT", 4313);
+const quantPort = readPort("E2E_QUANT_PORT", 4314);
 const mdpUrl = mdpUpstreamUrl(process.env.E2E_MDP_UPSTREAM_URL, mdpPort);
+const quantUrl = quantUpstreamUrl(process.env.E2E_QUANT_UPSTREAM_URL, quantPort);
 const webUrl = webOrigin;
 const oidcUrl = oidcOrigin ?? `http://127.0.0.1:${oidcPort}`;
 
@@ -71,9 +74,11 @@ export default defineConfig({
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
         EQO_RESEARCH_API_KEY: "research-service-test-key-that-is-at-least-32-bytes",
         MDP_TERMINAL_JWT_SECRET: "m".repeat(64),
+        QUANT_TERMINAL_JWT_SECRET: "t".repeat(64),
         EQO_RESEARCH_PUBLIC_ORIGIN: process.env.E2E_RESEARCH_PUBLIC_ORIGIN ?? "",
         EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
         EQO_MDP_URL: mdpUrl,
+        EQO_QUANT_RESEARCH_URL: quantUrl,
         API_URL: `http://127.0.0.1:${researchPort}`,
       },
     },

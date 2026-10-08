@@ -1,14 +1,33 @@
 import { defineConfig } from "@playwright/test";
 import { assertHostE2eEnvironmentIsIsolated } from "./e2e/isolated-env";
 import { mdpUpstreamUrl } from "./e2e/mdp-upstream";
+import { quantUpstreamUrl } from "./e2e/quant-upstream";
 
 assertHostE2eEnvironmentIsIsolated();
 
-const oidcUrl = "http://127.0.0.1:4320";
-const webUrl = "http://127.0.0.1:3320";
-const mdpUrl = mdpUpstreamUrl(process.env.E2E_MDP_UPSTREAM_URL, 4323);
-const sameHostnameWebUrl = "http://127.0.0.1:3321";
-const credentialWebUrl = "http://127.0.0.1:3322";
+function readPort(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  if (!/^\d+$/.test(raw)) throw new Error(`${name} must be a valid TCP port`);
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error(`${name} must be a valid TCP port`);
+  return port;
+}
+
+const oidcPort = readPort("E2E_OIDC_PORT", 4320);
+const webPort = readPort("E2E_RESEARCH_WEB_PORT", 3320);
+const sameHostnamePort = readPort("E2E_RESEARCH_SAME_HOSTNAME_PORT", 3321);
+const credentialPort = readPort("E2E_RESEARCH_CREDENTIAL_PORT", 3322);
+const gatewayPort = readPort("E2E_GATEWAY_PORT", 4321);
+const researchPort = readPort("E2E_RESEARCH_PORT", 4322);
+const mdpPort = readPort("E2E_MDP_PORT", 4323);
+const quantPort = readPort("E2E_QUANT_PORT", 4324);
+const oidcUrl = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${oidcPort}`;
+const webUrl = process.env.E2E_WEB_ORIGIN ?? `http://127.0.0.1:${webPort}`;
+const mdpUrl = mdpUpstreamUrl(process.env.E2E_MDP_UPSTREAM_URL, mdpPort);
+const quantUrl = quantUpstreamUrl(process.env.E2E_QUANT_UPSTREAM_URL, quantPort);
+const sameHostnameWebUrl = `http://127.0.0.1:${sameHostnamePort}`;
+const credentialWebUrl = `http://127.0.0.1:${credentialPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -30,16 +49,17 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 15_000,
       env: {
-        E2E_OIDC_PORT: "4320",
-        E2E_GATEWAY_PORT: "4321",
-        E2E_RESEARCH_PORT: "4322",
-        E2E_MDP_PORT: "4323",
+        E2E_OIDC_PORT: String(oidcPort),
+        E2E_GATEWAY_PORT: String(gatewayPort),
+        E2E_RESEARCH_PORT: String(researchPort),
+        E2E_MDP_PORT: String(mdpPort),
+        E2E_QUANT_PORT: String(quantPort),
         E2E_WEB_ORIGIN: webUrl,
         E2E_OIDC_ORIGIN: oidcUrl,
       },
     },
     {
-      command: "npm run start -- --hostname 127.0.0.1 --port 3320",
+      command: `npm run start -- --hostname 127.0.0.1 --port ${webPort}`,
       url: `${webUrl}/api/healthz`,
       reuseExistingServer: false,
       timeout: 120_000,
@@ -57,15 +77,17 @@ export default defineConfig({
         EQO_GATEWAY_JWT_SECRET: "",
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
         MDP_RESEARCH_JWT_SECRET: "q".repeat(64),
+        QUANT_RESEARCH_JWT_SECRET: "u".repeat(64),
         EQO_RESEARCH_API_KEY: "",
         ALPACA_KEY: "",
         ALPACA_SECRET: "",
-        EQO_RUST_URL: "http://127.0.0.1:4321",
+        EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
         EQO_MDP_URL: mdpUrl,
+        EQO_QUANT_RESEARCH_URL: quantUrl,
       },
     },
     {
-      command: "npm run start -- --hostname 127.0.0.1 --port 3321",
+      command: `npm run start -- --hostname 127.0.0.1 --port ${sameHostnamePort}`,
       url: `${sameHostnameWebUrl}/api/healthz`,
       reuseExistingServer: false,
       timeout: 120_000,
@@ -83,15 +105,17 @@ export default defineConfig({
         EQO_GATEWAY_JWT_SECRET: "",
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
         MDP_RESEARCH_JWT_SECRET: "q".repeat(64),
+        QUANT_RESEARCH_JWT_SECRET: "u".repeat(64),
         EQO_RESEARCH_API_KEY: "",
         ALPACA_KEY: "",
         ALPACA_SECRET: "",
-        EQO_RUST_URL: "http://127.0.0.1:4321",
+        EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
         EQO_MDP_URL: mdpUrl,
+        EQO_QUANT_RESEARCH_URL: quantUrl,
       },
     },
     {
-      command: "npm run start -- --hostname 127.0.0.1 --port 3322",
+      command: `npm run start -- --hostname 127.0.0.1 --port ${credentialPort}`,
       url: `${credentialWebUrl}/api/healthz`,
       reuseExistingServer: false,
       timeout: 120_000,
@@ -109,11 +133,13 @@ export default defineConfig({
         EQO_GATEWAY_JWT_SECRET: "",
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
         MDP_RESEARCH_JWT_SECRET: "q".repeat(64),
+        QUANT_RESEARCH_JWT_SECRET: "u".repeat(64),
         EQO_RESEARCH_API_KEY: "",
         ALPACA_KEY: "mock-market-key-must-not-enter-research",
         ALPACA_SECRET: "mock-market-secret-must-not-enter-research",
-        EQO_RUST_URL: "http://127.0.0.1:4321",
+        EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
         EQO_MDP_URL: mdpUrl,
+        EQO_QUANT_RESEARCH_URL: quantUrl,
       },
     },
   ],

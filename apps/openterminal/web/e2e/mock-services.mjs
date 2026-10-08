@@ -1,11 +1,13 @@
 import { createServer } from "node:http";
-import { randomUUID, webcrypto } from "node:crypto";
+import { createHash, randomUUID, webcrypto } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { generateKeyPair, exportJWK, SignJWT, decodeProtectedHeader, jwtVerify } from "jose";
 
 const oidcPort = Number(process.env.E2E_OIDC_PORT ?? 4310);
 const gatewayPort = Number(process.env.E2E_GATEWAY_PORT ?? 4311);
 const researchPort = Number(process.env.E2E_RESEARCH_PORT ?? 4312);
 const mdpPort = Number(process.env.E2E_MDP_PORT ?? 4313);
+const quantPort = Number(process.env.E2E_QUANT_PORT ?? 4314);
 const bindHost = process.env.E2E_MOCK_BIND_HOST ?? "127.0.0.1";
 const webOrigin = process.env.E2E_WEB_ORIGIN ?? "http://127.0.0.1:3300";
 const issuer = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${oidcPort}`;
@@ -14,6 +16,8 @@ const researchKey = "r".repeat(64);
 const researchServiceKey = "research-service-test-key-that-is-at-least-32-bytes";
 const mdpTerminalKey = "m".repeat(64);
 const mdpResearchKey = "q".repeat(64);
+const quantTerminalKey = "t".repeat(64);
+const quantResearchKey = "u".repeat(64);
 const { publicKey, privateKey } = await generateKeyPair("RS256");
 const publicJwk = await exportJWK(publicKey);
 publicJwk.kid = "test-oidc-key";
@@ -30,6 +34,7 @@ const metrics = {
   },
   research: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   mdp: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
+  quant: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
 };
 const mdpControl = {
   status: 200,
@@ -40,6 +45,14 @@ const mdpControl = {
   bodyBytes: 0,
   delayMs: 0,
 };
+const quantControl = {
+  status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
+  protoJsonText: null, publicProjectionBase64: null, publicProjectionSha256: null, factorFeatureSummary: null,
+};
+const defaultQuantProtoJson = readFileSync(
+  new URL("./fixtures/prediction-envelope-v1.synthetic.protojson", import.meta.url),
+  "utf8",
+);
 const gatewayControl = {
   snapshotStatus: 200,
   snapshotFeed: "sip",
@@ -209,6 +222,10 @@ const oidc = createServer(async (req, res) => {
       status: 200, response: null, contentType: "application/json", cacheControl: "no-store",
       location: null, bodyBytes: 0, delayMs: 0,
     });
+    Object.assign(quantControl, {
+      status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
+      protoJsonText: null, publicProjectionBase64: null, publicProjectionSha256: null, factorFeatureSummary: null,
+    });
     return sendJson(res, 200, { ok: true });
   }
   if (url.pathname === "/__test/roles" && req.method === "POST") {
@@ -231,6 +248,14 @@ const oidc = createServer(async (req, res) => {
     for (const key of ["status", "response", "contentType", "cacheControl", "location", "bodyBytes", "delayMs"]) {
       if (Object.hasOwn(body, `mdp${key[0].toUpperCase()}${key.slice(1)}`)) {
         mdpControl[key] = body[`mdp${key[0].toUpperCase()}${key.slice(1)}`];
+      }
+    }
+    for (const key of [
+      "status", "response", "location", "delayMs", "finiteReceiptBinding", "protoJsonText",
+      "publicProjectionBase64", "publicProjectionSha256", "factorFeatureSummary",
+    ]) {
+      if (Object.hasOwn(body, `quant${key[0].toUpperCase()}${key.slice(1)}`)) {
+        quantControl[key] = body[`quant${key[0].toUpperCase()}${key.slice(1)}`];
       }
     }
     previewSequence = 0;
@@ -504,6 +529,100 @@ async function verifyMdpRequest(req) {
   return { payload, kid: header.kid };
 }
 
+async function verifyQuantRequest(req) {
+  const raw = req.headers.authorization ?? "";
+  if (!raw.startsWith("Bearer ")) throw new Error("bearer required");
+  const token = raw.slice("Bearer ".length);
+  const header = decodeProtectedHeader(token);
+  if (header.alg !== "HS256" || header.typ !== "JWT" || !["quant-terminal", "quant-research"].includes(header.kid)) {
+    throw new Error("Quant signer rejected");
+  }
+  const isResearch = header.kid === "quant-research";
+  const secret = isResearch ? quantResearchKey : quantTerminalKey;
+  const issuer = isResearch ? "openterminal-research" : "eqoboard-openterminal";
+  const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
+    algorithms: ["HS256"], issuer, audience: "lqepoch-quant-research",
+  });
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.aud !== "lqepoch-quant-research" || payload.scope !== "research:private-read" ||
+      typeof payload.sub !== "string" || typeof payload.idp_iss !== "string" || typeof payload.jti !== "string" ||
+      typeof payload.iat !== "number" || typeof payload.exp !== "number" || payload.iat > now ||
+      payload.exp <= payload.iat || payload.exp - payload.iat > 60) throw new Error("Quant claims rejected");
+  return { payload, kid: header.kid };
+}
+
+function defaultQuantResponse(runId) {
+  const publicBytes = Buffer.from(quantControl.protoJsonText ?? defaultQuantProtoJson, "utf8");
+  const projectionBase64 = quantControl.publicProjectionBase64 ?? publicBytes.toString("base64");
+  const projectionSha256 = quantControl.publicProjectionSha256 ?? createHash("sha256").update(publicBytes).digest("hex");
+  const response = {
+    schema_name: "quant-research-registered-prediction-v1",
+    authority: "LOCAL_REGISTERED_ROOT",
+    read_only: true,
+    promotion_allowed: false,
+    run_id: runId,
+    prediction_status: "HISTORICAL_SIMULATED_EXPIRED",
+    source_manifest_sha256: "a".repeat(64),
+    private_artifact_sha256: "b".repeat(64),
+    public_protojson_base64: projectionBase64,
+    public_protojson_sha256: projectionSha256,
+    projection_receipt_sha256: "c".repeat(64),
+    assessment: {
+      lifecycle: "UNKNOWN",
+      identity_resolution: "VERIFIED_EXACT_ONLY",
+      source_manifest_binding: "EXACT_WHOLE_BYTES",
+      finite_receipt_binding: quantControl.finiteReceiptBinding,
+      point_in_time: "UNKNOWN_SOURCE_COMPLETENESS",
+      promotion_allowed: false,
+      reason_codes: ["FINITE_SEAL_RECEIPT_BYTES_MISSING"],
+    },
+  };
+  if (quantControl.factorFeatureSummary !== null) response.factor_feature = quantControl.factorFeatureSummary;
+  return response;
+}
+
+const quant = createServer(async (req, res) => {
+  trackResponse(metrics.quant, res);
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${quantPort}`);
+  countRequest(metrics.quant, url.pathname);
+  const encodedPath = /^\/v1\/research\/predictions\/([^/]+)$/.exec(url.pathname);
+  let runId = null;
+  if (encodedPath) {
+    try {
+      const decoded = decodeURIComponent(encodedPath[1]);
+      if (encodeURIComponent(decoded) === encodedPath[1] && /^[A-Za-z0-9][A-Za-z0-9_.:@+-]{0,254}$/.test(decoded)) {
+        runId = decoded;
+      }
+    } catch {}
+  }
+  const call = { method: req.method, path: url.pathname, query_present: Boolean(url.search), bearer_present: Boolean(req.headers.authorization) };
+  metrics.quant.calls.push(call);
+  let verified;
+  try {
+    if (!runId || req.method !== "GET" || url.search) throw new Error("route rejected");
+    verified = await verifyQuantRequest(req);
+    metrics.quant.authorized += 1;
+  } catch {
+    metrics.quant.rejected += 1;
+    return sendJson(res, 401, { error: "unauthorized" });
+  }
+  Object.assign(call, {
+    subject: verified.payload.sub,
+    scope: verified.payload.scope,
+    issuer: verified.payload.iss,
+    audience: verified.payload.aud,
+    kid: verified.kid,
+    issued_at: verified.payload.iat,
+    expires_at: verified.payload.exp,
+  });
+  if (quantControl.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(quantControl.delayMs, 10_000)));
+  if (quantControl.location) {
+    res.writeHead(quantControl.status, { location: quantControl.location, "cache-control": "no-store" });
+    return res.end();
+  }
+  return sendJson(res, quantControl.status, quantControl.response ?? defaultQuantResponse(runId));
+});
+
 function defaultMdpResponse(url) {
   const symbol = url.searchParams.get("symbol") ?? "QQQ";
   const datasetId = url.pathname.split("/")[3] ?? "synthetic-e2e-v1";
@@ -618,13 +737,13 @@ const mdp = createServer(async (req, res) => {
   res.end(bytes);
 });
 
-for (const [server, port] of [[oidc, oidcPort], [gateway, gatewayPort], [research, researchPort], [mdp, mdpPort]]) {
+for (const [server, port] of [[oidc, oidcPort], [gateway, gatewayPort], [research, researchPort], [mdp, mdpPort], [quant, quantPort]]) {
   await new Promise((resolve, reject) => server.once("error", reject).listen(port, bindHost, resolve));
 }
-console.log(`E2E mock OIDC/Gateway/research/MDP listening on ${oidcPort}/${gatewayPort}/${researchPort}/${mdpPort}`);
+console.log(`E2E mock OIDC/Gateway/research/MDP/Quant listening on ${oidcPort}/${gatewayPort}/${researchPort}/${mdpPort}/${quantPort}`);
 
 function shutdown() {
-  for (const server of [oidc, gateway, research, mdp]) server.close();
+  for (const server of [oidc, gateway, research, mdp, quant]) server.close();
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

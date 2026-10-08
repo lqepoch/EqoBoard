@@ -132,6 +132,13 @@ export type MdpMarketDataSigner = {
   kid: "mdp-terminal" | "mdp-research";
 };
 
+export type QuantResearchRuntimeMode = "terminal" | "research";
+export type QuantResearchSigner = {
+  secret: string;
+  issuer: "eqoboard-openterminal" | "openterminal-research";
+  kid: "quant-terminal" | "quant-research";
+};
+
 /**
  * Return only the MDP delegation key assigned to this BFF runtime. MDP keys
  * stay distinct from NextAuth and both legacy Gateway signing keys; a key for
@@ -161,6 +168,47 @@ export function mdpMarketDataSigner(mode: MdpMarketDataRuntimeMode): MdpMarketDa
     return null;
   }
   return { secret, issuer: "openterminal-research", kid: "mdp-research" };
+}
+
+/** Return only this hostname's dedicated, private prediction-read key. */
+export function quantResearchSigner(mode: QuantResearchRuntimeMode): QuantResearchSigner | null {
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+  const gatewaySecret = process.env.EQO_GATEWAY_JWT_SECRET;
+  const researchGatewaySecret = process.env.EQO_RESEARCH_JWT_SECRET;
+  const mdpTerminalSecret = process.env.MDP_TERMINAL_JWT_SECRET;
+  const mdpResearchSecret = process.env.MDP_RESEARCH_JWT_SECRET;
+  const terminalQuantSecret = process.env.QUANT_TERMINAL_JWT_SECRET;
+  const researchQuantSecret = process.env.QUANT_RESEARCH_JWT_SECRET;
+  const otherSecrets = [
+    nextAuthSecret,
+    gatewaySecret,
+    researchGatewaySecret,
+    mdpTerminalSecret,
+    mdpResearchSecret,
+    process.env.EQO_OIDC_CLIENT_SECRET,
+    process.env.EQO_OPENBB_OIDC_CLIENT_SECRET,
+    process.env.EQO_RESEARCH_API_KEY,
+  ];
+
+  if (mode === "terminal") {
+    const secret = terminalQuantSecret;
+    if ((process.env.EQO_BFF_MODE !== undefined && process.env.EQO_BFF_MODE !== "terminal") ||
+        Object.hasOwn(process.env, "QUANT_RESEARCH_JWT_SECRET") ||
+        Object.hasOwn(process.env, "MDP_RESEARCH_JWT_SECRET") ||
+        !isAuthRuntimeConfigured() || !validHmacSecret(secret) || otherSecrets.includes(secret)) {
+      return null;
+    }
+    return { secret, issuer: "eqoboard-openterminal", kid: "quant-terminal" };
+  }
+
+  const secret = researchQuantSecret;
+  if (process.env.EQO_BFF_MODE !== "research" ||
+      Object.hasOwn(process.env, "QUANT_TERMINAL_JWT_SECRET") ||
+      Object.hasOwn(process.env, "MDP_TERMINAL_JWT_SECRET") ||
+      !isResearchAuthRuntimeConfigured() || !validHmacSecret(secret) || otherSecrets.includes(secret)) {
+    return null;
+  }
+  return { secret, issuer: "openterminal-research", kid: "quant-research" };
 }
 
 export function isCurrentRuntimeReady(): boolean {

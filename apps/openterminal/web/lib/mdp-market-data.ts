@@ -2,9 +2,17 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeMdpMarketDataRequest } from "@/lib/eqo-auth";
 import { readLimitedResponse } from "@/lib/http-response";
+import {
+  MDP_BAR_SCHEMA_ID,
+  MDP_BAR_SCHEMA_SHA256,
+  type MdpBarsResponseV1,
+  type MdpDatasetNamespace,
+  type MdpSource,
+  type TradeMinuteBarV1,
+} from "@/lib/mdp-market-data-contract";
 
-export const MDP_BAR_SCHEMA_ID = "lqepoch.us_equity_trade_bar_1m.v1";
-export const MDP_BAR_SCHEMA_SHA256 = "5e761a91d880e0002aeafe6dc2083b7c8a0ff2ba486d5d93582fbb4479146cb0";
+export { MDP_BAR_SCHEMA_ID, MDP_BAR_SCHEMA_SHA256 } from "@/lib/mdp-market-data-contract";
+export type { MdpBarsResponseV1, MdpDatasetNamespace, MdpSource, TradeMinuteBarV1 } from "@/lib/mdp-market-data-contract";
 
 const MAX_DATASET_ID_LENGTH = 128;
 const MAX_QUERY_LENGTH = 512;
@@ -80,33 +88,6 @@ const SUMMARY_FIELDS = [
 
 const SOURCE_REQUIRED_FIELDS = ["provider", "feed", "entitlement", "numeric_encoding"] as const;
 const SOURCE_ALLOWED_FIELDS = new Set([...SOURCE_REQUIRED_FIELDS, "source_record_id"]);
-
-export type MdpDatasetNamespace = "diagnostic" | "curated";
-
-type MdpSource = {
-  provider: string;
-  feed: string;
-  entitlement: "unknown" | "authorized" | "unauthorized";
-  numeric_encoding: string;
-  source_record_id?: string | null;
-};
-
-type TradeMinuteBarV1 = Record<(typeof BAR_FIELDS)[number], unknown>;
-
-type MdpBarsResponseV1 = {
-  summary: {
-    namespace: MdpDatasetNamespace;
-    dataset_id: string;
-    schema_id: typeof MDP_BAR_SCHEMA_ID;
-    source: MdpSource;
-    row_count: string;
-    returned_rows: string;
-    content_sha256: string;
-    parquet_schema_sha256: typeof MDP_BAR_SCHEMA_SHA256;
-    cache_hit: boolean;
-  };
-  rows: TradeMinuteBarV1[];
-};
 
 type ExpectedRequest = {
   datasetId: string;
