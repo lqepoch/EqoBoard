@@ -40,3 +40,5 @@ FROM runtime AS compose-e2e
 COPY --from=build --chown=node:node /build/web/e2e/mock-services.mjs /srv/e2e/mock-services.mjs
 COPY --from=build --chown=node:node /build/web/e2e/compose-e2e-server.mjs /srv/e2e/compose-e2e-server.mjs
 COPY --from=build --chown=node:node /build/web/e2e/fixtures/prediction-envelope-v1.synthetic.protojson /srv/e2e/fixtures/prediction-envelope-v1.synthetic.protojson
+COPY --from=build --chown=node:node /build/web/e2e/fixtures/engine-status-response-v1.json /srv/e2e/fixtures/engine-status-response-v1.json
+COPY --from=build --chown=node:node /build/web/e2e/fixtures/synthetic-offline-preview-v1.json /srv/e2e/fixtures/synthetic-offline-preview-v1.json
