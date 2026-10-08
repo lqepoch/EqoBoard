@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -14,6 +14,7 @@ import {
 } from "lightweight-charts";
 import { apiGet, fmt, fmtBig, type Candle } from "../../lib/api";
 import type { EqoHistory } from "../../lib/eqo-market";
+import type { MdpBarsResponseV1, TradeMinuteBarV1 } from "../../lib/mdp-market-data-contract";
 import { sma, ema, vwap, rsi, macd, bollinger, type Point } from "../../lib/indicators";
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
 
@@ -24,6 +25,41 @@ const INDICATORS = ["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "BOLL", "RSI", 
 type Range = (typeof RANGES)[number];
 type ChartType = (typeof CHART_TYPES)[number];
 type Indicator = (typeof INDICATORS)[number];
+type DataMode = "provider" | "mdp-diagnostic";
+type ChartCandle = Candle & {
+  exact?: { open: string; high: string; low: string; close: string; volume: string };
+};
+
+const DATASET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const MAX_CHART_PRICE = 1_000_000_000_000;
+const MAX_CHART_VOLUME = 1_000_000_000_000_000;
+
+function finiteChartValue(value: string, maximum: number): number | null {
+  if (value.length > 128 || !/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && Math.abs(parsed) <= maximum ? parsed : null;
+}
+
+function projectMdpBar(row: TradeMinuteBarV1): ChartCandle | null {
+  const open = finiteChartValue(row.open, MAX_CHART_PRICE);
+  const high = finiteChartValue(row.high, MAX_CHART_PRICE);
+  const low = finiteChartValue(row.low, MAX_CHART_PRICE);
+  const close = finiteChartValue(row.close, MAX_CHART_PRICE);
+  const volume = finiteChartValue(row.volume, MAX_CHART_VOLUME);
+  const time = Date.parse(row.bar_start_utc) / 1_000;
+  if ([open, high, low, close, volume].some((value) => value === null) ||
+      !Number.isSafeInteger(time) ||
+      time <= 0) return null;
+  return {
+    time,
+    open: open!,
+    high: high!,
+    low: low!,
+    close: close!,
+    volume: volume!,
+    exact: { open: row.open, high: row.high, low: row.low, close: row.close, volume: row.volume },
+  };
+}
 
 const ts = (t: number) => t as UTCTimestamp;
 const toMap = (pts: Point[]) => new Map(pts.map((p) => [p.time, p.value]));
@@ -35,23 +71,46 @@ const INDICATOR_COLOR: Record<string, string> = {
 
 export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   const symbol = useWidgetSymbol(widget);
+  const [dataMode, setDataMode] = useState<DataMode>("provider");
+  const [datasetDraft, setDatasetDraft] = useState("");
+  const [datasetId, setDatasetId] = useState<string | null>(null);
+  const [datasetInputError, setDatasetInputError] = useState<string | null>(null);
   const [range, setRange] = useState<Range>("6M");
   const [chartType, setChartType] = useState<ChartType>("candles");
   const [active, setActive] = useState<Set<Indicator>>(new Set(["SMA20"]));
-  const [legend, setLegend] = useState<Candle | null>(null);
+  const [legend, setLegend] = useState<ChartCandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
-  const { data: history, error } = useQuery({
+  const { data: history, error: historyError } = useQuery({
     queryKey: ["history", symbol, range],
     queryFn: () => apiGet<EqoHistory>(`/api/history/${encodeURIComponent(symbol)}?range=${range}`),
     refetchInterval: range === "1D" ? 8_000 : 60_000,
+    enabled: dataMode === "provider",
   });
-  const candles: Candle[] | undefined = history?.bars;
+  const { data: archive, error: archiveError } = useQuery({
+    queryKey: ["mdp-diagnostic-bars", datasetId, symbol],
+    queryFn: () => apiGet<MdpBarsResponseV1>(
+      `/api/eqo/market-data/datasets/${encodeURIComponent(datasetId!)}/bars?namespace=diagnostic&symbol=${encodeURIComponent(symbol)}`
+    ),
+    enabled: dataMode === "mdp-diagnostic" && datasetId !== null,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+  const archiveCandles = useMemo<ChartCandle[] | null | undefined>(() => {
+    if (!archive) return undefined;
+    const rows = archive.rows.map(projectMdpBar);
+    if (rows.some((row) => row === null)) return null;
+    return rows as ChartCandle[];
+  }, [archive]);
+  const candles: ChartCandle[] | undefined = dataMode === "provider"
+    ? history?.bars
+    : archiveCandles ?? undefined;
+  const error = dataMode === "provider" ? historyError : archiveError;
 
   // Fast time -> candle lookup for the crosshair legend, independent of chart type.
   const byTime = useMemo(() => {
-    const m = new Map<number, Candle>();
+    const m = new Map<number, ChartCandle>();
     for (const c of candles ?? []) m.set(c.time, c);
     return m;
   }, [candles]);
@@ -234,10 +293,34 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       return next;
     });
 
+  function loadDataset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const id = datasetDraft.trim();
+    setLegend(null);
+    if (!DATASET_ID.test(id)) {
+      setDatasetId(null);
+      setDatasetInputError("Enter a valid diagnostic dataset ID.");
+      return;
+    }
+    setDatasetInputError(null);
+    setDatasetId(id);
+  }
+
+  function switchDataMode(mode: DataMode) {
+    setLegend(null);
+    setDataMode(mode);
+  }
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" data-testid="chart-widget">
       <div className="flex gap-1 p-1 flex-wrap shrink-0">
-        {RANGES.map((r) => (
+        <button className={`term-btn ${dataMode === "provider" ? "active" : ""}`} onClick={() => switchDataMode("provider")}>
+          PROVIDER HISTORY
+        </button>
+        <button className={`term-btn ${dataMode === "mdp-diagnostic" ? "active" : ""}`} onClick={() => switchDataMode("mdp-diagnostic")}>
+          MDP DIAGNOSTIC
+        </button>
+        {dataMode === "provider" && RANGES.map((r) => (
           <button key={r} className={`term-btn ${range === r ? "active" : ""}`} onClick={() => setRange(r)}>
             {r}
           </button>
@@ -255,19 +338,48 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
           </button>
         ))}
       </div>
+      {dataMode === "mdp-diagnostic" && (
+        <form className="flex gap-1 px-2 py-1 border-b border-[#1c1c1c]" onSubmit={loadDataset}>
+          <label className="sr-only" htmlFor={`mdp-dataset-${widget.id}`}>Diagnostic dataset ID</label>
+          <input
+            id={`mdp-dataset-${widget.id}`}
+            value={datasetDraft}
+            onChange={(event) => setDatasetDraft(event.target.value)}
+            maxLength={128}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Diagnostic dataset ID"
+            className="min-w-0 flex-1 bg-[#111] border border-[var(--border)] px-2 py-1 text-[var(--text)] text-[10px]"
+            data-testid="mdp-dataset-id"
+          />
+          <button type="submit" className="term-btn" onMouseDown={(event) => event.stopPropagation()}>LOAD ARCHIVE</button>
+        </form>
+      )}
+      {dataMode === "mdp-diagnostic" && datasetInputError &&
+        <div role="alert" className="px-2 py-1 text-[10px] down">{datasetInputError}</div>}
       <div className="px-2 py-1 border-b border-[#1c1c1c] text-[9px] dim">
-        Source {history?.source??"unknown"} · as of {history?.asOf??"unknown"} · bar volume source follows the listed feed
+        {dataMode === "provider"
+          ? <>Source {history?.source ?? "unknown"} · as of {history?.asOf ?? "unknown"} · bar volume source follows the listed feed</>
+          : archive?.summary
+          ? <>Diagnostic archive · {archive.summary.source.provider}/{archive.summary.source.feed}/{archive.summary.source.entitlement} · {archive.rows[0]?.completion_mode ?? "empty"} · {archive.summary.dataset_id} · NOT LIVE · promotion unavailable</>
+            : <>Diagnostic archive · source unknown · no dataset loaded · NOT LIVE</>}
       </div>
       {error && <div className="p-2 down">Error: {(error as Error).message}</div>}
+      {dataMode === "mdp-diagnostic" && datasetId === null && !error &&
+        <div className="px-2 py-1 text-[10px] dim">Enter a diagnostic dataset ID to load archived bars.</div>}
+      {dataMode === "mdp-diagnostic" && archiveCandles === null &&
+        <div role="alert" className="px-2 py-1 text-[10px] down">Archive values exceed the bounded chart projection; no bars were plotted.</div>}
+      {dataMode === "mdp-diagnostic" && archive && archive.rows.length === 0 &&
+        <div className="px-2 py-1 text-[10px] dim">The validated diagnostic dataset contains no bars for this symbol.</div>}
       <div className="relative flex-1 min-h-0">
         {legend && (
           <div className="absolute top-1 left-2 z-10 flex flex-col gap-0.5 text-[11px] pointer-events-none bg-[rgba(10,10,10,0.7)] px-2 py-1 rounded max-w-[95%]">
             <div className="flex gap-3">
-              <span className="dim">O <span className="text-[var(--text)]">{fmt(legend.open)}</span></span>
-              <span className="dim">H <span className="up">{fmt(legend.high)}</span></span>
-              <span className="dim">L <span className="down">{fmt(legend.low)}</span></span>
-              <span className="dim">C <span className={legend.close >= legend.open ? "up" : "down"}>{fmt(legend.close)}</span></span>
-              <span className="dim">Vol <span className="text-[var(--text)]">{fmtBig(legend.volume)}</span></span>
+              <span className="dim">O <span className="text-[var(--text)]">{legend.exact?.open ?? fmt(legend.open)}</span></span>
+              <span className="dim">H <span className="up">{legend.exact?.high ?? fmt(legend.high)}</span></span>
+              <span className="dim">L <span className="down">{legend.exact?.low ?? fmt(legend.low)}</span></span>
+              <span className="dim">C <span className={legend.close >= legend.open ? "up" : "down"}>{legend.exact?.close ?? fmt(legend.close)}</span></span>
+              <span className="dim">Vol <span className="text-[var(--text)]">{legend.exact?.volume ?? fmtBig(legend.volume)}</span></span>
             </div>
             {indicatorRows.length > 0 && (
               <div className="flex gap-3 flex-wrap">

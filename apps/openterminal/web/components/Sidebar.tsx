@@ -21,6 +21,7 @@ const ITEMS: Array<{ type: WidgetType; label: string; key: string }> = [
   { type: "insider", label: "INSIDER", key: "" },
   { type: "tv", label: "LIVE TV", key: "" },
   { type: "recap", label: "MARKET RECAP", key: "" },
+  { type: "researchpredictions", label: "PREDICTION", key: "" },
 ];
 
 export default function Sidebar({ researchOrigin }: { researchOrigin: string | null }) {
