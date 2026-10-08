@@ -1,0 +1,26 @@
+name: Verify EqoBoard Alpaca SIP actual quota
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/qqq_sip_quota_probe.py
+      - .github/workflows/qqq-sip-quota-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rate-quota-probe:
+    if: github.repository == 'lqepoch/EqoBoard' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: market-data-readonly
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Read actual Alpaca SIP response quota (never expose keys)
+        env:
+          ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
+          ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
+          ALPACA_CREDENTIAL_SOURCE: EqoBoard/market-data-readonly/ALPACA_KEY
+        run: python3 tools/qqq_sip_quota_probe.py
