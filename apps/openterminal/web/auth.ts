@@ -125,6 +125,44 @@ export function isResearchAuthRuntimeConfigured(): boolean {
     !process.env.ALPACA_SECRET;
 }
 
+export type MdpMarketDataRuntimeMode = "terminal" | "research";
+export type MdpMarketDataSigner = {
+  secret: string;
+  issuer: "eqoboard-openterminal" | "openterminal-research";
+  kid: "mdp-terminal" | "mdp-research";
+};
+
+/**
+ * Return only the MDP delegation key assigned to this BFF runtime. MDP keys
+ * stay distinct from NextAuth and both legacy Gateway signing keys; a key for
+ * the opposite hostname is a configuration error, not a fallback.
+ */
+export function mdpMarketDataSigner(mode: MdpMarketDataRuntimeMode): MdpMarketDataSigner | null {
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+  const gatewaySecret = process.env.EQO_GATEWAY_JWT_SECRET;
+  const researchGatewaySecret = process.env.EQO_RESEARCH_JWT_SECRET;
+
+  if (mode === "terminal") {
+    const secret = process.env.MDP_TERMINAL_JWT_SECRET;
+    if (process.env.EQO_BFF_MODE === "research" ||
+        Object.hasOwn(process.env, "MDP_RESEARCH_JWT_SECRET") ||
+        !isAuthRuntimeConfigured() || !validHmacSecret(secret) ||
+        [nextAuthSecret, gatewaySecret, researchGatewaySecret].includes(secret)) {
+      return null;
+    }
+    return { secret, issuer: "eqoboard-openterminal", kid: "mdp-terminal" };
+  }
+
+  const secret = process.env.MDP_RESEARCH_JWT_SECRET;
+  if (process.env.EQO_BFF_MODE !== "research" ||
+      Object.hasOwn(process.env, "MDP_TERMINAL_JWT_SECRET") ||
+      !isResearchAuthRuntimeConfigured() || !validHmacSecret(secret) ||
+      [nextAuthSecret, gatewaySecret, researchGatewaySecret].includes(secret)) {
+    return null;
+  }
+  return { secret, issuer: "openterminal-research", kid: "mdp-research" };
+}
+
 export function isCurrentRuntimeReady(): boolean {
   return process.env.EQO_BFF_MODE === "research"
     ? isResearchAuthRuntimeConfigured()

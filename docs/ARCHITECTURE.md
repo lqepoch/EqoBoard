@@ -24,6 +24,8 @@ Alpaca OPRA ─────┼──────────►│ Rust Tokio/Ax
                               └ Schwab Rust service     │
 ```
 
+历史归档分钟 bars 使用独立的 MDP read API：OpenTerminal 与 research Next BFF 以各自的短时 `market:read` 委托调用 MDP，浏览器不持有 MDP token，也不直连归档。该接口不是 Gateway 行情流、账户 entitlement 或订阅 ACK 的替代品。
+
 ## UI 边界
 
 OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlist、Chart、Screener、Heatmap、宏观、日历、SEC/FINRA/新闻等成熟能力。EqoBoard 只维护差异化模块：
@@ -39,6 +41,12 @@ OpenTerminal 提供 Workspace、Widget 生命周期、Command Palette、Watchlis
 OpenTerminal 可通过可选 `EQO_RESEARCH_PUBLIC_ORIGIN` 在原生 Sidebar 和 Command Palette 暴露 OpenBB Research 外链。它只接受纯 HTTPS origin（本地开发可用精确 loopback HTTP），hostname 必须不同于 `EQO_PUBLIC_ORIGIN`；链接在新标签打开，不共享 OpenTerminal OIDC 会话或凭据。未设置或非法时入口隐藏，主终端不依赖 OpenBB 服务启动。
 
 主终端与 OpenBB 浏览器都只通过各自的 Next BFF 访问受保护 API。Next 使用固定 OIDC issuer 的 PKCE/state 会话，把 allowlist role 映射为短时委托；Gateway 校验 issuer、audience、kid、签名、有效期和 scope。OpenBB 使用独立 hostname 与 research-mode Next BFF；不同端口不足以隔离 host-only cookies，`EQO_TERMINAL_PUBLIC_ORIGIN` 缺失或与 research hostname 相同时 readiness 拒绝启动。Research BFF 只持有独立 research signer，验证其 OIDC 用户 session 与 `market:read` role 后签发最长 60 秒的 `market:read` 子 token。`/api/research/auth-check` 供 ingress 内部 `auth_request` 检查会话和角色，返回 204/401/403 且不签 token；公网 ingress 必须隐藏该路径。Research BFF/Lite 不配置终端 Gateway signer、Node API key 或 Alpaca market keys；只有 Rust Gateway 持有行情凭据。关闭可选 Research 服务不影响 OpenTerminal、Gateway 或 Node research 主服务。客户端身份头和静态 `EQO_ACCESS_TOKEN` 不构成认证。
+
+## MDP 归档只读接口
+
+只读路径为 `/api/eqo/market-data/datasets/{dataset_id}/bars?namespace=diagnostic&symbol=QQQ`。终端签发者固定为 `iss=eqoboard-openterminal` / `kid=mdp-terminal`，research 签发者固定为 `iss=openterminal-research` / `kid=mdp-research`；两者共用 audience `lqepoch-market-data`，但分别使用 `MDP_TERMINAL_JWT_SECRET` 与 `MDP_RESEARCH_JWT_SECRET`，并与 Gateway/NextAuth key 不同。
+
+BFF 只接受最多 390 行、4 MiB 的 `lqepoch.us_equity_trade_bar_1m.v1` 响应，校验 schema fingerprint `5e761a91d880e0002aeafe6dc2083b7c8a0ff2ba486d5d93582fbb4479146cb0`、逐行来源和数值/时间语义。当前接口不含 CompletionV2，故 BFF 只放行 `diagnostic` 并在任何 MDP 请求前拒绝 `curated`。`synthetic`、`unknown`、缺失的 entitlement 或 NBBO 状态不会被改写成“行情已连接”。
 
 ## Rust 数据接口
 

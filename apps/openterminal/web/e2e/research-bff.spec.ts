@@ -4,6 +4,7 @@ const WEB_ORIGIN = "http://127.0.0.1:3320";
 const OIDC_ORIGIN = "http://127.0.0.1:4320";
 const SAME_HOSTNAME_WEB_ORIGIN = "http://127.0.0.1:3321";
 const CREDENTIAL_WEB_ORIGIN = "http://127.0.0.1:3322";
+const LOCAL_MDP_DATASET_ID = "synthetic-2026-10-08-four-bars-parquet-v3-bars-1m-v1";
 
 async function postJson(request: APIRequestContext, url: string, data: unknown) {
   const response = await request.post(url, { data });
@@ -75,6 +76,11 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   const anonymousAuthCheck = await request.get(`${WEB_ORIGIN}/api/research/auth-check`);
   expect(anonymousAuthCheck.status()).toBe(401);
   expect(await anonymousAuthCheck.json()).toEqual({ error: "authentication_required" });
+  const anonymousMdpBars = await request.get(
+    `${WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+  );
+  expect(anonymousMdpBars.status()).toBe(401);
+  expect(await metrics(request)).toMatchObject({ mdp: { requests: {}, authorized: 0, rejected: 0 } });
 
   const csrfResponse = await page.context().request.get(`${WEB_ORIGIN}/api/auth/csrf`);
   expect(csrfResponse.status()).toBe(200);
@@ -95,6 +101,17 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   expect((await request.get(`${WEB_ORIGIN}/%61pi/eqo/orders/preview`)).status()).toBe(404);
   expect((await request.post(`${WEB_ORIGIN}/api/openbb/openbb/v1/options`, { data: {} })).status()).toBe(404);
   expect((await request.post(`${WEB_ORIGIN}/api/research/auth-check`)).status()).toBe(404);
+  expect((await request.post(
+    `${WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+    { data: {} },
+  )).status()).toBe(404);
+  expect((await request.head(
+    `${WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+  )).status()).toBe(404);
+  expect((await request.fetch(
+    `${WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+    { method: "OPTIONS" },
+  )).status()).toBe(404);
   for (const path of [
     "/api/portfolios",
     "/api/ai/chat",
@@ -130,7 +147,16 @@ test("research runtime exposes only auth, health, manifests, and allowlisted rea
   expect(await credentialReadiness.json()).toMatchObject({ ready: false, runtime_mode: "research" });
   const credentialMarketRequest = await request.get(`${CREDENTIAL_WEB_ORIGIN}/api/openbb/openbb/v1/stocks?symbols=QQQ`);
   expect(credentialMarketRequest.status()).toBe(503);
+  const credentialMdpRequest = await request.get(
+    `${CREDENTIAL_WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+  );
+  expect(credentialMdpRequest.status()).toBe(503);
+  const sameHostnameMdpRequest = await request.get(
+    `${SAME_HOSTNAME_WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+  );
+  expect(sameHostnameMdpRequest.status()).toBe(503);
   expect(await metrics(request)).toMatchObject({ gateway: { requests: {}, authorized: 0, rejected: 0 } });
+  expect((await metrics(request)).mdp.requests).toEqual({});
 
   const manifests = await request.get(`${WEB_ORIGIN}/api/openbb/widgets.json`);
   expect(manifests.status()).toBe(200);
@@ -188,6 +214,18 @@ test("market-reader OIDC session reaches SIP and OPRA only through short researc
     updated_at: "2026-10-07T12:00:00Z", truncated: false,
   }]);
 
+  const mdpBars = await page.context().request.get(
+    `${WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+  );
+  expect(mdpBars.status()).toBe(200);
+  expect(mdpBars.headers()["cache-control"]).toBe("no-store");
+  const mdpBody = await mdpBars.json();
+  expect(mdpBody.summary).toMatchObject({
+    namespace: "diagnostic",
+    source: { provider: "synthetic", feed: "synthetic", entitlement: "unknown" },
+  });
+  expect(mdpBody.rows[0]).toMatchObject({ source_provider: "synthetic", source_entitlement: "unknown" });
+
   await configureGateway(request, { openbbOptionsTruncated: true });
   const truncated = await page.context().request.get(
     `${WEB_ORIGIN}/api/openbb/openbb/v1/options?underlying=QQQ&expiration=2026-10-09`,
@@ -211,6 +249,43 @@ test("market-reader OIDC session reaches SIP and OPRA only through short researc
   expect(marketCalls[1]).toMatchObject({ symbol: "QQQ", timeframe: "1Day", days: "30", limit: "500" });
   expect(marketCalls[2]).toMatchObject({ underlying: "QQQ", expiration: "2026-10-09" });
   expect(result.research.requests).toEqual({});
+  expect(result.mdp.authorized).toBe(1);
+  expect(result.mdp.calls[0]).toMatchObject({
+    kid: "mdp-research",
+    issuer: "openterminal-research",
+    audience: "lqepoch-market-data",
+    subject: "subject-e2e",
+    scope: ["market:read"],
+  });
+  expect(result.mdp.calls[0].exp - result.mdp.calls[0].iat).toBeGreaterThan(0);
+  expect(result.mdp.calls[0].exp - result.mdp.calls[0].iat).toBeLessThanOrEqual(60);
+});
+
+test("research OIDC BFF reads synthetic diagnostic bars from the actual loopback MDP HTTP service", async ({ page, request }) => {
+  test.skip(!process.env.E2E_MDP_UPSTREAM_URL, "requires an explicit loopback E2E_MDP_UPSTREAM_URL and local MDP service");
+  await reset(request);
+  await signIn(page, request, ["eqoboard-market-reader"]);
+  const response = await page.context().request.get(
+    `${WEB_ORIGIN}/api/eqo/market-data/datasets/${LOCAL_MDP_DATASET_ID}/bars?namespace=diagnostic&symbol=QQQ`,
+  );
+
+  expect(response.status()).toBe(200);
+  expect(response.headers()["cache-control"]).toBe("no-store");
+  const body = await response.json();
+  expect(body.summary).toMatchObject({
+    namespace: "diagnostic",
+    dataset_id: LOCAL_MDP_DATASET_ID,
+    schema_id: "lqepoch.us_equity_trade_bar_1m.v1",
+    source: { provider: "synthetic", feed: "synthetic", entitlement: "unknown" },
+    row_count: "4",
+    returned_rows: "4",
+    parquet_schema_sha256: "5e761a91d880e0002aeafe6dc2083b7c8a0ff2ba486d5d93582fbb4479146cb0",
+  });
+  expect(body.rows).toHaveLength(4);
+  expect(body.rows.every((row: Record<string, unknown>) =>
+    row.source_provider === "synthetic" && row.source_feed === "synthetic" &&
+    row.source_entitlement === "unknown" && row.completion_mode === "synthetic_eof")).toBe(true);
+  expect((await metrics(request)).mdp.requests).toEqual({});
 });
 
 test("wrong role, feed denial, invalid input, and unknown paths fail without fallback", async ({ page, request }) => {
@@ -220,7 +295,12 @@ test("wrong role, feed denial, invalid input, and unknown paths fail without fal
   expect(await authCheck.json()).toEqual({ error: "action_forbidden" });
   const forbidden = await page.context().request.get(`${WEB_ORIGIN}/api/openbb/openbb/v1/stocks?symbols=QQQ`);
   expect(forbidden.status()).toBe(403);
+  const forbiddenMdp = await page.context().request.get(
+    `${WEB_ORIGIN}/api/eqo/market-data/datasets/synthetic-e2e-bars-v1/bars?namespace=diagnostic&symbol=QQQ`,
+  );
+  expect(forbiddenMdp.status()).toBe(403);
   expect(await metrics(request)).toMatchObject({ gateway: { requests: {}, authorized: 0 } });
+  expect((await metrics(request)).mdp.requests).toEqual({});
 
   await signIn(page, request, ["eqoboard-market-reader"]);
   for (const url of [

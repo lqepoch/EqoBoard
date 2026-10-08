@@ -81,6 +81,14 @@ openssl rand -hex 32
 
 `EQO_SESSION_TTL_SECONDS` 是滚动会话空闲期限，默认 3600 秒，允许范围 5 到 86400 秒。SSE 每次连接绑定当次签名会话及委托期限，期限到时断开；浏览器需重新授权连接，不能延长已建立流的凭证。写请求要求浏览器 Origin 与配置的 public origin 完全匹配，JSON 不超过 64 KiB，body 最长读取 5 秒。
 
+### MDP 归档 read API
+
+`EQO_MDP_URL` 配置只读 MDP 服务 origin；留空时 `/api/eqo/market-data/datasets/{dataset_id}/bars` 返回不可用，不访问下游。当前仓库 Compose 不启动 MDP 服务。若 MDP 与 BFF 加入同一私有 Compose 网络，固定服务名使用 `market-data-platform`，可设置 `http://market-data-platform:8088`；其它非 loopback 地址必须使用 HTTPS。服务不得公开到浏览器或公网，部署时应限制在 BFF 可达的私有网络。
+
+MDP 服务委托 key 与 Gateway key 完全分开。终端只接收 `MDP_TERMINAL_JWT_SECRET`；`compose.openbb.yaml` 的 research BFF 只接收 `MDP_RESEARCH_JWT_SECRET`。分别生成独立的至少 32 字节随机值（建议 `openssl rand -hex 32`），不得与彼此、NextAuth 或 Gateway signing key 重用。BFF 签发的 MDP JWT 固定 audience `lqepoch-market-data`、`scope=[market:read]` 和最多 60 秒期限；kid/issuer 映射分别为 `mdp-terminal` / `eqoboard-openterminal` 与 `mdp-research` / `openterminal-research`。
+
+当前 BFF 针对 MDP revision `f7e21beb79e125bfaeaca09bda95639cd89faaea` 的 V1 只读 API；它只允许 `diagnostic` bars，并以 Core 注册的 `lqepoch.us_equity_trade_bar_1m.v1` schema 指纹验证响应。V1 不含 completion qualification，`curated` 会在请求 MDP 前拒绝。归档 API、BFF 身份 readiness 和 Gateway `/readyz` 都不证明真实 SIP/OPRA 授权、行情连接、exchange calendar 或交易能力。
+
 ## 行情与 readiness
 
 `ALPACA_KEY` / `ALPACA_SECRET` 只注入 Rust Gateway 容器。无凭据时服务保留健康和只读页面，但 SIP/OPRA API 返回明确不可用状态；不得用 Yahoo、IEX、mock 或 indicative 数据替换并标成 SIP/OPRA。真实市场数据状态需单独核实账户 entitlement 与实际上游返回。
@@ -91,6 +99,7 @@ openssl rand -hex 32
 | Gateway `/readyz` | Gateway 验证主体所需的独立 signing key 已配置；响应另列 `market_data_ready`，本版本恒为 `false` |
 | OpenTerminal `/api/healthz` | Next 进程可响应 |
 | OpenTerminal `/api/readyz` | OIDC、会话及委托配置齐全；没有 OIDC 时返回 503，受保护 BFF 不访问下游 |
+| OpenTerminal MDP bars BFF | 单次 diagnostic archive query；缺 MDP key/origin 时返回 503，不表示持续采集或行情已连接 |
 | research `/readyz` | Node 服务身份 key 与委托验证配置齐全；该 endpoint 不发布宿主端口 |
 
 `docker compose up --wait` 使用容器 healthcheck 等待进程健康。应用 readiness 有意独立于 liveness；启动成功或 `/healthz` 返回 200 不能作为身份、市场数据或交易能力的证据。当前 `execution_enabled` 固定为 `false`，Paper submit 会 blocked 且不会调用券商，Live 始终拒绝。

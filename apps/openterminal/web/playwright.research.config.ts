@@ -1,10 +1,12 @@
 import { defineConfig } from "@playwright/test";
 import { assertHostE2eEnvironmentIsIsolated } from "./e2e/isolated-env";
+import { mdpUpstreamUrl } from "./e2e/mdp-upstream";
 
 assertHostE2eEnvironmentIsIsolated();
 
 const oidcUrl = "http://127.0.0.1:4320";
 const webUrl = "http://127.0.0.1:3320";
+const mdpUrl = mdpUpstreamUrl(process.env.E2E_MDP_UPSTREAM_URL, 4323);
 const sameHostnameWebUrl = "http://127.0.0.1:3321";
 const credentialWebUrl = "http://127.0.0.1:3322";
 
@@ -31,6 +33,7 @@ export default defineConfig({
         E2E_OIDC_PORT: "4320",
         E2E_GATEWAY_PORT: "4321",
         E2E_RESEARCH_PORT: "4322",
+        E2E_MDP_PORT: "4323",
         E2E_WEB_ORIGIN: webUrl,
         E2E_OIDC_ORIGIN: oidcUrl,
       },
@@ -53,10 +56,12 @@ export default defineConfig({
         EQO_OIDC_CLIENT_SECRET: "test-secret",
         EQO_GATEWAY_JWT_SECRET: "",
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
+        MDP_RESEARCH_JWT_SECRET: "q".repeat(64),
         EQO_RESEARCH_API_KEY: "",
         ALPACA_KEY: "",
         ALPACA_SECRET: "",
         EQO_RUST_URL: "http://127.0.0.1:4321",
+        EQO_MDP_URL: mdpUrl,
       },
     },
     {
@@ -77,10 +82,12 @@ export default defineConfig({
         EQO_OIDC_CLIENT_SECRET: "test-secret",
         EQO_GATEWAY_JWT_SECRET: "",
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
+        MDP_RESEARCH_JWT_SECRET: "q".repeat(64),
         EQO_RESEARCH_API_KEY: "",
         ALPACA_KEY: "",
         ALPACA_SECRET: "",
         EQO_RUST_URL: "http://127.0.0.1:4321",
+        EQO_MDP_URL: mdpUrl,
       },
     },
     {
@@ -101,10 +108,12 @@ export default defineConfig({
         EQO_OIDC_CLIENT_SECRET: "test-secret",
         EQO_GATEWAY_JWT_SECRET: "",
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
+        MDP_RESEARCH_JWT_SECRET: "q".repeat(64),
         EQO_RESEARCH_API_KEY: "",
         ALPACA_KEY: "mock-market-key-must-not-enter-research",
         ALPACA_SECRET: "mock-market-secret-must-not-enter-research",
         EQO_RUST_URL: "http://127.0.0.1:4321",
+        EQO_MDP_URL: mdpUrl,
       },
     },
   ],

@@ -1,5 +1,6 @@
-# OpenTerminal is the browser entry point. Rust Gateway remains the sole
-# stock/option authority; research and market credentials never reach browsers.
+# OpenTerminal is the browser entry point. Rust Gateway remains the live
+# stock/option authority; MDP is a separate read-only archive API. Service keys
+# stay server-side and are projected only to their matching BFF runtime.
 include:
   - compose.openbb.yaml
 
@@ -43,6 +44,8 @@ services:
       EQO_RUST_URL: http://eqoboard:8080
       EQO_GATEWAY_JWT_SECRET: ${EQO_GATEWAY_JWT_SECRET:-}
       EQO_RESEARCH_JWT_SECRET: ${EQO_RESEARCH_JWT_SECRET:-}
+      EQO_MDP_URL: ${EQO_MDP_URL:-}
+      MDP_TERMINAL_JWT_SECRET: ${MDP_TERMINAL_JWT_SECRET:-}
       EQO_RESEARCH_API_KEY: ${EQO_RESEARCH_API_KEY:-}
       API_URL: http://research:4000
       NEXT_TELEMETRY_DISABLED: "1"

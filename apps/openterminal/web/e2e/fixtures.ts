@@ -16,8 +16,9 @@ export async function resetDownstream(request: APIRequestContext) {
       activeStreams: result.gateway.activeStreams,
       gatewayInFlight: result.gateway.inFlight,
       researchInFlight: result.research.inFlight,
+      mdpInFlight: result.mdp.inFlight,
     };
-  }, { timeout: 5_000 }).toEqual({ activeStreams: 0, gatewayInFlight: 0, researchInFlight: 0 });
+  }, { timeout: 5_000 }).toEqual({ activeStreams: 0, gatewayInFlight: 0, researchInFlight: 0, mdpInFlight: 0 });
   const response = await request.post(`${MOCK_OIDC_ORIGIN}/__test/reset`);
   expect(response.ok()).toBeTruthy();
 }
