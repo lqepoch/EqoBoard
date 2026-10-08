@@ -136,8 +136,9 @@ test("BFF validates the public envelope with the pinned Core ProtoJSON parser", 
   });
   expect(maximumSequenceResult.status).toBe(200);
 
+  const unknownFieldEnvelope = JSON.parse(PUBLIC_PROTOJSON_FIXTURE) as Record<string, unknown>;
   const invalidProtoJson = [
-    ["unknown field", PUBLIC_PROTOJSON_FIXTURE.replace("{", '{"unknownField":"x",')],
+    ["unknown field", JSON.stringify({ ...unknownFieldEnvelope, unknownField: "x" })],
     ["duplicate field", PUBLIC_PROTOJSON_FIXTURE.replace(
       '"predictionId":"prediction-e2e"',
       '"predictionId":"prediction-e2e","predictionId":"duplicate"',
