@@ -5,7 +5,7 @@
 1. UI 主路径为 `apps/openterminal`。通用 Workspace、图表、Watchlist、研究 Widget 优先同步或扩展 OpenTerminal；禁止另建平行终端。
 2. 期权大表统一使用 AG Grid Community；高频更新使用批量 transaction，禁止每个 tick 触发整表 React render。
 3. OpenBB 位于 Rust Gateway 的兼容接口层：`/widgets.json`、`/apps.json`、`/openbb/*`。修改前核对当前官方 Workspace spec。
-4. Rust 领域模型在 `crates/domain`，Alpaca 在 `crates/alpaca-data`，执行适配在 `crates/execution`，HTTP/WS 在 `apps/gateway`。
+4. 共享市场契约由固定版本的 `trading-core/market-contracts` 提供；`crates/domain` 仅保留 EqoBoard 旧 JSON DTO 的兼容重导出。Alpaca 在 `crates/alpaca-data`，执行适配在 `crates/execution`，HTTP/WS 在 `apps/gateway`。旧 DTO 的 `f64` 字段不得作为精确行情归档或新 wire contract。
 5. ALPACA_KEY / ALPACA_SECRET 只能进入服务端运行环境。公共 GitHub Actions 不读取组织行情、OAuth、Drive 或 GitHub App 凭据，也不执行真实行情探测、数据导出或自动合并；对应 workflows 已从 `.github/workflows` 移除，保留的只读行情脚本只能由操作者在本地显式运行，生成的数据不得提交或作为公开 Actions artifact。任何 mock 数据必须显式标识，不能伪装行情。
 6. live 委托保持拒绝；当前 Gateway 的 effective execution 固定为 disabled，即使配置请求 Paper 也只保留只读和离线 preview。Paper 还需一次性服务端锁定 preview、限额、原子多腿、幂等、持久 outbox、账户身份、审计和对账后才可单独启用。
 7. 上游依赖固定版本/commit，保留许可证和变更记录；OpenTerminal 升级先做 diff、契约测试、构建和回滚计划。

@@ -42,6 +42,8 @@ OpenTerminal 可通过可选 `EQO_RESEARCH_PUBLIC_ORIGIN` 在原生 Sidebar 和 
 
 ## Rust 数据接口
 
+共享 Rust 市场契约由固定 revision 的 `trading-core/crates/market-contracts` 持有。EqoBoard `crates/domain` 是旧 JSON DTO 的兼容 facade，保持现有 `eqo_domain::*` 消费者路径和 JSON 形状；新版本化 wire DTO 应直接复用 core 类型，不在本仓库复制。旧快照、bar 和事件中的 `f64` 是兼容投影，不保证精确十进制表示，不能作为新归档或执行合同。
+
 所有受保护 Gateway 路由都要求可验证委托主体；`/healthz` 仅表示进程存活，`/readyz` 表示身份 keyring 可用。行情配置和 SIP/OPRA 授权另行判断，身份 readiness 不等于市场数据 ready。
 
 - `GET /api/v1/status`
