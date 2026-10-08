@@ -1373,6 +1373,24 @@ mod tests {
         .expect("test token encodes")
     }
 
+    fn test_token_with_malformed_nbf(secret: &[u8], kid: &str, issuer: &str, nbf: &str) -> String {
+        let now = Utc::now().timestamp().max(0) as usize;
+        let mut header = Header::new(Algorithm::HS256);
+        header.kid = Some(kid.to_owned());
+        let claims = serde_json::json!({
+            "sub": "subject-1",
+            "iss": issuer,
+            "aud": GATEWAY_AUDIENCE,
+            "iat": now,
+            "exp": now + 60,
+            "jti": "malformed-nbf-test-token",
+            "idp_iss": "https://identity.example",
+            "scope": ["market:read"],
+            "nbf": nbf,
+        });
+        encode(&header, &claims, &EncodingKey::from_secret(secret)).expect("test token encodes")
+    }
+
     fn order_test_state(brokers: BrokerRouter, keys: AuthKeyring) -> AppState {
         let (stock_tx, _) = watch::channel(Vec::<String>::new());
         let (option_tx, _) = watch::channel(Vec::<String>::new());
@@ -1781,6 +1799,27 @@ mod tests {
             Utc::now().timestamp().max(0) as usize,
         )
         .is_err());
+    }
+
+    #[test]
+    fn malformed_future_nbf_is_rejected_even_when_not_required() {
+        let research = b"research-signing-secret-that-is-at-least-64-bytes-long-0123456789";
+        let keys = AuthKeyring {
+            bff: Some(Arc::new(vec![b'b'; 64])),
+            research: Some(Arc::new(research.to_vec())),
+        };
+        let now = Utc::now().timestamp().max(0) as usize;
+        let malformed_future_nbf = now.saturating_add(3_600).to_string();
+        let token = test_token_with_malformed_nbf(
+            research,
+            "research",
+            RESEARCH_ISSUER,
+            &malformed_future_nbf,
+        );
+
+        // `nbf` is intentionally absent from required_spec_claims; a malformed
+        // standard claim must still fail validation rather than act as absent.
+        assert!(authenticate_delegation(&token, &keys, now).is_err());
     }
 
     #[tokio::test]
