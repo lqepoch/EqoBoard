@@ -10,10 +10,12 @@ rust-version = "1.98.1"
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.45", features = ["full"] }
+tokio = { version = "=1.53.2", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 tracing = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
-market-contracts = { git = "https://github.com/lqepoch/trading-core", rev = "0a2eaff08d45e8abc1a0137dab17d5d3ef5553c8", package = "market-contracts" }
+market-contracts = { git = "https://github.com/lqepoch/trading-core.git", rev = "22315511e084050c2ec037fa36c5d07a0bc6606e", package = "market-contracts" }
+broker-ports = { git = "https://github.com/lqepoch/broker-connectors.git", rev = "a8eea66a967f2d40cf726344b46e229ffee6f41b", package = "broker-ports" }
+alpaca-stream = { git = "https://github.com/lqepoch/broker-connectors.git", rev = "a8eea66a967f2d40cf726344b46e229ffee6f41b", package = "alpaca-stream" }

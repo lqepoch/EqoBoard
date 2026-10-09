@@ -9,6 +9,9 @@ publish = false
 eqo-domain = { path = "../../crates/domain" }
 eqo-alpaca-data = { path = "../../crates/alpaca-data" }
 eqo-execution = { path = "../../crates/execution" }
+broker-ports.workspace = true
+alpaca-stream.workspace = true
+market-contracts.workspace = true
 futures-util = "0.3"
 axum = { version = "0.8", features = ["ws", "json"] }
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
