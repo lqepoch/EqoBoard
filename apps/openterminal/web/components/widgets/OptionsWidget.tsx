@@ -98,7 +98,9 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
     refetchInterval:15_000,retry:1
   });
   const gatewayInstanceId=useMarket(s=>s.gatewayInstanceId);
-  const data=responseData&&(!gatewayInstanceId||responseData.gateway_instance_id===gatewayInstanceId||
+  const gatewayInstanceGeneration=useMarket(s=>s.gatewayInstanceGeneration);
+  const data=responseData&&responseData.clientGatewayInstanceGeneration===gatewayInstanceGeneration&&
+    (!gatewayInstanceId||responseData.gateway_instance_id===gatewayInstanceId||
     (responseData.source_mode!=="alpaca"&&responseData.source_mode!=="offline_mock"))?responseData:undefined;
   const hasUsableSubscriptionLimit=typeof subscriptionLimit==="number"&&
     Number.isSafeInteger(subscriptionLimit)&&subscriptionLimit>0;

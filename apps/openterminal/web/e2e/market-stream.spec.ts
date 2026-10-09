@@ -212,7 +212,7 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
   expect(lease?.body.symbols).toHaveLength(3);
   expect(new Set(lease?.body.symbols).size).toBe(3);
 
-  await configureMocks(request, { sseEvents: [feedStatus(3, null, null, undefined, null)] });
+  await configureMocks(request, { sseEvents: [feedStatus(3, null, null, undefined, -1)] });
   await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
   await expect.poll(async () => {
     const current = await metrics(request);
@@ -220,7 +220,15 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
       entry.path.endsWith("/subscriptions/options")).at(-1)?.body.symbols ?? null;
   }).toEqual([]);
 
-  await configureMocks(request, { sseEvents: [feedStatus(4, null, null, undefined, -1)] });
+  await configureMocks(request, { sseEvents: [feedStatus(4, null, null, undefined, 3)] });
+  await expect(panel).toContainText("OPRA lease request: 3/8 unique chain contracts", { timeout: 5_000 });
+  await expect.poll(async () => {
+    const current = await metrics(request);
+    return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1)?.body.symbols?.length ?? 0;
+  }).toBe(3);
+
+  await configureMocks(request, { sseEvents: [feedStatus(5, null, null, undefined, null)] });
   await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
   await expect.poll(async () => {
     const current = await metrics(request);
@@ -228,7 +236,7 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
       entry.path.endsWith("/subscriptions/options")).at(-1)?.body.symbols ?? null;
   }).toEqual([]);
 
-  await configureMocks(request, { sseEvents: [feedStatus(5, null, null, undefined, 3)] });
+  await configureMocks(request, { sseEvents: [feedStatus(6, null, null, undefined, 3)] });
   await expect(panel).toContainText("OPRA lease request: 3/8 unique chain contracts", { timeout: 5_000 });
   await expect.poll(async () => {
     const current = await metrics(request);
@@ -277,6 +285,254 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
       entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
   ).length;
   expect(activeOptionLeasesAfterRestart).toBe(activeOptionLeasesBeforeRestart);
+});
+
+test("same-instance SSE close clears ACK and freshness while retaining the cap through reconnect", async ({ page, request }) => {
+  test.setTimeout(45_000);
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  refreshOidcSessionDuringLongTest(page.context());
+
+  const snapshotTime = new Date(Date.now() - 20_000).toISOString();
+  const liveTime = new Date().toISOString();
+  const liveUntil = new Date(Date.now() + 30_000).toISOString();
+  const contract = {
+    ...optionCallFixture(600),
+    symbol: contractSymbol,
+    right: "put",
+    quote_at: snapshotTime,
+    trade_at: snapshotTime,
+  };
+  const initialEvents = [
+    feedStatus(1, [contractSymbol], liveTime, liveUntil, 3),
+    {
+      gateway_instance_id: "gateway-e2e-offline-1",
+      source_mode: "offline_mock",
+      source_label: "OFFLINE MOCK — NOT MARKET DATA",
+      kind: "option_quote",
+      symbol: contractSymbol,
+      bid: 1.5,
+      ask: 1.6,
+      bid_size: 8,
+      ask_size: 9,
+      event_time: liveTime,
+      received_at: new Date().toISOString(),
+      connection_epoch: 8,
+      local_sequence: 2,
+    },
+  ];
+  await configureMocks(request, {
+    optionStatus: 200,
+    optionFeed: "opra",
+    contracts: [contract],
+    sseEvents: initialEvents,
+    sseDisconnectAfterMs: 10_000,
+  });
+  const beforeOpen = await metrics(request);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /OPTIONS/ }).click();
+  const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
+  await expect(panel).toContainText("FRESH · OFFLINE MOCK", { timeout: 10_000 });
+  await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("1/1 confirmed");
+  await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("Gateway effective limit 3");
+  const bidCell = panel.locator('.ag-row[row-index="0"] [col-id="put.bid"]');
+  await expect(bidCell).toContainText("1.50");
+  await expect.poll(async () => (await metrics(request)).gateway.subscriptions.filter(
+    (entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
+  ).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 5_000 })
+    .toBeGreaterThan(beforeOpen.gateway.streamOpened);
+  await configureMocks(request, { sseStatus: 503 });
+  // Refresh the event-time evidence shortly before the scheduled server close,
+  // so the post-close assertion distinguishes cleared live state from old data
+  // that merely aged past the client's freshness guard.
+  await page.waitForTimeout(5_000);
+  const preCloseTime = new Date().toISOString();
+  await configureMocks(request, {
+    sseEvents: [
+      feedStatus(3, [contractSymbol], preCloseTime, new Date(Date.now() + 30_000).toISOString(), 3),
+      {
+        gateway_instance_id: "gateway-e2e-offline-1",
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
+        kind: "option_quote",
+        symbol: contractSymbol,
+        bid: 1.55,
+        ask: 1.65,
+        bid_size: 8,
+        ask_size: 9,
+        event_time: preCloseTime,
+        received_at: new Date().toISOString(),
+        connection_epoch: 8,
+        local_sequence: 4,
+      },
+    ],
+  });
+  await expect(panel).toContainText("FRESH · OFFLINE MOCK", { timeout: 3_000 });
+  await expect(bidCell).toContainText("1.55");
+  const beforeClose = await metrics(request);
+  const emptyLeasesBeforeClose = beforeClose.gateway.subscriptions.filter(
+    (entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) === 0,
+  ).length;
+
+  // This changes only the next connection's behavior. The already-open SSE
+  // keeps its scheduled close, giving the test a deterministic server-side drop.
+  await configureMocks(request, { sseDisconnectAfterMs: null });
+  await expect.poll(async () => (await metrics(request)).gateway.streamClosed, { timeout: 12_000 })
+    .toBeGreaterThan(beforeOpen.gateway.streamClosed);
+  await expect(panel).toContainText("BROWSER DISCONNECTED");
+  await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("confirmed unknown · desired unknown");
+  await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("Gateway effective limit 3");
+  await expect(panel.locator('[data-testid="market-feed-status-options"]')).toContainText("quotes ACK unknown · desired unknown");
+  await expect(panel.locator('[data-testid="market-feed-status-options"]')).toContainText("coverage unknown");
+  await expect(panel).not.toContainText("FRESH · OFFLINE MOCK");
+  await expect(bidCell).toContainText("1.25");
+  const afterClose = await metrics(request);
+  expect(afterClose.gateway.subscriptions.filter(
+    (entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) === 0,
+  )).toHaveLength(emptyLeasesBeforeClose);
+
+  const recoveryTime = new Date().toISOString();
+  const openedAfterClose = afterClose.gateway.streamOpened;
+  await configureMocks(request, {
+    sseStatus: 200,
+    sseDisconnectAfterMs: null,
+    sseEvents: [
+      feedStatus(5, [contractSymbol], recoveryTime, new Date(Date.now() + 30_000).toISOString(), 3),
+      {
+        gateway_instance_id: "gateway-e2e-offline-1",
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
+        kind: "option_quote",
+        symbol: contractSymbol,
+        bid: 1.6,
+        ask: 1.7,
+        bid_size: 8,
+        ask_size: 9,
+        event_time: recoveryTime,
+        received_at: new Date().toISOString(),
+        connection_epoch: 8,
+        local_sequence: 6,
+      },
+    ],
+  });
+  await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 12_000 })
+    .toBeGreaterThan(openedAfterClose);
+  await expect(panel).toContainText("FRESH · OFFLINE MOCK", { timeout: 8_000 });
+  await expect(bidCell).toContainText("1.60");
+  const afterReconnect = await metrics(request);
+  expect(afterReconnect.gateway.subscriptions.filter(
+    (entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) === 0,
+  )).toHaveLength(emptyLeasesBeforeClose);
+});
+
+test("new Gateway cap cannot lease the prior generation chain before its REST refresh", async ({ page, request }) => {
+  test.setTimeout(60_000);
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  refreshOidcSessionDuringLongTest(page.context());
+
+  const priorContracts = [496, 497, 498, 499, 500, 501, 502, 503].map(optionCallFixture);
+  await configureMocks(request, {
+    optionStatus: 200,
+    optionFeed: "opra",
+    contracts: priorContracts,
+    sseEvents: [feedStatus(1, null, null, undefined, 3)],
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /OPTIONS/ }).click();
+  const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
+  await expect(panel).toContainText("8 unique snapshot contracts");
+  await expect.poll(async () => {
+    const current = await metrics(request);
+    return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1)?.body.symbols ?? null;
+  }).toHaveLength(3);
+
+  const newGatewayInstance = "gateway-e2e-cap-before-rest";
+  const subscriptionsBeforeTransition = (await metrics(request)).gateway.subscriptions
+    .filter((entry: { path: string }) => entry.path.endsWith("/subscriptions/options"));
+  const priorNonemptyLeaseCount = subscriptionsBeforeTransition.filter(
+    (entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) > 0,
+  ).length;
+  let releaseSnapshot!: () => void;
+  let snapshotPaused = false;
+  const snapshotRelease = new Promise<void>((resolve) => { releaseSnapshot = resolve; });
+  const snapshotRoute = /\/api\/options\/QQQ\?expiry=/;
+  await page.route(snapshotRoute, async (route: Route) => {
+    if (snapshotPaused) return route.continue();
+    snapshotPaused = true;
+    await snapshotRelease;
+    await route.continue();
+  });
+
+  try {
+    const chainRequestsBeforeRefresh = (await metrics(request)).gateway.requests["/api/v1/options/chain"] ?? 0;
+    // The response has no Gateway identity, so the browser-captured generation
+    // must prevent this prior chain from being reused with the new instance cap.
+    await configureMocks(request, {
+      sseEvents: [{
+        ...feedStatus(1, null, null, undefined, 3),
+        gateway_instance_id: newGatewayInstance,
+        connection_epoch: 1,
+      }],
+    });
+    await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("Gateway effective limit 3");
+    await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("no REST contracts");
+    const afterNewCap = await metrics(request);
+    const subscriptionsAfterNewCap = afterNewCap.gateway.subscriptions
+      .filter((entry: { path: string }) => entry.path.endsWith("/subscriptions/options"));
+    expect(subscriptionsAfterNewCap.filter(
+      (entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) > 0,
+    )).toHaveLength(priorNonemptyLeaseCount);
+
+    const refreshedContracts = Array.from({ length: 8 }, (_, index) => ({
+      ...optionCallFixture(600 + index), gateway_instance_id: newGatewayInstance,
+    }));
+    await configureMocks(request, { contracts: refreshedContracts });
+    await expect.poll(() => snapshotPaused, {
+      timeout: 22_000,
+    }).toBe(true);
+
+    await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("no REST contracts");
+    const whileRefreshHeld = await metrics(request);
+    expect(whileRefreshHeld.gateway.requests["/api/v1/options/chain"] ?? 0).toBe(chainRequestsBeforeRefresh);
+    const nonemptyLeasesWhileHeld = whileRefreshHeld.gateway.subscriptions.filter(
+      (entry: { path: string; body: { symbols?: string[] } }) =>
+        entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
+    );
+    expect(nonemptyLeasesWhileHeld).toHaveLength(priorNonemptyLeaseCount);
+    const oldSymbols = new Set(priorContracts.map((contract) => contract.symbol));
+    const submissionsDuringGap = whileRefreshHeld.gateway.subscriptions
+      .filter((entry: { path: string }) => entry.path.endsWith("/subscriptions/options"))
+      .slice(subscriptionsBeforeTransition.length)
+      .flatMap((entry: { body: { symbols?: string[] } }) => entry.body.symbols ?? []);
+    expect(submissionsDuringGap.some((symbol: string) => oldSymbols.has(symbol))).toBe(false);
+
+    releaseSnapshot();
+    await expect.poll(async () => (await metrics(request)).gateway.requests["/api/v1/options/chain"] ?? 0, {
+      timeout: 10_000,
+    }).toBeGreaterThan(chainRequestsBeforeRefresh);
+    await expect(panel.locator('.ag-cell[col-id="strike"]').filter({ hasText: "600" })).toHaveCount(1);
+    await expect(panel).toContainText("8 unique snapshot contracts");
+    await expect.poll(async () => {
+      const current = await metrics(request);
+      return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+        entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1)?.body.symbols ?? null;
+    }).toHaveLength(3);
+    const refreshedSymbols = new Set(refreshedContracts.map((contract) => contract.symbol));
+    const latestLease = (await metrics(request)).gateway.subscriptions.filter(
+      (entry: { path: string; body: { symbols?: string[] } }) =>
+        entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
+    ).at(-1);
+    expect(latestLease?.body.symbols?.every((symbol: string) => refreshedSymbols.has(symbol))).toBe(true);
+  } finally {
+    releaseSnapshot();
+    await page.unroute(snapshotRoute);
+  }
 });
 
 test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases across widgets and tabs", async ({ page, context, request }) => {
