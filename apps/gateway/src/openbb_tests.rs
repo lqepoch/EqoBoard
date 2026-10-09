@@ -4,6 +4,7 @@ use market_contracts::{
     DecimalString, EntitlementState, EventMetadataV1, MarketDataSourceV1, MarketEventEnvelopeV1,
     MarketEventV1, NumericEncodingV1, UtcTimestamp,
 };
+use market_stream::{UNKNOWN_ENTITLEMENT, UNKNOWN_SOURCE_MODE};
 use std::sync::{
     atomic::{AtomicU16, Ordering},
     Arc, Mutex as StdMutex,
