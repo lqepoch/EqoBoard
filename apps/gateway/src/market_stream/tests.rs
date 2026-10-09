@@ -88,6 +88,26 @@ fn option_projection_preserves_source_and_receive_times_but_stays_unknown() {
 }
 
 #[test]
+fn decimal_projection_preserves_absence_and_rejects_invalid_or_non_finite_values() {
+    let valid = DecimalString::new("1.20").expect("test decimal is valid");
+    assert_eq!(decimal_projection(None), Some(None));
+    assert_eq!(decimal_projection(Some(&valid)), Some(Some(1.2)));
+    assert_eq!(required_decimal_projection("1.2.3"), None);
+    assert_eq!(required_decimal_projection("1e9999"), None);
+
+    let (publisher, mut receiver) = test_publisher();
+    let mut envelope = test_envelope();
+    let MarketEventV1::OptionQuote { bid, .. } = &mut envelope.event else {
+        panic!("test envelope should contain an option quote");
+    };
+    *bid = None;
+    assert!(publisher.publish_option_envelope(&envelope, 4));
+    let event = serde_json::to_value(receiver.try_recv().expect("sparse quote is published"))
+        .expect("event serializes");
+    assert!(event["bid"].is_null());
+}
+
+#[test]
 fn feed_status_has_distinct_unknown_auth_entitlement_and_ack_fields() {
     let (publisher, mut receiver) = test_publisher();
     publisher.publish_status(FeedStatusSnapshot {

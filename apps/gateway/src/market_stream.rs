@@ -690,9 +690,10 @@ enum LegacyData {
 }
 
 fn decimal_projection(value: Option<&DecimalString>) -> Option<Option<f64>> {
-    value
-        .map(|decimal| required_decimal_projection(decimal.as_str()).map(Some))
-        .transpose()
+    match value {
+        None => Some(None),
+        Some(decimal) => required_decimal_projection(decimal.as_str()).map(Some),
+    }
 }
 
 fn required_decimal_projection(value: &str) -> Option<f64> {
