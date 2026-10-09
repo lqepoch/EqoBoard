@@ -1,6 +1,6 @@
 import { configureMocks, loginWithOidc, metrics, resetDownstream, test, expect, WEB_ORIGIN } from "./fixtures";
 import type { BrowserContext, Route } from "@playwright/test";
-import { optionPutSymbol, sipSnapshotResponse } from "./market-test-data";
+import { futureFridayOCCDate, optionPutSymbol, sipSnapshotResponse } from "./market-test-data";
 
 const contractSymbol = optionPutSymbol;
 type SessionRefreshState = {
@@ -24,6 +24,7 @@ function feedStatus(
   confirmed: string[] | null,
   freshnessAsOf: string | null,
   freshUntil?: string | null,
+  coverageLimit: number | null = 16,
 ) {
   return {
     kind: "feed_status",
@@ -40,7 +41,7 @@ function feedStatus(
       unsubscribe: { quotes: [], trades: [] },
     },
     upstream: confirmed === null ? "connecting" : "ready",
-    coverage: { desired_count: 1, confirmed_count: confirmed === null ? 0 : 1, limit: null, complete: confirmed !== null },
+    coverage: { desired_count: 1, confirmed_count: confirmed === null ? 0 : 1, limit: coverageLimit, complete: confirmed !== null },
     connection_epoch: 8,
     local_sequence: localSequence,
     received_at: new Date().toISOString(),
@@ -51,6 +52,34 @@ function feedStatus(
         state: "fresh", as_of: freshnessAsOf, age_ms: 1_000, ...(freshUntil === undefined ? {} : { fresh_until: freshUntil }),
       },
     },
+  };
+}
+
+function optionCallFixture(strike: number) {
+  const timestamp = new Date().toISOString();
+  const strikeCode = String(Math.round(strike * 1_000)).padStart(8, "0");
+  return {
+    symbol: `QQQ${futureFridayOCCDate()}C${strikeCode}`,
+    gateway_instance_id: "gateway-e2e-offline-1",
+    source_mode: "offline_mock",
+    source_label: "OFFLINE MOCK — NOT MARKET DATA",
+    received_at: timestamp,
+    right: "call",
+    strike,
+    bid: 1.25,
+    ask: 1.35,
+    last: 1.30,
+    iv: 0.22,
+    delta: 0.4,
+    gamma: 0.02,
+    theta: -0.01,
+    vega: 0.1,
+    bid_size: 4,
+    ask_size: 5,
+    quote_at: timestamp,
+    trade_at: timestamp,
+    model_as_of: null,
+    feed: "opra",
   };
 }
 
@@ -89,6 +118,75 @@ test("options subscription BFF requires a positive safe generation before forwar
     path: "/api/v1/subscriptions/options",
     body: { consumer_id: consumerId, generation: 1, symbols },
   });
+});
+
+test("options widget limits a large chain to unique ATM-nearest leases and keeps every REST row", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const contracts = Array.from({ length: 20 }, (_, index) => optionCallFixture(490 + index));
+  // A repeated REST row must not consume one of the bounded lease slots.
+  contracts.push(optionCallFixture(500));
+  await configureMocks(request, {
+    optionStatus: 200,
+    optionFeed: "opra",
+    contracts,
+    sseEvents: [feedStatus(1, null, null, undefined, 16)],
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /OPTIONS/ }).click();
+  const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
+  await expect(panel).toContainText("20 strikes");
+  await expect(panel).toContainText("20 unique snapshot contracts");
+  await expect(panel).toContainText("OPRA lease request: 16/20 unique chain contracts (nearest underlying first); REST-returned contracts remain in the table");
+
+  const expectedStrikes = [500, 499, 501, 498, 502, 497, 503, 496, 504, 495, 505, 494, 506, 493, 507, 492];
+  const expectedSymbols = expectedStrikes.map((strike) => optionCallFixture(strike).symbol);
+  await expect.poll(async () => {
+    const seen = await metrics(request);
+    const leases = seen.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0);
+    return leases.at(-1)?.body.symbols ?? null;
+  }).toEqual(expectedSymbols);
+  const seen = await metrics(request);
+  const lease = seen.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+    entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1);
+  expect(lease?.body.symbols).toHaveLength(16);
+  expect(new Set(lease?.body.symbols).size).toBe(16);
+});
+
+test("options widget waits for a known cap before leasing and honors a smaller configured limit", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const contracts = [496, 497, 498, 499, 500, 501, 502, 503].map(optionCallFixture);
+  await configureMocks(request, {
+    optionStatus: 200,
+    optionFeed: "opra",
+    contracts,
+    sseEvents: [feedStatus(1, null, null, undefined, null)],
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /OPTIONS/ }).click();
+  const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
+  await expect(panel).toContainText("8 strikes");
+  await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
+  expect((await metrics(request)).gateway.subscriptions).toHaveLength(0);
+
+  await configureMocks(request, { sseEvents: [feedStatus(2, null, null, undefined, 3)] });
+  await page.reload();
+  await expect(panel).toContainText("8 strikes");
+  await expect(panel).toContainText("OPRA lease request: 3/8 unique chain contracts (nearest underlying first); REST-returned contracts remain in the table");
+  const expectedSymbols = [500, 499, 501].map((strike) => optionCallFixture(strike).symbol);
+  await expect.poll(async () => {
+    const seen = await metrics(request);
+    const leases = seen.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0);
+    return leases.at(-1)?.body.symbols ?? null;
+  }).toEqual(expectedSymbols);
+  const seen = await metrics(request);
+  const lease = seen.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+    entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1);
+  expect(lease?.body.symbols).toHaveLength(3);
+  expect(new Set(lease?.body.symbols).size).toBe(3);
 });
 
 test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases across widgets and tabs", async ({ page, context, request }) => {

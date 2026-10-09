@@ -10,6 +10,9 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
   const status = useMarket((state) => state.feedStatus[feed]);
   const label = feed === "stocks" ? "SIP" : "OPRA";
   const source = resolveMarketSource(status, feed === "stocks" ? "sip" : "opra");
+  const configuredLimit = status?.coverage.limit;
+  const effectiveLimit = typeof configuredLimit === "number" &&
+    Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : "unknown";
 
   return (
     <div className="flex flex-wrap gap-x-2 gap-y-0.5 dim text-[9px]" data-testid={`market-feed-status-${feed}`}>
@@ -41,7 +44,7 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
         ? `coverage unknown${status ? `/${status.coverage.desired_count} desired` : ""}`
         : `coverage ${status.coverage.confirmed_count}/${status.coverage.desired_count}${status.coverage.complete ? " complete" : " partial"}`}</span>
       {feed === "options" && <span>
-        configured/local limit {status?.coverage.limit ?? "unknown"}
+        Gateway effective limit {effectiveLimit}
       </span>}
       {status?.last_error && <span className="down" title={status.last_error.message ?? status.last_error.class}>
         {status.last_error.code ? `HTTP ${status.last_error.code} · ` : ""}{status.last_error.class}
