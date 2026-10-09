@@ -17,6 +17,8 @@ services:
       EQO_RESEARCH_JWT_SECRET: ${EQO_RESEARCH_JWT_SECRET:-}
       EQO_STOCK_FEED: "sip"
       EQO_OPTION_FEED: "opra"
+      EQO_MAX_OPTION_LEASES: ${EQO_MAX_OPTION_LEASES:-1024}
+      EQO_MAX_OPTION_LEASES_PER_PRINCIPAL: ${EQO_MAX_OPTION_LEASES_PER_PRINCIPAL:-32}
       EQO_EXECUTION_MODE: "disabled"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]

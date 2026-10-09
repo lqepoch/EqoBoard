@@ -169,7 +169,12 @@ test("options widget waits for a known cap before leasing and honors a smaller c
   const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
   await expect(panel).toContainText("8 strikes");
   await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
-  expect((await metrics(request)).gateway.subscriptions).toHaveLength(0);
+  await expect.poll(async () => {
+    const seen = await metrics(request);
+    return seen.gateway.subscriptions.some((entry: { path: string }) => entry.path.endsWith("/subscriptions/stocks"));
+  }).toBe(true);
+  const noLimitSubscriptions = (await metrics(request)).gateway.subscriptions;
+  expect(noLimitSubscriptions.filter((entry: { path: string }) => entry.path.endsWith("/subscriptions/options"))).toHaveLength(0);
 
   await configureMocks(request, { sseEvents: [feedStatus(2, null, null, undefined, 3)] });
   await page.reload();
