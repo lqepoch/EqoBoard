@@ -32,8 +32,9 @@ use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use market_stream::{ChannelSymbols, FeedStatusSnapshot};
 use market_stream::{
     GatewayMarketEvent, MarketPublisher, OptionSubscriptionRevision, MAX_BROKER_OPTION_SYMBOLS,
-    OPTION_FEED_NAME, STOCK_FEED_NAME,
 };
+#[cfg(test)]
+use market_stream::{OPTION_FEED_NAME, STOCK_FEED_NAME};
 use option_supervisor::{alpaca_opra_port, run_option_market_stream};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

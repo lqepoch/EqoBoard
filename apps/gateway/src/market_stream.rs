@@ -14,7 +14,6 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use broker_ports::MarketDataPort;
 use eqo_domain::MarketEvent;
 use market_contracts::{DecimalString, MarketEventEnvelopeV1, MarketEventV1};
 use serde::Serialize;
@@ -92,7 +91,7 @@ pub(crate) enum GatewayMarketEvent {
         auth: String,
         desired: ChannelSymbols,
         confirmed: Option<ChannelSymbols>,
-        pending: PendingChannels,
+        pending: Box<PendingChannels>,
         upstream: String,
         coverage: Coverage,
         coverage_complete: bool,
@@ -274,10 +273,6 @@ impl MarketPublisher {
         (receiver, snapshot)
     }
 
-    pub(crate) fn gateway_instance_id(&self) -> &str {
-        &self.gateway_instance_id
-    }
-
     pub(crate) fn publish_status(&self, snapshot: FeedStatusSnapshot) {
         if !matches!(snapshot.feed.as_str(), STOCK_FEED_NAME | OPTION_FEED_NAME) {
             return;
@@ -312,6 +307,7 @@ impl MarketPublisher {
         let _ = self.tx.send(event);
     }
 
+    #[cfg(test)]
     pub(crate) fn resync_event(&self, feed: &str) -> Option<GatewayMarketEvent> {
         if !matches!(feed, STOCK_FEED_NAME | OPTION_FEED_NAME) {
             return None;
@@ -360,9 +356,7 @@ impl MarketPublisher {
     }
 
     fn status_event(&self, snapshot: FeedStatusSnapshot) -> Option<GatewayMarketEvent> {
-        let Some(local_sequence) = self.next_sequence() else {
-            return None;
-        };
+        let local_sequence = self.next_sequence()?;
         let desired_count = snapshot
             .desired
             .quotes
@@ -381,10 +375,10 @@ impl MarketPublisher {
             auth: snapshot.auth,
             desired: snapshot.desired,
             confirmed: snapshot.confirmed,
-            pending: PendingChannels {
+            pending: Box::new(PendingChannels {
                 subscribe: snapshot.pending_subscribe,
                 unsubscribe: snapshot.pending_unsubscribe,
-            },
+            }),
             upstream: snapshot.upstream,
             coverage: Coverage {
                 desired_count,
@@ -403,6 +397,8 @@ impl MarketPublisher {
         Some(event)
     }
 
+    /// Returns false only when an envelope cannot be projected; absent browser listeners are a normal drop.
+    /// 仅在 envelope 无法投影时返回 false；当前没有浏览器监听者属于正常丢弃。
     pub(crate) fn publish_option_envelope(
         &self,
         envelope: &MarketEventEnvelopeV1,
@@ -499,7 +495,8 @@ impl MarketPublisher {
             }
             MarketEventV1::StockQuote { .. } | MarketEventV1::StockTrade { .. } => return false,
         };
-        self.tx.send(event).is_ok()
+        let _ = self.tx.send(event);
+        true
     }
 
     pub(crate) fn publish_legacy_stock_event(
@@ -583,7 +580,7 @@ impl MarketPublisher {
 
     fn next_sequence(&self) -> Option<u64> {
         self.sequence
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                 value.checked_add(1)
             })
             .ok()
@@ -627,7 +624,7 @@ pub(crate) async fn bridge_legacy_stock_stream(
                 Ok(MarketEvent::FeedStatus { state, .. }) => {
                     match state.as_str() {
                         "connecting" => {
-                            connection_epoch = connection_epoch.checked_add(1).unwrap_or(u64::MAX);
+                            connection_epoch = connection_epoch.saturating_add(1);
                             transport = "connecting";
                             last_error = None;
                         }

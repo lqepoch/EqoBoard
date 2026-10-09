@@ -5,4 +5,6 @@
 
 SSE/WS 新连接会在注册广播 receiver 时原子回放最近的 stocks/options 状态；快照只保留两个 feed，并与事件序号分配/发送串行化。慢客户端 `resync_required` 使用该 feed 已知 epoch，让现有 store 清除旧 live 值但保留 REST snapshot；不得发送固定 epoch 0 的状态。
 
+事件投影有效性与当前是否存在 SSE/WS receiver 解耦；没有浏览器监听者时丢弃 broadcast 是正常情况，不得因此把已确认的订阅 coverage 降级为行情解析/投影失败。
+
 OpenBB 只读行映射位于 `src/openbb.rs`，数据请求仍经 `eqo-alpaca-data`。只能在默认 Alpaca 数据源地址被使用时标记 `source_mode=alpaca`；`EQO_MARKET_DATA_BASE_URL` 的任何自定义地址均为 `unknown`。OpenBB rows 使用来源字段自己的市场时间，绝不使用 Gateway 请求时间补齐。bars/options 分页必须有限额并把 `pages_fetched`、`has_more`、`truncated` 显式返回；若页预算耗尽、仍有后续页但没有任何行情行，OpenBB flat-array endpoint 必须返回带来源/feed/分页字段的明确截断错误；完整空结果仍返回 `200 []`，不得伪造占位行。上游 `next_page_token` 仅允许缺失/null（终止）或非空字符串（续页），空字符串和其他类型都必须失败关闭。期权快照 OCC 符号无法解析或与精确请求到期日不一致时必须失败关闭；错误行不得静默丢弃或把缺失 OHLCV 填零。普通 table 的 `refetchInterval` 是 HTTP polling，不得称作 Live Grid。

@@ -1,4 +1,5 @@
 use super::*;
+use crate::market_stream::{GatewayMarketEvent, MAX_BROKER_OPTION_SYMBOLS};
 use broker_ports::PortFuture;
 use market_contracts::{
     DecimalString, EventMetadataV1, MarketDataSourceV1, MarketEventEnvelopeV1, MarketEventV1,
@@ -120,6 +121,22 @@ fn option_quote_item() -> MarketDataItem {
                 ask: Some(DecimalString::new("1.25").expect("ask is valid")),
                 bid_size: Some(DecimalString::new("2").expect("bid size is valid")),
                 ask_size: Some(DecimalString::new("3").expect("ask size is valid")),
+            },
+        },
+        raw_frame: None,
+    }
+}
+
+fn unsupported_option_event_item(sequence: u64) -> MarketDataItem {
+    MarketDataItem::Event {
+        envelope: MarketEventEnvelopeV1 {
+            metadata: metadata(1, sequence),
+            event: MarketEventV1::StockQuote {
+                symbol: "QQQ".into(),
+                bid: None,
+                ask: None,
+                bid_size: None,
+                ask_size: None,
             },
         },
         raw_frame: None,
@@ -252,6 +269,119 @@ async fn fake_broker_ack_and_event_reach_the_gateway_stream_without_promoting_so
     })
     .await;
     task.abort();
+}
+
+#[tokio::test]
+async fn no_browser_receiver_does_not_turn_a_valid_quote_into_projection_failure() {
+    let port = Arc::new(FakePort::default());
+    let (bus, browser) = broadcast::channel(64);
+    drop(browser);
+    let publisher = MarketPublisher::new(bus);
+    let inspector = publisher.clone();
+    let (_desired_tx, desired_rx) = watch::channel(OptionSubscriptionRevision {
+        revision: 1,
+        symbols: vec![SYMBOL.into()],
+    });
+    let task = tokio::spawn(run_option_market_stream(
+        Some(port.clone()),
+        desired_rx,
+        publisher,
+        MAX_BROKER_OPTION_SYMBOLS,
+    ));
+
+    let _ = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if !port.requests().is_empty() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the fake broker receives a subscription request");
+
+    let sender = port.sender().expect("fake session sender exists");
+    sender
+        .send(control_item(
+            1,
+            MarketControlEventV1::ConnectionStatus {
+                state: ConnectionState::Connecting,
+            },
+        ))
+        .await
+        .expect("connecting control enters the bounded lane");
+    sender
+        .send(exact_ack(2))
+        .await
+        .expect("exact ACK enters the bounded lane");
+    sender
+        .send(option_quote_item())
+        .await
+        .expect("valid quote enters the bounded lane");
+    sender
+        .send(control_item(
+            4,
+            MarketControlEventV1::ConnectionStatus {
+                state: ConnectionState::Connected,
+            },
+        ))
+        .await
+        .expect("status marker follows the valid quote in the bounded lane");
+
+    let acknowledged = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let events = inspector.resync_events();
+            if let Some(event) = events.into_iter().find(|event| {
+                let value = serde_json::to_value(event).expect("status event serializes");
+                value["feed"] == OPTION_FEED_NAME && value["coverage"]["complete"] == true
+            }) {
+                break serde_json::to_value(event).expect("status event serializes");
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("ACKed coverage remains visible without a browser receiver");
+    assert_eq!(acknowledged["confirmed"]["quotes"][0], SYMBOL);
+    assert_eq!(acknowledged["coverage"]["complete"], true);
+    assert_eq!(acknowledged["decode_error_count"], 0);
+    assert_eq!(acknowledged["source_entitlement"], "unknown");
+
+    sender
+        .send(unsupported_option_event_item(5))
+        .await
+        .expect("unsupported event enters the bounded lane");
+
+    let failed_projection = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            for event in inspector.resync_events() {
+                let value = serde_json::to_value(event).expect("status event serializes");
+                if value["feed"] == OPTION_FEED_NAME
+                    && value["last_error"]["class"] == "market_event_projection_failed"
+                {
+                    return value;
+                }
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("unsupported projection is reported within the bounded test deadline");
+
+    assert_eq!(failed_projection["coverage"]["complete"], false);
+    assert_eq!(failed_projection["source_entitlement"], "unknown");
+    assert_eq!(failed_projection["decode_error_count"], 1);
+    assert_eq!(
+        failed_projection["last_error"]["class"],
+        "market_event_projection_failed"
+    );
+
+    drop(sender);
+    task.abort();
+    let result = task
+        .await
+        .expect_err("test closes its long-lived fake session");
+    assert!(result.is_cancelled());
 }
 
 #[tokio::test]

@@ -140,6 +140,13 @@ fn feed_status_has_distinct_unknown_auth_entitlement_and_ack_fields() {
     assert_eq!(event["transport"], "connected");
     assert_eq!(event["auth"], "unknown");
     assert_eq!(event["confirmed"], serde_json::Value::Null);
+    assert_eq!(
+        event["pending"]["subscribe"]["quotes"][0],
+        "QQQ261009C00600000"
+    );
+    assert!(event["pending"]["unsubscribe"]["quotes"]
+        .as_array()
+        .is_some_and(Vec::is_empty));
     assert_eq!(event["coverage"]["complete"], false);
     assert_eq!(event["source_entitlement"], "unknown");
     assert_eq!(event["source_mode"], "unknown");

@@ -7,7 +7,7 @@
 //! Gateway 负责浏览器租约并集；Broker 负责 provider 解码、重连状态和订阅 ACK。租约变化时先取消并排空
 //! 旧有界队列，再启动新会话；排空超时会永久关闭本 supervisor，避免上游连接重叠。
 
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use alpaca_stream::{
     AlpacaCredentials, AlpacaOptionsMarketDataPort, CredentialFailure, CredentialProvider,
@@ -42,15 +42,10 @@ pub(crate) fn alpaca_opra_port() -> Arc<dyn MarketDataPort> {
 struct GatewayEnvironmentCredentials;
 
 impl CredentialProvider for GatewayEnvironmentCredentials {
-    fn load_credentials(
-        &mut self,
-    ) -> impl Future<Output = Result<AlpacaCredentials, CredentialFailure>> + Send {
-        async {
-            let key = std::env::var("ALPACA_KEY").map_err(|_| CredentialFailure::Unavailable)?;
-            let secret =
-                std::env::var("ALPACA_SECRET").map_err(|_| CredentialFailure::Unavailable)?;
-            AlpacaCredentials::new(key, secret).map_err(|_| CredentialFailure::Unavailable)
-        }
+    async fn load_credentials(&mut self) -> Result<AlpacaCredentials, CredentialFailure> {
+        let key = std::env::var("ALPACA_KEY").map_err(|_| CredentialFailure::Unavailable)?;
+        let secret = std::env::var("ALPACA_SECRET").map_err(|_| CredentialFailure::Unavailable)?;
+        AlpacaCredentials::new(key, secret).map_err(|_| CredentialFailure::Unavailable)
     }
 }
 
