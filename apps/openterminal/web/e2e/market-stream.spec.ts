@@ -399,11 +399,23 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
       entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) === 0,
   )).toHaveLength(emptyLeasesBeforeClose);
 
-  const recoveryTime = new Date().toISOString();
   const openedAfterClose = afterClose.gateway.streamOpened;
   await configureMocks(request, {
     sseStatus: 200,
     sseDisconnectAfterMs: null,
+    // Reconnect without replaying the prior ACK or quote. Build fresh evidence
+    // only after the retry has opened the new stream.
+    sseEvents: [],
+  });
+  await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 12_000 })
+    .toBeGreaterThan(openedAfterClose);
+  await expect(page.getByTestId("market-feed-status-options")).toContainText("Browser SSE connected");
+  await expect(page.getByTestId("market-feed-status-options")).toContainText("quotes ACK unknown · desired unknown");
+  await expect(page.getByTestId("market-feed-status-options")).toContainText("Gateway effective limit 3");
+  await expect(panel).not.toContainText("FRESH · OFFLINE MOCK");
+
+  const recoveryTime = new Date().toISOString();
+  await configureMocks(request, {
     sseEvents: [
       feedStatus(6, [contractSymbol], recoveryTime, new Date(Date.now() + 30_000).toISOString(), 3),
       {
@@ -423,8 +435,6 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
       },
     ],
   });
-  await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 12_000 })
-    .toBeGreaterThan(openedAfterClose);
   await expect(panel).toContainText("FRESH · OFFLINE MOCK", { timeout: 8_000 });
   await expect(bidCell).toContainText("1.60");
   const afterReconnect = await metrics(request);
