@@ -58,6 +58,39 @@ test.beforeEach(async ({ request }) => {
   await resetDownstream(request);
 });
 
+test("options subscription BFF requires a positive safe generation before forwarding", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const contextRequest = page.context().request;
+  const consumerId = "e42fb3e1-cdb2-4a44-9407-5d453ae61c66";
+  const symbols = [contractSymbol];
+  const invalidBodies = [
+    { consumer_id: consumerId, symbols },
+    { consumer_id: consumerId, generation: 0, symbols },
+    { consumer_id: consumerId, generation: Number.MAX_SAFE_INTEGER + 1, symbols },
+  ];
+  const subscriptionsBefore = (await metrics(request)).gateway.subscriptions.length;
+
+  for (const data of invalidBodies) {
+    const response = await contextRequest.post(`${WEB_ORIGIN}/api/eqo/options/subscribe`, {
+      headers: { origin: WEB_ORIGIN },
+      data,
+    });
+    expect(response.status()).toBe(400);
+  }
+  expect((await metrics(request)).gateway.subscriptions).toHaveLength(subscriptionsBefore);
+
+  const accepted = await contextRequest.post(`${WEB_ORIGIN}/api/eqo/options/subscribe`, {
+    headers: { origin: WEB_ORIGIN },
+    data: { consumer_id: consumerId, generation: 1, symbols },
+  });
+  expect(accepted.status()).toBe(200);
+  const forwarded = (await metrics(request)).gateway.subscriptions.at(-1);
+  expect(forwarded).toMatchObject({
+    path: "/api/v1/subscriptions/options",
+    body: { consumer_id: consumerId, generation: 1, symbols },
+  });
+});
+
 test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases across widgets and tabs", async ({ page, context, request }) => {
   test.setTimeout(90_000);
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);

@@ -159,6 +159,20 @@ pub(crate) enum GatewayMarketEvent {
     },
 }
 
+impl GatewayMarketEvent {
+    /// Return the Gateway-local publication sequence used to order browser events.
+    /// 返回 Gateway 本地发布序号，用于排序浏览器事件。
+    pub(crate) fn local_sequence(&self) -> u64 {
+        match self {
+            Self::FeedStatus { local_sequence, .. }
+            | Self::StockQuote { local_sequence, .. }
+            | Self::StockTrade { local_sequence, .. }
+            | Self::OptionQuote { local_sequence, .. }
+            | Self::OptionTrade { local_sequence, .. } => *local_sequence,
+        }
+    }
+}
+
 /// Pending subscribe/unsubscribe projections used by the existing market widgets.
 /// 现有行情 widget 使用的待订阅与待退订投影。
 #[derive(Clone, Debug, Serialize)]
@@ -194,6 +208,25 @@ pub(crate) struct MarketPublisher {
 struct LatestFeedStatus {
     stocks: Option<FeedStatusSnapshot>,
     options: Option<FeedStatusSnapshot>,
+}
+
+fn disconnected_feed_status(feed: &str) -> FeedStatusSnapshot {
+    FeedStatusSnapshot {
+        feed: feed.to_owned(),
+        transport: "disconnected".to_owned(),
+        auth: "unknown".to_owned(),
+        desired: ChannelSymbols::default(),
+        confirmed: None,
+        pending_subscribe: ChannelSymbols::default(),
+        pending_unsubscribe: ChannelSymbols::default(),
+        upstream: "degraded".to_owned(),
+        coverage_limit: None,
+        coverage_complete: false,
+        connection_epoch: 0,
+        last_error: None,
+        decode_error_count: 0,
+        resync_required: true,
+    }
 }
 
 impl MarketPublisher {
@@ -291,27 +324,37 @@ impl MarketPublisher {
             .latest_status
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.resync_event_from_latest(feed, &latest)
+    }
+
+    /// Build both feed snapshots under one publication lock with strictly increasing sequences.
+    /// 在同一发布锁内为两个 feed 构造快照，保证序号严格递增。
+    pub(crate) fn resync_events(&self) -> Vec<GatewayMarketEvent> {
+        let _publication = self
+            .publication_order
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let latest = self
+            .latest_status
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        [STOCK_FEED_NAME, OPTION_FEED_NAME]
+            .into_iter()
+            .filter_map(|feed| self.resync_event_from_latest(feed, &latest))
+            .collect()
+    }
+
+    fn resync_event_from_latest(
+        &self,
+        feed: &str,
+        latest: &LatestFeedStatus,
+    ) -> Option<GatewayMarketEvent> {
         let mut snapshot = match feed {
             STOCK_FEED_NAME => latest.stocks.clone(),
             OPTION_FEED_NAME => latest.options.clone(),
-            _ => None,
+            _ => return None,
         }
-        .unwrap_or_else(|| FeedStatusSnapshot {
-            feed: feed.to_owned(),
-            transport: "disconnected".to_owned(),
-            auth: "unknown".to_owned(),
-            desired: ChannelSymbols::default(),
-            confirmed: None,
-            pending_subscribe: ChannelSymbols::default(),
-            pending_unsubscribe: ChannelSymbols::default(),
-            upstream: "degraded".to_owned(),
-            coverage_limit: None,
-            coverage_complete: false,
-            connection_epoch: 0,
-            last_error: None,
-            decode_error_count: 0,
-            resync_required: true,
-        });
+        .unwrap_or_else(|| disconnected_feed_status(feed));
         snapshot.resync_required = true;
         self.status_event(snapshot)
     }

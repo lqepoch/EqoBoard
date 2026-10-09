@@ -727,3 +727,95 @@ async fn alpaca_http_client_does_not_forward_credentials_through_redirects() {
     source.stop();
     target.stop();
 }
+
+#[test]
+fn overflowing_market_batch_resyncs_both_feeds_and_discards_older_events() {
+    fn status(feed: &str, epoch: u64) -> FeedStatusSnapshot {
+        let symbol = if feed == OPTION_FEED_NAME {
+            "QQQ261016C00600000"
+        } else {
+            "QQQ"
+        };
+        let channels = ChannelSymbols {
+            quotes: vec![symbol.to_owned()],
+            trades: vec![symbol.to_owned()],
+        };
+        FeedStatusSnapshot {
+            feed: feed.to_owned(),
+            transport: "connected".into(),
+            auth: "unknown".into(),
+            desired: channels.clone(),
+            confirmed: Some(channels),
+            pending_subscribe: ChannelSymbols::default(),
+            pending_unsubscribe: ChannelSymbols::default(),
+            upstream: "ready".into(),
+            coverage_limit: Some(16),
+            coverage_complete: true,
+            connection_epoch: epoch,
+            last_error: None,
+            decode_error_count: 0,
+            resync_required: false,
+        }
+    }
+
+    let (tx, _receiver) = broadcast::channel(2048);
+    let publisher = MarketPublisher::new(tx);
+    publisher.publish_status(status(STOCK_FEED_NAME, 9));
+    publisher.publish_status(status(OPTION_FEED_NAME, 9));
+
+    let mut batch = Vec::with_capacity(MARKET_EVENT_BATCH_CAP);
+    for _ in 0..MARKET_EVENT_BATCH_CAP {
+        batch.push(
+            publisher
+                .resync_event(OPTION_FEED_NAME)
+                .expect("known feed has a status snapshot"),
+        );
+    }
+    let old_trigger = publisher
+        .resync_event(STOCK_FEED_NAME)
+        .expect("known feed has a status snapshot");
+    let old_sequence = old_trigger.local_sequence();
+    let mut discard_through_sequence = 0;
+
+    append_market_event_or_resync(
+        &publisher,
+        &mut batch,
+        &mut discard_through_sequence,
+        old_trigger.clone(),
+    );
+
+    assert_eq!(batch.len(), 2);
+    assert!(discard_through_sequence > old_sequence);
+    let snapshot: Vec<Value> = batch
+        .iter()
+        .map(|event| serde_json::to_value(event).expect("status snapshot serializes"))
+        .collect();
+    assert_eq!(snapshot[0]["feed"], STOCK_FEED_NAME);
+    assert_eq!(snapshot[1]["feed"], OPTION_FEED_NAME);
+    assert_eq!(snapshot[0]["connection_epoch"], 9);
+    assert_eq!(snapshot[1]["connection_epoch"], 9);
+    assert_eq!(snapshot[1]["confirmed"]["quotes"][0], "QQQ261016C00600000");
+    assert!(snapshot
+        .iter()
+        .all(|event| event["resync_required"] == true));
+    assert!(batch
+        .windows(2)
+        .all(|events| events[0].local_sequence() < events[1].local_sequence()));
+
+    append_market_event_or_resync(
+        &publisher,
+        &mut batch,
+        &mut discard_through_sequence,
+        old_trigger,
+    );
+    assert_eq!(batch.len(), 2, "queued pre-resync events stay discarded");
+
+    let newer = publisher
+        .resync_event(OPTION_FEED_NAME)
+        .expect("known feed has a newer snapshot");
+    append_market_event_or_resync(&publisher, &mut batch, &mut discard_through_sequence, newer);
+    assert_eq!(batch.len(), 3);
+    assert!(batch
+        .windows(2)
+        .all(|events| events[0].local_sequence() < events[1].local_sequence()));
+}

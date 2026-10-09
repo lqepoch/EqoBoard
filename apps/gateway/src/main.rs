@@ -28,9 +28,11 @@ use eqo_execution::{
 };
 use futures_util::stream;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+#[cfg(test)]
+use market_stream::{ChannelSymbols, FeedStatusSnapshot};
 use market_stream::{
     GatewayMarketEvent, MarketPublisher, OptionSubscriptionRevision, MAX_BROKER_OPTION_SYMBOLS,
-    STOCK_FEED_NAME,
+    OPTION_FEED_NAME, STOCK_FEED_NAME,
 };
 use option_supervisor::{alpaca_opra_port, run_option_market_stream};
 use serde::{Deserialize, Serialize};
@@ -1046,31 +1048,22 @@ async fn stream_to_browser(
     publisher: MarketPublisher,
     mut batch: Vec<GatewayMarketEvent>,
 ) {
+    let mut discard_through_sequence = 0;
     let mut flush = tokio::time::interval(Duration::from_millis(50));
     batch.reserve(256usize.saturating_sub(batch.len()));
     loop {
         tokio::select! {
             received = rx.recv() => match received {
-                Ok(event) => {
-                    if batch.len() >= 512 {
-                        batch.clear();
-                        if let Some(event) = publisher.resync_event(STOCK_FEED_NAME) {
-                            batch.push(event);
-                        }
-                        if let Some(event) = publisher.resync_event("options") {
-                            batch.push(event);
-                        }
-                    }
-                    batch.push(event);
-                },
+                Ok(event) => append_market_event_or_resync(
+                    &publisher,
+                    &mut batch,
+                    &mut discard_through_sequence,
+                    event,
+                ),
                 Err(broadcast::error::RecvError::Lagged(_)) => {
-                    batch.clear();
-                    if let Some(event) = publisher.resync_event(STOCK_FEED_NAME) {
-                        batch.push(event);
-                    }
-                    if let Some(event) = publisher.resync_event("options") {
-                        batch.push(event);
-                    }
+                    discard_through_sequence = discard_through_sequence.max(
+                        replace_batch_with_resync_statuses(&publisher, &mut batch),
+                    );
                 },
                 Err(_) => break,
             },
@@ -1087,6 +1080,42 @@ async fn stream_to_browser(
             },
         }
     }
+}
+
+const MARKET_EVENT_BATCH_CAP: usize = 512;
+
+/// Replace an overflowing batch with fresh feed snapshots and return their sequence watermark.
+/// 溢出时只保留新的 feed 快照并返回序号水位，避免把旧触发事件排在快照之后。
+fn replace_batch_with_resync_statuses(
+    publisher: &MarketPublisher,
+    batch: &mut Vec<GatewayMarketEvent>,
+) -> u64 {
+    batch.clear();
+    batch.extend(publisher.resync_events());
+    batch
+        .iter()
+        .map(GatewayMarketEvent::local_sequence)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Queue only events newer than the latest resync snapshot; the triggering overflow event is discarded.
+/// 只排入晚于最近 resync 快照的事件；触发溢出的旧事件会被丢弃。
+fn append_market_event_or_resync(
+    publisher: &MarketPublisher,
+    batch: &mut Vec<GatewayMarketEvent>,
+    discard_through_sequence: &mut u64,
+    event: GatewayMarketEvent,
+) {
+    if event.local_sequence() <= *discard_through_sequence {
+        return;
+    }
+    if batch.len() >= MARKET_EVENT_BATCH_CAP {
+        *discard_through_sequence =
+            (*discard_through_sequence).max(replace_batch_with_resync_statuses(publisher, batch));
+        return;
+    }
+    batch.push(event);
 }
 
 /// Same normalized market broadcast used by the existing WebSocket terminal.
@@ -1109,34 +1138,32 @@ async fn live_sse(
             Vec::<GatewayMarketEvent>::new(),
             timer,
             publisher,
+            0_u64,
         ),
-        |(mut rx, mut initial_status, mut batch, mut flush, publisher)| async move {
+        |(
+            mut rx,
+            mut initial_status,
+            mut batch,
+            mut flush,
+            publisher,
+            mut discard_through_sequence,
+        )| async move {
             if !initial_status.is_empty() {
                 batch.append(&mut initial_status);
             }
             loop {
                 tokio::select! {
                     event = rx.recv() => match event {
-                        Ok(event) => {
-                            if batch.len() >= 512 {
-                                batch.clear();
-                                if let Some(event) = publisher.resync_event(STOCK_FEED_NAME) {
-                                    batch.push(event);
-                                }
-                                if let Some(event) = publisher.resync_event("options") {
-                                    batch.push(event);
-                                }
-                            }
-                            batch.push(event);
-                        },
+                        Ok(event) => append_market_event_or_resync(
+                            &publisher,
+                            &mut batch,
+                            &mut discard_through_sequence,
+                            event,
+                        ),
                         Err(broadcast::error::RecvError::Lagged(_)) => {
-                            batch.clear();
-                            if let Some(event) = publisher.resync_event(STOCK_FEED_NAME) {
-                                batch.push(event);
-                            }
-                            if let Some(event) = publisher.resync_event("options") {
-                                batch.push(event);
-                            }
+                            discard_through_sequence = discard_through_sequence.max(
+                                replace_batch_with_resync_statuses(&publisher, &mut batch),
+                            );
                         },
                         Err(broadcast::error::RecvError::Closed) => return None,
                     },
@@ -1149,7 +1176,14 @@ async fn live_sse(
             let json = serde_json::to_string(&batch).unwrap_or_else(|_| "[]".into());
             Some((
                 Ok::<Event, Infallible>(Event::default().data(json)),
-                (rx, Vec::new(), Vec::new(), flush, publisher),
+                (
+                    rx,
+                    Vec::new(),
+                    Vec::new(),
+                    flush,
+                    publisher,
+                    discard_through_sequence,
+                ),
             ))
         },
     );

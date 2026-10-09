@@ -75,7 +75,7 @@ UI 只显示 synthetic/offline/source unknown、best-effort non-transactional �
 - `GET /api/v1/stocks/bars`
 - `GET /api/v1/options/chain`
 - `POST /api/v1/subscriptions/stocks`：活动股票/Watchlist 租约，和启动基础标的求并集。
-- `POST /api/v1/subscriptions/options`：带正数 `generation` 的 OPRA 合约租约；HTTP 成功只表示 Gateway 接受租约，不代表上游已订阅。
+- `POST /api/v1/subscriptions/options`：带正数 `generation` 的 OPRA 合约租约；Next BFF 拒绝缺失、零值和超出 JavaScript 安全整数范围的代次后才转发。HTTP 成功只表示 Gateway 接受租约，不代表上游已订阅。
 - `GET /api/v1/stream/sse`：50ms 批量的统一股票/期权浏览器事件总线。
 - `POST /api/v1/orders/preview`
 - `POST /api/v1/orders/submit`
