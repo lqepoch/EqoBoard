@@ -1,4 +1,8 @@
 # 网关 Agent
 负责 HTTP/WS、权限校验、消息扇出、订阅租约、审计与启动配置。loopback 是默认监听；non-loopback 必须配置独立且可验证的 `EQO_GATEWAY_JWT_SECRET` 与 `EQO_RESEARCH_JWT_SECRET`，Gateway 按受信签名、固定 issuer/audience、`idp_iss` + `sub` 和 allowlist scope 验证主体，不能信任身份头或已退役的静态 `EQO_ACCESS_TOKEN`。WS ticket 仍限时且一次性；不在日志记录凭据；同步失败不盲重试。主要依据 .agents/skills/gateway-operations/SKILL.md。新增 API 同时更新 docs/ARCHITECTURE.md 和对应 Web Types。
 
+期权实时行情复用固定版本的 Broker `MarketDataPort`，Gateway 只维护一个 OPRA session，并消费有序 control lane 中的精确订阅 ACK；不得再启动第二条 Alpaca options socket 或自行解析 provider ACK。options lease 请求必须带正数 `generation`；有效符号上限是配置值与 Broker 32 个 quote/trade channel entries（两类各一项）的较小值，超限拒绝、不截断。并集变化时必须先取消并在有界期限内排空旧 session，再订阅新并集；排空超时关闭 supervisor，不允许连接重叠。ACK 只确认订阅 coverage，不证明 upstream auth、SIP/OPRA entitlement、来源或 `market_data_ready`。目前 options auth/source entitlement 仍为 `unknown`；股票流仍是旧 adapter，尚无 typed ACK，confirmed 保持空。Broker record lane 里的 raw-frame payload 在本阶段仅被消费/丢弃，不能称为持久原始行情归档或 pre-decode durable capture。
+
+SSE/WS 新连接会在注册广播 receiver 时原子回放最近的 stocks/options 状态；快照只保留两个 feed，并与事件序号分配/发送串行化。慢客户端 `resync_required` 使用该 feed 已知 epoch，让现有 store 清除旧 live 值但保留 REST snapshot；不得发送固定 epoch 0 的状态。
+
 OpenBB 只读行映射位于 `src/openbb.rs`，数据请求仍经 `eqo-alpaca-data`。只能在默认 Alpaca 数据源地址被使用时标记 `source_mode=alpaca`；`EQO_MARKET_DATA_BASE_URL` 的任何自定义地址均为 `unknown`。OpenBB rows 使用来源字段自己的市场时间，绝不使用 Gateway 请求时间补齐。bars/options 分页必须有限额并把 `pages_fetched`、`has_more`、`truncated` 显式返回；若页预算耗尽、仍有后续页但没有任何行情行，OpenBB flat-array endpoint 必须返回带来源/feed/分页字段的明确截断错误；完整空结果仍返回 `200 []`，不得伪造占位行。上游 `next_page_token` 仅允许缺失/null（终止）或非空字符串（续页），空字符串和其他类型都必须失败关闭。期权快照 OCC 符号无法解析或与精确请求到期日不一致时必须失败关闭；错误行不得静默丢弃或把缺失 OHLCV 填零。普通 table 的 `refetchInterval` 是 HTTP polling，不得称作 Live Grid。

@@ -298,6 +298,90 @@ test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases acro
   }
 });
 
+test("Gateway status replay confirms a late browser subscriber and nonzero-epoch resync clears live quotes", async ({ page, context, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const snapshotTime = new Date(Date.now() - 20_000).toISOString();
+  const contract = {
+    symbol: contractSymbol,
+    gateway_instance_id: "gateway-e2e-offline-1",
+    source_mode: "offline_mock",
+    source_label: "OFFLINE MOCK — NOT MARKET DATA",
+    received_at: new Date().toISOString(),
+    right: "put",
+    strike: 600,
+    bid: 1.25,
+    ask: 1.35,
+    last: 1.30,
+    iv: 0.22,
+    delta: -0.4,
+    gamma: 0.02,
+    theta: -0.01,
+    vega: 0.1,
+    bid_size: 4,
+    ask_size: 5,
+    quote_at: snapshotTime,
+    trade_at: snapshotTime,
+    model_as_of: null,
+    greeksSource: "REST model",
+    greeksAsOf: null,
+  };
+  await configureMocks(request, {
+    optionStatus: 200,
+    optionFeed: "opra",
+    contracts: [contract],
+    sseEvents: [feedStatus(1, null, null)],
+  });
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: /OPTIONS/ }).click();
+  const panels = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ });
+  await expect(panels).toHaveCount(2);
+
+  const liveTime = new Date().toISOString();
+  await configureMocks(request, {
+    sseEvents: [
+      feedStatus(3, [contractSymbol], liveTime, new Date(Date.now() + 30_000).toISOString()),
+      {
+        gateway_instance_id: "gateway-e2e-offline-1",
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
+        kind: "option_quote",
+        symbol: contractSymbol,
+        bid: 1.50,
+        ask: 1.60,
+        bid_size: 8,
+        ask_size: 9,
+        event_time: liveTime,
+        received_at: new Date().toISOString(),
+        connection_epoch: 8,
+        local_sequence: 4,
+      },
+    ],
+  });
+  const bidCell = panels.first().locator('.ag-row[row-index="0"] [col-id="put.bid"]');
+  await expect(bidCell).toContainText("1.50", { timeout: 8_000 });
+
+  await configureMocks(request, {
+    sseEvents: [feedStatus(5, [contractSymbol], liveTime)],
+  });
+  const lateSubscriber = await context.newPage();
+  await lateSubscriber.goto("/", { waitUntil: "domcontentloaded" });
+  const latePanels = lateSubscriber.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ });
+  await expect(latePanels).toHaveCount(2);
+  await expect(latePanels.first()).toContainText("quotes ACK 1/1", { timeout: 8_000 });
+  await expect(latePanels.first()).toContainText("OPRA source entitlement unknown");
+
+  await configureMocks(request, {
+    sseEvents: [{
+      ...feedStatus(6, [contractSymbol], liveTime),
+      resync_required: true,
+    }],
+  });
+  await expect(bidCell).toContainText("1.25", { timeout: 8_000 });
+  await expect(bidCell).not.toContainText("1.50");
+  await expect(panels.first()).toContainText("SUBSCRIBED · WAITING FOR DATA");
+});
+
 test("a browser stream outage cannot pin an old U.S. tick over a newer REST SIP snapshot", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
   const gatewayInstanceId = "gateway-e2e-outage-1";

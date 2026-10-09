@@ -325,8 +325,8 @@ fn test_keys() -> (AuthKeyring, Vec<u8>, Vec<u8>) {
 
 fn openbb_app(data: AlpacaData, keys: AuthKeyring) -> Router {
     let (stock_tx, _) = watch::channel(Vec::<String>::new());
-    let (option_tx, _) = watch::channel(Vec::<String>::new());
-    let (broadcasts, _) = broadcast::channel(16);
+    let (option_tx, _) = watch::channel(OptionSubscriptionRevision::default());
+    let (broadcasts, _) = broadcast::channel::<GatewayMarketEvent>(16);
     let state = AppState {
         data: Some(data),
         stock_feed: "sip".into(),
@@ -338,10 +338,10 @@ fn openbb_app(data: AlpacaData, keys: AuthKeyring) -> Router {
         max_stock_subscriptions: 100,
         stock_tx,
         stock_leases: Arc::default(),
-        max_option_subscriptions: 500,
+        max_option_subscriptions: MAX_BROKER_OPTION_SYMBOLS,
         option_tx,
         option_leases: Arc::default(),
-        broadcasts,
+        market_publisher: MarketPublisher::new(broadcasts),
         tickets: Arc::default(),
         previews: PreviewStore::default(),
         risk: RiskPolicy {

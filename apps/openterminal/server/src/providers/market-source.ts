@@ -3,6 +3,7 @@ export type MarketSourceMode = GatewaySourceMode | "unknown";
 export type MarketSourceFields = {
   source_mode?: unknown;
   source_label?: unknown;
+  source_entitlement?: "unknown" | "authorized" | "unauthorized";
 };
 
 export const OFFLINE_MARKET_SOURCE_LABEL = "OFFLINE MOCK — NOT MARKET DATA";

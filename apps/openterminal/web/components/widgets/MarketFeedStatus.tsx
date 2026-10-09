@@ -19,6 +19,7 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
       <span>{label} auth {status?.auth ?? "unknown"}</span>
       <span>{label} transport {status?.transport ?? "unknown"}</span>
       <span>{label} upstream {status?.upstream ?? "unknown"}</span>
+      <span>{label} source entitlement {status?.source_entitlement ?? "unknown"}</span>
       <span data-testid={`market-source-${feed}`} data-source-mode={source.mode}>
         data source {source.label}
       </span>
@@ -40,7 +41,7 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
         ? `coverage unknown${status ? `/${status.coverage.desired_count} desired` : ""}`
         : `coverage ${status.coverage.confirmed_count}/${status.coverage.desired_count}${status.coverage.complete ? " complete" : " partial"}`}</span>
       {feed === "options" && <span>
-        configured/local limit {status?.coverage.limit ?? "unknown"} · account entitlement unknown
+        configured/local limit {status?.coverage.limit ?? "unknown"}
       </span>}
       {status?.last_error && <span className="down" title={status.last_error.message ?? status.last_error.class}>
         {status.last_error.code ? `HTTP ${status.last_error.code} · ` : ""}{status.last_error.class}
