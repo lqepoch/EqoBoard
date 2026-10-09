@@ -8,9 +8,11 @@ const channelNames = ["quotes", "trades"] as const;
 export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
   const browserConnected = useMarket((state) => state.browserConnected);
   const status = useMarket((state) => state.feedStatus[feed]);
+  const optionSubscriptionLimit = useMarket((state) => state.optionSubscriptionLimit);
   const label = feed === "stocks" ? "SIP" : "OPRA";
   const source = resolveMarketSource(status, feed === "stocks" ? "sip" : "opra");
-  const configuredLimit = status?.coverage.limit;
+  // The configured cap survives a same-Gateway browser SSE reconnect; live status and ACK do not.
+  const configuredLimit = feed === "options" ? optionSubscriptionLimit : status?.coverage.limit;
   const effectiveLimit = typeof configuredLimit === "number" &&
     Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : "unknown";
 

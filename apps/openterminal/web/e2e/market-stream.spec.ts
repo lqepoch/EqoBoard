@@ -187,8 +187,10 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
   await page.goto("/");
   await page.getByRole("button", { name: /OPTIONS/ }).click();
   const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
+  const optionsStatus = panel.getByTestId("market-feed-status-options");
   await expect(panel).toContainText("8 strikes");
   await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
+  await expect(optionsStatus).toContainText("Gateway effective limit unknown");
   await expect.poll(async () => {
     const seen = await metrics(request);
     return seen.gateway.subscriptions.some((entry: { path: string }) => entry.path.endsWith("/subscriptions/stocks"));
@@ -199,6 +201,7 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
   await configureMocks(request, { sseEvents: [feedStatus(2, null, null, undefined, 3)] });
   await expect(panel).toContainText("8 strikes");
   await expect(panel).toContainText("OPRA lease request: 3/8 unique chain contracts (nearest underlying first); REST-returned contracts remain in the table");
+  await expect(optionsStatus).toContainText("Gateway effective limit 3");
   const expectedSymbols = [500, 499, 501].map((strike) => optionCallFixture(strike).symbol);
   await expect.poll(async () => {
     const seen = await metrics(request);
@@ -214,6 +217,7 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
 
   await configureMocks(request, { sseEvents: [feedStatus(3, null, null, undefined, -1)] });
   await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
+  await expect(optionsStatus).toContainText("Gateway effective limit unknown");
   await expect.poll(async () => {
     const current = await metrics(request);
     return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
@@ -230,6 +234,7 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
 
   await configureMocks(request, { sseEvents: [feedStatus(5, null, null, undefined, null)] });
   await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
+  await expect(optionsStatus).toContainText("Gateway effective limit unknown");
   await expect.poll(async () => {
     const current = await metrics(request);
     return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
@@ -275,6 +280,7 @@ test("options widget waits for a known cap and clears it on unknown status or Ga
   await expect(panel.locator('.ag-cell[col-id="strike"]').filter({ hasText: "600" })).toHaveCount(1);
   await expect(panel).toContainText("8 unique snapshot contracts");
   await expect(panel).toContainText("Gateway effective limit unknown");
+  await expect(optionsStatus).toContainText("Gateway effective limit unknown");
   await expect.poll(async () => {
     const current = await metrics(request);
     return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
@@ -304,8 +310,7 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
     optionStatus: 200,
     optionFeed: "opra",
     contracts: [contract],
-    // Establish this Gateway instance and its non-authoritative capacity before
-    // the REST query. The response must not be captured under generation zero.
+    // Seed this Gateway identity and its non-authoritative capacity; REST has its own source and generation checks.
     sseEvents: [feedStatus(1, null, null, undefined, 3)],
     sseDisconnectAfterMs: null,
   });
