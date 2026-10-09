@@ -289,7 +289,7 @@ async fn no_browser_receiver_does_not_turn_a_valid_quote_into_projection_failure
         MAX_BROKER_OPTION_SYMBOLS,
     ));
 
-    let _ = tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             if !port.requests().is_empty() {
                 break;
@@ -402,7 +402,7 @@ async fn drain_timeout_poison_stops_before_a_replacement_session() {
         Duration::from_millis(25),
     ));
 
-    let _ = tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             if !port.requests().is_empty() {
                 break;
