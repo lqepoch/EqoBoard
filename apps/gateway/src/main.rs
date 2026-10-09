@@ -2185,13 +2185,13 @@ mod tests {
         let leases = state.option_leases.lock().await;
         assert_eq!(leases.len(), 2);
         assert!(leases.contains_key(&(
-            first_principal.identity_issuer,
-            first_principal.subject,
+            first_principal.identity_issuer.clone(),
+            first_principal.subject.clone(),
             first_id
         )));
         assert!(leases.contains_key(&(
-            same_subject_other_issuer.identity_issuer,
-            same_subject_other_issuer.subject,
+            same_subject_other_issuer.identity_issuer.clone(),
+            same_subject_other_issuer.subject.clone(),
             other_issuer_id
         )));
         assert!(!leases.contains_key(&(
