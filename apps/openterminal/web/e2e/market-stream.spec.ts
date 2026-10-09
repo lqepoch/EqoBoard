@@ -293,8 +293,6 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
   refreshOidcSessionDuringLongTest(page.context());
 
   const snapshotTime = new Date(Date.now() - 20_000).toISOString();
-  const liveTime = new Date().toISOString();
-  const liveUntil = new Date(Date.now() + 30_000).toISOString();
   const contract = {
     ...optionCallFixture(600),
     symbol: contractSymbol,
@@ -302,56 +300,61 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
     quote_at: snapshotTime,
     trade_at: snapshotTime,
   };
-  const initialEvents = [
-    feedStatus(1, [contractSymbol], liveTime, liveUntil, 3),
-    {
-      gateway_instance_id: "gateway-e2e-offline-1",
-      source_mode: "offline_mock",
-      source_label: "OFFLINE MOCK — NOT MARKET DATA",
-      kind: "option_quote",
-      symbol: contractSymbol,
-      bid: 1.5,
-      ask: 1.6,
-      bid_size: 8,
-      ask_size: 9,
-      event_time: liveTime,
-      received_at: new Date().toISOString(),
-      connection_epoch: 8,
-      local_sequence: 2,
-    },
-  ];
   await configureMocks(request, {
     optionStatus: 200,
     optionFeed: "opra",
     contracts: [contract],
-    sseEvents: initialEvents,
-    sseDisconnectAfterMs: 10_000,
+    // Establish this Gateway instance and its non-authoritative capacity before
+    // the REST query. The response must not be captured under generation zero.
+    sseEvents: [feedStatus(1, null, null, undefined, 3)],
+    sseDisconnectAfterMs: null,
   });
   const beforeOpen = await metrics(request);
 
   await page.goto("/");
+  await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 5_000 })
+    .toBeGreaterThan(beforeOpen.gateway.streamOpened);
+  await expect(page.getByTestId("market-feed-status-options")).toContainText("Gateway effective limit 3");
   await page.getByRole("button", { name: /OPTIONS/ }).click();
   const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
-  await expect(panel).toContainText("FRESH · OFFLINE MOCK", { timeout: 10_000 });
-  await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("1/1 confirmed");
+  await expect(panel).toContainText("1 unique snapshot contracts");
   await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("Gateway effective limit 3");
   const bidCell = panel.locator('.ag-row[row-index="0"] [col-id="put.bid"]');
-  await expect(bidCell).toContainText("1.50");
   await expect.poll(async () => (await metrics(request)).gateway.subscriptions.filter(
     (entry: { path: string; body: { symbols?: string[] } }) =>
       entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
   ).length).toBeGreaterThan(0);
-  await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 5_000 })
-    .toBeGreaterThan(beforeOpen.gateway.streamOpened);
-  await configureMocks(request, { sseStatus: 503 });
-  // Refresh the event-time evidence shortly before the scheduled server close,
-  // so the post-close assertion distinguishes cleared live state from old data
-  // that merely aged past the client's freshness guard.
-  await page.waitForTimeout(5_000);
+
+  const initialLiveTime = new Date().toISOString();
+  await configureMocks(request, {
+    sseEvents: [
+      feedStatus(2, [contractSymbol], initialLiveTime, new Date(Date.now() + 30_000).toISOString(), 3),
+      {
+        gateway_instance_id: "gateway-e2e-offline-1",
+        source_mode: "offline_mock",
+        source_label: "OFFLINE MOCK — NOT MARKET DATA",
+        kind: "option_quote",
+        symbol: contractSymbol,
+        bid: 1.5,
+        ask: 1.6,
+        bid_size: 8,
+        ask_size: 9,
+        event_time: initialLiveTime,
+        received_at: new Date().toISOString(),
+        connection_epoch: 8,
+        local_sequence: 3,
+      },
+    ],
+  });
+  await expect(panel).toContainText("FRESH · OFFLINE MOCK", { timeout: 5_000 });
+  await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("1/1 confirmed");
+  await expect(bidCell).toContainText("1.50");
+
+  // Refresh with current event time immediately before the controlled close.
   const preCloseTime = new Date().toISOString();
   await configureMocks(request, {
     sseEvents: [
-      feedStatus(3, [contractSymbol], preCloseTime, new Date(Date.now() + 30_000).toISOString(), 3),
+      feedStatus(4, [contractSymbol], preCloseTime, new Date(Date.now() + 30_000).toISOString(), 3),
       {
         gateway_instance_id: "gateway-e2e-offline-1",
         source_mode: "offline_mock",
@@ -365,7 +368,7 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
         event_time: preCloseTime,
         received_at: new Date().toISOString(),
         connection_epoch: 8,
-        local_sequence: 4,
+        local_sequence: 5,
       },
     ],
   });
@@ -377,11 +380,12 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
       entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) === 0,
   ).length;
 
-  // This changes only the next connection's behavior. The already-open SSE
-  // keeps its scheduled close, giving the test a deterministic server-side drop.
-  await configureMocks(request, { sseDisconnectAfterMs: null });
-  await expect.poll(async () => (await metrics(request)).gateway.streamClosed, { timeout: 12_000 })
-    .toBeGreaterThan(beforeOpen.gateway.streamClosed);
+  // The mock closes only currently open SSE responses once; the 503 prevents
+  // an immediate reconnect until the test explicitly restores the stream.
+  const closeResult = await configureMocks(request, { sseStatus: 503, closeActiveSse: true });
+  expect(closeResult.closedSseStreams).toBeGreaterThan(0);
+  await expect.poll(async () => (await metrics(request)).gateway.streamClosed, { timeout: 5_000 })
+    .toBeGreaterThan(beforeClose.gateway.streamClosed);
   await expect(panel).toContainText("BROWSER DISCONNECTED");
   await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("confirmed unknown · desired unknown");
   await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("Gateway effective limit 3");
@@ -401,7 +405,7 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
     sseStatus: 200,
     sseDisconnectAfterMs: null,
     sseEvents: [
-      feedStatus(5, [contractSymbol], recoveryTime, new Date(Date.now() + 30_000).toISOString(), 3),
+      feedStatus(6, [contractSymbol], recoveryTime, new Date(Date.now() + 30_000).toISOString(), 3),
       {
         gateway_instance_id: "gateway-e2e-offline-1",
         source_mode: "offline_mock",
@@ -415,7 +419,7 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
         event_time: recoveryTime,
         received_at: new Date().toISOString(),
         connection_epoch: 8,
-        local_sequence: 6,
+        local_sequence: 7,
       },
     ],
   });

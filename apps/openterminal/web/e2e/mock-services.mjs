@@ -39,6 +39,7 @@ const metrics = {
   quant: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   engine: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
 };
+const activeSseClosers = new Set();
 const mdpControl = {
   status: 200,
   response: null,
@@ -285,7 +286,21 @@ const oidc = createServer(async (req, res) => {
       }
     }
     previewSequence = 0;
-    return sendJson(res, 200, { ok: true, config: gatewayControl, mdp: mdpControl, engine: { ...engineControl, statusText: undefined, previewText: undefined } });
+    let closedSseStreams = 0;
+    if (Object.hasOwn(body, "closeActiveSse")) {
+      if (body.closeActiveSse !== true) return sendJson(res, 400, { error: "close_active_sse_must_be_true" });
+      // One-shot test control; it does not change how the next stream connects.
+      const activeSse = [...activeSseClosers];
+      closedSseStreams = activeSse.length;
+      for (const close of activeSse) close();
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      closedSseStreams,
+      config: gatewayControl,
+      mdp: mdpControl,
+      engine: { ...engineControl, statusText: undefined, previewText: undefined },
+    });
   }
   if (url.pathname === "/evil") {
     const html = `<!doctype html><html><body>external-origin<script>
@@ -455,11 +470,14 @@ const gateway = createServer(async (req, res) => {
     res.write(`data: ${JSON.stringify(gatewayControl.sseEvents)}\n\n`);
     const timer = setInterval(() => res.write(`data: ${JSON.stringify(gatewayControl.sseEvents)}\n\n`), 1000);
     let closed = false;
+    const closeActiveSse = () => res.end();
+    activeSseClosers.add(closeActiveSse);
     const closeStream = () => {
       if (closed) return;
       closed = true;
       clearInterval(timer);
       if (disconnectTimer) clearTimeout(disconnectTimer);
+      activeSseClosers.delete(closeActiveSse);
       metrics.gateway.activeStreams = Math.max(0, metrics.gateway.activeStreams - 1);
       metrics.gateway.streamClosed += 1;
     };
