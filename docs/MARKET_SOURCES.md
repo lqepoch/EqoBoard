@@ -27,6 +27,8 @@ The source pairs and typed timestamps below describe the Web/Node contract when 
 | FINRA short-sale volume | FINRA Reg SHO daily file. | File's trading date (published on the following day in normal operation). | This is a daily statistic, not live tape volume. |
 | SEC Form 4 insider filings | SEC EDGAR filing data. | Filing date and transaction date are distinct. | Filing/transaction dates are not quote times. |
 
+OpenBB Research widgets use read-only Gateway REST endpoints. An OPRA REST snapshot does not acquire a terminal options lease or start the Gateway OPRA WebSocket by itself; the live options session is demand-driven by an explicit authenticated OpenTerminal BFF lease. An unknown effective limit creates no options lease. REST row availability remains separate from WebSocket subscription, ACK, source identity and entitlement.
+
 ## Feed status and freshness
 
 The OpenBB Gateway adapter returns row-level `source`, `source_mode`, `source_label`, and `feed`. It marks rows `alpaca` only when the built-in `https://data.alpaca.markets` endpoint is used; any configured base URL override reports `unknown`, even when the feed parameter is `sip` or `opra`. Stock `market_as_of` follows the source used for `last` (`trade` or daily bar); quote and daily-bar timestamps are separate. Option `quote_at`, `trade_at`, and `model_as_of` are separate; absent model time stays null. A bar's `market_as_of` is its source bar timestamp. These OpenBB rows do not imply that account entitlement or stream readiness has been verified.

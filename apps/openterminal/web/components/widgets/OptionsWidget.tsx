@@ -82,6 +82,7 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const grid=useRef<AgGridReact<Row>>(null);
   const browserConnected=useMarket(s=>s.browserConnected);
   const feedStatus=useMarket(s=>s.feedStatus.options);
+  const subscriptionLimit=useMarket(s=>s.optionSubscriptionLimit);
   const optionSnapshots=useMarket(s=>s.optionSnapshots);
   const setSnapshotWatermark=useMarket(s=>s.setSnapshotWatermark);
   const setOptionSnapshot=useMarket(s=>s.setOptionSnapshot);
@@ -99,7 +100,6 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const gatewayInstanceId=useMarket(s=>s.gatewayInstanceId);
   const data=responseData&&(!gatewayInstanceId||responseData.gateway_instance_id===gatewayInstanceId||
     (responseData.source_mode!=="alpaca"&&responseData.source_mode!=="offline_mock"))?responseData:undefined;
-  const subscriptionLimit=feedStatus?.coverage.limit;
   const hasUsableSubscriptionLimit=typeof subscriptionLimit==="number"&&
     Number.isSafeInteger(subscriptionLimit)&&subscriptionLimit>0;
   const subscriptionSymbols=useMemo(()=>{

@@ -441,7 +441,13 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
   const barsUpstreamRequest = dataCalls.find((call: { path: string; symbol: string }) => call.path.endsWith("/bars") && call.symbol === "QQQ");
   expect(barsUpstreamRequest).toMatchObject({ feed: "sip", timeframe: "1Day", limit: "500" });
   for (const call of dataCalls) expect(call).toMatchObject({ key_id_present: true, secret_present: true });
-  expect(callMetrics.websocket_paths.sort()).toEqual(["/v1beta1/opra", "/v2/sip"]);
+  const gatewayMetrics = await (await request.get(`${RESEARCH_OIDC_ORIGIN}/__test/metrics`)).json();
+  expect(gatewayMetrics.gateway.subscriptions.filter((entry: { path: string }) =>
+    entry.path.endsWith("/subscriptions/options"))).toHaveLength(0);
+  // The research widgets use bounded REST calls. They do not acquire a
+  // terminal options lease, so rendering an OPRA snapshot must not start the
+  // Gateway's OPRA WebSocket session.
+  expect(callMetrics.websocket_paths.sort()).toEqual(["/v2/sip"]);
   expect(browserCalls.some((url) => /yahoo|iex/i.test(url))).toBe(false);
   expect(browserCalls.some((url) => /\/orders?(\/|\?|$)|\/submit(\/|\?|$)/i.test(url))).toBe(false);
 

@@ -10,6 +10,24 @@ type SessionRefreshState = {
 };
 const sessionRefreshStates = new WeakMap<BrowserContext, SessionRefreshState>();
 
+function refreshOidcSessionDuringLongTest(context: BrowserContext) {
+  const refreshState: SessionRefreshState = { timer: null, inFlight: null };
+  refreshState.timer = setInterval(() => {
+    if (refreshState.inFlight) return;
+    refreshState.inFlight = context.request.get(`${WEB_ORIGIN}/api/auth/session`, { timeout: 5_000 })
+      .then(async (response) => {
+        if (!response.ok()) throw new Error("session refresh rejected");
+        const session = await response.json();
+        if (session.user?.id !== "subject-e2e" || session.sessionExpiresAt <= Date.now() + 1_000) {
+          throw new Error("session refresh did not return an active test principal");
+        }
+      })
+      .catch(() => { refreshState.failure = "active OIDC session refresh failed"; })
+      .finally(() => { refreshState.inFlight = null; });
+  }, 2_000);
+  sessionRefreshStates.set(context, refreshState);
+}
+
 test.afterEach(async ({ context }) => {
   const state = sessionRefreshStates.get(context);
   if (!state) return;
@@ -154,8 +172,10 @@ test("options widget limits a large chain to unique ATM-nearest leases and keeps
   expect(new Set(lease?.body.symbols).size).toBe(16);
 });
 
-test("options widget waits for a known cap before leasing and honors a smaller configured limit", async ({ page, request }) => {
+test("options widget waits for a known cap and clears it on unknown status or Gateway restart", async ({ page, request }) => {
+  test.setTimeout(60_000);
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  refreshOidcSessionDuringLongTest(page.context());
   const contracts = [496, 497, 498, 499, 500, 501, 502, 503].map(optionCallFixture);
   await configureMocks(request, {
     optionStatus: 200,
@@ -177,7 +197,6 @@ test("options widget waits for a known cap before leasing and honors a smaller c
   expect(noLimitSubscriptions.filter((entry: { path: string }) => entry.path.endsWith("/subscriptions/options"))).toHaveLength(0);
 
   await configureMocks(request, { sseEvents: [feedStatus(2, null, null, undefined, 3)] });
-  await page.reload();
   await expect(panel).toContainText("8 strikes");
   await expect(panel).toContainText("OPRA lease request: 3/8 unique chain contracts (nearest underlying first); REST-returned contracts remain in the table");
   const expectedSymbols = [500, 499, 501].map((strike) => optionCallFixture(strike).symbol);
@@ -192,26 +211,78 @@ test("options widget waits for a known cap before leasing and honors a smaller c
     entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1);
   expect(lease?.body.symbols).toHaveLength(3);
   expect(new Set(lease?.body.symbols).size).toBe(3);
+
+  await configureMocks(request, { sseEvents: [feedStatus(3, null, null, undefined, null)] });
+  await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
+  await expect.poll(async () => {
+    const current = await metrics(request);
+    return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options")).at(-1)?.body.symbols ?? null;
+  }).toEqual([]);
+
+  await configureMocks(request, { sseEvents: [feedStatus(4, null, null, undefined, -1)] });
+  await expect(panel).toContainText("OPRA lease not requested: Gateway effective limit unknown; all 8 REST-returned contracts remain in the table");
+  await expect.poll(async () => {
+    const current = await metrics(request);
+    return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options")).at(-1)?.body.symbols ?? null;
+  }).toEqual([]);
+
+  await configureMocks(request, { sseEvents: [feedStatus(5, null, null, undefined, 3)] });
+  await expect(panel).toContainText("OPRA lease request: 3/8 unique chain contracts", { timeout: 5_000 });
+  await expect.poll(async () => {
+    const current = await metrics(request);
+    return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1)?.body.symbols?.length ?? 0;
+  }).toBe(3);
+  const activeOptionLeasesBeforeRestart = (await metrics(request)).gateway.subscriptions.filter(
+    (entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
+  ).length;
+  const newGatewayInstance = "gateway-e2e-offline-2";
+  const receivedAt = new Date().toISOString();
+  await configureMocks(request, { sseEvents: [{
+    kind: "stock_trade",
+    gateway_instance_id: newGatewayInstance,
+    source_mode: "offline_mock",
+    source_label: "OFFLINE MOCK — NOT MARKET DATA",
+    symbol: "QQQ",
+    price: 501,
+    size: 1,
+    event_time: receivedAt,
+    received_at: receivedAt,
+    connection_epoch: 1,
+    local_sequence: 1,
+  }] });
+  const restartedContracts = Array.from({ length: 8 }, (_, index) => ({
+    ...optionCallFixture(600 + index), gateway_instance_id: newGatewayInstance,
+  }));
+  await configureMocks(request, { contracts: restartedContracts });
+  const optionChainRequestsBeforeRestartSnapshot =
+    (await metrics(request)).gateway.requests["/api/v1/options/chain"] ?? 0;
+  await expect.poll(async () => {
+    const current = await metrics(request);
+    return current.gateway.requests["/api/v1/options/chain"] ?? 0;
+  }, { timeout: 20_000 }).toBeGreaterThan(optionChainRequestsBeforeRestartSnapshot);
+  await expect(panel.locator('.ag-cell[col-id="strike"]').filter({ hasText: "600" })).toHaveCount(1);
+  await expect(panel).toContainText("8 unique snapshot contracts");
+  await expect(panel).toContainText("Gateway effective limit unknown");
+  await expect.poll(async () => {
+    const current = await metrics(request);
+    return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options")).at(-1)?.body.symbols ?? null;
+  }).toEqual([]);
+  const activeOptionLeasesAfterRestart = (await metrics(request)).gateway.subscriptions.filter(
+    (entry: { path: string; body: { symbols?: string[] } }) =>
+      entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
+  ).length;
+  expect(activeOptionLeasesAfterRestart).toBe(activeOptionLeasesBeforeRestart);
 });
 
 test("OPRA UI waits for ACK, rejects an older tick, and keeps stable leases across widgets and tabs", async ({ page, context, request }) => {
   test.setTimeout(90_000);
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
-  const refreshState: SessionRefreshState = { timer: null, inFlight: null };
-  refreshState.timer = setInterval(() => {
-    if (refreshState.inFlight) return;
-    refreshState.inFlight = context.request.get(`${WEB_ORIGIN}/api/auth/session`, { timeout: 5_000 })
-      .then(async (response) => {
-        if (!response.ok()) throw new Error("session refresh rejected");
-        const session = await response.json();
-        if (session.user?.id !== "subject-e2e" || session.sessionExpiresAt <= Date.now() + 1_000) {
-          throw new Error("session refresh did not return an active test principal");
-        }
-      })
-      .catch(() => { refreshState.failure = "active OIDC session refresh failed"; })
-      .finally(() => { refreshState.inFlight = null; });
-  }, 2_000);
-  sessionRefreshStates.set(context, refreshState);
+  refreshOidcSessionDuringLongTest(context);
 
   const baseMs = Date.now();
   const snapshotTime = new Date(baseMs - 20_000).toISOString();
