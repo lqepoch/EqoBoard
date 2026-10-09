@@ -458,27 +458,50 @@ test("new Gateway cap cannot lease the prior generation chain before its REST re
   const priorNonemptyLeaseCount = subscriptionsBeforeTransition.filter(
     (entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) > 0,
   ).length;
+  const refreshedContracts = Array.from({ length: 8 }, (_, index) => ({
+    ...optionCallFixture(600 + index), gateway_instance_id: newGatewayInstance,
+  }));
+  const refreshedSymbols = new Set(refreshedContracts.map((contract) => contract.symbol));
   let releaseSnapshot!: () => void;
-  let snapshotPaused = false;
+  let snapshotResponseHeld = false;
+  let snapshotRoutesInFlight = 0;
   const snapshotRelease = new Promise<void>((resolve) => { releaseSnapshot = resolve; });
   const snapshotRoute = /\/api\/options\/QQQ\?expiry=/;
-  await page.route(snapshotRoute, async (route: Route) => {
-    if (snapshotPaused) return route.continue();
-    snapshotPaused = true;
-    await snapshotRelease;
-    await route.continue();
-  });
+  const holdSnapshotResponse = async (route: Route) => {
+    snapshotRoutesInFlight += 1;
+    try {
+      // Hold only the response containing the refreshed chain. Older in-flight
+      // polls pass through, and Gateway request counts may already change here.
+      const response = await route.fetch({ timeout: 10_000 });
+      const body = await response.json() as {
+        calls?: Array<{ symbol?: string }>;
+        puts?: Array<{ symbol?: string }>;
+      };
+      const hasRefreshedChain = [...(body.calls ?? []), ...(body.puts ?? [])]
+        .some((contract) => contract.symbol !== undefined && refreshedSymbols.has(contract.symbol));
+      if (!hasRefreshedChain) {
+        await route.fulfill({ response });
+        return;
+      }
+      snapshotResponseHeld = true;
+      await snapshotRelease;
+      await route.fulfill({ response });
+    } finally {
+      snapshotRoutesInFlight -= 1;
+    }
+  };
+  await page.route(snapshotRoute, holdSnapshotResponse);
 
   try {
-    const chainRequestsBeforeRefresh = (await metrics(request)).gateway.requests["/api/v1/options/chain"] ?? 0;
-    // The response has no Gateway identity, so the browser-captured generation
-    // must prevent this prior chain from being reused with the new instance cap.
+    // The browser-captured generation must prevent any prior chain from being
+    // reused with the new instance cap until this matching response is released.
     await configureMocks(request, {
       sseEvents: [{
         ...feedStatus(1, null, null, undefined, 3),
         gateway_instance_id: newGatewayInstance,
         connection_epoch: 1,
       }],
+      contracts: refreshedContracts,
     });
     await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("Gateway effective limit 3");
     await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("no REST contracts");
@@ -489,17 +512,12 @@ test("new Gateway cap cannot lease the prior generation chain before its REST re
       (entry: { body: { symbols?: string[] } }) => (entry.body.symbols?.length ?? 0) > 0,
     )).toHaveLength(priorNonemptyLeaseCount);
 
-    const refreshedContracts = Array.from({ length: 8 }, (_, index) => ({
-      ...optionCallFixture(600 + index), gateway_instance_id: newGatewayInstance,
-    }));
-    await configureMocks(request, { contracts: refreshedContracts });
-    await expect.poll(() => snapshotPaused, {
+    await expect.poll(() => snapshotResponseHeld, {
       timeout: 22_000,
     }).toBe(true);
 
     await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("no REST contracts");
     const whileRefreshHeld = await metrics(request);
-    expect(whileRefreshHeld.gateway.requests["/api/v1/options/chain"] ?? 0).toBe(chainRequestsBeforeRefresh);
     const nonemptyLeasesWhileHeld = whileRefreshHeld.gateway.subscriptions.filter(
       (entry: { path: string; body: { symbols?: string[] } }) =>
         entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
@@ -513,9 +531,6 @@ test("new Gateway cap cannot lease the prior generation chain before its REST re
     expect(submissionsDuringGap.some((symbol: string) => oldSymbols.has(symbol))).toBe(false);
 
     releaseSnapshot();
-    await expect.poll(async () => (await metrics(request)).gateway.requests["/api/v1/options/chain"] ?? 0, {
-      timeout: 10_000,
-    }).toBeGreaterThan(chainRequestsBeforeRefresh);
     await expect(panel.locator('.ag-cell[col-id="strike"]').filter({ hasText: "600" })).toHaveCount(1);
     await expect(panel).toContainText("8 unique snapshot contracts");
     await expect.poll(async () => {
@@ -523,7 +538,6 @@ test("new Gateway cap cannot lease the prior generation chain before its REST re
       return current.gateway.subscriptions.filter((entry: { path: string; body: { symbols?: string[] } }) =>
         entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0).at(-1)?.body.symbols ?? null;
     }).toHaveLength(3);
-    const refreshedSymbols = new Set(refreshedContracts.map((contract) => contract.symbol));
     const latestLease = (await metrics(request)).gateway.subscriptions.filter(
       (entry: { path: string; body: { symbols?: string[] } }) =>
         entry.path.endsWith("/subscriptions/options") && (entry.body.symbols?.length ?? 0) > 0,
@@ -531,7 +545,10 @@ test("new Gateway cap cannot lease the prior generation chain before its REST re
     expect(latestLease?.body.symbols?.every((symbol: string) => refreshedSymbols.has(symbol))).toBe(true);
   } finally {
     releaseSnapshot();
-    await page.unroute(snapshotRoute);
+    if (snapshotRoutesInFlight > 0) {
+      await expect.poll(() => snapshotRoutesInFlight, { timeout: 12_000 }).toBe(0);
+    }
+    await page.unroute(snapshotRoute, holdSnapshotResponse);
   }
 });
 
