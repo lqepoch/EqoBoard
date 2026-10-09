@@ -39,16 +39,26 @@ OpenBB 上游差异报告、许可证检查和镜像回滚流程见 [`docs/OPENB
 
 - Repository: https://github.com/lqepoch/trading-core
 - Crate: `market-contracts`
-- Pinned revision: `0a2eaff08d45e8abc1a0137dab17d5d3ef5553c8`
+- Pinned revision: `22315511e084050c2ec037fa36c5d07a0bc6606e`
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `crates/domain` re-exports the pinned crate's `legacy` module to preserve existing `eqo_domain::*` consumers and JSON shape. New versioned market wire contracts should use the shared crate directly; legacy `f64` DTOs are not exact-decimal archival contracts.
+
+## Read-only Broker market-data adapter
+
+- Repository: https://github.com/lqepoch/broker-connectors
+- Pinned revision: `a8eea66a967f2d40cf726344b46e229ffee6f41b`
+- Shared Core revision: `22315511e084050c2ec037fa36c5d07a0bc6606e`
+- The selected revision pins Tokio `1.53.2` and zeroize `1.9.1`; EqoBoard's workspace lock resolves those patched versions. This dependency pin does not enable provider access or establish SIP/OPRA entitlement.
+- Declared license: `MIT OR Apache-2.0`
+- EqoBoard usage: `apps/gateway` consumes `broker-ports` and `alpaca-stream` for one read-only OPRA options session and its ordered event/control lane. Provider decoding and ACK validation remain owned by Broker; Gateway only adapts valid records into the existing browser contract. This does not establish real provider availability, authentication, entitlement, durable raw capture, or SIP subscription ACK.
+- The adapter and its fixtures are covered by the Broker workspace's native tests; EqoBoard's Gateway integration is verified separately. No provider request or OAuth flow is run by this integration.
 
 The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`. OpenTerminal pins it to `b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. The Quant BFF uses `parsePredictionEnvelopeProtoJsonText` for its bounded public ProtoJSON, while the Engine BFF uses `parseEngineStatusResponseV1ProtoJsonText` and `parseSyntheticOfflinePreviewV1ProtoJsonText` for Engine status and preview. These generated parsers enforce exact fields, duplicate-key and alias rejection, and bounded numeric representations. The browser receives only public projections or generated type-only contracts after server-side validation.
 
 ## Rust JWT and trust-root data
 
 - `jsonwebtoken` is pinned to `10.3.0` in `Cargo.lock`, with `default-features = false` and only its `aws_lc_rs` crypto backend enabled in `apps/gateway/Cargo.toml`. This avoids resolving the unpatched `rsa` crate through `rust_crypto`; it does not imply that other crypto dependencies are advisory-free.
-- Current locked backend versions are `aws-lc-rs 1.18.1` and `aws-lc-sys 0.45.0`. The dependency graph and licenses are checked with `cargo deny check all`; the exact Git source allowlist is limited to the pinned `lqepoch/trading-core` revision and crates.io.
+- Current locked backend versions are `aws-lc-rs 1.18.1` and `aws-lc-sys 0.45.0`. The dependency graph and licenses are checked with `cargo deny check all`; the exact Git source allowlist is limited to the pinned `lqepoch/trading-core` and `lqepoch/broker-connectors` revisions and crates.io.
 - `webpki-roots 0.26.11` and `webpki-roots 1.0.9` contain trust-root data under CDLA-Permissive-2.0. Their packaged `LICENSE` files have the same SHA-256, `e271993808fec50ab29350b39539cdec611a9103f827e0aa26d61da70e2d33f8`. The exact text is retained at `third_party/licenses/webpki-roots/CDLA-Permissive-2.0.txt` and copied into the Gateway runtime image under `/usr/share/licenses/eqoboard/` so it accompanies the distributed trust-root data.
 - `deny.toml` explicitly allows only the observed permissive SPDX identifiers and scopes CDLA-Permissive-2.0 exceptions to those two exact crate versions. Unknown licenses, unpinned Git sources, yanked packages, and known advisories fail the check; the policy contains no advisory ignores.
 

@@ -4,16 +4,17 @@
 
 - 上游基线见 `docs/THIRD_PARTY.md`。
 - 实时股票/期权价格、K线、Option Chain 走 `web/lib/eqo-market.ts` → Rust Gateway；离线归档分钟 bars 只读入口是 `/api/eqo/market-data/datasets/{dataset_id}/bars`，由同源 Next BFF 转发到独立 MDP HTTP API，不替代 Gateway 实时接口。
-- Web/Node 只消费 Gateway 提供的可信来源/时间/状态字段，不推断 `feed=sip|opra` 就代表 Alpaca。当前 Gateway 基线缺少部分来源身份、实例和typed ACK字段：legacy REST 数值可以展示，但 source/as-of 必须标 unknown；legacy SSE 不得显示 LIVE。#3 Rust协议验收未由 Web/Node 测试代替。
+- Web/Node 只消费 Gateway 提供的可信来源/时间/状态字段，不推断 `feed=sip|opra` 就代表 Alpaca。OPRA Gateway 路径现在消费 Broker typed ACK 并发布 generation/epoch/coverage 状态，但 auth、entitlement 和 provider 来源仍为 unknown；legacy SIP/REST 数值缺少来源或事件时间时必须继续显示 unknown，legacy SIP stream 不得显示 LIVE。#3 的真实 provider/entitlement 验收未由 Web/Node 测试代替。
 - FRED/SEC/FINRA/新闻等补充研究 Provider 可沿用上游 server。
 - EqoBoard 自有 widget 放在 `web/components/widgets`，优先复用当前依赖，避免再引入同类 UI 框架。
 - 可选 OpenBB Research 入口只扩展原生 Sidebar/Command Palette，使用服务端验证后的 `EQO_RESEARCH_PUBLIC_ORIGIN` 在新标签打开独立 origin；变量必须是 HTTPS 或精确 loopback HTTP 纯 origin，hostname 与 `EQO_PUBLIC_ORIGIN` 不同。缺省或非法配置隐藏入口且不影响终端；这只是外链，不共享 OIDC 会话、凭据或 Gateway 状态。
 - Option Chain 固定 AG Grid Community；空 IV/Greeks 不转换成 0。
 - 所有 U.S. 股票/ETF 的价格、涨跌、成交量、历史 bars、财报价格变动请求 `Alpaca SIP`；TradingView 只用于市场元数据和明确标注的研究字段。SIP 403/缺失时显示 unavailable，不回退到免费行情源；缺少可信来源字段的 legacy 数值需显示 source/as-of unknown。
 - 期权 quote/trade 请求 `Alpaca OPRA`。IV/Greeks 是 Alpaca REST snapshot 的 vendor/model 字段，不是 OPRA 原生字段；没有独立模型时间就显示 `model as-of unknown`，不能继承 quote/trade 或 Gateway response 时间。
-- Widget 将浏览器 SSE、上游认证、订阅 ACK、覆盖率和逐事件新鲜度分开显示。只有 Gateway ACK 能确认订阅；浏览器连接或 REST lease accepted 不能代表上游 ready/live。当前 Gateway 未发布 ACK 时显示 unknown/pending。缺失 event time 保持 unknown。
+- Widget 将浏览器 SSE、上游认证、订阅 ACK、覆盖率和逐事件新鲜度分开显示。只有 Gateway ACK 能确认订阅；浏览器连接或 REST lease accepted 不能代表上游 ready/live。OPRA Gateway 路径会发布 typed ACK coverage，但 source/auth/entitlement 仍为 unknown；legacy SIP 仍无 typed ACK。缺失 event time 保持 unknown。
+- OptionsWidget 不因实时租约裁剪 REST 返回行（上游 `truncated` 仍单独标记），只按 Gateway 返回的有效 coverage limit 申请去重后的有限实时租约，优先选择最接近 underlying 的合约；limit 缺失或无效时不申请实时租约。limit 仅作为当前 `gateway_instance_id` 的配置元数据：同一 Gateway 的浏览器 SSE 短暂断开可保留该 limit，但连接状态、ACK、实时值和 freshness 仍清空；收到新 Gateway 实例或同实例明确缺失/无效的 limit 后必须清除。有限租约不表示整条链已覆盖，也不改变 source/auth/entitlement 的 unknown 状态。REST chain response 只能在其浏览器捕获的 `clientGatewayInstanceGeneration` 仍等于当前 generation 时展示或形成租约；新实例 cap 到达而新 REST chain 尚未返回期间，旧 generation 的 chain 不得用于新租约。
 - UI 用共享时钟同时执行 Gateway `fresh_until` 与独立五秒客户端保护阈值，较早者生效；服务器期限不能延长客户端上限。事件时间晚于同一发布的 `received_at` 时保持 unknown。五秒是显示保护，不是 Gateway freshness policy。空闲 SSE 不得让旧 tick 永久保持 LIVE。
-- 同一行情状态由 `web/store/market.ts` 持有；REST watermark 按 feed/symbol/event type 防旧响应与旧 tick，Gateway instance/epoch 变化或 resync 会清理旧 live 值。订阅客户端在 membership 更新和释放时发送递增 generation/tombstone；在 Gateway 返回可核验的 active generation/集合之前，不得宣称服务器已防止旧 cleanup/renew 竞态。
+- 同一行情状态由 `web/store/market.ts` 持有；REST watermark 按 feed/symbol/event type 防旧响应与旧 tick，Gateway instance/epoch 变化或 resync 会清理旧 live 值。Options BFF 要求正的 JavaScript safe-integer generation 并转发到 Gateway；Gateway 拒绝旧代次和同代次冲突的 symbol set，接受 HTTP lease 不等于上游 ACK。股票订阅仍走旧接口，不具备同等 generation 保护；任何租约状态都不能替代 provider ACK 或证明来源/entitlement。
 - 行情来源、as-of 与 coverage 定义见 [`docs/MARKET_SOURCES.md`](../../docs/MARKET_SOURCES.md)。
 - 新交易 UI 只能调用服务端 `/api/eqo/orders/*`，浏览器不得接触券商/Alpaca密钥。
 - 终端 `/api` BFF 路由（含通用代理、订单、订阅和 SSE）必须要求当前 OIDC 会话及 action scope；写请求校验同源 Origin 和 bounded JSON。角色只来自受信 OIDC claims allowlist，不能由浏览器/session update 提升。研究模式的 `/api/openbb/widgets.json`、`apps.json` 只返回非敏感 metadata；市场 endpoints 仍必须校验 `market:read`。

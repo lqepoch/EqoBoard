@@ -75,7 +75,7 @@ UI 只显示 synthetic/offline/source unknown、best-effort non-transactional �
 - `GET /api/v1/stocks/bars`
 - `GET /api/v1/options/chain`
 - `POST /api/v1/subscriptions/stocks`：活动股票/Watchlist 租约，和启动基础标的求并集。
-- `POST /api/v1/subscriptions/options`：OPRA 合约租约。
+- `POST /api/v1/subscriptions/options`：带正数 `generation` 的 OPRA 合约租约；Next BFF 拒绝缺失、零值和超出 JavaScript 安全整数范围的代次后才转发。单个租约符号数受 Gateway/Broker 有效上限约束；全局 consumer lease 数和每个 `(issuer, subject)` 的 lease 数分别由 `EQO_MAX_OPTION_LEASES` / `EQO_MAX_OPTION_LEASES_PER_PRINCIPAL` 限制，新 consumer 超限返回 429，已有 ID 的 generation refresh 与空 tombstone 可在满额时更新。HTTP 成功只表示 Gateway 接受租约，不代表上游已订阅。
 - `GET /api/v1/stream/sse`：50ms 批量的统一股票/期权浏览器事件总线。
 - `POST /api/v1/orders/preview`
 - `POST /api/v1/orders/submit`
@@ -106,4 +106,6 @@ Production：OIDC/RBAC、持久事件存储、OpenTelemetry/SLO、WORM 审计、
 
 OpenTerminal 由单一 `MarketStreamProvider` 建立 SSE。所有 Widget 从共享 Zustand market store 消费事件；Option Chain 继续使用 AG Grid `applyTransactionAsync`，由 AG Grid 自身约 50ms 合并事务。Watchlist/Quote 不进行 1 秒 REST 轮询，15 秒快照只承担校准和日线字段补全。
 
-股票和期权订阅都使用 90 秒租约，30 秒续租。浏览器关闭或 Widget 删除后主动释放，异常退出最多在 TTL 后回收。Rust 对多个浏览器/Widget 求订阅并集，只维持每个 feed 的共享上游连接。
+股票和期权订阅都使用 90 秒租约，30 秒续租。浏览器关闭或 Widget 删除后主动释放，异常退出最多在 TTL 后回收。Rust 对多个浏览器/Widget 求订阅并集，只维持每个 feed 的共享上游连接。options 使用固定版本 Broker `MarketDataPort` 的单一只读 OPRA session；Gateway 复用 Broker 解码器和有序 control lane，不自建 WebSocket 或 ACK 状态机。options 租约需带正数 `generation`；旧代次拒绝，等代次只接受相同 symbol set。最大合约数取配置值和 Broker 的 32 个 quote/trade channel entries 双订阅上限（16 个合约）中的较小值，超限直接拒绝、不截断。并集变化时 Gateway 先取消并在 5 秒内排空旧 session，再开始新 session；超时会 poison supervisor 并停止，避免连接重叠。OptionsWidget 读取 Gateway 报告的有效 coverage limit，先按合约符号去重，再优先租用最接近 underlying 的有限集合；实时租约不会裁剪 REST 返回行，上游 `truncated` 状态仍单独显示。limit 缺失或无效时不创建实时租约，不能把有限集合描述为整条链已覆盖。
+
+Broker 完整 subscription ACK 可将对应 OPRA quote/trade channels 标为 `confirmed` 并完成该订阅请求的 coverage；它不代表认证成功、OPRA entitlement、来源真实性或新鲜行情。当前 Gateway 对 options 的 auth、source mode/label 和 source entitlement 均保持 `unknown`，`market_data_ready` 继续固定为 false。股票 SIP 仍走既有 `eqo-alpaca-data` stream adapter，没有接入 typed Broker ACK，故 confirmed 保持空、event time 不从 Gateway receive time推导。当前 Broker raw-frame record 在 Gateway 侧不做持久化；不能称为 durable raw capture。真实 provider、账户授权、OPRA/SIP 行情与 durable pre-decode sink 本阶段均未验证。

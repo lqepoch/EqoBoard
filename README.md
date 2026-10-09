@@ -8,7 +8,7 @@
 |---|---|---|
 | 1 · UI | OpenTerminal 主 Workspace；可选 OpenBB Lite 原生 Workspace | 主终端为默认 UI；研究工作台通过单独 Research origin 与 Compose `openbb` profile 启用 |
 | 2 · 身份与 BFF | 两个独立 Next BFF + OIDC | 各自校验会话；Research BFF 只签最长 60 秒 `market:read` 委托，Lite 仍使用原生邮箱/密码登录，不构成 SSO |
-| 3 · 行情契约 | Rust + Tokio + Axum Gateway | SIP/OPRA REST/WS、50ms 批处理、订阅租约、来源与时间戳；浏览器不直连券商数据 API |
+| 3 · 行情契约 | Rust + Tokio + Axum Gateway | REST/WS、50ms 批处理、订阅租约、来源与时间戳；浏览器不直连券商数据 API |
 | 4 · 市场来源 | Alpaca SIP / OPRA | 生产市场来源边界；覆盖数据 endpoint 的测试 fixture 只模拟 SIP/OPRA 协议，Gateway 必须标 `source=unknown` |
 | 5 · 执行 | Rust BrokerAdapter | 唯一订单执行边界；当前 effective mode 固定为 disabled，Paper 与 Live 均不提交 |
 
@@ -22,7 +22,7 @@ OpenTerminal 原始代码保留在 `apps/openterminal`，上游许可与固定�
 
 OpenBB manifests 和行情兼容路由位于 `apps/gateway/openbb/` 与 Rust Gateway；研究模式 Next BFF 通过独立 hostname、host-only OIDC cookies 和 `market:read` 短时委托访问它们。不同端口仍共享 hostname Cookie 边界。可选服务由默认 Compose 自动包含的 `openbb` profile 与原生 OpenTerminal Research 入口提供。无 skip 的 Compose + native Lite 浏览器生命周期验收已通过，测试使用真实 Rust Gateway 和仅测试用 loopback SIP/OPRA 协议 mock；mock 行的来源为 `unknown`，不代表真实 Alpaca entitlement 或市场数据。
 
-浏览器只建立 **1 条 EqoBoard SSE 行情连接**。Quote、Watchlist、AG Grid Option Chain、OPRA Tape 共用这条 50ms 批量流；股票 Watchlist/活动 Widget 通过租约合并为一条 Alpaca SIP 上游订阅。REST 快照用于初始状态与周期校准。
+浏览器只建立 **1 条 EqoBoard SSE 行情连接**。Quote、Watchlist、AG Grid Option Chain、OPRA Tape 共用这条 50ms 批量流；股票 Watchlist/活动 Widget 通过租约合并为一条既有 SIP 上游订阅，options 租约合并为一条 Broker 只读 OPRA session。Options 只有完整 typed ACK 才报告订阅 coverage 已确认；当前 auth、source entitlement 和来源标签仍为 `unknown`，SIP stream 仍走旧 adapter 且没有 typed ACK。租约/ACK 均不证明账户授权、真实行情或 `market_data_ready`；Gateway readiness 不会因这次接线变成 ready。REST 快照用于初始状态与周期校准。
 
 ## 启动
 

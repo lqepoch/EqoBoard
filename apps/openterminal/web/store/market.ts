@@ -233,7 +233,7 @@ function instanceTransition(state: MarketState, instanceId: string): Partial<Mar
       ? [...state.retiredGatewayInstanceIds, state.gatewayInstanceId]
       : state.retiredGatewayInstanceIds,
     gatewayInstanceGeneration: state.gatewayInstanceGeneration + 1,
-    feedStatus: {}, connectionEpochs: {}, feedSequences: {},
+    feedStatus: {}, optionSubscriptionLimit: null, connectionEpochs: {}, feedSequences: {},
     stockQuotes: {}, stockTrades: {}, stockSnapshots: {},
     optionQuotes: {}, optionSnapshots: {}, optionTrades: [], optionTradeLatest: {},
     snapshotWatermarks: {}, lastBatch: [],
@@ -262,6 +262,9 @@ type MarketState = {
   connectionError: string | null;
   subscriptionError: string | null;
   feedStatus: Partial<Record<FeedName, FeedStatusEvent>>;
+  // Gateway configuration metadata only. It is scoped to gatewayInstanceId and
+  // must never stand in for live status, an upstream ACK, or entitlement.
+  optionSubscriptionLimit: number | null;
   gatewayInstanceId: string | null;
   retiredGatewayInstanceIds: string[];
   gatewayInstanceGeneration: number;
@@ -367,6 +370,7 @@ export const useMarket = create<MarketState>((set, get) => ({
   connectionError: null,
   subscriptionError: null,
   feedStatus: {},
+  optionSubscriptionLimit: null,
   gatewayInstanceId: null,
   retiredGatewayInstanceIds: [],
   gatewayInstanceGeneration: 0,
@@ -542,6 +546,7 @@ export const useMarket = create<MarketState>((set, get) => ({
     const batch = inputBatch.filter(compatibleEvent);
     if (batch.length === 0) return state;
     let feedStatus = state.feedStatus;
+    let optionSubscriptionLimit = state.optionSubscriptionLimit;
     let gatewayInstanceId = state.gatewayInstanceId;
     let retiredGatewayInstanceIds = state.retiredGatewayInstanceIds;
     let gatewayInstanceGeneration = state.gatewayInstanceGeneration;
@@ -569,7 +574,7 @@ export const useMarket = create<MarketState>((set, get) => ({
       }
       gatewayInstanceId = instanceId;
       gatewayInstanceGeneration++;
-      feedStatus = {}; connectionEpochs = {}; feedSequences = {};
+      feedStatus = {}; optionSubscriptionLimit = null; connectionEpochs = {}; feedSequences = {};
       stockQuotes = {}; stockTrades = {}; stockSnapshots = {};
       optionQuotes = {}; optionSnapshots = {}; optionTrades = []; optionTradeLatest = {};
       snapshotWatermarks = {};
@@ -596,6 +601,11 @@ export const useMarket = create<MarketState>((set, get) => ({
         if (!copied.has("connectionEpochs")) { connectionEpochs = { ...connectionEpochs }; copied.add("connectionEpochs"); }
         if (!copied.has("feedSequences")) { feedSequences = { ...feedSequences }; copied.add("feedSequences"); }
         feedStatus[event.feed] = event;
+        if (event.feed === "options") {
+          const configuredLimit = event.coverage.limit;
+          optionSubscriptionLimit = typeof configuredLimit === "number" &&
+            Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : null;
+        }
         connectionEpochs[event.feed] = event.connection_epoch;
         feedSequences[event.feed] = event.local_sequence;
         acceptedStatuses.set(event.feed, event);
@@ -683,7 +693,7 @@ export const useMarket = create<MarketState>((set, get) => ({
     }
     const hasStateChange = copied.size > 0 || acceptedStatuses.size > 0 || acceptedQuotes.size > 0 || acceptedTrades.length > 0;
     if (!hasStateChange) return state;
-    return { feedStatus, gatewayInstanceId, retiredGatewayInstanceIds, gatewayInstanceGeneration,
+    return { feedStatus, optionSubscriptionLimit, gatewayInstanceId, retiredGatewayInstanceIds, gatewayInstanceGeneration,
       connectionEpochs, feedSequences, stockQuotes, stockTrades, stockSnapshots, optionQuotes, optionSnapshots,
       optionTrades, optionTradeLatest, snapshotWatermarks,
       lastBatch: [...acceptedStatuses.values(), ...acceptedTrades, ...acceptedQuotes.values()],

@@ -1,5 +1,7 @@
 //! HTTP/WS gateway. Credentials and broker execution remain server-side.
+mod market_stream;
 mod openbb;
+mod option_supervisor;
 
 #[cfg(test)]
 mod openbb_tests;
@@ -20,12 +22,20 @@ use axum::{
 };
 use chrono::{NaiveDate, Utc};
 use eqo_alpaca_data::{AlpacaData, DataError};
-use eqo_domain::{parse_occ, MarketEvent};
+use eqo_domain::parse_occ;
 use eqo_execution::{
     BrokerRouter, OrderError, OrderIntent, PreviewOwner, PreviewStore, RiskPolicy,
 };
 use futures_util::stream;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+#[cfg(test)]
+use market_stream::{ChannelSymbols, FeedStatusSnapshot};
+use market_stream::{
+    GatewayMarketEvent, MarketPublisher, OptionSubscriptionRevision, MAX_BROKER_OPTION_SYMBOLS,
+};
+#[cfg(test)]
+use market_stream::{OPTION_FEED_NAME, STOCK_FEED_NAME};
+use option_supervisor::{alpaca_opra_port, run_option_market_stream};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -47,8 +57,21 @@ use uuid::Uuid;
 
 type ConsumerKey = (String, String, Uuid);
 type ConsumerLeases = HashMap<ConsumerKey, (Instant, HashSet<String>)>;
+type OptionConsumerLeases = HashMap<ConsumerKey, OptionLease>;
 type WebSocketTicket = (Instant, String, String);
 type WebSocketTickets = HashMap<Uuid, WebSocketTicket>;
+
+const DEFAULT_MAX_OPTION_LEASES: usize = 1_024;
+const MAX_CONFIGURED_OPTION_LEASES: usize = 10_000;
+const DEFAULT_MAX_OPTION_LEASES_PER_PRINCIPAL: usize = 32;
+const MAX_CONFIGURED_OPTION_LEASES_PER_PRINCIPAL: usize = 1_000;
+
+#[derive(Clone)]
+struct OptionLease {
+    expires_at: Instant,
+    generation: u64,
+    symbols: HashSet<String>,
+}
 
 const BFF_ISSUER: &str = "eqoboard-openterminal";
 const RESEARCH_ISSUER: &str = "openterminal-research";
@@ -125,9 +148,11 @@ struct AppState {
     stock_tx: watch::Sender<Vec<String>>,
     stock_leases: Arc<Mutex<ConsumerLeases>>,
     max_option_subscriptions: usize,
-    option_tx: watch::Sender<Vec<String>>,
-    option_leases: Arc<Mutex<ConsumerLeases>>,
-    broadcasts: broadcast::Sender<MarketEvent>,
+    max_option_leases: usize,
+    max_option_leases_per_principal: usize,
+    option_tx: watch::Sender<OptionSubscriptionRevision>,
+    option_leases: Arc<Mutex<OptionConsumerLeases>>,
+    market_publisher: MarketPublisher,
     tickets: Arc<Mutex<WebSocketTickets>>,
     previews: PreviewStore,
     risk: RiskPolicy,
@@ -228,15 +253,105 @@ fn stock_subscription_union(base: &[String], leases: &ConsumerLeases) -> Vec<Str
     sorted
 }
 
-fn option_subscription_union(leases: &ConsumerLeases) -> Vec<String> {
+fn option_subscription_union(leases: &OptionConsumerLeases) -> Vec<String> {
     let mut combined: Vec<String> = leases
         .values()
-        .flat_map(|(_, set)| set.iter().cloned())
+        .flat_map(|lease| lease.symbols.iter().cloned())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
     combined.sort();
     combined
+}
+
+fn advance_option_revision(
+    sender: &watch::Sender<OptionSubscriptionRevision>,
+    symbols: Vec<String>,
+) -> bool {
+    let current = sender.borrow().clone();
+    if current.symbols == symbols {
+        return true;
+    }
+    let Some(revision) = current.revision.checked_add(1) else {
+        return false;
+    };
+    sender.send_replace(OptionSubscriptionRevision { revision, symbols });
+    true
+}
+
+fn effective_option_subscription_limit(configured: usize) -> usize {
+    configured.clamp(1, 1000).min(MAX_BROKER_OPTION_SYMBOLS)
+}
+
+fn configured_positive_limit(
+    name: &str,
+    default: usize,
+    maximum: usize,
+) -> Result<usize, std::io::Error> {
+    match std::env::var(name) {
+        Ok(value) => parse_positive_limit(name, &value, maximum),
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(std::env::VarError::NotUnicode(_)) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{name} must be a positive integer"),
+        )),
+    }
+}
+
+fn parse_positive_limit(name: &str, raw: &str, maximum: usize) -> Result<usize, std::io::Error> {
+    let value = raw.parse::<usize>().map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{name} must be a positive integer"),
+        )
+    })?;
+    if value == 0 || value > maximum {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{name} must be in 1..={maximum}"),
+        ));
+    }
+    Ok(value)
+}
+
+fn validate_option_lease_limits(
+    max_leases: usize,
+    max_leases_per_principal: usize,
+) -> Result<(), std::io::Error> {
+    if max_leases_per_principal > max_leases {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "EQO_MAX_OPTION_LEASES_PER_PRINCIPAL must not exceed EQO_MAX_OPTION_LEASES",
+        ));
+    }
+    Ok(())
+}
+
+fn option_lease_count_for_principal(
+    leases: &OptionConsumerLeases,
+    issuer: &str,
+    subject: &str,
+) -> usize {
+    leases
+        .keys()
+        .filter(|(lease_issuer, lease_subject, _)| {
+            lease_issuer == issuer && lease_subject == subject
+        })
+        .count()
+}
+
+fn option_lease_capacity_available(
+    leases: &OptionConsumerLeases,
+    consumer_key: &ConsumerKey,
+    max_leases: usize,
+    max_leases_per_principal: usize,
+) -> bool {
+    if leases.contains_key(consumer_key) {
+        return true;
+    }
+    leases.len() < max_leases
+        && option_lease_count_for_principal(leases, &consumer_key.0, &consumer_key.1)
+            < max_leases_per_principal
 }
 
 fn authenticate_delegation(
@@ -402,7 +517,7 @@ async fn status(
         "max_stock_subscriptions":state.max_stock_subscriptions,
         "active_stock_subscriptions":state.stock_tx.borrow().len(),
         "max_option_subscriptions":state.max_option_subscriptions,
-        "active_option_subscriptions":state.option_tx.borrow().len(),
+        "active_option_subscriptions":state.option_tx.borrow().symbols.len(),
         "stock_symbols":state.stock_symbols,
         "as_of":Utc::now().to_rfc3339(),
         "notes":"configured feeds do not imply entitlements; upstream 403 remains explicit"
@@ -738,6 +853,13 @@ struct SubscribeSymbols {
     consumer_id: Uuid,
     symbols: Vec<String>,
 }
+
+#[derive(Deserialize)]
+struct OptionSubscribeSymbols {
+    consumer_id: Uuid,
+    generation: u64,
+    symbols: Vec<String>,
+}
 async fn stock_subscribe(
     Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
@@ -797,10 +919,17 @@ async fn stock_subscribe(
 async fn option_subscribe(
     Extension(principal): Extension<GatewayPrincipal>,
     State(state): State<AppState>,
-    Json(body): Json<SubscribeSymbols>,
+    Json(body): Json<OptionSubscribeSymbols>,
 ) -> Response {
     if let Some(response) = require_scope(&principal, "market:subscribe") {
         return response;
+    }
+    if body.generation == 0 {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_generation",
+            "option subscription generation must be positive",
+        );
     }
     if body.symbols.len() > state.max_option_subscriptions {
         return fail(
@@ -821,29 +950,86 @@ async fn option_subscribe(
         wanted.insert(symbol);
     }
     let mut leases = state.option_leases.lock().await;
-    leases.retain(|_, (until, _)| *until > Instant::now());
+    let before_expiry = option_subscription_union(&leases);
+    leases.retain(|_, lease| lease.expires_at > Instant::now());
+    let after_expiry = option_subscription_union(&leases);
+    if before_expiry != after_expiry && !advance_option_revision(&state.option_tx, after_expiry) {
+        return fail(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "subscription_state_exhausted",
+            "option subscription revision exhausted",
+        );
+    }
     let consumer_key = (
         principal.identity_issuer,
         principal.subject,
         body.consumer_id,
     );
-    leases.insert(
+    if let Some(previous) = leases.get(&consumer_key) {
+        if body.generation < previous.generation {
+            return fail(
+                StatusCode::CONFLICT,
+                "stale_subscription_generation",
+                "option subscription generation is stale",
+            );
+        }
+        if body.generation == previous.generation && wanted != previous.symbols {
+            return fail(
+                StatusCode::CONFLICT,
+                "subscription_generation_conflict",
+                "one option subscription generation cannot describe multiple symbol sets",
+            );
+        }
+    }
+    if !option_lease_capacity_available(
+        &leases,
+        &consumer_key,
+        state.max_option_leases,
+        state.max_option_leases_per_principal,
+    ) {
+        return fail(
+            StatusCode::TOO_MANY_REQUESTS,
+            "subscription_limit",
+            "option lease capacity exceeded",
+        );
+    }
+    let before_update = option_subscription_union(&leases);
+    let previous = leases.insert(
         consumer_key.clone(),
-        (Instant::now() + Duration::from_secs(90), wanted),
+        OptionLease {
+            expires_at: Instant::now() + Duration::from_secs(90),
+            generation: body.generation,
+            symbols: wanted,
+        },
     );
     let sorted = option_subscription_union(&leases);
     if sorted.len() > state.max_option_subscriptions {
-        leases.remove(&consumer_key);
+        if let Some(previous) = previous {
+            leases.insert(consumer_key, previous);
+        } else {
+            leases.remove(&consumer_key);
+        }
         return fail(
             StatusCode::UNPROCESSABLE_ENTITY,
             "subscription_limit",
             "global OPRA stream capacity exceeded",
         );
     }
-    state.option_tx.send_replace(sorted.clone());
+    if before_update != sorted && !advance_option_revision(&state.option_tx, sorted.clone()) {
+        if let Some(previous) = previous {
+            leases.insert(consumer_key, previous);
+        } else {
+            leases.remove(&consumer_key);
+        }
+        return fail(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "subscription_state_exhausted",
+            "option subscription revision exhausted",
+        );
+    }
     Json(
         json!({"active":sorted.len(),"max":state.max_option_subscriptions,
-        "expires_in_seconds":90}),
+        "expires_in_seconds":90,"generation":body.generation,"state":"lease_active"}),
     )
     .into_response()
 }
@@ -855,12 +1041,11 @@ async fn prune_leases(state: AppState) {
 
         {
             let mut leases = state.option_leases.lock().await;
-            let before = leases.len();
-            leases.retain(|_, (until, _)| *until > Instant::now());
-            if before != leases.len() {
-                state
-                    .option_tx
-                    .send_replace(option_subscription_union(&leases));
+            let before = option_subscription_union(&leases);
+            leases.retain(|_, lease| lease.expires_at > Instant::now());
+            let after = option_subscription_union(&leases);
+            if before != after && !advance_option_revision(&state.option_tx, after) {
+                warn!("option subscription revision exhausted; retaining previous upstream state");
             }
         }
 
@@ -941,29 +1126,35 @@ async fn market_ws(
     if !valid {
         return fail(StatusCode::UNAUTHORIZED, "ticket", "expired/used WS ticket");
     }
+    let publisher = state.market_publisher.clone();
+    let (receiver, initial_status) = publisher.subscribe_with_snapshot();
     upgrade
-        .on_upgrade(move |ws| stream_to_browser(ws, state.broadcasts.subscribe()))
+        .on_upgrade(move |ws| stream_to_browser(ws, receiver, publisher, initial_status))
         .into_response()
 }
 
-async fn stream_to_browser(mut ws: WebSocket, mut rx: broadcast::Receiver<MarketEvent>) {
+async fn stream_to_browser(
+    mut ws: WebSocket,
+    mut rx: broadcast::Receiver<GatewayMarketEvent>,
+    publisher: MarketPublisher,
+    mut batch: Vec<GatewayMarketEvent>,
+) {
+    let mut discard_through_sequence = 0;
     let mut flush = tokio::time::interval(Duration::from_millis(50));
-    let mut batch: Vec<MarketEvent> = Vec::with_capacity(256);
+    batch.reserve(256usize.saturating_sub(batch.len()));
     loop {
         tokio::select! {
             received = rx.recv() => match received {
-                Ok(event) => {
-                    if batch.len() >= 512 {
-                        batch.clear();
-                        batch.push(MarketEvent::FeedStatus { feed:"all".into(),
-                            state:"resync_required".into(), timestamp:Utc::now().to_rfc3339() });
-                    }
-                    batch.push(event);
-                },
+                Ok(event) => append_market_event_or_resync(
+                    &publisher,
+                    &mut batch,
+                    &mut discard_through_sequence,
+                    event,
+                ),
                 Err(broadcast::error::RecvError::Lagged(_)) => {
-                    batch.clear();
-                    batch.push(MarketEvent::FeedStatus { feed:"all".into(),
-                        state:"resync_required".into(), timestamp:Utc::now().to_rfc3339() });
+                    discard_through_sequence = discard_through_sequence.max(
+                        replace_batch_with_resync_statuses(&publisher, &mut batch),
+                    );
                 },
                 Err(_) => break,
             },
@@ -982,6 +1173,42 @@ async fn stream_to_browser(mut ws: WebSocket, mut rx: broadcast::Receiver<Market
     }
 }
 
+const MARKET_EVENT_BATCH_CAP: usize = 512;
+
+/// Replace an overflowing batch with fresh feed snapshots and return their sequence watermark.
+/// 溢出时只保留新的 feed 快照并返回序号水位，避免把旧触发事件排在快照之后。
+fn replace_batch_with_resync_statuses(
+    publisher: &MarketPublisher,
+    batch: &mut Vec<GatewayMarketEvent>,
+) -> u64 {
+    batch.clear();
+    batch.extend(publisher.resync_events());
+    batch
+        .iter()
+        .map(GatewayMarketEvent::local_sequence)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Queue only events newer than the latest resync snapshot; the triggering overflow event is discarded.
+/// 只排入晚于最近 resync 快照的事件；触发溢出的旧事件会被丢弃。
+fn append_market_event_or_resync(
+    publisher: &MarketPublisher,
+    batch: &mut Vec<GatewayMarketEvent>,
+    discard_through_sequence: &mut u64,
+    event: GatewayMarketEvent,
+) {
+    if event.local_sequence() <= *discard_through_sequence {
+        return;
+    }
+    if batch.len() >= MARKET_EVENT_BATCH_CAP {
+        *discard_through_sequence =
+            (*discard_through_sequence).max(replace_batch_with_resync_statuses(publisher, batch));
+        return;
+    }
+    batch.push(event);
+}
+
 /// Same normalized market broadcast used by the existing WebSocket terminal.
 /// Next.js serves it to the OpenTerminal browser with credentials kept server-side.
 async fn live_sse(
@@ -993,34 +1220,41 @@ async fn live_sse(
     }
     let mut timer = tokio::time::interval(Duration::from_millis(50));
     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let publisher = state.market_publisher.clone();
+    let (receiver, initial_status) = publisher.subscribe_with_snapshot();
     let events = stream::unfold(
         (
-            state.broadcasts.subscribe(),
-            Vec::<MarketEvent>::new(),
+            receiver,
+            initial_status,
+            Vec::<GatewayMarketEvent>::new(),
             timer,
+            publisher,
+            0_u64,
         ),
-        |(mut rx, mut batch, mut flush)| async move {
+        |(
+            mut rx,
+            mut initial_status,
+            mut batch,
+            mut flush,
+            publisher,
+            mut discard_through_sequence,
+        )| async move {
+            if !initial_status.is_empty() {
+                batch.append(&mut initial_status);
+            }
             loop {
                 tokio::select! {
                     event = rx.recv() => match event {
-                        Ok(event) => {
-                            if batch.len() >= 512 {
-                                batch.clear();
-                                batch.push(MarketEvent::FeedStatus {
-                                    feed: "all".into(),
-                                    state: "resync_required".into(),
-                                    timestamp: Utc::now().to_rfc3339(),
-                                });
-                            }
-                            batch.push(event);
-                        },
+                        Ok(event) => append_market_event_or_resync(
+                            &publisher,
+                            &mut batch,
+                            &mut discard_through_sequence,
+                            event,
+                        ),
                         Err(broadcast::error::RecvError::Lagged(_)) => {
-                            batch.clear();
-                            batch.push(MarketEvent::FeedStatus {
-                                feed: "all".into(),
-                                state: "resync_required".into(),
-                                timestamp: Utc::now().to_rfc3339(),
-                            });
+                            discard_through_sequence = discard_through_sequence.max(
+                                replace_batch_with_resync_statuses(&publisher, &mut batch),
+                            );
                         },
                         Err(broadcast::error::RecvError::Closed) => return None,
                     },
@@ -1033,7 +1267,14 @@ async fn live_sse(
             let json = serde_json::to_string(&batch).unwrap_or_else(|_| "[]".into());
             Some((
                 Ok::<Event, Infallible>(Event::default().data(json)),
-                (rx, Vec::new(), flush),
+                (
+                    rx,
+                    Vec::new(),
+                    Vec::new(),
+                    flush,
+                    publisher,
+                    discard_through_sequence,
+                ),
             ))
         },
     );
@@ -1209,14 +1450,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|s| safe_symbol(s))
         .collect();
     let (stock_tx, stock_rx) = watch::channel(stocks.clone());
-    let (option_tx, option_rx) = watch::channel(Vec::<String>::new());
+    let (option_tx, option_rx) = watch::channel(OptionSubscriptionRevision::default());
     let max_stock_subscriptions = std::env::var("EQO_MAX_STOCK_SUBSCRIPTIONS")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(100)
         .max(stocks.len())
         .min(1000);
-    let (broadcasts, _) = broadcast::channel(4096);
+    let max_option_subscriptions = effective_option_subscription_limit(
+        std::env::var("EQO_MAX_OPTION_SUBSCRIPTIONS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(500),
+    );
+    let max_option_leases = configured_positive_limit(
+        "EQO_MAX_OPTION_LEASES",
+        DEFAULT_MAX_OPTION_LEASES,
+        MAX_CONFIGURED_OPTION_LEASES,
+    )?;
+    let max_option_leases_per_principal = configured_positive_limit(
+        "EQO_MAX_OPTION_LEASES_PER_PRINCIPAL",
+        DEFAULT_MAX_OPTION_LEASES_PER_PRINCIPAL,
+        MAX_CONFIGURED_OPTION_LEASES_PER_PRINCIPAL,
+    )?;
+    validate_option_lease_limits(max_option_leases, max_option_leases_per_principal)?;
+    let (broadcasts, _) = broadcast::channel::<GatewayMarketEvent>(4096);
+    let market_publisher = MarketPublisher::new(broadcasts);
+    let option_port_enabled = data.as_ref().is_some_and(|configured| {
+        configured.source_mode() == "alpaca"
+            && option_feed == "opra"
+            && std::env::var_os("EQO_MARKET_STREAM_BASE_URL").is_none()
+    });
+    let option_port = option_port_enabled.then(alpaca_opra_port);
     let risk = RiskPolicy::from_env();
     let state = AppState {
         data: data.clone(),
@@ -1229,14 +1494,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_stock_subscriptions,
         stock_tx: stock_tx.clone(),
         stock_leases: Arc::default(),
-        max_option_subscriptions: std::env::var("EQO_MAX_OPTION_SUBSCRIPTIONS")
-            .ok()
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(500)
-            .clamp(1, 1000),
+        max_option_subscriptions,
+        max_option_leases,
+        max_option_leases_per_principal,
         option_tx,
         option_leases: Arc::default(),
-        broadcasts: broadcasts.clone(),
+        market_publisher: market_publisher.clone(),
         tickets: Arc::default(),
         previews: PreviewStore::default(),
         risk,
@@ -1247,14 +1510,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         chains: Arc::default(),
     };
     if let Some(data) = data {
-        let quotes = data.clone();
-        let tx = broadcasts.clone();
-        tokio::spawn(async move { quotes.stream(false, stock_rx, tx).await });
-        let tx = broadcasts.clone();
-        tokio::spawn(async move { data.stream(true, option_rx, tx).await });
+        let (legacy_stock_tx, _) = broadcast::channel(4096);
+        let legacy_stock_receiver = legacy_stock_tx.subscribe();
+        let legacy_stock_sender = legacy_stock_tx.clone();
+        let quotes = data;
+        tokio::spawn(async move { quotes.stream(false, stock_rx, legacy_stock_sender).await });
+        tokio::spawn(market_stream::bridge_legacy_stock_stream(
+            legacy_stock_receiver,
+            stock_tx.subscribe(),
+            market_publisher.clone(),
+            max_stock_subscriptions,
+        ));
     } else {
         warn!("missing market data credentials; API returns 503, no fake prices");
     }
+    if !option_port_enabled {
+        warn!("OPRA Broker port unavailable for this configuration; option ACK and source remain unknown");
+    }
+    tokio::spawn(run_option_market_stream(
+        option_port,
+        option_rx,
+        market_publisher,
+        max_option_subscriptions,
+    ));
     tokio::spawn(prune_leases(state.clone()));
     let api = Router::new()
         .route("/api/v1/status", get(status))
@@ -1393,8 +1671,8 @@ mod tests {
 
     fn order_test_state(brokers: BrokerRouter, keys: AuthKeyring) -> AppState {
         let (stock_tx, _) = watch::channel(Vec::<String>::new());
-        let (option_tx, _) = watch::channel(Vec::<String>::new());
-        let (broadcasts, _) = broadcast::channel(16);
+        let (option_tx, _) = watch::channel(OptionSubscriptionRevision::default());
+        let (broadcasts, _) = broadcast::channel::<GatewayMarketEvent>(16);
         AppState {
             data: None,
             stock_feed: "sip".into(),
@@ -1406,10 +1684,12 @@ mod tests {
             max_stock_subscriptions: 100,
             stock_tx,
             stock_leases: Arc::default(),
-            max_option_subscriptions: 500,
+            max_option_subscriptions: MAX_BROKER_OPTION_SYMBOLS,
+            max_option_leases: DEFAULT_MAX_OPTION_LEASES,
+            max_option_leases_per_principal: DEFAULT_MAX_OPTION_LEASES_PER_PRINCIPAL,
             option_tx,
             option_leases: Arc::default(),
-            broadcasts,
+            market_publisher: MarketPublisher::new(broadcasts),
             tickets: Arc::default(),
             previews: PreviewStore::default(),
             risk: RiskPolicy {
@@ -1427,6 +1707,68 @@ mod tests {
             audit_lock: Arc::default(),
             chains: Arc::default(),
         }
+    }
+
+    fn option_lease_test_state(max_leases: usize, max_leases_per_principal: usize) -> AppState {
+        let mut state = order_test_state(
+            BrokerRouter::from_adapters(HashMap::new()),
+            AuthKeyring::default(),
+        );
+        state.max_option_leases = max_leases;
+        state.max_option_leases_per_principal = max_leases_per_principal;
+        state
+    }
+
+    #[test]
+    fn option_lease_caps_require_positive_bounded_values_and_consistent_hierarchy() {
+        assert_eq!(
+            parse_positive_limit("global", "1", MAX_CONFIGURED_OPTION_LEASES)
+                .expect("lower configured bound is accepted"),
+            1
+        );
+        assert_eq!(
+            parse_positive_limit("global", "10000", MAX_CONFIGURED_OPTION_LEASES)
+                .expect("upper configured bound is accepted"),
+            MAX_CONFIGURED_OPTION_LEASES
+        );
+        assert!(parse_positive_limit("global", "0", MAX_CONFIGURED_OPTION_LEASES).is_err());
+        assert!(parse_positive_limit("global", "10001", MAX_CONFIGURED_OPTION_LEASES).is_err());
+        assert!(parse_positive_limit("global", "unbounded", MAX_CONFIGURED_OPTION_LEASES).is_err());
+        assert!(validate_option_lease_limits(10, 11).is_err());
+        assert!(validate_option_lease_limits(10, 10).is_ok());
+    }
+
+    fn option_lease_principal(issuer: &str, subject: &str) -> GatewayPrincipal {
+        GatewayPrincipal {
+            subject: subject.into(),
+            identity_issuer: issuer.into(),
+            scopes: HashSet::from(["market:subscribe".into()]),
+        }
+    }
+
+    async fn call_option_subscribe(
+        state: &AppState,
+        principal: GatewayPrincipal,
+        consumer_id: Uuid,
+        generation: u64,
+        symbols: Vec<&str>,
+    ) -> (StatusCode, Value) {
+        let response = option_subscribe(
+            Extension(principal),
+            State(state.clone()),
+            Json(OptionSubscribeSymbols {
+                consumer_id,
+                generation,
+                symbols: symbols.into_iter().map(str::to_owned).collect(),
+            }),
+        )
+        .await;
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1_048_576)
+            .await
+            .expect("option subscribe response body reads");
+        let body = serde_json::from_slice(&bytes).expect("option subscribe response is JSON");
+        (status, body)
     }
 
     fn order_test_app(state: AppState, keys: AuthKeyring) -> Router {
@@ -1752,9 +2094,209 @@ mod tests {
             stock_subscription_union(&["SPY".into(), "QQQ".into()], &leases),
             vec!["NVDA".to_string(), "QQQ".to_string(), "SPY".to_string()]
         );
+        let mut option_leases = OptionConsumerLeases::new();
+        option_leases.insert(
+            (
+                "https://issuer.example".into(),
+                "user-1".into(),
+                Uuid::nil(),
+            ),
+            OptionLease {
+                expires_at: now,
+                generation: 1,
+                symbols: ["QQQ".to_string(), "NVDA".to_string()]
+                    .into_iter()
+                    .collect(),
+            },
+        );
         assert_eq!(
-            option_subscription_union(&leases),
+            option_subscription_union(&option_leases),
             vec!["NVDA".to_string(), "QQQ".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn new_empty_option_leases_are_rejected_at_the_global_cap_without_revision_changes() {
+        let state = option_lease_test_state(2, 2);
+        let first_principal = option_lease_principal("issuer-a", "same-subject");
+        let second_principal = option_lease_principal("issuer-b", "same-subject");
+        let first_id = Uuid::new_v4();
+        let second_id = Uuid::new_v4();
+        let rejected_id = Uuid::new_v4();
+
+        let (status, _) = call_option_subscribe(
+            &state,
+            first_principal.clone(),
+            first_id,
+            1,
+            vec!["QQQ261009C00600000"],
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) =
+            call_option_subscribe(&state, second_principal, second_id, 1, Vec::new()).await;
+        assert_eq!(status, StatusCode::OK);
+        let revision_before_rejection = state.option_tx.borrow().clone();
+
+        let (status, response) =
+            call_option_subscribe(&state, first_principal.clone(), rejected_id, 1, Vec::new())
+                .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response["error"], "subscription_limit");
+        assert_eq!(
+            state.option_tx.borrow().revision,
+            revision_before_rejection.revision
+        );
+        let leases = state.option_leases.lock().await;
+        assert_eq!(leases.len(), 2);
+        assert!(!leases.contains_key(&(
+            first_principal.identity_issuer,
+            first_principal.subject,
+            rejected_id
+        )));
+    }
+
+    #[tokio::test]
+    async fn option_lease_principal_cap_isolated_by_issuer_and_subject() {
+        let state = option_lease_test_state(4, 1);
+        let first_principal = option_lease_principal("issuer-a", "same-subject");
+        let same_subject_other_issuer = option_lease_principal("issuer-b", "same-subject");
+        let first_id = Uuid::new_v4();
+        let rejected_id = Uuid::new_v4();
+        let other_issuer_id = Uuid::new_v4();
+
+        let (status, _) =
+            call_option_subscribe(&state, first_principal.clone(), first_id, 1, Vec::new()).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, _) =
+            call_option_subscribe(&state, first_principal.clone(), rejected_id, 1, Vec::new())
+                .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        let (status, _) = call_option_subscribe(
+            &state,
+            same_subject_other_issuer.clone(),
+            other_issuer_id,
+            1,
+            Vec::new(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let leases = state.option_leases.lock().await;
+        assert_eq!(leases.len(), 2);
+        assert!(leases.contains_key(&(
+            first_principal.identity_issuer.clone(),
+            first_principal.subject.clone(),
+            first_id
+        )));
+        assert!(leases.contains_key(&(
+            same_subject_other_issuer.identity_issuer.clone(),
+            same_subject_other_issuer.subject.clone(),
+            other_issuer_id
+        )));
+        assert!(!leases.contains_key(&(
+            first_principal.identity_issuer,
+            first_principal.subject,
+            rejected_id
+        )));
+    }
+
+    #[tokio::test]
+    async fn full_option_lease_capacity_allows_existing_empty_tombstone_refresh() {
+        let state = option_lease_test_state(1, 1);
+        let principal = option_lease_principal("issuer-a", "operator");
+        let consumer_id = Uuid::new_v4();
+        let symbol = "QQQ261009C00600000";
+        state.option_tx.send_replace(OptionSubscriptionRevision {
+            revision: 7,
+            symbols: vec![symbol.into()],
+        });
+        state.option_leases.lock().await.insert(
+            (
+                principal.identity_issuer.clone(),
+                principal.subject.clone(),
+                consumer_id,
+            ),
+            OptionLease {
+                expires_at: Instant::now() + Duration::from_secs(60),
+                generation: 1,
+                symbols: HashSet::from([symbol.into()]),
+            },
+        );
+
+        let (status, _) =
+            call_option_subscribe(&state, principal.clone(), consumer_id, 2, Vec::new()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(state.option_tx.borrow().revision, 8);
+        assert!(state.option_tx.borrow().symbols.is_empty());
+
+        let (status, _) =
+            call_option_subscribe(&state, principal.clone(), consumer_id, 3, Vec::new()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(state.option_tx.borrow().revision, 8);
+        let (status, _) =
+            call_option_subscribe(&state, principal.clone(), consumer_id, 3, vec![symbol]).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) =
+            call_option_subscribe(&state, principal.clone(), consumer_id, 2, Vec::new()).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let leases = state.option_leases.lock().await;
+        assert_eq!(leases.len(), 1);
+        let lease = leases
+            .get(&(principal.identity_issuer, principal.subject, consumer_id))
+            .expect("empty tombstone remains until expiry");
+        assert_eq!(lease.generation, 3);
+        assert!(lease.symbols.is_empty());
+    }
+
+    #[tokio::test]
+    async fn expired_option_lease_pruning_releases_capacity_and_active_stale_generation_is_rejected(
+    ) {
+        let state = option_lease_test_state(1, 1);
+        let principal = option_lease_principal("issuer-a", "operator");
+        let expired_id = Uuid::new_v4();
+        let current_id = Uuid::new_v4();
+        let symbol = "QQQ261009C00600000";
+        state.option_tx.send_replace(OptionSubscriptionRevision {
+            revision: 11,
+            symbols: vec![symbol.into()],
+        });
+        state.option_leases.lock().await.insert(
+            (
+                principal.identity_issuer.clone(),
+                principal.subject.clone(),
+                expired_id,
+            ),
+            OptionLease {
+                expires_at: Instant::now() - Duration::from_secs(1),
+                generation: 50,
+                symbols: HashSet::from([symbol.into()]),
+            },
+        );
+
+        let (status, _) =
+            call_option_subscribe(&state, principal.clone(), current_id, 2, Vec::new()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(state.option_tx.borrow().revision, 12);
+        assert!(state.option_tx.borrow().symbols.is_empty());
+        let (status, _) =
+            call_option_subscribe(&state, principal.clone(), current_id, 1, Vec::new()).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let leases = state.option_leases.lock().await;
+        assert_eq!(leases.len(), 1);
+        assert!(!leases.contains_key(&(
+            principal.identity_issuer.clone(),
+            principal.subject.clone(),
+            expired_id
+        )));
+        assert_eq!(
+            leases
+                .get(&(principal.identity_issuer, principal.subject, current_id))
+                .expect("current lease remains after stale renewal")
+                .generation,
+            2
         );
     }
     #[test]

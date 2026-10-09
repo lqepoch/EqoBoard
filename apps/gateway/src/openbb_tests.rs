@@ -1,5 +1,10 @@
 use super::*;
 use jsonwebtoken::{encode, EncodingKey, Header};
+use market_contracts::{
+    DecimalString, EntitlementState, EventMetadataV1, MarketDataSourceV1, MarketEventEnvelopeV1,
+    MarketEventV1, NumericEncodingV1, UtcTimestamp,
+};
+use market_stream::{UNKNOWN_ENTITLEMENT, UNKNOWN_SOURCE_MODE};
 use std::sync::{
     atomic::{AtomicU16, Ordering},
     Arc, Mutex as StdMutex,
@@ -325,8 +330,8 @@ fn test_keys() -> (AuthKeyring, Vec<u8>, Vec<u8>) {
 
 fn openbb_app(data: AlpacaData, keys: AuthKeyring) -> Router {
     let (stock_tx, _) = watch::channel(Vec::<String>::new());
-    let (option_tx, _) = watch::channel(Vec::<String>::new());
-    let (broadcasts, _) = broadcast::channel(16);
+    let (option_tx, _) = watch::channel(OptionSubscriptionRevision::default());
+    let (broadcasts, _) = broadcast::channel::<GatewayMarketEvent>(16);
     let state = AppState {
         data: Some(data),
         stock_feed: "sip".into(),
@@ -338,10 +343,12 @@ fn openbb_app(data: AlpacaData, keys: AuthKeyring) -> Router {
         max_stock_subscriptions: 100,
         stock_tx,
         stock_leases: Arc::default(),
-        max_option_subscriptions: 500,
+        max_option_subscriptions: MAX_BROKER_OPTION_SYMBOLS,
+        max_option_leases: DEFAULT_MAX_OPTION_LEASES,
+        max_option_leases_per_principal: DEFAULT_MAX_OPTION_LEASES_PER_PRINCIPAL,
         option_tx,
         option_leases: Arc::default(),
-        broadcasts,
+        market_publisher: MarketPublisher::new(broadcasts),
         tickets: Arc::default(),
         previews: PreviewStore::default(),
         risk: RiskPolicy {
@@ -726,4 +733,140 @@ async fn alpaca_http_client_does_not_forward_credentials_through_redirects() {
     assert!(target.requests().is_empty());
     source.stop();
     target.stop();
+}
+
+#[test]
+fn overflowing_market_batch_resyncs_both_feeds_and_discards_older_events() {
+    fn status(feed: &str, epoch: u64) -> FeedStatusSnapshot {
+        let symbol = if feed == OPTION_FEED_NAME {
+            "QQQ261016C00600000"
+        } else {
+            "QQQ"
+        };
+        let channels = ChannelSymbols {
+            quotes: vec![symbol.to_owned()],
+            trades: vec![symbol.to_owned()],
+        };
+        FeedStatusSnapshot {
+            feed: feed.to_owned(),
+            transport: "connected".into(),
+            auth: "unknown".into(),
+            desired: channels.clone(),
+            confirmed: Some(channels),
+            pending_subscribe: ChannelSymbols::default(),
+            pending_unsubscribe: ChannelSymbols::default(),
+            upstream: "ready".into(),
+            coverage_limit: Some(16),
+            coverage_complete: true,
+            connection_epoch: epoch,
+            last_error: None,
+            decode_error_count: 0,
+            resync_required: false,
+        }
+    }
+
+    let (tx, _receiver) = broadcast::channel(2048);
+    let publisher = MarketPublisher::new(tx);
+    publisher.publish_status(status(STOCK_FEED_NAME, 9));
+    publisher.publish_status(status(OPTION_FEED_NAME, 9));
+
+    let mut batch = Vec::with_capacity(MARKET_EVENT_BATCH_CAP);
+    for _ in 0..MARKET_EVENT_BATCH_CAP {
+        batch.push(
+            publisher
+                .resync_event(OPTION_FEED_NAME)
+                .expect("known feed has a status snapshot"),
+        );
+    }
+    let old_trigger = publisher
+        .resync_event(STOCK_FEED_NAME)
+        .expect("known feed has a status snapshot");
+    let old_sequence = old_trigger.local_sequence();
+    let mut discard_through_sequence = 0;
+
+    append_market_event_or_resync(
+        &publisher,
+        &mut batch,
+        &mut discard_through_sequence,
+        old_trigger.clone(),
+    );
+
+    assert_eq!(batch.len(), 2);
+    assert!(discard_through_sequence > old_sequence);
+    let snapshot: Vec<Value> = batch
+        .iter()
+        .map(|event| serde_json::to_value(event).expect("status snapshot serializes"))
+        .collect();
+    assert_eq!(snapshot[0]["feed"], STOCK_FEED_NAME);
+    assert_eq!(snapshot[1]["feed"], OPTION_FEED_NAME);
+    assert_eq!(snapshot[0]["connection_epoch"], 9);
+    assert_eq!(snapshot[1]["connection_epoch"], 9);
+    assert_eq!(snapshot[1]["confirmed"]["quotes"][0], "QQQ261016C00600000");
+    assert!(snapshot
+        .iter()
+        .all(|event| event["resync_required"] == true));
+    assert!(batch
+        .windows(2)
+        .all(|events| events[0].local_sequence() < events[1].local_sequence()));
+
+    append_market_event_or_resync(
+        &publisher,
+        &mut batch,
+        &mut discard_through_sequence,
+        old_trigger,
+    );
+    assert_eq!(batch.len(), 2, "queued pre-resync events stay discarded");
+
+    let mut market_events = publisher.subscribe();
+    let newer_quote = MarketEventEnvelopeV1 {
+        metadata: EventMetadataV1 {
+            schema_version: 1,
+            source: MarketDataSourceV1::new(
+                "alpaca",
+                "opra",
+                EntitlementState::Unknown,
+                NumericEncodingV1::DecimalToken,
+                None,
+            )
+            .expect("test source metadata is valid"),
+            generation: 1,
+            sequence: 4,
+            raw_frame_sha256: None,
+            source_timestamp: Some(
+                UtcTimestamp::parse("2026-10-08T13:30:00.123456789Z")
+                    .expect("source timestamp is valid"),
+            ),
+            received_timestamp: UtcTimestamp::parse("2026-10-08T13:30:00.223456789Z")
+                .expect("receive timestamp is valid"),
+        },
+        event: MarketEventV1::OptionQuote {
+            symbol: "QQQ261016C00600000".into(),
+            bid: Some(DecimalString::new("1.20").expect("bid is valid")),
+            ask: Some(DecimalString::new("1.25").expect("ask is valid")),
+            bid_size: Some(DecimalString::new("2").expect("bid size is valid")),
+            ask_size: Some(DecimalString::new("3").expect("ask size is valid")),
+        },
+    };
+    assert!(publisher.publish_option_envelope(&newer_quote, 9));
+    let newer_quote = market_events
+        .try_recv()
+        .expect("newer option quote reaches the shared market broadcast");
+    assert!(newer_quote.local_sequence() > discard_through_sequence);
+    append_market_event_or_resync(
+        &publisher,
+        &mut batch,
+        &mut discard_through_sequence,
+        newer_quote,
+    );
+    assert_eq!(batch.len(), 3);
+    let newest = serde_json::to_value(batch.last().expect("quote follows resync snapshots"))
+        .expect("option quote serializes");
+    assert_eq!(newest["kind"], "option_quote");
+    assert_eq!(newest["symbol"], "QQQ261016C00600000");
+    assert_eq!(newest["connection_epoch"], 9);
+    assert_eq!(newest["source_mode"], UNKNOWN_SOURCE_MODE);
+    assert_eq!(newest["source_entitlement"], UNKNOWN_ENTITLEMENT);
+    assert!(batch
+        .windows(2)
+        .all(|events| events[0].local_sequence() < events[1].local_sequence()));
 }

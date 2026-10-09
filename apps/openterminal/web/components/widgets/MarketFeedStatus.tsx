@@ -8,8 +8,13 @@ const channelNames = ["quotes", "trades"] as const;
 export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
   const browserConnected = useMarket((state) => state.browserConnected);
   const status = useMarket((state) => state.feedStatus[feed]);
+  const optionSubscriptionLimit = useMarket((state) => state.optionSubscriptionLimit);
   const label = feed === "stocks" ? "SIP" : "OPRA";
   const source = resolveMarketSource(status, feed === "stocks" ? "sip" : "opra");
+  // The configured cap survives a same-Gateway browser SSE reconnect; live status and ACK do not.
+  const configuredLimit = feed === "options" ? optionSubscriptionLimit : status?.coverage.limit;
+  const effectiveLimit = typeof configuredLimit === "number" &&
+    Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : "unknown";
 
   return (
     <div className="flex flex-wrap gap-x-2 gap-y-0.5 dim text-[9px]" data-testid={`market-feed-status-${feed}`}>
@@ -19,6 +24,7 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
       <span>{label} auth {status?.auth ?? "unknown"}</span>
       <span>{label} transport {status?.transport ?? "unknown"}</span>
       <span>{label} upstream {status?.upstream ?? "unknown"}</span>
+      <span>{label} source entitlement {status?.source_entitlement ?? "unknown"}</span>
       <span data-testid={`market-source-${feed}`} data-source-mode={source.mode}>
         data source {source.label}
       </span>
@@ -40,7 +46,7 @@ export default function MarketFeedStatus({ feed }: { feed: FeedName }) {
         ? `coverage unknown${status ? `/${status.coverage.desired_count} desired` : ""}`
         : `coverage ${status.coverage.confirmed_count}/${status.coverage.desired_count}${status.coverage.complete ? " complete" : " partial"}`}</span>
       {feed === "options" && <span>
-        configured/local limit {status?.coverage.limit ?? "unknown"} · account entitlement unknown
+        Gateway effective limit {effectiveLimit}
       </span>}
       {status?.last_error && <span className="down" title={status.last_error.message ?? status.last_error.class}>
         {status.last_error.code ? `HTTP ${status.last_error.code} · ` : ""}{status.last_error.class}

@@ -82,6 +82,7 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const grid=useRef<AgGridReact<Row>>(null);
   const browserConnected=useMarket(s=>s.browserConnected);
   const feedStatus=useMarket(s=>s.feedStatus.options);
+  const subscriptionLimit=useMarket(s=>s.optionSubscriptionLimit);
   const optionSnapshots=useMarket(s=>s.optionSnapshots);
   const setSnapshotWatermark=useMarket(s=>s.setSnapshotWatermark);
   const setOptionSnapshot=useMarket(s=>s.setOptionSnapshot);
@@ -97,15 +98,25 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
     refetchInterval:15_000,retry:1
   });
   const gatewayInstanceId=useMarket(s=>s.gatewayInstanceId);
-  const data=responseData&&(!gatewayInstanceId||responseData.gateway_instance_id===gatewayInstanceId||
+  const gatewayInstanceGeneration=useMarket(s=>s.gatewayInstanceGeneration);
+  const data=responseData&&responseData.clientGatewayInstanceGeneration===gatewayInstanceGeneration&&
+    (!gatewayInstanceId||responseData.gateway_instance_id===gatewayInstanceId||
     (responseData.source_mode!=="alpaca"&&responseData.source_mode!=="offline_mock"))?responseData:undefined;
+  const hasUsableSubscriptionLimit=typeof subscriptionLimit==="number"&&
+    Number.isSafeInteger(subscriptionLimit)&&subscriptionLimit>0;
   const subscriptionSymbols=useMemo(()=>{
     const contracts=[...(data?.calls??[]),...(data?.puts??[])];
+    const uniqueContracts=new Map<string,Contract>();
+    for(const contract of contracts){
+      if(!uniqueContracts.has(contract.symbol))uniqueContracts.set(contract.symbol,contract);
+    }
+    const unique=[...uniqueContracts.values()];
+    if(typeof subscriptionLimit!=="number"||!Number.isSafeInteger(subscriptionLimit)||subscriptionLimit<=0)return [];
     const center=data?.underlyingPrice;
-    const ordered=center===null||center===undefined?contracts:
-      [...contracts].sort((a,b)=>Math.abs(a.strike-center)-Math.abs(b.strike-center));
-    return [...new Set(ordered.slice(0,500).map(c=>c.symbol))];
-  },[data?.calls,data?.puts,data?.underlyingPrice]);
+    const ordered=center===null||center===undefined?unique:
+      [...unique].sort((a,b)=>Math.abs(a.strike-center)-Math.abs(b.strike-center));
+    return ordered.slice(0,subscriptionLimit).map(c=>c.symbol);
+  },[data?.calls,data?.puts,data?.underlyingPrice,subscriptionLimit]);
   const membershipKey=subscriptionSymbols.join(",");
   const firstContract=subscriptionSymbols[0]??"";
   const firstSnapshotAsOf=useMarket(s=>firstContract?s.optionSnapshots[firstContract]?.quote_at??
@@ -113,6 +124,17 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
   const snapshotContractCount=useMemo(()=>new Set(
     [...(data?.calls??[]),...(data?.puts??[])].map(contract=>contract.symbol)
   ).size,[data]);
+  const subscriptionCoverageText=(()=>{
+    if(snapshotContractCount===0)return "OPRA lease not requested: no REST contracts";
+    if(!hasUsableSubscriptionLimit)
+      return `OPRA lease not requested: Gateway effective limit unknown; all ${snapshotContractCount} REST-returned contracts remain in the table`;
+    const selectionNote=data?.underlyingPrice==null
+      ? "Gateway order; underlying unavailable"
+      : "nearest underlying first";
+    const selection=subscriptionSymbols.length<snapshotContractCount?` (${selectionNote})`:"";
+    return `OPRA lease request: ${subscriptionSymbols.length}/${snapshotContractCount} unique chain contracts`+
+      `${selection}; REST-returned contracts remain in the table`;
+  })();
   const modelMetadata=useMemo(()=>{
     const contracts=[...(data?.calls??[]),...(data?.puts??[])];
     const first=contracts.find(contract=>contract.greeksSource)||null;
@@ -242,10 +264,10 @@ export default function OptionsWidget({widget}:{widget:WidgetInstance}){
     {subscriptionError&&<div role="alert" className="down p-2">{subscriptionError}</div>}
     {data?.truncated&&<div className="down p-1">⚠ 期权链分页达到上限；数据不完整。</div>}
     <div className="dim px-2 py-1 text-[9px]" data-testid="options-subscription-coverage">
-      OPRA lease: {subscriptionSymbols.length} requested by this widget · {feedStatus&&feedStatus.confirmed!==null
+      {subscriptionCoverageText} · {feedStatus&&feedStatus.confirmed!==null
         ? `${feedStatus.coverage.confirmed_count}/${feedStatus.coverage.desired_count} confirmed`
         : `confirmed unknown${feedStatus?`/${feedStatus.coverage.desired_count} desired`:" · desired unknown"}`} gateway-wide unique symbols
-      · configured/local limit {feedStatus?.coverage.limit??"unknown"} · account entitlement unknown · {snapshotContractCount} unique snapshot contracts
+      · Gateway effective limit {hasUsableSubscriptionLimit?subscriptionLimit:"unknown"} · account entitlement unknown · {snapshotContractCount} unique snapshot contracts
       {data?.underlyingPrice===null&&" · SIP underlying unavailable; ATM ranking unavailable"}
     </div>
     <div className="flex-1 min-h-[230px]" style={{width:"100%"}}>

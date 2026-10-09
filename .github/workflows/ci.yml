@@ -165,8 +165,35 @@ jobs:
       - name: Validate compose contract
         working-directory: .
         run: |
-          cp .env.example .env
-          docker compose config --quiet
+          set -euo pipefail
+          env -i PATH="$PATH" docker compose --env-file /dev/null config --quiet
+          assert_option_lease_config() {
+            local env_file="$1" expected_total="$2" expected_principal="$3"
+            env -i PATH="$PATH" docker compose --env-file "$env_file" config --format json | node -e '
+              let input = "";
+              const [expectedTotal, expectedPrincipal] = process.argv.slice(1);
+              process.stdin.setEncoding("utf8");
+              process.stdin.on("data", (chunk) => input += chunk);
+              process.stdin.on("end", () => {
+                try {
+                  const config = JSON.parse(input);
+                  const environment = config.services?.eqoboard?.environment;
+                  if (environment?.EQO_MAX_OPTION_LEASES !== expectedTotal ||
+                      environment?.EQO_MAX_OPTION_LEASES_PER_PRINCIPAL !== expectedPrincipal) {
+                    throw new Error("Compose did not render the expected option lease limits");
+                  }
+                } catch (error) {
+                  console.error(error.message);
+                  process.exitCode = 1;
+                }
+              });
+            ' "$expected_total" "$expected_principal"
+          }
+          assert_option_lease_config /dev/null 1024 32
+          synthetic_env="$(mktemp)"
+          trap 'rm -f "$synthetic_env"' EXIT
+          printf 'EQO_MAX_OPTION_LEASES=7\nEQO_MAX_OPTION_LEASES_PER_PRINCIPAL=3\n' > "$synthetic_env"
+          assert_option_lease_config "$synthetic_env" 7 3
       - name: Build and exercise production containers with offline mocks
         working-directory: .
         run: bash tools/container-e2e.sh

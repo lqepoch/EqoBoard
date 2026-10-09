@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const occ = /^[A-Z0-9]{1,6}\d{6}[CP]\d{8}$/;
   if (
     typeof args.consumer_id !== "string" || !uuid.test(args.consumer_id) ||
-    (args.generation !== undefined && (!Number.isSafeInteger(args.generation) || Number(args.generation) < 0)) ||
+    typeof args.generation !== "number" || !Number.isSafeInteger(args.generation) || args.generation <= 0 ||
     !Array.isArray(args.symbols) || args.symbols.length > 1000 ||
     !args.symbols.every((symbol) => typeof symbol === "string" && occ.test(symbol))
   ) {
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       redirect: "manual",
       body: JSON.stringify({
         consumer_id: args.consumer_id,
-        ...(args.generation === undefined ? {} : { generation: args.generation }),
+        generation: args.generation,
         symbols: args.symbols,
       }),
       signal: AbortSignal.timeout(12_000),
