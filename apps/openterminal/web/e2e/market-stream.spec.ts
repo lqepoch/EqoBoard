@@ -312,11 +312,13 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
   const beforeOpen = await metrics(request);
 
   await page.goto("/");
+  // The default workspace seeds w-options before the toolbar can add another OptionsWidget.
+  const panel = page.locator(".terminal-panel").filter({ has: page.getByTestId("options-source-label") }).first();
+  const optionsStatus = panel.getByTestId("market-feed-status-options");
   await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 5_000 })
     .toBeGreaterThan(beforeOpen.gateway.streamOpened);
-  await expect(page.getByTestId("market-feed-status-options")).toContainText("Gateway effective limit 3");
+  await expect(optionsStatus).toContainText("Gateway effective limit 3");
   await page.getByRole("button", { name: /OPTIONS/ }).click();
-  const panel = page.locator(".terminal-panel").filter({ hasText: /OPRA quotes ·/ }).first();
   await expect(panel).toContainText("1 unique snapshot contracts");
   await expect(panel.locator('[data-testid="options-subscription-coverage"]')).toContainText("Gateway effective limit 3");
   const bidCell = panel.locator('.ag-row[row-index="0"] [col-id="put.bid"]');
@@ -409,9 +411,9 @@ test("same-instance SSE close clears ACK and freshness while retaining the cap t
   });
   await expect.poll(async () => (await metrics(request)).gateway.streamOpened, { timeout: 12_000 })
     .toBeGreaterThan(openedAfterClose);
-  await expect(page.getByTestId("market-feed-status-options")).toContainText("Browser SSE connected");
-  await expect(page.getByTestId("market-feed-status-options")).toContainText("quotes ACK unknown · desired unknown");
-  await expect(page.getByTestId("market-feed-status-options")).toContainText("Gateway effective limit 3");
+  await expect(optionsStatus).toContainText("Browser SSE connected");
+  await expect(optionsStatus).toContainText("quotes ACK unknown · desired unknown");
+  await expect(optionsStatus).toContainText("Gateway effective limit 3");
   await expect(panel).not.toContainText("FRESH · OFFLINE MOCK");
 
   const recoveryTime = new Date().toISOString();
