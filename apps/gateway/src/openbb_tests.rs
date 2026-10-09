@@ -344,6 +344,8 @@ fn openbb_app(data: AlpacaData, keys: AuthKeyring) -> Router {
         stock_tx,
         stock_leases: Arc::default(),
         max_option_subscriptions: MAX_BROKER_OPTION_SYMBOLS,
+        max_option_leases: DEFAULT_MAX_OPTION_LEASES,
+        max_option_leases_per_principal: DEFAULT_MAX_OPTION_LEASES_PER_PRINCIPAL,
         option_tx,
         option_leases: Arc::default(),
         market_publisher: MarketPublisher::new(broadcasts),
