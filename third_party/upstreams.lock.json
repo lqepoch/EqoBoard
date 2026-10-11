@@ -23,7 +23,7 @@
       "commit": "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2",
       "license": "MIT OR Apache-2.0",
       "package": "@lqepoch/trading-core-contracts",
-      "previous_commit": "95ef156e6c0693072fdaddbd27da4214089331ae",
+      "previous_commit": "b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4",
       "reviewed_at": "2026-10-11",
       "reviewed_change": "Added strict control-event uint64 ProtoJSON parsing, UTF-8 byte-bound assertions, and immutable exported schema type view; the merged follow-up explicitly includes locked TypeScript build dependencies when the parent npm install omits development dependencies. Existing prediction and engine parsers retained.",
       "integration": "server-side PredictionEnvelopeV1 and Engine offline-preview ProtoJSON validation through the supported generated TypeScript package",
