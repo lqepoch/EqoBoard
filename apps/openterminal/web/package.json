@@ -11,7 +11,7 @@
     "test:e2e:research": "npm run build && playwright test -c playwright.research.config.ts"
   },
   "dependencies": {
-    "@lqepoch/trading-core-contracts": "https://github.com/lqepoch/trading-core.git#b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4",
+    "@lqepoch/trading-core-contracts": "https://github.com/lqepoch/trading-core.git#95ef156e6c0693072fdaddbd27da4214089331ae",
     "@tanstack/react-query": "^5.64.1",
     "ag-grid-community": "36.2.0",
     "ag-grid-react": "36.2.0",

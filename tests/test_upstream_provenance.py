@@ -14,11 +14,13 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(sources["AG Grid Community"]["version"],"36.2.0")
         self.assertEqual(sources["OpenBB Workspace"]["license"],"Apache-2.0")
         core_source = sources["trading-core TypeScript contracts"]
-        expected_core_commit = "b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4"
+        expected_core_commit = "95ef156e6c0693072fdaddbd27da4214089331ae"
         self.assertEqual(core_source["repository"], "lqepoch/trading-core")
         self.assertEqual(core_source["commit"], expected_core_commit)
         self.assertEqual(core_source["license"], "MIT OR Apache-2.0")
         self.assertEqual(core_source["package"], "@lqepoch/trading-core-contracts")
+        self.assertEqual(core_source["previous_commit"], "b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4")
+        self.assertEqual(core_source["reviewed_at"], "2026-10-11")
         self.assertEqual(
             core_source["downstream_paths"],
             [
@@ -38,8 +40,14 @@ class ProvenanceTests(unittest.TestCase):
             f"git+https://github.com/lqepoch/trading-core.git#{expected_core_commit}",
         )
         self.assertEqual(core_lock["license"], core_source["license"])
+        broker_source = sources["broker-connectors read-only market adapter"]
+        self.assertEqual(broker_source["commit"], "de121017b6698601c5720e705ce298683aa3fdff")
+        cargo_toml = (ROOT/"Cargo.toml").read_text()
+        self.assertIn(f'rev = "{expected_core_commit}"', cargo_toml)
+        self.assertIn(f'rev = "{broker_source["commit"]}"', cargo_toml)
         third_party = (ROOT/"docs/THIRD_PARTY.md").read_text()
         self.assertIn(expected_core_commit, third_party)
+        self.assertIn(broker_source["commit"], third_party)
         self.assertIn(core_source["license"], third_party)
         self.assertIn("parsePredictionEnvelopeProtoJsonText", third_party)
         self.assertIn("parseEngineStatusResponseV1ProtoJsonText", third_party)
