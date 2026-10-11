@@ -39,21 +39,23 @@ OpenBB 上游差异报告、许可证检查和镜像回滚流程见 [`docs/OPENB
 
 - Repository: https://github.com/lqepoch/trading-core
 - Crate: `market-contracts`
-- Pinned revision: `22315511e084050c2ec037fa36c5d07a0bc6606e`
+- Pinned revision: `7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2`
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `crates/domain` re-exports the pinned crate's `legacy` module to preserve existing `eqo_domain::*` consumers and JSON shape. New versioned market wire contracts should use the shared crate directly; legacy `f64` DTOs are not exact-decimal archival contracts.
 
 ## Read-only Broker market-data adapter
 
 - Repository: https://github.com/lqepoch/broker-connectors
-- Pinned revision: `a8eea66a967f2d40cf726344b46e229ffee6f41b`
-- Shared Core revision: `22315511e084050c2ec037fa36c5d07a0bc6606e`
+- Pinned revision: `2359bb2bde052d070174d650a14fe040b6cd1e84`
+- Shared Core revision: `7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2`
 - The selected revision pins Tokio `1.53.2` and zeroize `1.9.1`; EqoBoard's workspace lock resolves those patched versions. This dependency pin does not enable provider access or establish SIP/OPRA entitlement.
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `apps/gateway` consumes `broker-ports` and `alpaca-stream` for one read-only OPRA options session and its ordered event/control lane. Provider decoding and ACK validation remain owned by Broker; Gateway only adapts valid records into the existing browser contract. This does not establish real provider availability, authentication, entitlement, durable raw capture, or SIP subscription ACK.
 - The adapter and its fixtures are covered by the Broker workspace's native tests; EqoBoard's Gateway integration is verified separately. No provider request or OAuth flow is run by this integration.
 
-The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`. OpenTerminal pins it to `b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. The Quant BFF uses `parsePredictionEnvelopeProtoJsonText` for its bounded public ProtoJSON, while the Engine BFF uses `parseEngineStatusResponseV1ProtoJsonText` and `parseSyntheticOfflinePreviewV1ProtoJsonText` for Engine status and preview. These generated parsers enforce exact fields, duplicate-key and alias rejection, and bounded numeric representations. The browser receives only public projections or generated type-only contracts after server-side validation.
+The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`, pinned at `7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. This npm package pin includes the upstream fix that keeps its locked TypeScript build dependency available when the parent npm install omits development dependencies. The reviewed update from `b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4` adds strict control-event uint64 ProtoJSON parsing and UTF-8 byte-limit validators, and protects schema validation from mutation of the exported compatibility set. Existing prediction and Engine parser entry points remain present and are still used by the BFFs. The Quant BFF uses `parsePredictionEnvelopeProtoJsonText` for its bounded public ProtoJSON, while the Engine BFF uses `parseEngineStatusResponseV1ProtoJsonText` and `parseSyntheticOfflinePreviewV1ProtoJsonText` for Engine status and preview. These generated parsers enforce exact fields, duplicate-key and alias rejection, and bounded numeric representations. The browser receives only public projections or generated type-only contracts after server-side validation.
+
+The Broker pin advances from `de121017b6698601c5720e705ce298683aa3fdff` to `2359bb2bde052d070174d650a14fe040b6cd1e84`, aligning its shared Core dependencies with `7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2`. It retains the reviewed rejection of stale or future-dated option trades before the shared event contract, which has no freshness field; the adapter emits a failed connection control instead of publishing those trades. This is a read-only normalization boundary and does not prove provider authentication, OPRA entitlement, or real-source readiness. Gateway contract tests must be rerun against the new Broker pin.
 
 ## Rust JWT and trust-root data
 

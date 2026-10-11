@@ -548,7 +548,7 @@ class OpenBBSourceSupplyChainTests(unittest.TestCase):
             with mock.patch.object(upstream, "ROOT", root):
                 self.assertEqual(
                     upstream.validate_recipe_assets({"support_files": [record]}),
-                    [(record["path"], asset, record["sha256"])],
+                    [(record["path"], asset.resolve(), record["sha256"])],
                 )
                 asset.write_bytes(b"modified patch")
                 with self.assertRaisesRegex(upstream.SupplyChainError, "SHA-256 does not match"):
