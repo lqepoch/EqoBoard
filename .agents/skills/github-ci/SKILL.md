@@ -11,7 +11,7 @@ description: 治理 GitHub Actions、依赖构建、公共仓库组织 Secrets �
 
 ## PR 合并与自动合并策略
 
-专用 GitHub App 自动合并 workflow 当前已移除，策略代码与反例测试仅保留为本地离线审查记录。不得仅通过变量、Secret、App 安装或 ruleset 配置重新启用；需单独授权并重新审查完整特权路径。获准的本仓库 owner operator 自合并按 `docs/AUTOMERGE.md` 的独立证据门槛执行。
+专用 GitHub App 自动合并 workflow 当前已移除，策略代码与反例测试仅保留为本地离线审查记录。不得仅通过变量、Secret、App 安装或 ruleset 配置重新启用；需单独授权并重新审查完整特权路径。获准的本仓库 owner operator 自合并按 `docs/AUTOMERGE.md` 的任务自审自合并门槛执行。
 
 ### 专用 GitHub App 自动合并
 
@@ -27,4 +27,4 @@ GitHub `combined status` 默认每页 30 条，不可作为完整状态集合。
 
 用户已明确授权本仓库 owner 自合并 PR。该持续授权适用于用户授权的本仓库开发任务及其 PR 范围，无须逐任务或逐 PR 重复询问相同合并权限；它不适用于未授权任务或其它仓库。此 operator 路径与专用 App 分开运行，不改变自动合并策略、分支 ruleset 或组织通用权限。若现有仓库 Owner/Admin/Team 权限例外能处理唯一剩余的形式审批门槛，可按授权使用；这不构成独立 review，不能写入或声称存在 GitHub `APPROVED`。
 
-合并前必须刷新 `origin/main` 与 PR，确认目标为同仓库 `main`、PR base 是最新远程 `main`、head SHA 已冻结且无冲突；仓库受信 required-check manifest 与当前 ruleset required checks 的并集，以及 CodeQL，都必须在这个 head SHA 上成功。任何必需或已出现的检查为 pending、失败、过期、未知或无法归属到该 head 时都停止。`CHANGES_REQUESTED`、未解决 review thread 或其它未处理的阻断 review 也会阻止合并，不能用 owner 授权或权限例外忽略。非作者必须对最终 diff 完成独立代码复核且没有阻断问题。必要时更新 PR 后重新等待自然触发的检查与复核，不用空提交或手工重跑来制造通过记录。通过 GitHub 写入接口时以冻结的 head SHA 作为期望值；合并后读取 PR 并核验 merged 状态、merge SHA 和远程 `main`。核验后先检查本任务 worktree 的 dirty 状态和私有 `.env`/`.state`，再清理本任务干净的 worktree 与分支；保留需留存的私有状态，绝不删除其它任务的 worktree 或分支。仅能使用仓库现有权限，不能为当前任务改动组织级 ruleset 或其它仓库的权限。合并不部署服务，Paper 和 Live execution 仍保持 disabled。
+合并前必须刷新 `origin/main` 与 PR，确认目标为同仓库 `main`、PR base 是最新远程 `main`、head SHA 已冻结且无冲突；仓库受信 required-check manifest 与当前 ruleset required checks 的并集，以及 CodeQL，都必须在这个 head SHA 上成功。任何必需或已出现的检查为 pending、失败、过期、未知或无法归属到该 head 时都停止。`CHANGES_REQUESTED`、未解决 review thread 或其它未处理的阻断 review 也会阻止合并，不能用 owner 授权或权限例外忽略。作者可对最终 diff 自审，无须等待非作者；在 PR 评论记录绑定最终 head SHA 的 scope、findings、validation 和 `SELF_REVIEW`，不得冒称独立复核。必要时更新 PR 后重新等待自然触发的检查与复核，不用空提交或手工重跑来制造通过记录。通过 GitHub 写入接口时以冻结的 head SHA 作为期望值；合并后读取 PR 并核验 merged 状态、merge SHA 和远程 `main`。核验后先检查本任务 worktree 的 dirty 状态和私有 `.env`/`.state`，再清理本任务干净的 worktree 与分支；保留需留存的私有状态，绝不删除其它任务的 worktree 或分支。仅能使用仓库现有权限，不能为当前任务改动组织级 ruleset 或其它仓库的权限。合并不部署服务，Paper 和 Live execution 仍保持 disabled。
