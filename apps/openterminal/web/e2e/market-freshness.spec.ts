@@ -1,4 +1,5 @@
 import { configureMocks, loginWithOidc, metrics, resetDownstream, test, expect } from "./fixtures";
+import { sipSnapshotResponse } from "./market-test-data";
 
 const instanceId = "gateway-e2e-offline-1";
 const offlineSource = {
@@ -9,6 +10,66 @@ const offlineSource = {
 test.beforeEach(async ({ request }) => {
   await resetDownstream(request);
 });
+
+for (const [name, statusEntitlement, eventEntitlement] of [
+  ["feed status", "unknown", "authorized"],
+  ["market event", "authorized", "unknown"],
+] as const) {
+  test(`Alpaca SIP freshness requires authorized entitlement on the ${name}`, async ({ page, request }) => {
+    await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+    const publishedAt = new Date().toISOString();
+    const snapshotAt = new Date(Date.now() - 1_000).toISOString();
+    const providerSource = { source_mode: "alpaca", source_label: "Alpaca SIP" };
+    const snapshotResponse = sipSnapshotResponse(100, snapshotAt, 42, 0, {
+      gatewayInstanceId: instanceId,
+      receivedAt: publishedAt,
+      sourceMode: "alpaca",
+      sourceLabel: "Alpaca SIP",
+    });
+    await configureMocks(request, {
+      snapshots: {
+        ...snapshotResponse,
+        source_entitlement: eventEntitlement,
+        snapshots: snapshotResponse.snapshots.map((snapshot) => ({
+          ...snapshot, source_entitlement: eventEntitlement,
+        })),
+      },
+      sseEvents: [
+        {
+          kind: "feed_status", gateway_instance_id: instanceId, ...providerSource,
+          source_entitlement: statusEntitlement,
+          feed: "stocks", transport: "connected", auth: "authenticated",
+          desired: { quotes: ["QQQ"], trades: ["QQQ"] },
+          confirmed: { quotes: ["QQQ"], trades: ["QQQ"] },
+          pending: { subscribe: { quotes: [], trades: [] }, unsubscribe: { quotes: [], trades: [] } },
+          upstream: "ready", coverage: { desired_count: 1, confirmed_count: 1, limit: null, complete: true },
+          connection_epoch: 42, local_sequence: 1, received_at: publishedAt,
+          last_error: null, decode_error_count: 0,
+          freshness: { "QQQ:trade": { state: "fresh", as_of: publishedAt, age_ms: 0 } },
+        },
+        {
+          kind: "stock_trade", gateway_instance_id: instanceId, ...providerSource,
+          source_entitlement: eventEntitlement,
+          symbol: "QQQ", price: 100, size: 10, event_time: publishedAt,
+          received_at: publishedAt, connection_epoch: 42, local_sequence: 2,
+        },
+      ],
+    });
+
+    const snapshotResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/quotes" && url.searchParams.get("symbols") === "QQQ";
+    });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const response = await snapshotResponse;
+    expect(response.status()).toBe(200);
+    const [snapshot] = await response.json();
+    expect(snapshot).toMatchObject({ symbol: "QQQ", price: 100, source_mode: "alpaca" });
+    const quotePanel = page.locator(".terminal-panel").filter({ hasText: /Quote\s*QQQ/ }).first();
+    await expect(quotePanel).toContainText("FRESHNESS UNKNOWN", { timeout: 10_000 });
+    await expect(quotePanel).not.toContainText("LIVE");
+  });
+}
 
 for (const upstreamStatus of [401, 403, 429] as const) {
   test(`authenticated SIP quote requests surface upstream HTTP ${upstreamStatus} without fallback`, async ({ page, request }) => {

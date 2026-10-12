@@ -109,6 +109,10 @@ test("status route preserves disabled broker capabilities separately from config
   const response = await page.context().request.get(`${WEB_ORIGIN}/api/status`);
   expect(response.status()).toBe(200);
   const status = await response.json();
+  expect(status).toMatchObject({
+    ok: false, ready: false, configured: false,
+    marketDataStatus: "not_configured", sourceEntitlement: "unknown",
+  });
   expect(status.adapterEndpointsConfigured).toEqual(["ibkr"]);
   expect(status.brokerCapabilities).toMatchObject({
     ibkr: { paper: { enabled: false, implementation: "disabled" } },
