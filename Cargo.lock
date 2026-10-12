@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "alpaca-stream"
 version = "0.1.0"
-source = "git+https://github.com/lqepoch/broker-connectors.git?rev=dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9#dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9"
+source = "git+https://github.com/lqepoch/broker-connectors.git?rev=873337e3fafe64344dfb9ac7719fad54f157a9c0#873337e3fafe64344dfb9ac7719fad54f157a9c0"
 dependencies = [
  "broker-ports",
  "chrono",
@@ -177,7 +177,7 @@ dependencies = [
 [[package]]
 name = "broker-ports"
 version = "0.1.0"
-source = "git+https://github.com/lqepoch/broker-connectors.git?rev=dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9#dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9"
+source = "git+https://github.com/lqepoch/broker-connectors.git?rev=873337e3fafe64344dfb9ac7719fad54f157a9c0#873337e3fafe64344dfb9ac7719fad54f157a9c0"
 dependencies = [
  "domain",
  "market-contracts",
@@ -355,7 +355,7 @@ dependencies = [
 [[package]]
 name = "domain"
 version = "0.1.0"
-source = "git+https://github.com/lqepoch/trading-core.git?rev=105e42896eaa62afe7377a24478f0dd5632b1155#105e42896eaa62afe7377a24478f0dd5632b1155"
+source = "git+https://github.com/lqepoch/trading-core.git?rev=b2679e757576f8da7850cd4b5ea2958bc9a2354c#b2679e757576f8da7850cd4b5ea2958bc9a2354c"
 dependencies = [
  "exact-decimal",
 ]
@@ -452,7 +452,7 @@ dependencies = [
 [[package]]
 name = "exact-decimal"
 version = "0.1.0"
-source = "git+https://github.com/lqepoch/trading-core.git?rev=105e42896eaa62afe7377a24478f0dd5632b1155#105e42896eaa62afe7377a24478f0dd5632b1155"
+source = "git+https://github.com/lqepoch/trading-core.git?rev=b2679e757576f8da7850cd4b5ea2958bc9a2354c#b2679e757576f8da7850cd4b5ea2958bc9a2354c"
 
 [[package]]
 name = "find-msvc-tools"
@@ -914,7 +914,7 @@ checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
 [[package]]
 name = "market-contracts"
 version = "0.1.0"
-source = "git+https://github.com/lqepoch/trading-core.git?rev=105e42896eaa62afe7377a24478f0dd5632b1155#105e42896eaa62afe7377a24478f0dd5632b1155"
+source = "git+https://github.com/lqepoch/trading-core.git?rev=b2679e757576f8da7850cd4b5ea2958bc9a2354c#b2679e757576f8da7850cd4b5ea2958bc9a2354c"
 dependencies = [
  "chrono",
  "domain",
