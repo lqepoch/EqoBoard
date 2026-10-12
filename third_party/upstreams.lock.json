@@ -1,5 +1,5 @@
 {
-  "last_verified": "2026-10-08",
+  "last_verified": "2026-10-13",
   "sources": [
     {
       "name": "OpenTerminal",
@@ -20,12 +20,12 @@
     {
       "name": "trading-core TypeScript contracts",
       "repository": "lqepoch/trading-core",
-      "commit": "105e42896eaa62afe7377a24478f0dd5632b1155",
+      "commit": "b2679e757576f8da7850cd4b5ea2958bc9a2354c",
       "license": "MIT OR Apache-2.0",
       "package": "@lqepoch/trading-core-contracts",
-      "previous_commit": "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2",
-      "reviewed_at": "2026-10-12",
-      "reviewed_change": "Advances the shared Rust and TypeScript contract pin to the merged own-property validation fix. JSON objects with inherited properties no longer satisfy required uint64 fields; focused parser tests cover the regression. Existing prediction and Engine parser entry points remain in use.",
+      "previous_commit": "105e42896eaa62afe7377a24478f0dd5632b1155",
+      "reviewed_at": "2026-10-13",
+      "reviewed_change": "Advances the shared Rust and TypeScript contracts to merged Core main b2679e7. The TypeScript BarV2 parser rejects Arrow nanosecond timestamps outside the signed-i64 range; existing Prediction and Engine parser entry points remain in use. This is a source-pin refresh and does not qualify provider data or entitlement.",
       "integration": "server-side PredictionEnvelopeV1 and Engine offline-preview ProtoJSON validation through the supported generated TypeScript package",
       "downstream_paths": [
         "apps/openterminal/web/lib/quant-predictions.ts",
@@ -35,10 +35,10 @@
     {
       "name": "broker-connectors read-only market adapter",
       "repository": "lqepoch/broker-connectors",
-      "commit": "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9",
-      "previous_commit": "2359bb2bde052d070174d650a14fe040b6cd1e84",
-      "reviewed_at": "2026-10-12",
-      "reviewed_change": "Advances the read-only Broker dependency pin to the merged revision whose shared Core dependency is trading-core 105e42896eaa62afe7377a24478f0dd5632b1155; retains the previously reviewed stale/future-dated option-trade rejection. Gateway integration remains read-only. Provider access and entitlement are not implied.",
+      "commit": "873337e3fafe64344dfb9ac7719fad54f157a9c0",
+      "previous_commit": "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9",
+      "reviewed_at": "2026-10-13",
+      "reviewed_change": "Advances the read-only Broker dependency pin to merged main 873337e, whose shared Core dependency is trading-core b2679e7. Gateway integration remains read-only; provider access, source identity, and entitlement are not implied.",
       "license": "MIT OR Apache-2.0",
       "packages": ["broker-ports", "alpaca-stream"],
       "integration": "Rust Gateway OPRA session and ordered event/control lane; no provider access or entitlement claim is implied.",
@@ -46,7 +46,7 @@
         "Cargo.toml",
         "apps/gateway/src"
       ],
-      "shared_core_commit": "105e42896eaa62afe7377a24478f0dd5632b1155"
+      "shared_core_commit": "b2679e757576f8da7850cd4b5ea2958bc9a2354c"
     },
     {
       "name": "OpenBB Workspace",
