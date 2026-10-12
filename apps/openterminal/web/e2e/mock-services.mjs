@@ -414,6 +414,8 @@ const gateway = createServer(async (req, res) => {
   if (url.pathname === "/api/v1/status") {
     return sendJson(res, 200, {
       service: "EqoBoard", market_credentials_present: false,
+      market_data_configured: false, market_data_ready: false,
+      market_data_status: "not_configured", source_entitlement: "unknown",
       stock_feed: "sip", option_feed: "opra", execution_mode: "disabled",
       adapter_endpoints_configured: ["ibkr"],
       broker_capabilities: Object.fromEntries(["alpaca", "ibkr", "schwab"].map((broker) => [broker, {

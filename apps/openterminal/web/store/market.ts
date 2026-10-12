@@ -740,8 +740,16 @@ export function marketCondition(
   const expectedFeed = feed === "stocks" ? "sip" : "opra";
   const statusSource = resolveMarketSource(status, expectedFeed);
   const eventSource = resolveMarketSource(event, expectedFeed);
+  if (status.source_entitlement === "unauthorized" || event.source_entitlement === "unauthorized") {
+    return "unauthorized";
+  }
   if (statusSource.mode === "unknown" || eventSource.mode === "unknown" ||
       statusSource.mode !== eventSource.mode || statusSource.label !== eventSource.label) return "unknown";
+  // A recognized provider label is not evidence that this account may use the
+  // feed. Preserve explicit offline-mock freshness, but require an authorized
+  // entitlement on both the Gateway status and the event before showing LIVE.
+  if (statusSource.mode === "alpaca" &&
+      (status.source_entitlement !== "authorized" || event.source_entitlement !== "authorized")) return "unknown";
   const eventPublicationOrder = compareRfc3339Nanos(event.event_time, event.received_at);
   if (eventPublicationOrder === null || eventPublicationOrder > 0 ||
       isWithinFutureSkew(event.event_time, event.received_at, FUTURE_EVENT_SKEW_MS) !== true) return "unknown";

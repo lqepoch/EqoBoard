@@ -99,12 +99,15 @@ async function getRust<T>(path: string, authorization: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 export async function eqoStatus(authorization: string) {
-  const data=await getRust<MarketSourceFields & {market_credentials_present:boolean;stock_feed:string;option_feed:string;
+  const data=await getRust<MarketSourceFields & {market_credentials_present:boolean;market_data_ready:boolean;
+    market_data_status:string;stock_feed:string;option_feed:string;
     execution_mode:string;adapter_endpoints_configured:string[];
     broker_capabilities:Record<string, {paper:{enabled:boolean;implementation:string};live:{enabled:boolean;implementation:string}}>;
     as_of:string}>("/api/v1/status", authorization);
   return {
-    ok:data.market_credentials_present, ai:false,
+    ok:data.market_data_ready, ready:data.market_data_ready,
+    configured:data.market_credentials_present, marketDataStatus:data.market_data_status,
+    sourceEntitlement:data.source_entitlement??"unknown", ai:false,
     providers:[{name:data.stock_feed.toUpperCase()+" (configured protocol)",ok:0,failed:0,lastLatencyMs:null},
       {name:data.option_feed.toUpperCase()+" (configured protocol)",ok:0,failed:0,lastLatencyMs:null}],
     dataSource:resolveMarketSource(data,data.stock_feed==="sip"?"sip":"opra").label,
@@ -113,7 +116,7 @@ export async function eqoStatus(authorization: string) {
     executionMode:data.execution_mode,
     adapterEndpointsConfigured:data.adapter_endpoints_configured,
     brokerCapabilities:data.broker_capabilities,
-    note:"Configured subscription does not prove real-time entitlement; 401/403/429 are propagated",
+    note:"Configured credentials do not prove market readiness or entitlement; 401/403/429 are propagated",
     asOf:data.as_of
   };
 }
