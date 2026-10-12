@@ -1,5 +1,5 @@
 {
-  "last_verified": "2026-10-12",
+  "last_verified": "2026-10-08",
   "sources": [
     {
       "name": "OpenTerminal",
@@ -38,7 +38,7 @@
       "commit": "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9",
       "previous_commit": "2359bb2bde052d070174d650a14fe040b6cd1e84",
       "reviewed_at": "2026-10-12",
-      "reviewed_change": "Advances the read-only Broker dependency pin to the merged revision whose shared Core dependency is trading-core 105e42896eaa62afe7377a24478f0dd5632b1155. Provider access and entitlement are not implied.",
+      "reviewed_change": "Advances the read-only Broker dependency pin to the merged revision whose shared Core dependency is trading-core 105e42896eaa62afe7377a24478f0dd5632b1155; retains the previously reviewed stale/future-dated option-trade rejection. Gateway integration remains read-only. Provider access and entitlement are not implied.",
       "license": "MIT OR Apache-2.0",
       "packages": ["broker-ports", "alpaca-stream"],
       "integration": "Rust Gateway OPRA session and ordered event/control lane; no provider access or entitlement claim is implied.",
