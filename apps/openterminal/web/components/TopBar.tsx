@@ -7,6 +7,8 @@ import { useMarket } from "../store/market";
 import { resolveMarketSource } from "../../server/src/providers/market-source.ts";
 
 type Status = {
+  ready?: boolean;
+  marketDataStatus?: string;
   stockFeed?: string;
   optionFeed?: string;
   executionMode?: string;
@@ -63,6 +65,16 @@ export default function TopBar() {
     ? `${status.stockFeed?.toUpperCase() ?? "unknown"} / ${status.optionFeed?.toUpperCase() ?? "unknown"}`
     : "unknown";
   const configuredSource = resolveMarketSource(stockFeedStatus, "sip").label;
+  const marketReadiness = status?.ready === true
+    ? "ready"
+    : status?.ready === false
+      ? "not ready"
+      : "unknown";
+  const marketStatus = status?.marketDataStatus === "not_configured"
+    ? "not configured"
+    : status?.marketDataStatus === "awaiting_upstream"
+      ? "awaiting upstream"
+      : "status unknown";
 
   return (
     <header className="flex items-center gap-4 px-3 h-8 bg-[var(--panel-2)] border-b border-[var(--border)] text-[11px] shrink-0">
@@ -80,6 +92,13 @@ export default function TopBar() {
       >
         {activeSymbol} — search symbol… <span className="float-right">⌘K</span>
       </button>
+      <span
+        className="dim"
+        data-testid="market-readiness-status"
+        title="Gateway readiness is separate from configured feed names, source identity, entitlement, and LIVE market status"
+      >
+        Market data: {marketReadiness} · {marketStatus}
+      </span>
       <span className="dim ml-auto" data-testid="configured-market-feeds"
         title="Configured feeds do not establish credentials or account entitlements">
         Configured feeds: {configuredFeeds} · source {configuredSource} · entitlement unverified

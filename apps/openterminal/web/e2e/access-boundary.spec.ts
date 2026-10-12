@@ -104,7 +104,7 @@ test("quotes route U.S. symbols to SIP, named research symbols to Node, preserve
   expect(observed.research.requests).toEqual({});
 });
 
-test("status route preserves disabled broker capabilities separately from configured endpoints", async ({ page, request }) => {
+test("status route shows market readiness separately from configured endpoints and feed names", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
   const response = await page.context().request.get(`${WEB_ORIGIN}/api/status`);
   expect(response.status()).toBe(200);
@@ -120,6 +120,31 @@ test("status route preserves disabled broker capabilities separately from config
   });
   await page.goto("/");
   await expect(page.getByLabel("Broker").locator("option").filter({ hasText: "IBKR · Paper disabled" })).toHaveCount(1);
+  await expect(page.getByTestId("market-readiness-status")).toHaveText(
+    "Market data: not ready · not configured",
+  );
+
+  await page.route("**/api/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ready: false, marketDataStatus: "awaiting_upstream" }),
+  }));
+  await page.reload();
+  await expect(page.getByTestId("market-readiness-status")).toHaveText(
+    "Market data: not ready · awaiting upstream",
+  );
+
+  await page.unrouteAll();
+  await page.route("**/api/status", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "gateway_unavailable" }),
+  }));
+  await page.reload();
+  await expect(page.getByTestId("market-readiness-status")).toHaveText(
+    "Market data: unknown · status unknown",
+  );
+  await page.unrouteAll();
   const observed = await metrics(request);
   expect(observed.gateway.requests["/api/v1/status"]).toBeGreaterThanOrEqual(1);
   expect(observed.gateway.authorized).toBeGreaterThanOrEqual(1);
