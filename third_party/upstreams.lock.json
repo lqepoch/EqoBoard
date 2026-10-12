@@ -20,12 +20,12 @@
     {
       "name": "trading-core TypeScript contracts",
       "repository": "lqepoch/trading-core",
-      "commit": "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2",
+      "commit": "105e42896eaa62afe7377a24478f0dd5632b1155",
       "license": "MIT OR Apache-2.0",
       "package": "@lqepoch/trading-core-contracts",
-      "previous_commit": "b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4",
-      "reviewed_at": "2026-10-11",
-      "reviewed_change": "Added strict control-event uint64 ProtoJSON parsing, UTF-8 byte-bound assertions, and immutable exported schema type view; the merged follow-up explicitly includes locked TypeScript build dependencies when the parent npm install omits development dependencies. Existing prediction and engine parsers retained.",
+      "previous_commit": "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2",
+      "reviewed_at": "2026-10-12",
+      "reviewed_change": "Advances the shared Rust and TypeScript contract pin to the merged own-property validation fix. JSON objects with inherited properties no longer satisfy required uint64 fields; focused parser tests cover the regression. Existing prediction and Engine parser entry points remain in use.",
       "integration": "server-side PredictionEnvelopeV1 and Engine offline-preview ProtoJSON validation through the supported generated TypeScript package",
       "downstream_paths": [
         "apps/openterminal/web/lib/quant-predictions.ts",
@@ -35,17 +35,18 @@
     {
       "name": "broker-connectors read-only market adapter",
       "repository": "lqepoch/broker-connectors",
-      "commit": "2359bb2bde052d070174d650a14fe040b6cd1e84",
-      "previous_commit": "de121017b6698601c5720e705ce298683aa3fdff",
-      "reviewed_at": "2026-10-11",
-      "reviewed_change": "Refreshes the Broker pin to the merged revision whose shared Core dependencies resolve to trading-core 7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2; retains the previously reviewed stale/future-dated option-trade rejection. Gateway integration remains read-only.",
+      "commit": "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9",
+      "previous_commit": "2359bb2bde052d070174d650a14fe040b6cd1e84",
+      "reviewed_at": "2026-10-12",
+      "reviewed_change": "Advances the read-only Broker dependency pin to the merged revision whose shared Core dependency is trading-core 105e42896eaa62afe7377a24478f0dd5632b1155; retains the previously reviewed stale/future-dated option-trade rejection. Gateway integration remains read-only. Provider access and entitlement are not implied.",
       "license": "MIT OR Apache-2.0",
       "packages": ["broker-ports", "alpaca-stream"],
       "integration": "Rust Gateway OPRA session and ordered event/control lane; no provider access or entitlement claim is implied.",
       "downstream_paths": [
         "Cargo.toml",
         "apps/gateway/src"
-      ]
+      ],
+      "shared_core_commit": "105e42896eaa62afe7377a24478f0dd5632b1155"
     },
     {
       "name": "OpenBB Workspace",
