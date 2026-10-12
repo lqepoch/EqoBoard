@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { configureMocks, loginWithOidc, metrics, resetDownstream, test, expect } from "./fixtures";
 import { sipSnapshotResponse } from "./market-test-data";
 
@@ -16,7 +18,7 @@ for (const [name, statusEntitlement, eventEntitlement, expectLive] of [
   ["market event", "authorized", "unknown", false],
   ["feed status and market event", "authorized", "authorized", true],
 ] as const) {
-  test(`Alpaca SIP freshness requires authorized entitlement on the ${name}`, async ({ page, request }) => {
+  test(`Alpaca SIP freshness requires authorized entitlement on the ${name}`, async ({ page, request }, testInfo) => {
     await loginWithOidc(page, request, ["eqoboard-market-reader"]);
     const publishedAt = new Date().toISOString();
     const snapshotAt = new Date(Date.now() - 1_000).toISOString();
@@ -29,7 +31,7 @@ for (const [name, statusEntitlement, eventEntitlement, expectLive] of [
       sourceMode: "alpaca",
       sourceLabel: "Alpaca SIP",
     });
-    await configureMocks(request, {
+    const mockInput = {
       snapshots: {
         ...snapshotFixture,
         source_entitlement: eventEntitlement,
@@ -57,7 +59,17 @@ for (const [name, statusEntitlement, eventEntitlement, expectLive] of [
           received_at: publishedAt, connection_epoch: 42, local_sequence: 2,
         },
       ],
+    };
+    const mockInputBytes = Buffer.from(JSON.stringify(mockInput));
+    const mockInputSha256 = createHash("sha256").update(mockInputBytes).digest("hex");
+    const mockInputPath = testInfo.outputPath("market-freshness-input.json");
+    await writeFile(mockInputPath, mockInputBytes, { flag: "wx" });
+    testInfo.annotations.push({ type: "synthetic-input-sha256", description: mockInputSha256 });
+    await testInfo.attach("market-freshness-input.json", {
+      path: mockInputPath,
+      contentType: "application/json",
     });
+    await configureMocks(request, mockInput);
 
     const snapshotResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
