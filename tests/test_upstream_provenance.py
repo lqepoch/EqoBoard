@@ -14,15 +14,15 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(sources["AG Grid Community"]["version"],"36.2.0")
         self.assertEqual(sources["OpenBB Workspace"]["license"],"Apache-2.0")
         core_source = sources["trading-core TypeScript contracts"]
-        expected_core_rust_commit = "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2"
-        expected_core_npm_commit = "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2"
-        previous_core_npm_commit = "b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4"
+        expected_core_rust_commit = "105e42896eaa62afe7377a24478f0dd5632b1155"
+        expected_core_npm_commit = "105e42896eaa62afe7377a24478f0dd5632b1155"
+        previous_core_npm_commit = "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2"
         self.assertEqual(core_source["repository"], "lqepoch/trading-core")
         self.assertEqual(core_source["commit"], expected_core_npm_commit)
         self.assertEqual(core_source["license"], "MIT OR Apache-2.0")
         self.assertEqual(core_source["package"], "@lqepoch/trading-core-contracts")
         self.assertEqual(core_source["previous_commit"], previous_core_npm_commit)
-        self.assertEqual(core_source["reviewed_at"], "2026-10-11")
+        self.assertEqual(core_source["reviewed_at"], "2026-10-12")
         self.assertEqual(
             core_source["downstream_paths"],
             [
@@ -43,12 +43,17 @@ class ProvenanceTests(unittest.TestCase):
         )
         self.assertEqual(core_lock["license"], core_source["license"])
         broker_source = sources["broker-connectors read-only market adapter"]
-        self.assertEqual(broker_source["commit"], "2359bb2bde052d070174d650a14fe040b6cd1e84")
+        self.assertEqual(broker_source["commit"], "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9")
+        self.assertEqual(broker_source["shared_core_commit"], expected_core_rust_commit)
         cargo_toml = (ROOT/"Cargo.toml").read_text()
         self.assertIn(f'rev = "{expected_core_rust_commit}"', cargo_toml)
         cargo_lock = (ROOT/"Cargo.lock").read_text()
         self.assertIn(f"?rev={expected_core_rust_commit}#{expected_core_rust_commit}", cargo_lock)
         self.assertIn(f'rev = "{broker_source["commit"]}"', cargo_toml)
+        self.assertIn(
+            f"?rev={broker_source['commit']}#{broker_source['commit']}",
+            cargo_lock,
+        )
         third_party = (ROOT/"docs/THIRD_PARTY.md").read_text()
         self.assertIn(expected_core_rust_commit, third_party)
         self.assertIn(expected_core_npm_commit, third_party)

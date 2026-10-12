@@ -16,6 +16,6 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 tracing = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
-market-contracts = { git = "https://github.com/lqepoch/trading-core.git", rev = "7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2", package = "market-contracts" }
-broker-ports = { git = "https://github.com/lqepoch/broker-connectors.git", rev = "2359bb2bde052d070174d650a14fe040b6cd1e84", package = "broker-ports" }
-alpaca-stream = { git = "https://github.com/lqepoch/broker-connectors.git", rev = "2359bb2bde052d070174d650a14fe040b6cd1e84", package = "alpaca-stream" }
+market-contracts = { git = "https://github.com/lqepoch/trading-core.git", rev = "105e42896eaa62afe7377a24478f0dd5632b1155", package = "market-contracts" }
+broker-ports = { git = "https://github.com/lqepoch/broker-connectors.git", rev = "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9", package = "broker-ports" }
+alpaca-stream = { git = "https://github.com/lqepoch/broker-connectors.git", rev = "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9", package = "alpaca-stream" }
