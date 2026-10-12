@@ -20,7 +20,7 @@ for (const [name, statusEntitlement, eventEntitlement] of [
     const publishedAt = new Date().toISOString();
     const snapshotAt = new Date(Date.now() - 1_000).toISOString();
     const providerSource = { source_mode: "alpaca", source_label: "Alpaca SIP" };
-    const snapshotResponse = sipSnapshotResponse(100, snapshotAt, 42, 0, {
+    const snapshotFixture = sipSnapshotResponse(100, snapshotAt, 42, 0, {
       gatewayInstanceId: instanceId,
       receivedAt: publishedAt,
       sourceMode: "alpaca",
@@ -28,9 +28,9 @@ for (const [name, statusEntitlement, eventEntitlement] of [
     });
     await configureMocks(request, {
       snapshots: {
-        ...snapshotResponse,
+        ...snapshotFixture,
         source_entitlement: eventEntitlement,
-        snapshots: snapshotResponse.snapshots.map((snapshot) => ({
+        snapshots: snapshotFixture.snapshots.map((snapshot) => ({
           ...snapshot, source_entitlement: eventEntitlement,
         })),
       },
