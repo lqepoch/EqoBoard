@@ -229,6 +229,70 @@ fn disconnected_feed_status(feed: &str) -> FeedStatusSnapshot {
 }
 
 impl MarketPublisher {
+    pub(crate) fn publish_futu_stock_event(&self, value: &serde_json::Value, epoch: u64) {
+        let Some(symbol) = value["symbol"].as_str().filter(|s| crate::safe_symbol(s)) else {
+            return;
+        };
+        let _publication = self
+            .publication_order
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(sequence) = self.next_sequence() else {
+            return;
+        };
+        let received_at = now_rfc3339();
+        let event = match value["kind"].as_str() {
+            Some("stock_trade") => {
+                let Some(price) = value["price"]
+                    .as_f64()
+                    .filter(|v| v.is_finite() && *v > 0.0)
+                else {
+                    return;
+                };
+                let Some(size) = value["size"]
+                    .as_f64()
+                    .filter(|v| v.is_finite() && *v >= 0.0)
+                else {
+                    return;
+                };
+                let Some(time) = value["timestamp"]
+                    .as_str()
+                    .filter(|v| chrono::DateTime::parse_from_rfc3339(v).is_ok())
+                else {
+                    return;
+                };
+                GatewayMarketEvent::StockTrade {
+                    source_mode: "futu",
+                    source_label: "Futu OpenD",
+                    source_entitlement: "unknown",
+                    gateway_instance_id: self.gateway_instance_id.to_string(),
+                    event_time: Some(time.into()),
+                    received_at,
+                    connection_epoch: epoch,
+                    local_sequence: sequence,
+                    symbol: symbol.into(),
+                    price,
+                    size,
+                }
+            }
+            Some("stock_quote") => GatewayMarketEvent::StockQuote {
+                source_mode: "futu",
+                source_label: "Futu OpenD",
+                source_entitlement: "unknown",
+                gateway_instance_id: self.gateway_instance_id.to_string(),
+                event_time: None,
+                received_at,
+                connection_epoch: epoch,
+                local_sequence: sequence,
+                symbol: symbol.into(),
+                bid: value["bid"].as_f64().filter(|v| v.is_finite() && *v > 0.0),
+                ask: value["ask"].as_f64().filter(|v| v.is_finite() && *v > 0.0),
+            },
+            _ => return,
+        };
+        let _ = self.tx.send(event);
+    }
+
     pub(crate) fn new(tx: broadcast::Sender<GatewayMarketEvent>) -> Self {
         Self {
             tx,
@@ -237,6 +301,10 @@ impl MarketPublisher {
             publication_order: Arc::new(Mutex::new(())),
             latest_status: Arc::new(Mutex::new(LatestFeedStatus::default())),
         }
+    }
+
+    pub(crate) fn instance_id(&self) -> &str {
+        &self.gateway_instance_id
     }
 
     #[cfg(test)]

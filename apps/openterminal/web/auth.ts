@@ -1,3 +1,4 @@
+import { localAccessOrigin } from "@/lib/local-access";
 import type { NextAuthOptions } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { allowlistedRoles } from "@/lib/permissions";
@@ -99,7 +100,7 @@ export function isAuthRuntimeConfigured(): boolean {
   const gatewaySecret = process.env.EQO_GATEWAY_JWT_SECRET;
   const researchSecret = process.env.EQO_RESEARCH_JWT_SECRET;
   const signingSecrets = [nextAuthSecret, gatewaySecret, researchSecret];
-  return isOidcConfigured() &&
+  return (isOidcConfigured() || Boolean(localAccessOrigin())) &&
     validHmacSecret(gatewaySecret) &&
     validHmacSecret(researchSecret) &&
     new Set(signingSecrets).size === signingSecrets.length &&

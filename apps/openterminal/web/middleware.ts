@@ -1,3 +1,4 @@
+import { localAccessOrigin, localRequestAllowed } from "@/lib/local-access";
 import { NextRequest, NextResponse } from "next/server";
 import { isResearchRouteAllowed } from "@/lib/research-route-access";
 
@@ -8,6 +9,9 @@ function rejected(): NextResponse {
 }
 
 export function middleware(request: NextRequest): NextResponse {
+  if (localAccessOrigin() && !localRequestAllowed(request)) {
+    return NextResponse.json({ error: "local_origin_rejected" }, { status: 403, headers: NO_STORE });
+  }
   if (process.env.EQO_BFF_MODE !== "research") return NextResponse.next();
   return isResearchRouteAllowed(request.url, request.nextUrl.pathname, request.method)
     ? NextResponse.next()

@@ -337,6 +337,7 @@ fn openbb_app(data: AlpacaData, keys: AuthKeyring) -> Router {
         stock_feed: "sip".into(),
         option_feed: "opra".into(),
         requested_execution_mode: "disabled".into(),
+        futu: None,
         execution_enabled: false,
         auth_keys: keys.clone(),
         stock_symbols: Vec::new(),

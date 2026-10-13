@@ -16,6 +16,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "8.7.1",
     "fast-xml-parser": "5.7.0",
+    "futu-api": "10.11.7108",
     "jose": "6.2.12",
     "zod": "^3.24.1"
   },

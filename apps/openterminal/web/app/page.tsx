@@ -1,3 +1,4 @@
+import { localAccessOrigin } from "@/lib/local-access";
 import { getServerSession } from "next-auth";
 import { authOptions, isAuthRuntimeConfigured, isCurrentOidcIssuer, publicResearchOrigin } from "@/auth";
 import { scopesForRoles } from "@/lib/permissions";
@@ -12,6 +13,10 @@ export default async function Home() {
     return <AuthMessage title="Sign-in is not configured">
       Configure the OIDC issuer, client, session secret, gateway signing keys, and public HTTPS origin before using the terminal.
     </AuthMessage>;
+  }
+
+  if (localAccessOrigin()) {
+    return <TerminalShell userName="Local workstation · Alpaca Paper requested" researchOrigin={null} localAccess />;
   }
 
   let session;

@@ -1,4 +1,4 @@
-export type GatewaySourceMode = "alpaca" | "offline_mock";
+export type GatewaySourceMode = "alpaca" | "futu" | "offline_mock";
 export type MarketSourceMode = GatewaySourceMode | "unknown";
 export type MarketSourceFields = {
   source_mode?: unknown;
@@ -16,6 +16,9 @@ export function resolveMarketSource(
   source: MarketSourceFields | null | undefined,
   feed: "sip" | "opra",
 ): { mode: MarketSourceMode; label: string } {
+  if (feed === "sip" && source?.source_mode === "futu" && source.source_label === "Futu OpenD") {
+    return { mode: "futu", label: "Futu OpenD" };
+  }
   if (source?.source_mode === "offline_mock" && source.source_label === OFFLINE_MARKET_SOURCE_LABEL) {
     return { mode: "offline_mock", label: OFFLINE_MARKET_SOURCE_LABEL };
   }

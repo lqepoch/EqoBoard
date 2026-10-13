@@ -1,4 +1,5 @@
 //! HTTP/WS gateway. Credentials and broker execution remain server-side.
+mod futu_local;
 mod market_stream;
 mod openbb;
 mod option_supervisor;
@@ -138,6 +139,7 @@ impl GatewayPrincipal {
 #[derive(Clone)]
 struct AppState {
     data: Option<AlpacaData>,
+    futu: Option<futu_local::FutuLocal>,
     stock_feed: String,
     option_feed: String,
     requested_execution_mode: String,
@@ -472,7 +474,7 @@ async fn healthz() -> impl IntoResponse {
 }
 async fn readyz(State(state): State<AppState>) -> Response {
     let ready = state.auth_keys.ready();
-    let market_data_configured = state.data.is_some();
+    let market_data_configured = state.data.is_some() || state.futu.is_some();
     let body = json!({
         "ready":ready,
         "identity_validation_configured":ready,
@@ -480,7 +482,9 @@ async fn readyz(State(state): State<AppState>) -> Response {
         "market_data_configured":market_data_configured,
         "market_data_ready":false,
         "market_data_status":if market_data_configured {"awaiting_upstream"} else {"not_configured"},
-        "market_data_provider":"alpaca",
+        "market_data_provider":if state.futu.is_some() {"futu"} else {"alpaca"},
+        "source_mode":if state.futu.is_some() {"futu"} else {"unknown"},
+        "source_label":if state.futu.is_some() {"Futu OpenD"} else {"source unknown"},
         "execution_mode":"disabled",
         "execution_enabled":false
     });
@@ -503,12 +507,14 @@ async fn status(
     }
     Json(json!({
         "service":"EqoBoard", "schema_version":1,
-        "market_credentials_present":state.data.is_some(),
-        "market_data_configured":state.data.is_some(),
+        "market_credentials_present":state.data.is_some() || state.futu.is_some(),
+        "market_data_configured":state.data.is_some() || state.futu.is_some(),
         "market_data_ready":false,
-        "market_data_status":if state.data.is_some() {"awaiting_upstream"} else {"not_configured"},
+        "market_data_status":if state.data.is_some() || state.futu.is_some() {"awaiting_upstream"} else {"not_configured"},
         "stock_feed":state.stock_feed,"option_feed":state.option_feed,
-        "market_data_provider":"alpaca",
+        "market_data_provider":if state.futu.is_some() {"futu"} else {"alpaca"},
+        "source_mode":if state.futu.is_some() {"futu"} else {"unknown"},
+        "source_label":if state.futu.is_some() {"Futu OpenD"} else {"source unknown"},
         "requested_execution_mode":state.requested_execution_mode,
         "execution_mode":"disabled",
         "execution_enabled":false,
@@ -536,6 +542,31 @@ async fn stock_snapshots(
 ) -> Response {
     if let Some(response) = require_scope(&principal, "market:read") {
         return response;
+    }
+    if let Some(futu) = &state.futu {
+        let symbols = query.symbols.unwrap_or_else(|| "QQQ,SPY".into());
+        let symbols: Vec<String> = symbols
+            .split(',')
+            .map(|s| s.trim().to_uppercase())
+            .collect();
+        if symbols.is_empty() || symbols.len() > 32 || symbols.iter().any(|s| !safe_symbol(s)) {
+            return fail(
+                StatusCode::BAD_REQUEST,
+                "invalid_symbols",
+                "1..32 valid stock symbols required",
+            );
+        }
+        return match futu
+            .request(json!({"method":"snapshots","symbols":symbols}))
+            .await
+        {
+            Ok(mut value) => {
+                value["gateway_instance_id"] = json!(state.market_publisher.instance_id());
+                value["received_at"] = json!(Utc::now().to_rfc3339());
+                Json(value).into_response()
+            }
+            Err(error) => fail(StatusCode::SERVICE_UNAVAILABLE, "futu_unavailable", error),
+        };
     }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
@@ -577,6 +608,10 @@ async fn stock_bars(
     if let Some(response) = require_scope(&principal, "market:read") {
         return response;
     }
+    if state.futu.is_some() {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "futu_feature_disabled", "Futu local mode currently supports stock quotes and tickers; options and history are not enabled");
+    }
+
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -628,6 +663,10 @@ async fn option_chain(
     if let Some(response) = require_scope(&principal, "market:read") {
         return response;
     }
+    if state.futu.is_some() {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "futu_feature_disabled", "Futu local mode currently supports stock quotes and tickers; options and history are not enabled");
+    }
+
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);
     };
@@ -924,6 +963,10 @@ async fn option_subscribe(
     if let Some(response) = require_scope(&principal, "market:subscribe") {
         return response;
     }
+    if state.futu.is_some() {
+        return fail(StatusCode::SERVICE_UNAVAILABLE, "futu_feature_disabled", "Futu local mode currently supports stock quotes and tickers; options and history are not enabled");
+    }
+
     if body.generation == 0 {
         return fail(
             StatusCode::BAD_REQUEST,
@@ -1428,11 +1471,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !["disabled", "paper", "live"].contains(&mode.as_str()) {
         return Err("EQO_EXECUTION_MODE must be disabled, paper, or live".into());
     }
-    let data = match AlpacaData::from_env() {
-        Ok(c) => Some(c),
-        Err(err) => {
-            warn!(error=%err,"market data source not ready");
-            None
+    let futu_mode = match std::env::var("EQO_MARKET_DATA_PROVIDER").as_deref() {
+        Ok("futu") => true,
+        Ok("alpaca") | Err(_) => false,
+        _ => return Err("EQO_MARKET_DATA_PROVIDER must be alpaca or futu".into()),
+    };
+    if (futu_mode || std::env::var("EQO_LOCAL_ACCESS").as_deref() == Ok("true"))
+        && !addr.ip().is_loopback()
+    {
+        return Err("local Futu/access mode requires loopback bind".into());
+    }
+    let data = if futu_mode {
+        None
+    } else {
+        match AlpacaData::from_env() {
+            Ok(c) => Some(c),
+            Err(err) => {
+                warn!(error=%err,"market data source not ready");
+                None
+            }
         }
     };
     let stock_feed = data
@@ -1443,20 +1500,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_ref()
         .map(|c| c.option_feed.clone())
         .unwrap_or_else(|| std::env::var("EQO_OPTION_FEED").unwrap_or_else(|_| "opra".into()));
-    let stocks: Vec<String> = std::env::var("EQO_STOCK_SYMBOLS")
+    let mut stocks: Vec<String> = std::env::var("EQO_STOCK_SYMBOLS")
         .unwrap_or_else(|_| "SPY,QQQ,IWM,NVDA,TSLA".into())
         .split(',')
         .map(|s| s.trim().to_uppercase())
         .filter(|s| safe_symbol(s))
         .collect();
+    if futu_mode {
+        stocks = vec!["QQQ".into(), "SPY".into()];
+    }
     let (stock_tx, stock_rx) = watch::channel(stocks.clone());
     let (option_tx, option_rx) = watch::channel(OptionSubscriptionRevision::default());
-    let max_stock_subscriptions = std::env::var("EQO_MAX_STOCK_SUBSCRIPTIONS")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(100)
-        .max(stocks.len())
-        .min(1000);
+    let max_stock_subscriptions = if futu_mode {
+        32
+    } else {
+        std::env::var("EQO_MAX_STOCK_SUBSCRIPTIONS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(100)
+            .max(stocks.len())
+            .min(1000)
+    };
     let max_option_subscriptions = effective_option_subscription_limit(
         std::env::var("EQO_MAX_OPTION_SUBSCRIPTIONS")
             .ok()
@@ -1483,10 +1547,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let option_port = option_port_enabled.then(alpaca_opra_port);
     let risk = RiskPolicy::from_env();
+    let futu = if futu_mode {
+        Some(futu_local::FutuLocal::start(market_publisher.clone(), stock_tx.subscribe()).await?)
+    } else {
+        None
+    };
     let state = AppState {
         data: data.clone(),
-        stock_feed,
-        option_feed,
+        futu,
+        stock_feed: if futu_mode { "futu".into() } else { stock_feed },
+        option_feed: if futu_mode {
+            "disabled".into()
+        } else {
+            option_feed
+        },
         requested_execution_mode: mode,
         execution_enabled: false,
         auth_keys: auth_keys.clone(),
@@ -1675,6 +1749,7 @@ mod tests {
         let (broadcasts, _) = broadcast::channel::<GatewayMarketEvent>(16);
         AppState {
             data: None,
+            futu: None,
             stock_feed: "sip".into(),
             option_feed: "opra".into(),
             requested_execution_mode: "paper".into(),
