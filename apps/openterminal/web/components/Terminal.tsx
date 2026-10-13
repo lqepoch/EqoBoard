@@ -1,15 +1,52 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import TopBar from "./TopBar";
 import Sidebar from "./Sidebar";
 import Workspace from "./Workspace";
 import CommandPalette from "./CommandPalette";
 import { useTerminal } from "../store/terminal";
 
-export default function Terminal({ researchOrigin }: { researchOrigin: string | null }) {
+const ModernTerminal = dynamic(() => import("./terminal/ModernTerminal"), {
+  ssr: false,
+});
+
+export default function Terminal({
+  researchOrigin,
+  localAccess = false,
+}: {
+  researchOrigin: string | null;
+  localAccess?: boolean;
+}) {
   const setCommandOpen = useTerminal((s) => s.setCommandOpen);
   const addWidget = useTerminal((s) => s.addWidget);
+
+  const [viewMode, setViewModeState] = useState<"pro" | "workspace">(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("view");
+      if (p === "workspace") return "workspace";
+      if (p === "pro") return "pro";
+      if (localAccess) {
+        const saved = localStorage.getItem("eqo_view_mode");
+        if (saved === "workspace") return "workspace";
+        return "pro";
+      }
+      const saved = localStorage.getItem("eqo_view_mode");
+      if (saved === "pro") return "pro";
+      return "workspace";
+    }
+    return localAccess ? "pro" : "workspace";
+  });
+
+  const setViewMode = (mode: "pro" | "workspace") => {
+    setViewModeState(mode);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("eqo_view_mode", mode);
+      } catch {}
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -41,9 +78,21 @@ export default function Terminal({ researchOrigin }: { researchOrigin: string | 
     return () => window.removeEventListener("keydown", onKey);
   }, [setCommandOpen, addWidget]);
 
+  if (viewMode === "pro") {
+    return (
+      <div className="flex flex-col h-full w-full overflow-hidden">
+        <ModernTerminal
+          researchOrigin={researchOrigin}
+          onSwitchToWorkspace={() => setViewMode("workspace")}
+        />
+        <CommandPalette researchOrigin={researchOrigin} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen">
-      <TopBar />
+      <TopBar onSwitchToPro={() => setViewMode("pro")} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar researchOrigin={researchOrigin} />
         <main className="flex-1 overflow-auto">

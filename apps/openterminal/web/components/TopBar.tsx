@@ -44,7 +44,11 @@ function regularHoursEstimate(now: Date | null): "within" | "outside" | "unknown
   return weekdayHours && minutes >= 9 * 60 + 30 && minutes < 16 * 60 ? "within" : "outside";
 }
 
-export default function TopBar() {
+export default function TopBar({
+  onSwitchToPro,
+}: {
+  onSwitchToPro?: () => void;
+} = {}) {
   const setCommandOpen = useTerminal((s) => s.setCommandOpen);
   const activeSymbol = useTerminal((s) => s.activeSymbol);
   const marketClockMs = useMarket((s) => s.marketClockMs);
@@ -79,6 +83,16 @@ export default function TopBar() {
   return (
     <header className="flex items-center gap-4 px-3 h-8 bg-[var(--panel-2)] border-b border-[var(--border)] text-[11px] shrink-0">
       <span className="amber font-bold tracking-widest">EqoBoard / OpenTerminal</span>
+      {onSwitchToPro && (
+        <button
+          type="button"
+          onClick={onSwitchToPro}
+          className="term-btn text-cyan-300 border-cyan-800/80 bg-cyan-950/40 hover:bg-cyan-900/60 font-mono text-[11px] px-2 py-0.5"
+          title="Switch to Pro Trading Terminal"
+        >
+          ⚡ PRO TRADING
+        </button>
+      )}
       <span className="dim" data-testid="market-session-status" title="Weekday hours are an estimate; no holiday or early-close calendar is inferred">
         {sessionLabel} · 09:30–16:00 ET weekday-hours estimate: {regularHours}
       </span>

@@ -15,11 +15,19 @@ export default function TerminalShell({
   researchOrigin: string | null;
   localAccess?: boolean;
 }) {
-  return <>
-    <div className="terminal-session-controls">
-      <span>{userName}</span>
-      {!localAccess && <SignOutButton />}
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0b0e14]">
+      {!localAccess && (
+        <div className="h-6 bg-[#0a0e14] border-b border-[#1e293b] px-3 flex items-center justify-between text-[10px] font-mono text-slate-400 shrink-0 select-none">
+          <span>{userName}</span>
+          <SignOutButton />
+        </div>
+      )}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <MarketStreamProvider>
+          <Terminal researchOrigin={researchOrigin} localAccess={localAccess} />
+        </MarketStreamProvider>
+      </div>
     </div>
-    <MarketStreamProvider><Terminal researchOrigin={researchOrigin} /></MarketStreamProvider>
-  </>;
+  );
 }

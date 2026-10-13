@@ -17,3 +17,5 @@ apps/openterminal/web/test-results/
 .vscode/
 audit/
 build/openbb/
+data/
+apps/data/

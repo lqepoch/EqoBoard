@@ -17,13 +17,30 @@ export function localRequestAllowed(request: Request): boolean {
   const origin = localAccessOrigin();
   if (!origin) return false;
   const expected = new URL(origin);
-  // Next may normalize the internal request URL to 127.0.0.1; Host remains
-  // the exact public authority. Do not accept forwarded host assertions.
+  const host = request.headers.get("host");
+  const xForwardedHost = request.headers.get("x-forwarded-host");
+  const reqOrigin = request.headers.get("origin");
   const site = request.headers.get("sec-fetch-site");
-  return request.headers.get("host") === expected.host &&
-    (!request.headers.get("x-forwarded-host") || request.headers.get("x-forwarded-host") === expected.host) &&
-    (!request.headers.get("origin") || request.headers.get("origin") === origin) &&
-    (!site || site === "same-origin" || site === "none");
+
+  const portSuffix = expected.port ? `:${expected.port}` : "";
+  const allowedHosts = new Set([
+    expected.host,
+    `127.0.0.1${portSuffix}`,
+    `localhost${portSuffix}`,
+  ]);
+
+  const allowedOrigins = new Set([
+    origin,
+    `http://127.0.0.1${portSuffix}`,
+    `http://localhost${portSuffix}`,
+  ]);
+
+  const isHostAllowed = host ? allowedHosts.has(host) : false;
+  const isForwardedAllowed = !xForwardedHost || allowedHosts.has(xForwardedHost);
+  const isOriginAllowed = !reqOrigin || allowedOrigins.has(reqOrigin);
+  const isSiteAllowed = !site || site === "same-origin" || site === "none";
+
+  return isHostAllowed && isForwardedAllowed && isOriginAllowed && isSiteAllowed;
 }
 
 export const LOCAL_ROLES = [
