@@ -642,10 +642,11 @@ export async function GET(
         }
 
         // 若为 QQQ 或 SPY，将逐笔持久化写入 180 天本地缓存供多周期聚合
-        if (HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(symbol)) {
+        const allowedSym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
+        if (allowedSym) {
           const nowSec = Math.floor(Date.now() / 1000);
           appendCachedTicks(
-            symbol,
+            allowedSym,
             trades.map((t, idx) => ({
               id: t.id,
               time: nowSec - idx,

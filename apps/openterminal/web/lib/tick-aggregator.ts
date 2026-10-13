@@ -99,7 +99,8 @@ export function setCached1mBars(symbol: string, bars: AggregatedBar[]): void {
       close: Number(b.close) || 0,
       volume: Math.floor(Number(b.volume) || 0),
     }));
-    const filePath = path.join(getCacheDir(), `${sym}_1m_180d.json`);
+    const safeFile = sym === "QQQ" ? "QQQ_1m_180d.json" : "SPY_1m_180d.json";
+    const filePath = path.join(getCacheDir(), safeFile);
     fs.writeFileSync(filePath, JSON.stringify(cleanBars, null, 2), { encoding: "utf-8", mode: 0o600 });
   } catch (e) {
     console.warn("[Cache] Failed to write cached 1m bars", e instanceof Error ? e.message : "");
@@ -119,7 +120,8 @@ export function getCachedBars(symbol: string): AggregatedBar[] {
       return aggregateFrom1m(m1, "1D");
     }
 
-    const filePath = path.join(getCacheDir(), `${sym}_bars_180d.json`);
+    const safeFile = sym === "QQQ" ? "QQQ_bars_180d.json" : "SPY_bars_180d.json";
+    const filePath = path.join(getCacheDir(), safeFile);
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, "utf-8");
       return JSON.parse(raw);
@@ -145,7 +147,8 @@ export function setCachedBars(symbol: string, bars: AggregatedBar[]): void {
       close: Number(b.close) || 0,
       volume: Math.floor(Number(b.volume) || 0),
     }));
-    const filePath = path.join(getCacheDir(), `${sym}_bars_180d.json`);
+    const safeFile = sym === "QQQ" ? "QQQ_bars_180d.json" : "SPY_bars_180d.json";
+    const filePath = path.join(getCacheDir(), safeFile);
     fs.writeFileSync(filePath, JSON.stringify(cleanBars, null, 2), { encoding: "utf-8", mode: 0o600 });
   } catch (e) {
     console.warn("[Cache] Failed to write cached bars", e instanceof Error ? e.message : "");
@@ -159,7 +162,8 @@ export function getCachedTicks(symbol: string): Tick[] {
   const sym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
   if (!sym) return [];
   try {
-    const filePath = path.join(getCacheDir(), `${sym}_ticks.json`);
+    const safeFile = sym === "QQQ" ? "QQQ_ticks.json" : "SPY_ticks.json";
+    const filePath = path.join(getCacheDir(), safeFile);
     if (fs.existsSync(filePath)) {
       const raw = fs.readFileSync(filePath, "utf-8");
       return JSON.parse(raw);
@@ -197,7 +201,8 @@ export function appendCachedTicks(symbol: string, newTicks: Tick[]): void {
       .filter((t) => t.time >= cutoffSec)
       .sort((a, b) => a.time - b.time);
 
-    const filePath = path.join(getCacheDir(), `${sym}_ticks.json`);
+    const safeFile = sym === "QQQ" ? "QQQ_ticks.json" : "SPY_ticks.json";
+    const filePath = path.join(getCacheDir(), safeFile);
     fs.writeFileSync(filePath, JSON.stringify(combined), { encoding: "utf-8", mode: 0o600 });
   } catch (e) {
     console.warn("[Cache] Failed to append cached ticks", e instanceof Error ? e.message : "");
