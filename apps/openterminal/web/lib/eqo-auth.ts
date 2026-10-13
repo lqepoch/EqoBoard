@@ -1,3 +1,4 @@
+import { localAccessOrigin, localRequestAllowed, localScopes } from "@/lib/local-access";
 import { randomUUID } from "node:crypto";
 import { SignJWT } from "jose";
 import { getServerSession } from "next-auth";
@@ -107,6 +108,19 @@ async function authorizeOidcPrincipal(requiredScope: ActionScope): Promise<Princ
   };
 }
 
+async function authorizeTerminalPrincipal(request: Request, requiredScope: ActionScope): Promise<PrincipalResult> {
+  const localOrigin = localAccessOrigin();
+  if (localOrigin && !localRequestAllowed(request)) {
+    return { ok: false, response: jsonError(403, "local_origin_rejected") };
+  }
+  const scopes = localScopes();
+  return localOrigin
+    ? scopes.includes(requiredScope)
+      ? { ok: true, principal: { subject: "local-workstation", identityIssuer: `${localOrigin}/local-access`, scopes, sessionExpiresAt: Date.now() + 60_000 } }
+      : { ok: false, response: jsonError(403, "action_forbidden") }
+    : await authorizeOidcPrincipal(requiredScope);
+}
+
 export async function authorizeBffRequest(
   request: Request,
   requiredScope: ActionScope,
@@ -115,7 +129,7 @@ export async function authorizeBffRequest(
   const boundaryError = validRequestHeaders(request);
   if (boundaryError) return { ok: false, response: boundaryError };
   if (!isAuthRuntimeConfigured()) return { ok: false, response: jsonError(503, "identity_service_unavailable") };
-  const identity = await authorizeOidcPrincipal(requiredScope);
+  const identity = await authorizeTerminalPrincipal(request, requiredScope);
   if (!identity.ok) return identity;
 
   const secret = audience === "eqoboard-gateway"
@@ -249,11 +263,11 @@ export async function authorizeQuantPredictionRequest(request: Request): Promise
     return { ok: false, response: jsonError(503, "identity_service_unavailable") };
   }
   const mode = runtimeMode === "research" ? "research" : "terminal";
-  if (!isOidcConfigured() || (mode === "research" && !isResearchAuthRuntimeConfigured()) ||
+  if ((!isOidcConfigured() && !localAccessOrigin()) || (mode === "research" && !isResearchAuthRuntimeConfigured()) ||
       (mode === "terminal" && !isAuthRuntimeConfigured())) {
     return { ok: false, response: jsonError(503, "identity_service_unavailable") };
   }
-  const identity = await authorizeOidcPrincipal("research:private-read");
+  const identity = await authorizeTerminalPrincipal(request, "research:private-read");
   if (!identity.ok) return identity;
   const signer = quantResearchSigner(mode);
   if (!signer) return { ok: false, response: jsonError(503, "research_service_unavailable") };

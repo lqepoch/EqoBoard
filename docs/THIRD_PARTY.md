@@ -73,3 +73,9 @@ Previous CHG-2026-001 dependency refresh (2026-10-12): the Broker consumer pin m
 - 2026-10-08 OpenTerminal security refresh：`apps/openterminal/package-lock.json` 锁定 Next.js 15.5.27、PostCSS 8.5.28 override、fast-xml-parser 5.7.0、Vitest 4.1.11 / Vite 6.4.3，以及修补版 proxy-addr、sharp、shell-quote、source-map-js。`npm audit --package-lock-only --audit-level=low` 在锁刷新时报告 0 个已知漏洞；升级日志和测试结果以对应 PR 为准，后续发布仍须重新审计。
 - 2026-10-12 CHG-2026-001 shared dependency refresh: Rust `market-contracts` and TypeScript `@lqepoch/trading-core-contracts` now pin the merged `trading-core` revision `105e42896eaa62afe7377a24478f0dd5632b1155`; Rust `broker-ports` and `alpaca-stream` pin merged `broker-connectors` revision `dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9`, which itself pins that same Core revision. This is dependency closure only; it does not qualify real data sources, entitlement, external archive storage, or trading execution.
 - 2026-10-13 CHG-2026-001 current-main refresh: EqoBoard Rust and TypeScript consumers pin Core `b2679e757576f8da7850cd4b5ea2958bc9a2354c` and Broker `873337e3fafe64344dfb9ac7719fad54f157a9c0`, with Broker's Core dependency on the same exact Core revision. This refresh closes source identities only; real SIP/OPRA source, entitlement, provider ACK, remote archive readback, and P6 remain blocked.
+
+## Futu OpenD JavaScript SDK
+
+Official npm package `futu-api@10.11.7108` (ISC), stock-only server transport in
+`tools/futu-stdio.mjs`. `protobufjs` override 7.6.6; package integrity in lockfile.
+No trading API calls or browser provider credentials.

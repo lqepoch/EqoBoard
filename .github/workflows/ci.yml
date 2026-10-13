@@ -156,6 +156,11 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build -w server
       - run: npm run test -w server
+      - name: Test local Futu subscription and workstation boundaries
+        working-directory: .
+        run: |
+          node --test tools/futu-subscriptions.test.mjs
+          node --import ./apps/openterminal/node_modules/tsx/dist/loader.mjs --test tools/local-access.test.ts
       - name: Test client cancellation during BFF authorization
         run: node --test web/lib/client-abort.test.mjs
       - run: npx tsc --noEmit -p web/tsconfig.json

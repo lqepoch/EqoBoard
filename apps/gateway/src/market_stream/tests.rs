@@ -4,6 +4,39 @@ use market_contracts::{
     UtcTimestamp,
 };
 
+#[test]
+fn futu_projection_preserves_supplier_time_and_never_invents_quote_time() {
+    let (publisher, mut receiver) = test_publisher();
+    let time = "2026-10-12T19:59:59Z";
+    publisher.publish_futu_stock_event(
+        &serde_json::json!({
+            "kind":"stock_trade", "symbol":"QQQ", "price":500.25,
+            "size":100, "timestamp":time
+        }),
+        2,
+    );
+    let trade = serde_json::to_value(receiver.try_recv().unwrap()).unwrap();
+    assert_eq!(trade["source_mode"], "futu");
+    assert_eq!(trade["source_entitlement"], "unknown");
+    assert_eq!(trade["event_time"], time);
+    publisher.publish_futu_stock_event(
+        &serde_json::json!({
+            "kind":"stock_quote", "symbol":"SPY", "bid":600.1, "ask":600.2
+        }),
+        2,
+    );
+    let quote = serde_json::to_value(receiver.try_recv().unwrap()).unwrap();
+    assert!(quote["event_time"].is_null());
+    assert_eq!(quote["gateway_instance_id"], trade["gateway_instance_id"]);
+    publisher.publish_futu_stock_event(
+        &serde_json::json!({
+            "kind":"stock_trade", "symbol":"QQQ", "price":-1, "size":1, "timestamp":time
+        }),
+        2,
+    );
+    assert!(receiver.try_recv().is_err());
+}
+
 fn test_publisher() -> (MarketPublisher, broadcast::Receiver<GatewayMarketEvent>) {
     let (sender, _) = broadcast::channel(16);
     let publisher = MarketPublisher::new(sender);

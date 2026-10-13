@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { OFFLINE_MARKET_SOURCE_LABEL, resolveMarketSource } from "./market-source.js";
 
 describe("trusted market source metadata", () => {
+  it("recognizes explicit Futu stock identity without treating it as OPRA", () => {
+    expect(resolveMarketSource({ source_mode: "futu", source_label: "Futu OpenD" }, "sip"))
+      .toEqual({ mode: "futu", label: "Futu OpenD" });
+    expect(resolveMarketSource({ source_mode: "futu", source_label: "Futu OpenD" }, "opra").mode)
+      .toBe("unknown");
+    expect(resolveMarketSource({ source_mode: "futu", source_label: "Alpaca SIP" }, "sip").mode)
+      .toBe("unknown");
+  });
   it("accepts only matching Alpaca protocol labels and the explicit offline marker", () => {
     expect(resolveMarketSource({ source_mode: "alpaca", source_label: "Alpaca SIP" }, "sip"))
       .toEqual({ mode: "alpaca", label: "Alpaca SIP" });

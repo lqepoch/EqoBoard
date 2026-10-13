@@ -29,3 +29,5 @@
 - `npm run test:e2e:research --workspace web` 构建 production Next 并运行隔离 OIDC/Gateway mock。它只证明 BFF/API 组件行为，不启动 OpenBB Lite，也不证明 Rust Gateway、SIP/OPRA 或真实 Lite 浏览器集成；对应 profile、ingress 和 Lite E2E 必须单独验收。
 - `EQO_ACCESS_TOKEN` 已废弃；Paper/Live 在当前发布版均保持关闭。Portfolio owner 由 issuer+subject 派生，旧 `local` 数据不可自动转移给登录用户。
 - 同步上游必须保留 MIT LICENSE、固定 commit、diff 记录并运行全部构建。
+
+本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。

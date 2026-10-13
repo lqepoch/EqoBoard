@@ -81,6 +81,10 @@ function requireFeed(feed: string, expected: "sip" | "opra"): void {
   if (feed !== expected) throw new EqoUpstreamError(409,
     "EqoBoard configured feed is "+feed+"; "+expected+" required. No silent fallback.");
 }
+function requireStockFeed(data: MarketSourceFields & {feed: string}): void {
+  if (data.feed === "futu" && data.source_mode === "futu" && data.source_label === "Futu OpenD") return;
+  requireFeed(data.feed, "sip");
+}
 async function getRust<T>(path: string, authorization: string): Promise<T> {
   const host = process.env.EQO_RUST_URL ?? "http://127.0.0.1:8080";
   if (!authorization || authorization.trim() !== authorization || /\s/.test(authorization)) {
@@ -110,7 +114,7 @@ export async function eqoStatus(authorization: string) {
     sourceEntitlement:data.source_entitlement??"unknown", ai:false,
     providers:[{name:data.stock_feed.toUpperCase()+" (configured protocol)",ok:0,failed:0,lastLatencyMs:null},
       {name:data.option_feed.toUpperCase()+" (configured protocol)",ok:0,failed:0,lastLatencyMs:null}],
-    dataSource:resolveMarketSource(data,data.stock_feed==="sip"?"sip":"opra").label,
+    dataSource:resolveMarketSource(data,["sip", "futu"].includes(data.stock_feed)?"sip":"opra").label,
     source_mode:data.source_mode,source_label:data.source_label,
     stockFeed:data.stock_feed,optionFeed:data.option_feed,
     executionMode:data.execution_mode,
@@ -125,7 +129,7 @@ export async function eqoQuotes(input: string, authorization: string) {
   if (!symbols.length||symbols.length>50) throw new EqoUpstreamError(400,"Expected 1..50 stock symbols");
   const data=await getRust<MarketSourceFields & {gateway_instance_id?:string;received_at?:string|null;feed:string;snapshots:Snapshot[];watermark?:GatewaySnapshotWatermark}>(
     "/api/v1/stocks/snapshots?symbols="+encodeURIComponent(symbols.join(",")), authorization);
-  requireFeed(data.feed,"sip");
+  requireStockFeed(data);
   return data.snapshots.map(s=>{
     const sourceFields={source_mode:s.source_mode===undefined?data.source_mode:s.source_mode,
       source_label:s.source_label===undefined?data.source_label:s.source_label,
@@ -163,7 +167,7 @@ export async function eqoHistory(symbol: string, range: string, authorization: s
     symbol:sym,timeframe:r.timeframe,limit:String(r.limit),days:String(r.days)
   });
   const data=await getRust<BarsResponse>("/api/v1/stocks/bars?"+query.toString(), authorization);
-  requireFeed(data.feed,"sip");
+  requireStockFeed(data);
   // OpenTerminal charts use UNIX seconds. Preserve upstream bars without inventing candles.
   const bars=data.bars.map(b=>({
     time:Math.floor(Date.parse(b.time)/1000),

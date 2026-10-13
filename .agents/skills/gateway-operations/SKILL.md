@@ -19,3 +19,5 @@ description: 维护 Rust Axum 网关鉴权、SIP/OPRA 订阅租约、WebSocket �
 - SSE/WS 新连接在注册 receiver 时回放最近的 stocks/options 状态；缓存上限固定为两个 feed，状态快照与发布序号串行化。慢客户端的 `resync_required` 复用 feed 当前 epoch，以触发现有 store 清除旧 live 值。
 - 股票流仍走既有 adapter，尚未接入 typed Broker ACK；SIP auth、ACK coverage、source 和 entitlement 必须保持 unknown/未确认，不得从 HTTP lease 或 feed 名推导。
 - 浏览器默认只维持一个 SSE；若引入新实时 Widget，优先订阅共享 market store。
+
+本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。

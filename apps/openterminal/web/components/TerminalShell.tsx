@@ -9,14 +9,16 @@ const Terminal = dynamic(() => import("./Terminal"), { ssr: false });
 export default function TerminalShell({
   userName,
   researchOrigin,
+  localAccess = false,
 }: {
   userName: string;
   researchOrigin: string | null;
+  localAccess?: boolean;
 }) {
   return <>
     <div className="terminal-session-controls">
       <span>{userName}</span>
-      <SignOutButton />
+      {!localAccess && <SignOutButton />}
     </div>
     <MarketStreamProvider><Terminal researchOrigin={researchOrigin} /></MarketStreamProvider>
   </>;
