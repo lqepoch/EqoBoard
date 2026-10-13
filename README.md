@@ -86,6 +86,8 @@ npm run dev
 
 ## 当前边界
 
+职责边界：OpenTerminal 与 Next BFF 的行情/券商路径仅用于读取和离线预览；Rust Gateway 是过渡期市场数据/兼容服务，不能授予交易能力。当前 effective execution 固定为 `disabled`，Paper submit 被阻止，Live 始终拒绝。九仓职责汇总目前只是 [Draft PR #20 中的治理候选](https://github.com/lqepoch/platform-ops/blob/codex/chg-2026-001-workspace-layout/docs/NINE-REPOSITORY-ARCHITECTURE.md)，尚未成为 `main` 权威；本仓当前行为以源码、Cargo/npm 锁定依赖和本地文档为准。
+
 - 股票关键行情固定请求 SIP，期权关键行情固定请求 OPRA；401/403/429 原样转为显式状态，不做隐藏回退。
 - OpenTerminal 的 FRED、SEC、FINRA、新闻、宏观等研究 Provider 保留；股票/期权价格与历史图表通过 EqoBoard Rust Gateway。
 - 所有 BFF 路由都要求 OIDC 会话和对应 action scope；写请求还要通过同源校验及有界 JSON 请求检查。`EQO_ACCESS_TOKEN` 已废弃。
