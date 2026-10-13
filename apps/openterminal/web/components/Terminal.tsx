@@ -27,11 +27,14 @@ export default function Terminal({
       const p = new URLSearchParams(window.location.search).get("view");
       if (p === "workspace") return "workspace";
       if (p === "pro") return "pro";
-      const saved = localStorage.getItem("eqo_view_mode");
-      if (saved === "workspace" || saved === "pro") return saved;
-      if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+      if (localAccess) {
+        const saved = localStorage.getItem("eqo_view_mode");
+        if (saved === "workspace") return "workspace";
         return "pro";
       }
+      const saved = localStorage.getItem("eqo_view_mode");
+      if (saved === "pro") return "pro";
+      return "workspace";
     }
     return localAccess ? "pro" : "workspace";
   });
