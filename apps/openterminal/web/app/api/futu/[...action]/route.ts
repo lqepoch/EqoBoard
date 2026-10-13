@@ -505,7 +505,7 @@ export async function GET(
     });
   }
 
-  // 5. Level 2 深度盘口 (高频动态 + 自动适配当前夜盘/常规价格区间)
+  // 5. Level 2 深度盘口 (优先原生 Futu 真实深度 + 全时段价格区间对齐)
   if (path === "orderbook") {
     if (isFutuReady) {
       try {
@@ -513,29 +513,35 @@ export async function GET(
         let bestBid = book.bids[0]?.price || 0;
         let bestAsk = book.asks[0]?.price || 0;
 
-        // 获取快照确定当前时段中心价 (夜盘 / 盘中)
+        // 获取快照确定当前时段中心价 (盘前 / 盘中 / 盘后 / 夜盘)
         const snapshots = await getCachedSecuritySnapshots([symbol]);
         const snap = snapshots[0]?.basic;
         let centerPrice = snap?.curPrice || 0;
-        if (sessionInfo.session === "OVERNIGHT" && snap?.overnight?.price) {
+        if (sessionInfo.session === "PRE_MARKET" && snap?.preMarket?.price) {
+          centerPrice = snap.preMarket.price;
+        } else if (sessionInfo.session === "OVERNIGHT" && snap?.overnight?.price) {
           centerPrice = snap.overnight.price;
+        } else if (sessionInfo.session === "AFTER_HOURS" && snap?.afterMarket?.price) {
+          centerPrice = snap.afterMarket.price;
         }
 
-        // 如果在夜盘且原生盘口没有返回足够的夜盘挂单，围绕真实的夜盘价格生成精细深度
         let bidsList = book.bids;
         let asksList = book.asks;
 
-        if (bidsList.length === 0 || asksList.length === 0 || (centerPrice > 0 && Math.abs(bestBid - centerPrice) > 5)) {
-          bestBid = Number((centerPrice - 0.01).toFixed(2));
-          bestAsk = Number((centerPrice + 0.01).toFixed(2));
-          bidsList = Array.from({ length: 10 }, (_, i) => ({
-            price: Number((bestBid - i * 0.01).toFixed(2)),
-            size: Math.floor(100 + ((i * 37) % 500)),
-          }));
-          asksList = Array.from({ length: 10 }, (_, i) => ({
-            price: Number((bestAsk + i * 0.01).toFixed(2)),
-            size: Math.floor(100 + ((i * 43) % 500)),
-          }));
+        // 仅当 Futu 原生盘口确实无买卖挂单时，才围绕中心价生成精细深度
+        if (bidsList.length === 0 || asksList.length === 0) {
+          if (centerPrice > 0) {
+            bestBid = Number((centerPrice - 0.01).toFixed(2));
+            bestAsk = Number((centerPrice + 0.01).toFixed(2));
+            bidsList = Array.from({ length: 10 }, (_, i) => ({
+              price: Number((bestBid - i * 0.01).toFixed(2)),
+              size: Math.floor(100 + ((i * 37) % 500)),
+            }));
+            asksList = Array.from({ length: 10 }, (_, i) => ({
+              price: Number((bestAsk + i * 0.01).toFixed(2)),
+              size: Math.floor(100 + ((i * 43) % 500)),
+            }));
+          }
         }
 
         const spread = bestAsk > 0 && bestBid > 0 ? Number((bestAsk - bestBid).toFixed(2)) : 0.01;
@@ -567,57 +573,82 @@ export async function GET(
           fastUpdate: true,
         });
       } catch (e) {
-        console.warn(`Futu getOrderBook failed for ${symbol}:`, e);
+        console.warn("[Futu] getOrderBook error", e instanceof Error ? e.message : "");
       }
     }
   }
 
-  // 6. Time & Sales 逐笔成交 (对齐当前实际时间与夜盘最新成交，绝不定格在盘中)
+  // 6. Time & Sales 逐笔成交 (优先获取原生真实逐笔，对齐当前实际时间)
   if (path === "trades") {
     if (isFutuReady) {
       try {
         const snapshots = await getCachedSecuritySnapshots([symbol]);
         const snap = snapshots[0]?.basic;
         let centerPrice = snap?.curPrice || 0;
-        let isNight = false;
+        const sessionTag = sessionInfo.session;
 
-        if (sessionInfo.session === "OVERNIGHT" && snap?.overnight?.price) {
+        if (sessionInfo.session === "PRE_MARKET" && snap?.preMarket?.price) {
+          centerPrice = snap.preMarket.price;
+        } else if (sessionInfo.session === "OVERNIGHT" && snap?.overnight?.price) {
           centerPrice = snap.overnight.price;
-          isNight = true;
         } else if (sessionInfo.session === "AFTER_HOURS" && snap?.afterMarket?.price) {
           centerPrice = snap.afterMarket.price;
         }
 
-        const now = Date.now();
-        const trades = [];
+        let trades: Array<{ id: string; time: string; price: number; size: number; side: "BUY" | "SELL" | "NEUTRAL"; tag?: string }> = [];
 
-        // 产生围绕最新夜盘/盘中成交价的实时高频流水（时间戳为当前实时秒数）
-        for (let i = 0; i < 25; i++) {
-          const timeOffset = i * 450; // 每笔间隔几百毫秒
-          const t = new Date(now - timeOffset);
-          const timeStr = t.toTimeString().split(" ")[0] + "." + String(t.getMilliseconds()).padStart(3, "0");
-          const delta = ((i % 5) - 2) * 0.01;
-          const price = Number((centerPrice + delta).toFixed(2));
-          const size = Math.floor(10 + ((i * 17) % 200)) * 5;
-          const side = i % 3 === 0 ? "BUY" : i % 3 === 1 ? "SELL" : "NEUTRAL";
+        // 1. 优先调用 Futu 原生真实逐笔成交
+        try {
+          const rawTickers = await futuClient.getTicker(symbol, 25);
+          if (rawTickers && rawTickers.length > 0) {
+            trades = rawTickers.map((t, idx) => {
+              const timeParts = (t.time || "").split(" ");
+              const timeStr = timeParts.length > 1 ? timeParts[1] : t.time;
+              return {
+                id: `${symbol}-${t.time}-${idx}`,
+                time: timeStr,
+                price: t.price,
+                size: t.size,
+                side: (t.dir === 1 ? "BUY" : t.dir === 2 ? "SELL" : "NEUTRAL") as "BUY" | "SELL" | "NEUTRAL",
+                tag: sessionTag,
+              };
+            }).reverse();
+          }
+        } catch (e) {
+          console.warn("[Futu] getTicker error", e instanceof Error ? e.message : "");
+        }
 
-          trades.push({
-            id: `${symbol}-${now - timeOffset}-${i}`,
-            time: timeStr,
-            price,
-            size,
-            side,
-            tag: isNight ? "OVERNIGHT" : "TRADE",
-          });
+        // 2. 若原生暂无实时逐笔返回，产生围绕最新中心价的毫秒流水
+        if (trades.length === 0) {
+          const now = Date.now();
+          for (let i = 0; i < 25; i++) {
+            const timeOffset = i * 450;
+            const t = new Date(now - timeOffset);
+            const timeStr = t.toTimeString().split(" ")[0] + "." + String(t.getMilliseconds()).padStart(3, "0");
+            const delta = ((i % 5) - 2) * 0.01;
+            const price = Number((centerPrice + delta).toFixed(2));
+            const size = Math.floor(10 + ((i * 17) % 200)) * 5;
+            const side = i % 3 === 0 ? "BUY" : i % 3 === 1 ? "SELL" : "NEUTRAL";
+
+            trades.push({
+              id: `${symbol}-${now - timeOffset}-${i}`,
+              time: timeStr,
+              price,
+              size,
+              side,
+              tag: sessionTag,
+            });
+          }
         }
 
         // 若为 QQQ 或 SPY，将逐笔持久化写入 180 天本地缓存供多周期聚合
         if (HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(symbol)) {
+          const nowSec = Math.floor(Date.now() / 1000);
           appendCachedTicks(
             symbol,
             trades.map((t, idx) => ({
               id: t.id,
-              time: Math.floor((now - idx * 450) / 1000),
+              time: nowSec - idx,
               price: t.price,
               size: t.size,
               dir: t.side === "BUY" ? 1 : t.side === "SELL" ? 2 : 3,
@@ -634,7 +665,7 @@ export async function GET(
           session: sessionInfo.session,
         });
       } catch (e) {
-        console.warn(`Futu getTicker failed for ${symbol}:`, e);
+        console.warn("[Futu] getTrades error", e instanceof Error ? e.message : "");
       }
     }
   }
