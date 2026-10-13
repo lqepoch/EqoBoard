@@ -25,7 +25,7 @@ export default function TerminalShell({
       )}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <MarketStreamProvider>
-          <Terminal researchOrigin={researchOrigin} />
+          <Terminal researchOrigin={researchOrigin} localAccess={localAccess} />
         </MarketStreamProvider>
       </div>
     </div>

@@ -22,14 +22,28 @@ export default function Terminal({
   const setCommandOpen = useTerminal((s) => s.setCommandOpen);
   const addWidget = useTerminal((s) => s.addWidget);
 
-  const [viewMode, setViewMode] = useState<"pro" | "workspace">(() => {
+  const [viewMode, setViewModeState] = useState<"pro" | "workspace">(() => {
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search).get("view");
-      if (p === "pro") return "pro";
       if (p === "workspace") return "workspace";
+      if (p === "pro") return "pro";
+      const saved = localStorage.getItem("eqo_view_mode");
+      if (saved === "workspace" || saved === "pro") return saved;
+      if (["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+        return "pro";
+      }
     }
     return localAccess ? "pro" : "workspace";
   });
+
+  const setViewMode = (mode: "pro" | "workspace") => {
+    setViewModeState(mode);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("eqo_view_mode", mode);
+      } catch {}
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

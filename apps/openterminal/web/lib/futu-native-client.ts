@@ -248,7 +248,7 @@ class FutuNativeClient {
         this.subscribedSymbols.add(key);
       }
     } catch (e) {
-      console.warn(`Failed to sub ${sym}:`, e);
+      console.warn("Failed to subscribe symbol market data", e instanceof Error ? e.message : "");
     }
   }
 

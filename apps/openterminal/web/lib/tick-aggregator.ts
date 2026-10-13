@@ -57,7 +57,11 @@ function getCacheDir(): string {
     return defaultDir;
   } catch {}
 
-  return "/tmp/eqoboard-futu-cache";
+  const fallbackDir = path.resolve(process.cwd(), ".cache/futu");
+  try {
+    fs.mkdirSync(fallbackDir, { recursive: true });
+  } catch {}
+  return fallbackDir;
 }
 
 const RETENTION_180_DAYS_MS = 180 * 24 * 3600 * 1000;
@@ -66,8 +70,8 @@ const RETENTION_180_DAYS_MS = 180 * 24 * 3600 * 1000;
  * 读取本地缓存的 180 天全时段 1m K线
  */
 export function getCached1mBars(symbol: string): AggregatedBar[] {
-  const sym = symbol.toUpperCase();
-  if (!HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(sym)) return [];
+  const sym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
+  if (!sym) return [];
   try {
     const filePath = path.join(getCacheDir(), `${sym}_1m_180d.json`);
     if (fs.existsSync(filePath)) {
@@ -75,7 +79,7 @@ export function getCached1mBars(symbol: string): AggregatedBar[] {
       return JSON.parse(raw);
     }
   } catch (e) {
-    console.warn(`[Cache] Failed to read cached 1m bars for ${sym}:`, e);
+    console.warn("[Cache] Failed to read cached 1m bars", e instanceof Error ? e.message : "");
   }
   return [];
 }
@@ -84,13 +88,21 @@ export function getCached1mBars(symbol: string): AggregatedBar[] {
  * 写入本地 180 天全时段 1m K线
  */
 export function setCached1mBars(symbol: string, bars: AggregatedBar[]): void {
-  const sym = symbol.toUpperCase();
-  if (!HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(sym)) return;
+  const sym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
+  if (!sym || !Array.isArray(bars)) return;
   try {
+    const cleanBars: AggregatedBar[] = bars.slice(0, 100_000).map((b) => ({
+      time: Math.floor(Number(b.time) || 0),
+      open: Number(b.open) || 0,
+      high: Number(b.high) || 0,
+      low: Number(b.low) || 0,
+      close: Number(b.close) || 0,
+      volume: Math.floor(Number(b.volume) || 0),
+    }));
     const filePath = path.join(getCacheDir(), `${sym}_1m_180d.json`);
-    fs.writeFileSync(filePath, JSON.stringify(bars, null, 2), "utf-8");
+    fs.writeFileSync(filePath, JSON.stringify(cleanBars, null, 2), { encoding: "utf-8", mode: 0o600 });
   } catch (e) {
-    console.warn(`[Cache] Failed to write cached 1m bars for ${sym}:`, e);
+    console.warn("[Cache] Failed to write cached 1m bars", e instanceof Error ? e.message : "");
   }
 }
 
@@ -98,8 +110,8 @@ export function setCached1mBars(symbol: string, bars: AggregatedBar[]): void {
  * 兼容旧接口：读取本地缓存的 180 天日线历史走势 Bar
  */
 export function getCachedBars(symbol: string): AggregatedBar[] {
-  const sym = symbol.toUpperCase();
-  if (!HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(sym)) return [];
+  const sym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
+  if (!sym) return [];
   try {
     // 优先从 1m 缓存中动态聚合日线
     const m1 = getCached1mBars(sym);
@@ -113,7 +125,7 @@ export function getCachedBars(symbol: string): AggregatedBar[] {
       return JSON.parse(raw);
     }
   } catch (e) {
-    console.warn(`[Cache] Failed to read cached bars for ${sym}:`, e);
+    console.warn("[Cache] Failed to read cached bars", e instanceof Error ? e.message : "");
   }
   return [];
 }
@@ -122,13 +134,21 @@ export function getCachedBars(symbol: string): AggregatedBar[] {
  * 兼容旧接口：写入本地 180 天日线历史走势 Bar
  */
 export function setCachedBars(symbol: string, bars: AggregatedBar[]): void {
-  const sym = symbol.toUpperCase();
-  if (!HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(sym)) return;
+  const sym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
+  if (!sym || !Array.isArray(bars)) return;
   try {
+    const cleanBars: AggregatedBar[] = bars.slice(0, 100_000).map((b) => ({
+      time: Math.floor(Number(b.time) || 0),
+      open: Number(b.open) || 0,
+      high: Number(b.high) || 0,
+      low: Number(b.low) || 0,
+      close: Number(b.close) || 0,
+      volume: Math.floor(Number(b.volume) || 0),
+    }));
     const filePath = path.join(getCacheDir(), `${sym}_bars_180d.json`);
-    fs.writeFileSync(filePath, JSON.stringify(bars, null, 2), "utf-8");
+    fs.writeFileSync(filePath, JSON.stringify(cleanBars, null, 2), { encoding: "utf-8", mode: 0o600 });
   } catch (e) {
-    console.warn(`[Cache] Failed to write cached bars for ${sym}:`, e);
+    console.warn("[Cache] Failed to write cached bars", e instanceof Error ? e.message : "");
   }
 }
 
@@ -136,8 +156,8 @@ export function setCachedBars(symbol: string, bars: AggregatedBar[]): void {
  * 读取本地缓存的逐笔数据
  */
 export function getCachedTicks(symbol: string): Tick[] {
-  const sym = symbol.toUpperCase();
-  if (!HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(sym)) return [];
+  const sym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
+  if (!sym) return [];
   try {
     const filePath = path.join(getCacheDir(), `${sym}_ticks.json`);
     if (fs.existsSync(filePath)) {
@@ -145,7 +165,7 @@ export function getCachedTicks(symbol: string): Tick[] {
       return JSON.parse(raw);
     }
   } catch (e) {
-    console.warn(`[Cache] Failed to read cached ticks for ${sym}:`, e);
+    console.warn("[Cache] Failed to read cached ticks", e instanceof Error ? e.message : "");
   }
   return [];
 }
@@ -154,13 +174,23 @@ export function getCachedTicks(symbol: string): Tick[] {
  * 追加并持久化逐笔数据（自动修剪超过 180 天的历史）
  */
 export function appendCachedTicks(symbol: string, newTicks: Tick[]): void {
-  const sym = symbol.toUpperCase();
-  if (!HISTORICAL_QUOTA_ALLOWED_SYMBOLS.has(sym) || newTicks.length === 0) return;
+  const sym = symbol === "QQQ" ? "QQQ" : symbol === "SPY" ? "SPY" : null;
+  if (!sym || !Array.isArray(newTicks) || newTicks.length === 0) return;
   try {
     const existing = getCachedTicks(sym);
     const map = new Map<string, Tick>();
-    for (const t of existing) map.set(t.id, t);
-    for (const t of newTicks) map.set(t.id, t);
+    for (const t of existing) map.set(String(t.id), t);
+    for (const t of newTicks) {
+      const cleanTick: Tick = {
+        id: String(t.id).replace(/[^a-zA-Z0-9_-]/g, ""),
+        time: Math.floor(Number(t.time) || 0),
+        price: Number(t.price) || 0,
+        size: Math.floor(Number(t.size) || 0),
+        dir: t.dir === 1 ? 1 : t.dir === 2 ? 2 : 3,
+        tag: t.tag === "OVERNIGHT" ? "OVERNIGHT" : t.tag === "PRE" ? "PRE" : t.tag === "AFTER" ? "AFTER" : "REGULAR",
+      };
+      map.set(cleanTick.id, cleanTick);
+    }
 
     const cutoffSec = Math.floor((Date.now() - RETENTION_180_DAYS_MS) / 1000);
     const combined = Array.from(map.values())
@@ -168,9 +198,9 @@ export function appendCachedTicks(symbol: string, newTicks: Tick[]): void {
       .sort((a, b) => a.time - b.time);
 
     const filePath = path.join(getCacheDir(), `${sym}_ticks.json`);
-    fs.writeFileSync(filePath, JSON.stringify(combined), "utf-8");
+    fs.writeFileSync(filePath, JSON.stringify(combined), { encoding: "utf-8", mode: 0o600 });
   } catch (e) {
-    console.warn(`[Cache] Failed to append cached ticks for ${sym}:`, e);
+    console.warn("[Cache] Failed to append cached ticks", e instanceof Error ? e.message : "");
   }
 }
 
