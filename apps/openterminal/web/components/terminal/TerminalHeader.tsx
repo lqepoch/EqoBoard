@@ -3,7 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { useTradingStore } from "../../store/trading-terminal";
 
-export default function TerminalHeader() {
+export default function TerminalHeader({
+  onSwitchToWorkspace,
+}: {
+  onSwitchToWorkspace?: () => void;
+} = {}) {
   const {
     activeSymbol,
     setActiveSymbol,
@@ -56,12 +60,17 @@ export default function TerminalHeader() {
             </div>
           </div>
 
-          {/* Workspace Tabs: [TRADE] [WATCHLIST] [OPTIONS] [ANALYTICS] */}
+          {/* Workspace Tabs: [TRADE] [WATCHLIST] [OPTIONS] [ANALYTICS] [WORKSPACE] */}
           <nav className="flex items-center gap-1 ml-2">
             {(["TRADE", "WATCHLIST", "OPTIONS", "ANALYTICS"] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  setActiveTab(tab);
+                  if (tab === "OPTIONS" || tab === "ANALYTICS") {
+                    onSwitchToWorkspace?.();
+                  }
+                }}
                 className={`px-2.5 py-1 text-[10px] font-mono tracking-wider font-semibold rounded transition-colors ${
                   activeTab === tab
                     ? "bg-[#131b2a] text-cyan-300 border border-cyan-700/60 shadow-xs"
@@ -71,6 +80,15 @@ export default function TerminalHeader() {
                 [{tab}]
               </button>
             ))}
+            {onSwitchToWorkspace && (
+              <button
+                onClick={onSwitchToWorkspace}
+                className="px-2 py-1 text-[10px] font-mono tracking-wider font-semibold text-amber-400/80 hover:text-amber-300 hover:bg-[#10141e] rounded transition-colors"
+                title="Switch to Modular Workspace"
+              >
+                [WORKSPACE ⤢]
+              </button>
+            )}
           </nav>
         </div>
 

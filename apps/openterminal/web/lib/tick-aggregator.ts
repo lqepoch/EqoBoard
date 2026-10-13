@@ -29,8 +29,6 @@ function getCacheDir(): string {
   const candidates = [
     path.resolve(process.cwd(), "data/cache/futu"),
     path.resolve(process.cwd(), "apps/data/cache/futu"),
-    path.resolve("/Volumes/ExtSSD/GitHUB/EqoBoard/data/cache/futu"),
-    path.resolve("/Volumes/ExtSSD/GitHUB/EqoBoard/apps/data/cache/futu"),
     path.resolve(process.cwd(), "../data/cache/futu"),
     path.resolve(process.cwd(), "../../data/cache/futu"),
   ];

@@ -6,13 +6,9 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 let protoRoot: any = null;
 try {
-  protoRoot = require("/Volumes/ExtSSD/GitHUB/EqoBoard/apps/openterminal/node_modules/futu-api/proto.js");
-} catch {
-  try {
-    protoRoot = require("futu-api/proto.js");
-  } catch (e) {
-    console.error("Failed to load futu-api/proto.js", e);
-  }
+  protoRoot = require("futu-api/proto.js");
+} catch (e) {
+  console.error("Failed to load futu-api/proto.js", e);
 }
 
 export type FutuQuoteItem = {

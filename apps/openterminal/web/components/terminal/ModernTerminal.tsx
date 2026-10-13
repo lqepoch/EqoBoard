@@ -11,8 +11,10 @@ import { useTradingStore } from "../../store/trading-terminal";
 
 export default function ModernTerminal({
   researchOrigin,
+  onSwitchToWorkspace,
 }: {
   researchOrigin?: string | null;
+  onSwitchToWorkspace?: () => void;
 }) {
   const { fetchMarketData, fetchKlineData, fetchAccountData } = useTradingStore();
   const [selectedBookPrice, setSelectedBookPrice] = useState<number | null>(null);
@@ -27,7 +29,7 @@ export default function ModernTerminal({
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-[#07090e] text-slate-100 font-sans antialiased">
       {/* 顶部企业级 Header: 两级导航与标的/账户 Overview */}
-      <TerminalHeader />
+      <TerminalHeader onSwitchToWorkspace={onSwitchToWorkspace} />
 
       {/* 主体三栏响应式网格 (Watchlist | Main Chart & Studies | Order Book & Execution) */}
       <div className="flex-1 flex overflow-hidden min-h-0">
