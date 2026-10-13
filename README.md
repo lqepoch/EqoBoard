@@ -128,3 +128,5 @@ npm run build -w web
 ```
 
 安全、BrokerAdapter、行情与演进说明见 `docs/` 与 `.agents/skills/`。Owner 自合并授权与自动合并 App 的边界、检查要求和当前验收状态见 [PR 合并与自动合并治理](docs/AUTOMERGE.md)。
+
+本机 Futu、免登录与 Alpaca Paper 账户配置的范围及未完成执行边界见 [本机接入说明](docs/FUTU_LOCAL_MARKET_DATA.md)。

@@ -12,3 +12,5 @@ description: 按统一订单契约对接 Alpaca、IBKR、Schwab 的独立 Rust �
 标准 option multiplier 的来源与 adjusted symbol 规则见 `docs/ORDER_RISK.md` 和 `references/request-contract.md`。符号解析不是账户/合约主数据；真实 Paper 适配开放前必须确认 contract multiplier、deliverable、series tick 与账户能力。
 必须新增不涉及券商真实 Key 的 mock HTTP 测试，确保拒绝下单/未知状态完整覆盖。
 跨模块 API 修改需同步 references/request-contract.md。
+
+本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。

@@ -15,3 +15,5 @@
 11. 用户已明确授权本仓库 owner 自合并 PR；该持续授权适用于用户授权的本仓库开发任务及其 PR 范围，不逐任务或逐 PR 重复询问相同合并权限，也不覆盖未授权任务或其它仓库。owner 合并前必须确认 base 为最新远程 `main`、head SHA 已冻结、required-check 并集与 CodeQL 均在该 head 上成功、无冲突或 `CHANGES_REQUESTED`/未解决阻断 review/thread，并完成绑定最终 head 的 diff 自审且无阻断问题；作者可以自行完成审查，不强制等待非作者，自审记录必须标为 `SELF_REVIEW`，不得冒称独立复核。owner 可使用仓库已有 Owner/Admin/Team 权限例外处理唯一剩余的形式审批门槛；这不是独立审查，也不得伪造 GitHub `APPROVED`。合并前以期望 head SHA 写入，合并后验证远程 `main`。核验后仅清理本任务干净的 worktree/branch；先检查 dirty 状态及私有 `.env`/`.state`，不删除其它任务的 worktree 或分支。专用 App 仍执行其自身独立审批策略。禁止为此降低组织 ruleset、绕过失败或未知检查、扩大其它仓库权限，或启用 Paper/Live 交易。
 
 当前职责边界：OpenTerminal/Next BFF 的行情与券商路径仅用于读取和离线预览；Rust Gateway 是过渡期市场数据/兼容服务，effective execution 固定为 `disabled`。九仓职责汇总仅是 [Draft PR #20 的治理候选](https://github.com/lqepoch/platform-ops/blob/codex/chg-2026-001-workspace-layout/docs/NINE-REPOSITORY-ARCHITECTURE.md)，未合入前不取代本仓源码、锁定依赖和本地文档作为当前行为依据。
+
+本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。
