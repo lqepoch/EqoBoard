@@ -193,6 +193,7 @@ test("renames route both the old and new path names", () => {
     assert.deepEqual(classify(), { source: false, runtime: true, reason: "related-paths" });
   }, [SAFE_WIDGET, "apps/gateway/openbb/apps.json"]);
   withRepo(({ root, git, classify }) => {
+    mkdirSync(join(root, "apps/gateway/openbb"), { recursive: true });
     git("mv", "README.md", "apps/gateway/openbb/apps.json");
     commit(git, "move file into Gateway manifest path");
     assert.deepEqual(classify(), { source: false, runtime: true, reason: "related-paths" });
