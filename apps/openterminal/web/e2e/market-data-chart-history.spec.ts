@@ -927,7 +927,7 @@ test("a delayed older page cannot overwrite a newer 1D refresh and can be retrie
   await configureMocks(request, {
     marketBars: {
       enabled: true,
-      status: 200,
+      status: 206,
       response: refreshedIntraday,
       responsesByCursor: { [CURSOR]: oldestPage, [OLDEST_CURSOR]: oldestPage },
       delayMs: 0,
