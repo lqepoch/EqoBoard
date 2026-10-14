@@ -218,6 +218,10 @@ export function mdpMarketDataSigner(mode: MdpMarketDataRuntimeMode): MdpMarketDa
   return { secret, issuer: "openterminal-research", kid: "mdp-research" };
 }
 
+export function isMdpTerminalRuntimeConfigured(): boolean {
+  return mdpMarketDataSigner("terminal") !== null;
+}
+
 /** Return only this hostname's dedicated, private prediction-read key. */
 export function quantResearchSigner(mode: QuantResearchRuntimeMode): QuantResearchSigner | null {
   const nextAuthSecret = process.env.NEXTAUTH_SECRET;
@@ -291,7 +295,7 @@ export function engineOfflinePreviewSigner(): EngineOfflinePreviewSigner | null 
 export function isCurrentRuntimeReady(): boolean {
   return process.env.EQO_BFF_MODE === "research"
     ? isResearchAuthRuntimeConfigured()
-    : isAuthRuntimeConfigured();
+    : isAuthRuntimeConfigured() || isMdpTerminalRuntimeConfigured();
 }
 
 function researchCookies(): NonNullable<NextAuthOptions["cookies"]> | undefined {
