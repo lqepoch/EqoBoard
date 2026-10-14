@@ -163,13 +163,13 @@ function cross2016DailyResponse(assetClass: AssetClass) {
   const yahooSessionId = "fixture-yahoo-session-2015-12-31";
   const alpacaSessionId = "fixture-alpaca-session-2016-01-04";
   const yahooRow = {
-    ...bar("2015-12-31T00:00:00.000Z", "1d", "501.123456", assetClass),
+    ...bar("2015-12-31T05:00:00.000Z", "1d", "501.123456", assetClass),
     provenance_id: yahooProvenanceId,
     session_instance_id: yahooSessionId,
     validation_state: "provisional" as const,
   };
   const alpacaRow = {
-    ...bar("2016-01-04T00:00:00.000Z", "1d", "502.234567", assetClass),
+    ...bar("2016-01-04T05:00:00.000Z", "1d", "502.234567", assetClass),
     provenance_id: alpacaProvenanceId,
     session_instance_id: alpacaSessionId,
     validation_state: "provisional" as const,
@@ -448,8 +448,8 @@ test("MAX preserves mixed Yahoo and Alpaca daily provenance across the 2016 boun
     ["alpaca", "Alpaca synthetic fixture; unverified"],
   ]);
   const expectedTimes = [
-    Date.parse("2015-12-31T00:00:00.000Z") / 1_000,
-    Date.parse("2016-01-04T00:00:00.000Z") / 1_000,
+    Date.parse("2015-12-31T05:00:00.000Z") / 1_000,
+    Date.parse("2016-01-04T05:00:00.000Z") / 1_000,
   ];
   expect(payload.bars?.map((row) => row.time).filter((time): time is number => typeof time === "number"))
     .toEqual([expectedTimes[0], expectedTimes[0], expectedTimes[1]]);
@@ -463,12 +463,52 @@ test("MAX preserves mixed Yahoo and Alpaca daily provenance across the 2016 boun
   await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
   await widget.getByText("Coverage, gaps and provenance detail").click();
   const provenanceDetails = widget.locator("details pre");
-  await expect(provenanceDetails).toContainText("2015-12-31T00:00:00.000Z");
-  await expect(provenanceDetails).toContainText("2016-01-04T00:00:00.000Z");
-  await expect(provenanceDetails).toContainText("yfinance");
-  await expect(provenanceDetails).toContainText("Yahoo Finance synthetic fixture; unverified");
-  await expect(provenanceDetails).toContainText("alpaca");
-  await expect(provenanceDetails).toContainText("Alpaca synthetic fixture; unverified");
+  const provenanceText = await provenanceDetails.textContent();
+  if (!provenanceText) throw new Error("Chart provenance details are empty");
+  const details = JSON.parse(provenanceText) as {
+    segments?: Array<{
+      start_utc: string;
+      end_exclusive_utc: string;
+      provenance_id: string;
+      session_instance_id: string;
+    }>;
+    source_provenance?: Array<{ provenance_id: string; provider: string; source: string }>;
+  };
+  expect(details.segments).toHaveLength(2);
+  const expectedSegments = [
+    {
+      provenanceId: "fixture-yfinance-pre-2016",
+      sessionInstanceId: "fixture-yahoo-session-2015-12-31",
+      start: "2015-12-31T05:00:00.000Z",
+      end: "2016-01-01T05:00:00.000Z",
+    },
+    {
+      provenanceId: "fixture-alpaca-post-2016",
+      sessionInstanceId: "fixture-alpaca-session-2016-01-04",
+      start: "2016-01-04T05:00:00.000Z",
+      end: "2016-01-05T05:00:00.000Z",
+    },
+  ];
+  for (const expected of expectedSegments) {
+    const segment = details.segments?.find((item) => item.provenance_id === expected.provenanceId);
+    if (!segment) throw new Error(`Chart provenance segment is missing: ${expected.provenanceId}`);
+    expect(segment.session_instance_id).toBe(expected.sessionInstanceId);
+    expect(Date.parse(segment.start_utc)).toBe(Date.parse(expected.start));
+    expect(Date.parse(segment.end_exclusive_utc)).toBe(Date.parse(expected.end));
+  }
+  expect(details.source_provenance).toHaveLength(2);
+  expect(details.source_provenance).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      provenance_id: "fixture-yfinance-pre-2016",
+      provider: "yfinance",
+      source: "Yahoo Finance synthetic fixture; unverified",
+    }),
+    expect.objectContaining({
+      provenance_id: "fixture-alpaca-post-2016",
+      provider: "alpaca",
+      source: "Alpaca synthetic fixture; unverified",
+    }),
+  ]));
 });
 
 test("MAX explicit 15m keeps the request visible when the BFF returns a daily downgrade", async ({ page, request }) => {
