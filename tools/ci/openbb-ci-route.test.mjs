@@ -241,6 +241,12 @@ test("manual and weekly events always select both heavy lanes", () => {
 });
 
 test("valid status codes classify every old and new path", () => {
+  assert.deepEqual(classifyNameStatus(Buffer.from("R090\0docs/old.md\0docs/new.md\0", "utf8")), {
+    source: false, runtime: false, reason: "unrelated-paths",
+  });
+  assert.deepEqual(classifyNameStatus(Buffer.from("C075\0README.md\0apps/gateway/openbb/apps.json\0", "utf8")), {
+    source: false, runtime: true, reason: "related-paths",
+  });
   assert.deepEqual(classifyNameStatus(Buffer.from("R100\0README.md\0apps/gateway/openbb/apps.json\0", "utf8")), {
     source: false, runtime: true, reason: "related-paths",
   });

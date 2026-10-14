@@ -155,7 +155,7 @@ export function parseNameStatus(output) {
   const entries = [];
   for (let index = 0; index < fields.length;) {
     const status = decodeUtf8(fields[index++]);
-    if (!status || !/^(?:[ADMT]|[RC](?:100|[1-9][0-9]?))$/.test(status)) return null;
+    if (!status || !/^(?:[ADMT]|[RC](?:100|0?[0-9]{1,2}))$/.test(status)) return null;
     const pathCount = status.startsWith("R") || status.startsWith("C") ? 2 : 1;
     const rawPaths = fields.slice(index, index + pathCount);
     if (rawPaths.length !== pathCount || rawPaths.some((path) => path.length === 0)) return null;
