@@ -18,3 +18,6 @@
 当前职责边界：OpenTerminal/Next BFF 的行情与券商路径仅用于读取和离线预览；Rust Gateway 是过渡期市场数据/兼容服务，effective execution 固定为 `disabled`。九仓职责汇总仅是 [Draft PR #20 的治理候选](https://github.com/lqepoch/platform-ops/blob/codex/chg-2026-001-workspace-layout/docs/NINE-REPOSITORY-ARCHITECTURE.md)，未合入前不取代本仓源码、锁定依赖和本地文档作为当前行为依据。
 
 本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。
+
+12. 股票/ETF统一历史图表通过同源 BFF 与 Core Bars V1；`EQO_MDP_MARKET_BARS_ENABLED` 默认关闭，可回滚到旧历史路径。逐段保留 provider/feed/缺口和复权语义，source unknown 不可由路由意图替代。Futu 历史复用唯一 loopback OpenD 连接，无新订单或期权权限。
+13. 公共仓库编译、build 和最终测试由精确 PR HEAD 的 GitHub Actions 执行；本地不运行 build/Next dev，避免启动 Docker。受控只读 Provider 验收与 Actions 合成验收分别记录。
