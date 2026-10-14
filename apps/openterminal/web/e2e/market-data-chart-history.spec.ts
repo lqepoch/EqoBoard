@@ -10,14 +10,14 @@ import {
 
 const SYMBOL = "QQQ";
 const CURSOR = "older-page-cursor-e2e";
+const OLDEST_CURSOR = "oldest-page-cursor-e2e";
 const PROVENANCE_ID = "fixture-provenance-v1";
 
 type Resolution = "1m" | "5m" | "15m" | "1h" | "1d";
 type AssetClass = "stock" | "etf";
 
-function isoMinutesAgo(minutes: number): string {
-  const now = Date.now();
-  const rounded = Math.floor((now - minutes * 60_000) / 60_000) * 60_000;
+function isoMinutesAgo(minutes: number, anchorMs = Date.now()): string {
+  const rounded = Math.floor((anchorMs - minutes * 60_000) / 60_000) * 60_000;
   return new Date(rounded).toISOString();
 }
 
@@ -26,6 +26,13 @@ function visibleRangeSpan(value: string | null): number {
   const [from, to] = value.split(":").map(Number);
   if (!Number.isFinite(from) || !Number.isFinite(to)) throw new Error("Chart visible logical range is invalid");
   return to - from;
+}
+
+function visibleRange(value: string | null): { from: number; to: number } {
+  if (!value) throw new Error("Chart did not publish its visible logical range");
+  const [from, to] = value.split(":").map(Number);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) throw new Error("Chart visible logical range is invalid");
+  return { from, to };
 }
 
 function bar(startUtc: string, resolution: Resolution, close: string, assetClass: AssetClass) {
@@ -57,18 +64,24 @@ function bar(startUtc: string, resolution: Resolution, close: string, assetClass
 function marketBarsResponse({
   requestedResolution,
   effectiveResolution = requestedResolution,
-  assetClass = "etf",
+  assetClass = "stock",
+  feed = "fixture-feed",
+  anchorMs = Date.now(),
   startsMinutesAgo,
   cursor = null,
 }: {
   requestedResolution: Resolution;
   effectiveResolution?: Resolution;
   assetClass?: AssetClass;
+  feed?: string;
+  anchorMs?: number;
   startsMinutesAgo: Array<{ minutes: number; close: string }>;
   cursor?: string | null;
 }) {
   const oldestSafeMinute = effectiveResolution === "1d" ? 3_000 : effectiveResolution === "1h" ? 120 : effectiveResolution === "15m" ? 30 : effectiveResolution === "5m" ? 10 : 2;
-  const rows = startsMinutesAgo.map(({ minutes, close }) => bar(isoMinutesAgo(Math.max(minutes, oldestSafeMinute)), effectiveResolution, close, assetClass));
+  const rows = startsMinutesAgo.map(({ minutes, close }) => bar(
+    isoMinutesAgo(Math.max(minutes, oldestSafeMinute), anchorMs), effectiveResolution, close, assetClass,
+  ));
   const first = rows[0];
   const last = rows[rows.length - 1];
   const fetchedAt = new Date().toISOString();
@@ -96,13 +109,13 @@ function marketBarsResponse({
     source_provenance: [{
       provenance_id: PROVENANCE_ID,
       provider: "fixture-provider",
-      feed: "fixture-feed",
+      feed,
       source: "synthetic-chart-e2e",
       entitlement_status: "unknown",
       numeric_encoding: "decimal_token",
     }],
     provider: "fixture-provider",
-    feed: "fixture-feed",
+    feed,
     entitlement_status: "unknown",
     as_of: last.bar_start_utc,
     fetched_at: fetchedAt,
@@ -137,12 +150,14 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
       enabled: true,
       response: marketBarsResponse({
         requestedResolution: "1m",
+        assetClass: "etf",
         startsMinutesAgo: [{ minutes: 5, close: "501.00" }, { minutes: 3, close: "502.00" }],
         cursor: CURSOR,
       }),
       responsesByCursor: {
         [CURSOR]: marketBarsResponse({
           requestedResolution: "1m",
+          assetClass: "etf",
           startsMinutesAgo: [
             { minutes: 20, close: "499.00" },
             { minutes: 5, close: "501.00" },
@@ -174,9 +189,9 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
   const canvas = widget.getByTestId("chart-widget-canvas");
   const canvasBounds = await canvas.boundingBox();
   if (!canvasBounds) throw new Error("Chart canvas is not visible");
-  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.65, canvasBounds.y + canvasBounds.height * 0.55);
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.2, canvasBounds.y + canvasBounds.height * 0.55);
   await page.mouse.down();
-  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.9, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.65, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
   await page.mouse.up();
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR)).toBe(true);
   const pageCalls = (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
@@ -193,7 +208,7 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
   await expect(widget.getByTestId("chart-bar-count")).toHaveText("3 bars");
 
   await configureMocks(request, {
-    marketBars: { enabled: true, response: marketBarsResponse({ requestedResolution: "1m", startsMinutesAgo: [{ minutes: 5, close: "501.00" }] }) },
+    marketBars: { enabled: true, response: marketBarsResponse({ requestedResolution: "1m", assetClass: "etf", startsMinutesAgo: [{ minutes: 5, close: "501.00" }] }) },
   });
   await widget.getByLabel("Chart provider mode").selectOption("alpaca_only");
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { provider_mode?: string; resolution?: string } }) => call.query.provider_mode === "alpaca_only" && call.query.resolution === "1m")).toBe(true);
@@ -207,6 +222,8 @@ test("all chart ranges request the documented resolution through the BFF", async
   await page.goto(WEB_ORIGIN);
   const widget = page.getByTestId("chart-widget");
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
+  const initial = (await metrics(request)).mdpMarketBars.find((call: { query: { range?: string } }) => call.query.range === "6M");
+  expect(initial?.query).toMatchObject({ range: "6M", resolution: "1d", provider_mode: "auto" });
   const mappings: Array<[string, Resolution]> = [
     ["1D", "1m"], ["5D", "5m"], ["1M", "1h"], ["6M", "1d"],
     ["YTD", "1d"], ["1Y", "1d"], ["5Y", "1d"], ["MAX", "1d"],
@@ -230,10 +247,202 @@ test("all chart ranges request the documented resolution through the BFF", async
   }
 });
 
+test("MAX pans to a real daily cursor page and preserves unknown feed and exact decimals", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const anchorMs = Date.now();
+  const firstPage = marketBarsResponse({
+    requestedResolution: "1d",
+    assetClass: "stock",
+    feed: "unknown",
+    anchorMs,
+    startsMinutesAgo: [
+      { minutes: 9_000, close: "501.123456789012345678" },
+      { minutes: 6_000, close: "502.123456789012345678" },
+    ],
+    cursor: CURSOR,
+  });
+  const olderPage = marketBarsResponse({
+    requestedResolution: "1d",
+    assetClass: "stock",
+    feed: "unknown",
+    anchorMs,
+    startsMinutesAgo: [
+      { minutes: 12_000, close: "499.00" },
+      { minutes: 9_000, close: "498.00" },
+      { minutes: 6_000, close: "497.00" },
+    ],
+  });
+  await configureMocks(request, {
+    marketBars: { enabled: true, response: firstPage, responsesByCursor: { [CURSOR]: olderPage } },
+  });
+  await page.goto(WEB_ORIGIN);
+
+  const widget = page.getByTestId("chart-widget");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
+  await widget.getByRole("button", { name: "MAX", exact: true }).click();
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Resolution 1d → 1d");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Feed unknown");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Coverage partial");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Gaps 1");
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
+  await expect(widget.getByText("502.123456789012345678", { exact: true })).toBeVisible();
+  await widget.getByText("Coverage, gaps and provenance detail").click();
+  await expect(widget.locator("details pre")).toContainText("source_gap");
+
+  const initialCall = (await metrics(request)).mdpMarketBars.find((call: { query: { range?: string } }) => call.query.range === "MAX");
+  if (!initialCall) throw new Error("MAX history request was not recorded");
+  expect(initialCall.query).toMatchObject({ range: "MAX", resolution: "1d" });
+  expect(initialCall.query.cursor).toBeUndefined();
+  expect(initialCall.query.start).toBe("1970-01-01T00:00:00.000Z");
+  expect(initialCall.query.end).toMatch(/^\d{4}-\d\d-\d\dT.*Z$/);
+
+  const canvas = widget.getByTestId("chart-widget-canvas");
+  const canvasBounds = await canvas.boundingBox();
+  if (!canvasBounds) throw new Error("Chart canvas is not visible");
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.2, canvasBounds.y + canvasBounds.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.65, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
+  await page.mouse.up();
+
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { range?: string; cursor?: string } }) =>
+    call.query.range === "MAX" && call.query.cursor === CURSOR)).toBe(true);
+  const calls = (await metrics(request)).mdpMarketBars.filter((call: { query: { range?: string } }) => call.query.range === "MAX");
+  const cursorIndex = calls.findIndex((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR);
+  const cursorCall = calls[cursorIndex];
+  if (cursorIndex <= 0 || !cursorCall) throw new Error("MAX continuation request was not recorded after its first page");
+  expect(cursorCall.query).toMatchObject({
+    cursor: CURSOR,
+    start: initialCall.query.start,
+    end: initialCall.query.end,
+  });
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("3 bars");
+  await expect(widget.getByText("502.123456789012345678", { exact: true })).toBeVisible();
+});
+
+test("a delayed older page cannot overwrite a newer 1D refresh and can be retried", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const anchorMs = Date.now();
+  const initialDaily = marketBarsResponse({ requestedResolution: "1d", startsMinutesAgo: [{ minutes: 6_000, close: "500.00" }] });
+  await configureMocks(request, { marketBars: { enabled: true, response: initialDaily } });
+  await page.goto(WEB_ORIGIN);
+  const widget = page.getByTestId("chart-widget");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
+
+  const initialIntraday = marketBarsResponse({
+    requestedResolution: "1m",
+    anchorMs,
+    startsMinutesAgo: [{ minutes: 5, close: "501.00" }, { minutes: 3, close: "502.00" }],
+    cursor: CURSOR,
+  });
+  const delayedOlderPage = marketBarsResponse({
+    requestedResolution: "1m",
+    anchorMs,
+    startsMinutesAgo: [
+      { minutes: 20, close: "499.00" },
+      { minutes: 5, close: "498.00" },
+      { minutes: 3, close: "497.00" },
+    ],
+    cursor: OLDEST_CURSOR,
+  });
+  const oldestPage = marketBarsResponse({
+    requestedResolution: "1m",
+    anchorMs,
+    startsMinutesAgo: [{ minutes: 30, close: "490.00" }, { minutes: 20, close: "491.00" }],
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: initialIntraday } });
+  await widget.getByRole("button", { name: "1D", exact: true }).click();
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Resolution 1m → 1m");
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
+
+  const raceStart = (await metrics(request)).mdpMarketBars.length;
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      response: initialIntraday,
+      responsesByCursor: { [CURSOR]: delayedOlderPage },
+      delayMs: 3_000,
+    },
+  });
+  const canvas = widget.getByTestId("chart-widget-canvas");
+  const canvasBounds = await canvas.boundingBox();
+  if (!canvasBounds) throw new Error("Chart canvas is not visible");
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.2, canvasBounds.y + canvasBounds.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.65, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { resolution?: string; cursor?: string } }) =>
+    call.query.resolution === "1m" && call.query.cursor === CURSOR)).toBe(true);
+  await page.waitForTimeout(500);
+
+  const refreshedIntraday = marketBarsResponse({
+    requestedResolution: "1m",
+    anchorMs,
+    startsMinutesAgo: [{ minutes: 5, close: "511.00" }, { minutes: 3, close: "512.00" }],
+    cursor: CURSOR,
+  });
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      response: refreshedIntraday,
+      responsesByCursor: { [CURSOR]: delayedOlderPage },
+      delayMs: 0,
+    },
+  });
+  const backgroundPage = await page.context().newPage();
+  await backgroundPage.goto("about:blank");
+  await backgroundPage.bringToFront();
+  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("hidden");
+  await page.bringToFront();
+  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
+  await expect.poll(async () => {
+    const calls = (await metrics(request)).mdpMarketBars.slice(raceStart);
+    const cursorIndex = calls.findIndex((call: { query: { resolution?: string; cursor?: string } }) =>
+      call.query.resolution === "1m" && call.query.cursor === CURSOR);
+    const refreshIndex = calls.findIndex((call: { query: { resolution?: string; cursor?: string } }) =>
+      call.query.resolution === "1m" && !call.query.cursor);
+    return cursorIndex >= 0 && refreshIndex > cursorIndex;
+  }).toBe(true);
+  await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
+
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("3 bars", { timeout: 5_000 });
+  await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
+
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      status: 503,
+      response: refreshedIntraday,
+      responsesByCursor: { [OLDEST_CURSOR]: oldestPage },
+      delayMs: 0,
+    },
+  });
+  const oldestCallCount = (await metrics(request)).mdpMarketBars.filter((call: { query: { cursor?: string } }) => call.query.cursor === OLDEST_CURSOR).length;
+  await widget.getByTestId("chart-load-older").click();
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.filter((call: { query: { cursor?: string } }) => call.query.cursor === OLDEST_CURSOR).length)
+    .toBeGreaterThan(oldestCallCount);
+  await expect(widget.getByTestId("chart-history-error")).toBeVisible();
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("3 bars");
+  await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
+
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      status: 200,
+      response: refreshedIntraday,
+      responsesByCursor: { [OLDEST_CURSOR]: oldestPage },
+      delayMs: 0,
+    },
+  });
+  await widget.getByTestId("chart-load-older").click();
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("4 bars");
+  await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
+});
+
 test("MainChartPanel shares the provider history client and does not request Futu kline bars", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const anchorMs = Date.now();
   await configureMocks(request, {
-    marketBars: { enabled: true, response: marketBarsResponse({ requestedResolution: "1m", assetClass: "etf", startsMinutesAgo: [{ minutes: 5, close: "501.00" }, { minutes: 3, close: "502.00" }] }) },
+    marketBars: { enabled: true, response: marketBarsResponse({ requestedResolution: "1m", assetClass: "etf", anchorMs, startsMinutesAgo: [{ minutes: 5, close: "501.00" }, { minutes: 3, close: "502.00" }] }) },
   });
   await page.goto(WEB_ORIGIN);
   await page.getByRole("button", { name: /pro trading/i }).click();
@@ -244,6 +453,7 @@ test("MainChartPanel shares the provider history client and does not request Fut
   await expect(chart.getByTestId("main-chart-history-status")).toContainText("2 bars");
   const canvas = chart.getByTestId("main-chart-canvas");
   await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
+  const initialVisibleRange = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
   const initialViewportSpan = visibleRangeSpan(await canvas.getAttribute("data-visible-logical-range"));
   const call = (await metrics(request)).mdpMarketBars.at(-1);
   expect(call).toMatchObject({
@@ -258,6 +468,7 @@ test("MainChartPanel shares the provider history client and does not request Fut
       response: marketBarsResponse({
         requestedResolution: "1m",
         assetClass: "etf",
+        anchorMs,
         startsMinutesAgo: [
           { minutes: 12, close: "499.00" },
           { minutes: 10, close: "500.00" },
@@ -270,8 +481,11 @@ test("MainChartPanel shares the provider history client and does not request Fut
   await chart.getByLabel("Main chart provider mode").selectOption("futu_only");
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((entry: { query: { provider_mode?: string } }) => entry.query.provider_mode === "futu_only")).toBe(true);
   await expect(chart.getByTestId("main-chart-history-status")).toContainText("4 bars");
+  const switchedVisibleRange = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
   const switchedViewportSpan = visibleRangeSpan(await canvas.getAttribute("data-visible-logical-range"));
   expect(switchedViewportSpan).toBeCloseTo(initialViewportSpan, 2);
+  expect(switchedVisibleRange.from).toBeCloseTo(initialVisibleRange.from + 2, 1);
+  expect(switchedVisibleRange.to).toBeCloseTo(initialVisibleRange.to + 2, 1);
   const legacyKlineRequests = await page.evaluate(() => performance.getEntriesByType("resource")
     .filter((entry) => entry.name.includes("/api/futu/kline")).length);
   expect(legacyKlineRequests).toBe(0);
