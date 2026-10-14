@@ -1,7 +1,14 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "ci_workflow_file": ".github/workflows/ci.yml",
   "ci_workflow_name": "EqoBoard CI",
+  "additional_workflows": [
+    {
+      "key": "openbb",
+      "workflow_file": ".github/workflows/openbb.yml",
+      "workflow_name": "OpenBB Optional CI"
+    }
+  ],
   "required_checks": [
     {
       "context": "Rust data / gateway / execution",
@@ -17,6 +24,12 @@
       "context": "OpenTerminal / AG Grid / Next.js",
       "app_slug": "github-actions",
       "bind_to_workflow_run": true
+    },
+    {
+      "context": "OpenBB optional validation gate",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "openbb"
     }
   ],
   "guard_checks": [
@@ -39,6 +52,29 @@
     {
       "context": "Analyze (javascript-typescript)",
       "app_slug": "github-actions"
+    },
+    {
+      "context": "OpenBB change routing",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "openbb",
+      "must_exist": true
+    },
+    {
+      "context": "OpenBB source supply chain",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "openbb",
+      "allow_skipped": true,
+      "must_exist": true
+    },
+    {
+      "context": "OpenBB native runtime E2E",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "openbb",
+      "allow_skipped": true,
+      "must_exist": true
     }
   ]
 }

@@ -285,11 +285,20 @@ function rulesetRequiredChecks(rules) {
 
 function normalizeCheckDeclaration(entry, source, required) {
   if (!entry || typeof entry.context !== 'string' || entry.context.length === 0) return null;
+  const workflowKey = entry.workflowKey || entry.workflow_key || 'ci';
+  const allowSkipped = entry.allowSkipped === true || entry.allow_skipped === true;
+  const mustExist = entry.mustExist === true || entry.must_exist === true;
+  if (typeof workflowKey !== 'string' || workflowKey.length === 0) return null;
+  if (allowSkipped && (source !== 'guard' || required)) return null;
+  if (mustExist && source !== 'guard') return null;
   return {
     context: entry.context,
     appSlug: entry.appSlug || entry.app_slug || '',
     integrationId: entry.integrationId ?? entry.integration_id ?? null,
     bindToWorkflowRun: entry.bindToWorkflowRun === true || entry.bind_to_workflow_run === true,
+    workflowKey,
+    allowSkipped,
+    mustExist,
     source,
     required,
   };
@@ -305,7 +314,9 @@ function mergeRequiredChecks(manifestChecks, rules, guardChecks = []) {
   const checks = new Map();
   for (const entry of manifestChecks) {
     const declaration = normalizeCheckDeclaration(entry, 'manifest', true);
-    if (!declaration) return { valid: false, checks: [], reason: 'trusted-check-manifest-invalid' };
+    if (!declaration || checks.has(declaration.context)) {
+      return { valid: false, checks: [], reason: 'trusted-check-manifest-invalid-or-duplicate' };
+    }
     checks.set(declaration.context, declaration);
   }
   for (const entry of guardChecks) {
@@ -335,7 +346,7 @@ function mergeRequiredChecks(manifestChecks, rules, guardChecks = []) {
   return { valid: entries.some((entry) => entry.required), checks: entries, reason: entries.length ? undefined : 'required-check-set-empty' };
 }
 
-function validateRequiredChecks({ checks, statuses, requiredChecks, headSha, expectedCheckSuiteId }) {
+function validateRequiredChecks({ checks, statuses, requiredChecks, headSha, expectedCheckSuiteId, workflowCheckSuiteIds = {} }) {
   const reasons = [];
   if (!Array.isArray(checks) || !Array.isArray(statuses) || !Array.isArray(requiredChecks) || requiredChecks.length === 0) {
     return ['check-evidence-invalid'];
@@ -359,8 +370,23 @@ function validateRequiredChecks({ checks, statuses, requiredChecks, headSha, exp
     }
   }
   for (const required of requiredChecks) {
-    const matchingRuns = checks.filter((run) => run && run.name === required.context && run.head_sha === headSha);
+    const allMatchingRuns = checks.filter((run) => run && run.name === required.context && run.head_sha === headSha);
     const matchingStatuses = statuses.filter((status) => status && typeof status.context === 'string' && status.context.toLowerCase() === required.context.toLowerCase());
+    let expectedSuiteId = expectedCheckSuiteId;
+    if (required.workflowKey !== 'ci') expectedSuiteId = workflowCheckSuiteIds[required.workflowKey];
+    let matchingRuns = allMatchingRuns;
+    if (required.bindToWorkflowRun && Number.isSafeInteger(expectedSuiteId)) {
+      const boundRuns = allMatchingRuns.filter((run) => run.check_suite && run.check_suite.id === expectedSuiteId);
+      if (boundRuns.length > 0) {
+        matchingRuns = boundRuns;
+      } else if (required.required || required.mustExist) {
+        if (allMatchingRuns.length > 0) reasons.push(`check-suite-mismatch:${required.context}`);
+        matchingRuns = [];
+      } else {
+        // Optional lanes from older workflow runs do not describe the current run.
+        matchingRuns = [];
+      }
+    }
     if (matchingRuns.length > 0) {
       const selection = latestByTimestamp(matchingRuns, 'started_at');
       const latest = selection.item;
@@ -368,14 +394,16 @@ function validateRequiredChecks({ checks, statuses, requiredChecks, headSha, exp
         reasons.push(`check-evidence-invalid:${required.context}`);
         continue;
       }
-      if (latest.status !== 'completed' || latest.conclusion !== 'success') {
+      const skippedOptionalGuard = required.required === false && required.allowSkipped === true &&
+        latest.status === 'completed' && latest.conclusion === 'skipped';
+      if ((latest.status !== 'completed' || latest.conclusion !== 'success') && !skippedOptionalGuard) {
         reasons.push(`check-not-success:${required.context}`);
         continue;
       }
       if (required.bindToWorkflowRun && (
-        !Number.isSafeInteger(expectedCheckSuiteId) ||
+        !Number.isSafeInteger(expectedSuiteId) ||
         !Number.isSafeInteger(latest.check_suite && latest.check_suite.id) ||
-        latest.check_suite.id !== expectedCheckSuiteId
+        latest.check_suite.id !== expectedSuiteId
       )) {
         reasons.push(`check-suite-mismatch:${required.context}`);
         continue;
@@ -388,7 +416,10 @@ function validateRequiredChecks({ checks, statuses, requiredChecks, headSha, exp
       reasons.push(`guard-check-run-missing:${required.context}`);
       continue;
     }
-    if (required.required === false) continue;
+    if (required.required === false) {
+      if (required.mustExist) reasons.push(`check-missing:${required.context}`);
+      continue;
+    }
     if (required.source.includes('manifest') || required.source.includes('guard')) {
       reasons.push(`check-missing:${required.context}`);
       continue;
@@ -405,6 +436,59 @@ function validateRequiredChecks({ checks, statuses, requiredChecks, headSha, exp
       reasons.push(`check-missing:${required.context}`);
     } else if (latestStatus.state !== 'success' || latestStatus.creator?.login !== 'github-actions[bot]') {
       reasons.push(`check-status-not-success-or-untrusted:${required.context}`);
+    }
+  }
+  return reasons;
+}
+
+function validateAdditionalWorkflowRuns({ workflowBindings, workflowRuns, pr, expectedRepository = EXPECTED_REPOSITORY }) {
+  const reasons = [];
+  if (!Array.isArray(workflowBindings)) return ['trusted-workflow-bindings-invalid'];
+  const expectedRepo = expectedRepository.toLowerCase();
+  for (const binding of workflowBindings) {
+    const key = binding && binding.key;
+    const entry = typeof key === 'string' && workflowRuns && workflowRuns[key];
+    const workflow = entry && entry.workflow;
+    const run = entry && entry.run;
+    if (!binding || typeof key !== 'string' || !key || typeof binding.workflow_file !== 'string' || typeof binding.workflow_name !== 'string') {
+      reasons.push('trusted-workflow-binding-invalid');
+      continue;
+    }
+    if (!entry || !workflow || !run) {
+      reasons.push(`workflow-run-missing:${key}`);
+      continue;
+    }
+    if (!Number.isSafeInteger(workflow.id) || workflow.state !== 'active' ||
+      workflow.path !== binding.workflow_file || workflow.name !== binding.workflow_name ||
+      run.workflow_id !== workflow.id) {
+      reasons.push(`workflow-identity-untrusted:${key}`);
+    }
+    const runPath = typeof run.path === 'string' ? run.path.split('@')[0] : '';
+    if (run.name !== binding.workflow_name || runPath !== binding.workflow_file) {
+      reasons.push(`workflow-run-identity-mismatch:${key}`);
+    }
+    if (run.status !== 'completed' || run.conclusion !== 'success' || run.event !== 'pull_request') {
+      reasons.push(`workflow-run-not-successful-pull-request-run:${key}`);
+    }
+    if (!Number.isSafeInteger(run.check_suite_id)) reasons.push(`workflow-run-check-suite-id-invalid:${key}`);
+    if (run.head_repository?.full_name?.toLowerCase() !== expectedRepo ||
+      run.head_sha !== pr?.head?.sha || run.head_branch !== pr?.head?.ref) {
+      reasons.push(`workflow-run-tested-revision-mismatch:${key}`);
+    }
+    const links = run.pull_requests;
+    if (!Array.isArray(links) || links.length !== 1) {
+      reasons.push(`workflow-run-must-link-one-pull-request:${key}`);
+      continue;
+    }
+    const link = links[0];
+    if (link.number !== pr?.number) reasons.push(`workflow-run-pull-request-number-mismatch:${key}`);
+    if (link.head?.sha !== pr?.head?.sha || link.head?.ref !== pr?.head?.ref ||
+      link.base?.sha !== pr?.base?.sha || link.base?.ref !== pr?.base?.ref) {
+      reasons.push(`workflow-run-pr-head-or-base-mismatch:${key}`);
+    }
+    if (link.head?.repo?.full_name?.toLowerCase() !== expectedRepo ||
+      link.base?.repo?.full_name?.toLowerCase() !== expectedRepo) {
+      reasons.push(`workflow-run-repository-link-untrusted:${key}`);
     }
   }
   return reasons;
@@ -464,6 +548,7 @@ function validateRunBinding({ trigger, run, relatedPullRequests, pr, workflow, e
   if (!workflow || workflow.state !== 'active' || !run || run.workflow_id !== workflow.id) {
     reasons.push('ci-workflow-identity-untrusted');
   }
+  if (!workflow || run?.name !== workflow.name) reasons.push('ci-workflow-name-mismatch');
   const path = typeof run?.path === 'string' ? run.path.split('@')[0] : '';
   if (!workflow || !workflow.path || path !== workflow.path) reasons.push('ci-workflow-path-mismatch');
   if (typeof pr?.user?.login !== 'string' || pr.user.type !== 'User') reasons.push('pull-request-author-invalid');
@@ -485,12 +570,30 @@ function evaluatePolicySnapshot(input) {
   const checkPlan = mergeRequiredChecks(input.manifestChecks, input.rules, input.guardChecks || []);
   if (!checkPlan.valid) reasons.push(checkPlan.reason);
   if (checkPlan.valid) {
+    const workflowCheckSuiteIds = {
+      ...(input.workflowCheckSuiteIds || {}),
+      ci: input.run?.check_suite_id,
+    };
+    for (const binding of input.workflowBindings || []) {
+      const key = binding && binding.key;
+      const run = key && input.workflowRuns && input.workflowRuns[key] && input.workflowRuns[key].run;
+      if (key && run) workflowCheckSuiteIds[key] = run.check_suite_id;
+    }
+    if ((input.workflowBindings || []).length > 0) {
+      reasons.push(...validateAdditionalWorkflowRuns({
+        workflowBindings: input.workflowBindings,
+        workflowRuns: input.workflowRuns,
+        pr: input.pr,
+        expectedRepository: input.expectedRepository,
+      }));
+    }
     reasons.push(...validateRequiredChecks({
       checks: input.checkRuns,
       statuses: input.statuses,
       requiredChecks: checkPlan.checks,
       headSha: input.pr?.head?.sha,
       expectedCheckSuiteId: input.run?.check_suite_id,
+      workflowCheckSuiteIds,
     }));
   }
   if (!Array.isArray(input.unresolvedThreads)) {
@@ -530,6 +633,7 @@ module.exports = {
   permissionFor,
   rulesetRequiredChecks,
   rulesetRequiredApprovals,
+  validateAdditionalWorkflowRuns,
   validateRequiredChecks,
   validateCheckProvider,
   validateReviewPolicy,

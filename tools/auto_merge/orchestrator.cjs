@@ -85,21 +85,24 @@ async function loadReviewThreads(github, owner, repo, number) {
   throw new Error('GitHub review-thread pagination exceeded safe page bound');
 }
 
-async function getWorkflow(github, owner, repo) {
+async function getWorkflow(github, owner, repo, definition = {
+  workflow_file: manifest.ci_workflow_file,
+  workflow_name: manifest.ci_workflow_name,
+}) {
   const response = await github.request('GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}', {
     owner,
     repo,
-    workflow_id: manifest.ci_workflow_file,
+    workflow_id: definition.workflow_file,
   });
   const workflow = response && response.data;
   if (
     !workflow ||
     !Number.isSafeInteger(workflow.id) ||
     workflow.state !== 'active' ||
-    workflow.path !== manifest.ci_workflow_file ||
-    workflow.name !== manifest.ci_workflow_name
+    workflow.path !== definition.workflow_file ||
+    workflow.name !== definition.workflow_name
   ) {
-    throw new Error('trusted CI workflow identity differs from the check manifest');
+    throw new Error(`trusted workflow identity differs from the check manifest: ${definition.workflow_file}`);
   }
   return workflow;
 }
@@ -155,7 +158,21 @@ async function resolveLatestRun({ github, owner, repo, workflow, pr, eventRun, e
   if (latest.status !== 'completed' || latest.conclusion !== 'success') {
     throw new Error('latest linked CI run is not completed successfully');
   }
+  const runPath = typeof latest.path === 'string' ? latest.path.split('@')[0] : '';
+  if (latest.name !== workflow.name || runPath !== workflow.path) {
+    throw new Error('latest linked workflow run identity differs from the trusted workflow');
+  }
   return latest;
+}
+
+async function resolveAdditionalWorkflowRuns({ github, owner, repo, pr, expectedRepo, workflowBindings }) {
+  const resolved = {};
+  for (const binding of workflowBindings) {
+    const workflow = await getWorkflow(github, owner, repo, binding);
+    const run = await resolveLatestRun({ github, owner, repo, workflow, pr, expectedRepo });
+    resolved[binding.key] = { workflow, run };
+  }
+  return resolved;
 }
 
 function dataOrThrow(response, label) {
@@ -229,7 +246,7 @@ async function loadSnapshot({ github, owner, repo, number, headSha, baseBranch }
   return { files, reviews, threads, checkRuns, statuses: latestStatuses.statuses, rules };
 }
 
-async function createPolicyInput({ github, owner, repo, pr, run, workflow, trigger, config }) {
+async function createPolicyInput({ github, owner, repo, pr, run, workflow, workflowRuns, trigger, config }) {
   const snapshot = await loadSnapshot({
     github,
     owner,
@@ -245,6 +262,8 @@ async function createPolicyInput({ github, owner, repo, pr, run, workflow, trigg
     relatedPullRequests: run.pull_requests,
     pr,
     workflow,
+    workflowBindings: config.additionalWorkflows,
+    workflowRuns,
     expectedRepository: config.expectedRepository,
     baseBranch: config.baseBranch,
     trustedAuthors: config.trustedAuthors,
@@ -270,6 +289,7 @@ async function runAutoMerge({ github, context, config = {}, notify = () => {} })
     baseBranch: config.baseBranch || 'main',
     trustedAuthors: config.trustedAuthors || TRUSTED_AUTHORS,
     requiredChecks: config.requiredChecks || manifest.required_checks,
+    additionalWorkflows: config.additionalWorkflows || manifest.additional_workflows || [],
   };
   const { owner, repo } = context.repo || {};
   if (!owner || !repo || `${owner}/${repo}`.toLowerCase() !== policyConfig.expectedRepository.toLowerCase()) {
@@ -306,9 +326,17 @@ async function runAutoMerge({ github, context, config = {}, notify = () => {} })
       eventRun,
       expectedRepo: policyConfig.expectedRepository,
     });
+    const initialWorkflowRuns = await resolveAdditionalWorkflowRuns({
+      github,
+      owner,
+      repo,
+      pr: initialPr,
+      expectedRepo: policyConfig.expectedRepository,
+      workflowBindings: policyConfig.additionalWorkflows,
+    });
     const trigger = { eventName: context.eventName, ref: context.ref };
     const initialInput = await createPolicyInput({
-      github, owner, repo, pr: initialPr, run: latestRun, workflow, trigger, config: policyConfig,
+      github, owner, repo, pr: initialPr, run: latestRun, workflow, workflowRuns: initialWorkflowRuns, trigger, config: policyConfig,
     });
     const initialDecision = evaluatePolicySnapshot(initialInput);
     if (!initialDecision.eligible) {
@@ -326,8 +354,22 @@ async function runAutoMerge({ github, context, config = {}, notify = () => {} })
       github, owner, repo, workflow, pr: currentPr, expectedRepo: policyConfig.expectedRepository,
     });
     if (currentRun.id !== latestRun.id) return block(['latest-ci-run-changed-during-evaluation']);
+    const currentWorkflowRuns = await resolveAdditionalWorkflowRuns({
+      github,
+      owner,
+      repo,
+      pr: currentPr,
+      expectedRepo: policyConfig.expectedRepository,
+      workflowBindings: policyConfig.additionalWorkflows,
+    });
+    for (const binding of policyConfig.additionalWorkflows) {
+      if (currentWorkflowRuns[binding.key]?.run.id !== initialWorkflowRuns[binding.key]?.run.id ||
+        currentWorkflowRuns[binding.key]?.run.check_suite_id !== initialWorkflowRuns[binding.key]?.run.check_suite_id) {
+        return block([`latest-workflow-run-changed-during-evaluation:${binding.key}`]);
+      }
+    }
     const finalInput = await createPolicyInput({
-      github, owner, repo, pr: currentPr, run: currentRun, workflow, trigger, config: policyConfig,
+      github, owner, repo, pr: currentPr, run: currentRun, workflow, workflowRuns: currentWorkflowRuns, trigger, config: policyConfig,
     });
     const finalDecision = evaluatePolicySnapshot(finalInput);
     if (!finalDecision.eligible) {
@@ -365,6 +407,7 @@ module.exports = {
   collectRestPages,
   getPermission,
   loadReviewThreads,
+  resolveAdditionalWorkflowRuns,
   resolveLatestRun,
   runAutoMerge,
 };
