@@ -13,20 +13,21 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(sources["OpenTerminal"]["license"],"MIT")
         self.assertEqual(sources["AG Grid Community"]["version"],"36.2.0")
         core_source = sources["trading-core TypeScript contracts"]
-        expected_core_rust_commit = "b2679e757576f8da7850cd4b5ea2958bc9a2354c"
-        expected_core_npm_commit = "b2679e757576f8da7850cd4b5ea2958bc9a2354c"
-        previous_core_npm_commit = "105e42896eaa62afe7377a24478f0dd5632b1155"
+        expected_core_rust_commit = "f793be47ab90ebff9f530c8b08f41db5e774e4e5"
+        expected_core_npm_commit = "f793be47ab90ebff9f530c8b08f41db5e774e4e5"
+        previous_core_npm_commit = "b2679e757576f8da7850cd4b5ea2958bc9a2354c"
         self.assertEqual(core_source["repository"], "lqepoch/trading-core")
         self.assertEqual(core_source["commit"], expected_core_npm_commit)
         self.assertEqual(core_source["license"], "MIT OR Apache-2.0")
         self.assertEqual(core_source["package"], "@lqepoch/trading-core-contracts")
         self.assertEqual(core_source["previous_commit"], previous_core_npm_commit)
-        self.assertEqual(core_source["reviewed_at"], "2026-10-13")
+        self.assertEqual(core_source["reviewed_at"], "2026-10-14")
         self.assertEqual(
             core_source["downstream_paths"],
             [
                 "apps/openterminal/web/lib/quant-predictions.ts",
                 "apps/openterminal/web/lib/engine-preview.ts",
+                "apps/openterminal/web/lib/market-bars-contract.ts",
             ],
         )
         web_package=json.loads((ROOT/"apps/openterminal/web/package.json").read_text())
@@ -42,8 +43,8 @@ class ProvenanceTests(unittest.TestCase):
         )
         self.assertEqual(core_lock["license"], core_source["license"])
         broker_source = sources["broker-connectors read-only market adapter"]
-        self.assertEqual(broker_source["commit"], "873337e3fafe64344dfb9ac7719fad54f157a9c0")
-        self.assertEqual(broker_source["previous_commit"], "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9")
+        self.assertEqual(broker_source["commit"], "99e1d36f864d1e89e8cfba95651d29920e2f4c5a")
+        self.assertEqual(broker_source["previous_commit"], "873337e3fafe64344dfb9ac7719fad54f157a9c0")
         self.assertEqual(broker_source["shared_core_commit"], expected_core_rust_commit)
         cargo_toml = (ROOT/"Cargo.toml").read_text()
         self.assertIn(f'rev = "{expected_core_rust_commit}"', cargo_toml)

@@ -430,7 +430,7 @@ export function projectMdpMarketBarsResponse(
       asset_class: request.assetClass,
       asset_class_source: "caller_declared",
       provider_mode_requested: request.providerMode,
-      cache: { status: response.cache_status },
+      cache: { status: envelope.cache_status },
     };
   } catch {
     return null;
