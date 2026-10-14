@@ -606,7 +606,8 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
     expect(response?.body).toMatchObject({ error: "market_data_error" });
     const detail = (response?.body as { detail?: string } | undefined)?.detail;
     expect(detail).toContain("403");
-    await expect(widget.getByTestId("results-not-found")).toBeVisible();
+    // Provider denials render the native widget error panel, not the empty-success placeholder.
+    await expect(widget.locator("p").filter({ hasText: detail! })).toBeVisible();
     await expect(widget.getByText(detail!, { exact: true })).toBeVisible();
     await expect(widget.getByRole("gridcell")).toHaveCount(0);
   }
