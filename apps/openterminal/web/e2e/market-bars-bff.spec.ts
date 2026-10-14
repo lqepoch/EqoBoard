@@ -361,3 +361,22 @@ test("enabled history works when the optional terminal Gateway signer is absent"
   });
   expect(observed.gateway.requests["/api/v1/stocks/bars"]).toBeUndefined();
 });
+
+test("Alpaca-only history does not receive a Gateway delegation", async ({ page, request }) => {
+  test.skip(!featureEnabled || gatewaySignerDisabled,
+    "requires enabled MDP bars and the optional Gateway signer");
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  await configureMocks(request, { marketBars: { enabled: true, response: makeCoreEnvelope() } });
+
+  const response = await page.context().request.get(
+    `${WEB_ORIGIN}/api/history/QQQ?range=5D&provider_mode=alpaca_only`,
+  );
+  expect(response.status()).toBe(200);
+  const calls = (await metrics(request)).mdpMarketBars;
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
+    query: { provider_mode: "alpaca_only" },
+    bearer_present: true,
+    gateway_delegation_present: false,
+  });
+});

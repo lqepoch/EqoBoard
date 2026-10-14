@@ -315,7 +315,7 @@ export async function getMarketBars(request: NextRequest, rawSymbol: string): Pr
   const authorization = await authorizeMdpMarketDataRequest(
     request,
     parsed.providerMode === "research" ? "research:read" : "market:read",
-    true,
+    parsed.providerMode === "auto" || parsed.providerMode === "futu_only",
   );
   if (!authorization.ok) return authorization.response;
 
