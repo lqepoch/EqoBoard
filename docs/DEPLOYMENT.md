@@ -140,6 +140,10 @@ bash tools/container-e2e.sh
 
 此脚本会先在 Compose 启动前运行三个开发态预览/订单边界 smoke，再使用专属 Compose project 和临时 env file；Docker Compose 清除继承的 Alpaca/OIDC/service secret，host 侧 Playwright、mock server 和开发态 Next 进程只通过 `env -i` 接收测试所需 allowlist。它使用仅供测试的身份 key 和 loopback mock，不读取真实市场 key、不向 broker 下单。脚本输出实际 image ID、entrypoint/command、端口映射、运行用户、rootfs 权限、health/readiness、重启和 cache volume 重建结果，并通过 Playwright 驱动生产模式 Next 容器。失败时会先输出本次 Compose logs，再清理该专属 project 与 volumes。
 
+GitHub Actions 在 `OpenTerminal / AG Grid / Next.js` required job 中运行此容器验收，并预先用同一个 Buildx builder 构建 Gateway、OpenTerminal runtime 和 Compose E2E 镜像，再加载到 Docker daemon。之后的 `docker compose up --build` 通过 Compose Bake 复用该 builder 的本地层。GitHub Actions BuildKit 缓存按镜像/target 使用独立 scope；缓存导出失败只减少后续复用机会，cache miss 不改变验收范围。GitHub 的 cache ref 权限允许 PR workflow 读取 base/default branch cache，而 PR 写入限于该 PR merge ref；main push 与目标为 main 的 `workflow_dispatch` 维护默认分支 cache ref，其它 ref 的 dispatch 使用相应分支 cache ref，因此不需要为 PR 扩大 cache 写权限。CI 只把 builder 名称和 Bake 开关传入 E2E 脚本，GitHub 缓存授权由固定版本的 Docker Actions 管理，不写入 Compose 配置或测试 artifact。
+
+同一 required job 只会对 PR 路径做保守分类：只有所有改动都是普通修改，且每个路径都命中 `tools/ci/openbb-e2e-route.mjs` 中的小型 UI allowlist 时，才跳过 native OpenBB Lite E2E。新增、删除、重命名、混合路径、auth/research 导航、终端 shell/order entry，以及 Cargo/Gateway/市场契约、BFF、依赖锁、Dockerfile、Compose、测试工具和 CI 配置都运行完整套件。merge-base、SHA 或 diff 缺失/歧义、空 diff、无法解析的变更状态均 fail closed。主分支 push 和 `workflow_dispatch` 总是运行完整 OpenBB 验收。应用测试与容器验收仍执行，required job 名称不变。
+
 生产 Next 容器的浏览器阶段也会运行 `compose.e2e.yaml` 中的本地 MDP HTTP mock：容器只访问 loopback `E2E_MDP_PORT`（固定 14313），并使用 overlay 内独立的 MDP 测试 signer key。`tools/container-e2e.sh` 会清除宿主传入的 MDP origin、端口与 signer 变量，避免覆盖隔离配置。该 mock 只返回合成 fixture，不启动真实 MDP、rclone、Drive 或行情连接；它验证的是生产 Next BFF/容器路径，不是外部存储连通性。
 
 同一隔离 overlay 的 Quant mock 只返回合成的 `LOCAL_REGISTERED_ROOT` 测试视图，使用专属 Quant 测试 signer 和 loopback `E2E_QUANT_PORT`（固定 14314）。它不启动真实 Quant registry，不读取研究产物或 finite receipt；生产 BFF/UI测试只证明受信 OIDC role 到短时只读委托的容器路径。

@@ -33,8 +33,12 @@ umask 077
 ENV_FILE="$(mktemp /tmp/eqoboard-openbb-e2e-env.XXXXXX)"
 
 compose() {
+  local -a builder_env=()
+  if [[ -n ${BUILDX_BUILDER:-} ]]; then builder_env+=("BUILDX_BUILDER=${BUILDX_BUILDER}"); fi
+  if [[ -n ${COMPOSE_BAKE:-} ]]; then builder_env+=("COMPOSE_BAKE=${COMPOSE_BAKE}"); fi
   env -i \
     PATH="${TASK_PATH}" HOME="${TASK_HOME}" DOCKER_CONFIG="${DOCKER_CONFIG_DIR}" \
+    "${builder_env[@]}" \
     docker compose --project-name "${PROJECT_NAME}" --env-file "${ENV_FILE}" "$@"
 }
 

@@ -15,6 +15,9 @@ compose_args=(--project-name "$project" --env-file "$e2e_env_file" -f "$repo_roo
 
 # This run must remain offline and must never inherit an operator's market key.
 dc() {
+  local -a builder_env=()
+  if [[ -n ${BUILDX_BUILDER:-} ]]; then builder_env+=("BUILDX_BUILDER=${BUILDX_BUILDER}"); fi
+  if [[ -n ${COMPOSE_BAKE:-} ]]; then builder_env+=("COMPOSE_BAKE=${COMPOSE_BAKE}"); fi
   env \
     -u ALPACA_KEY -u ALPACA_SECRET \
     -u EQO_GATEWAY_JWT_SECRET -u EQO_RESEARCH_JWT_SECRET \
@@ -28,6 +31,7 @@ dc() {
     -u E2E_QUANT_PORT -u EQO_QUANT_RESEARCH_URL -u QUANT_TERMINAL_JWT_SECRET -u QUANT_RESEARCH_JWT_SECRET \
     -u E2E_ENGINE_PORT -u EQO_ENGINE_URL -u ENGINE_TERMINAL_JWT_SECRET -u ENGINE_RESEARCH_JWT_SECRET \
     -u E2E_WEB_ORIGIN -u E2E_OIDC_ORIGIN \
+    "${builder_env[@]}" \
     docker compose "${compose_args[@]}" "$@"
 }
 
