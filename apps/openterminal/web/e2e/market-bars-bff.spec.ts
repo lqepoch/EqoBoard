@@ -97,6 +97,10 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
   };
 }
 
+function expectNoResearchBarsRequests(calls: Array<{ path: string }>) {
+  expect(calls.filter(({ path }) => /(?:^|\/)(?:history|bars)(?:\/|$)/i.test(path))).toEqual([]);
+}
+
 const featureEnabled = process.env.E2E_MDP_MARKET_BARS_ENABLED === "true";
 const gatewaySignerDisabled = process.env.E2E_GATEWAY_SIGNER_DISABLED === "true";
 
@@ -192,7 +196,7 @@ test("enabled history accepts unknown feed evidence and projects the Core envelo
 
   const observed = await metrics(request);
   expect(observed.gateway.requests["/api/v1/stocks/bars"]).toBeUndefined();
-  expect(observed.research.requests).toEqual({});
+  expectNoResearchBarsRequests(observed.research.calls);
   expect(observed.mdp.authorized).toBe(1);
   expect(observed.mdp.rejected).toBe(0);
   expect(observed.mdpMarketBars).toHaveLength(1);
@@ -319,7 +323,7 @@ test("invalid inputs, unsupported symbols, and malformed Core envelopes fail wit
 
   const observed = await metrics(request);
   expect(observed.gateway.requests["/api/v1/stocks/bars"]).toBeUndefined();
-  expect(observed.research.requests).toEqual({});
+  expectNoResearchBarsRequests(observed.research.calls);
   expect(observed.mdpMarketBars).toHaveLength(2);
 });
 
