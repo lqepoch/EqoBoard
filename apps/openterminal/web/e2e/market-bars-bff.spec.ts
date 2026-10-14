@@ -110,6 +110,16 @@ test.beforeEach(async ({ request }) => {
 
 test("default-off history preserves the legacy route and rejects an unapplied provider preference", async ({ page, request }) => {
   test.skip(featureEnabled, "requires the default-off E2E server");
+  // This spec measures process-wide mock counters. Avoid counting the default
+  // Workspace chart's independent legacy history request during OIDC login.
+  await page.addInitScript((appOrigin) => {
+    if (window.location.origin !== appOrigin) return;
+    localStorage.setItem("eqo_view_mode", "workspace");
+    localStorage.setItem("eqoboard-open-terminal-v1", JSON.stringify({
+      state: { widgets: [], layout: [] },
+      version: 0,
+    }));
+  }, new URL(WEB_ORIGIN).origin);
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
 
   const legacy = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?range=6M`);
