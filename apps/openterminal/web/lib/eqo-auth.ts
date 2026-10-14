@@ -28,11 +28,39 @@ export type AuthorizationResult =
   | { ok: true; principal: VerifiedWebPrincipal; token: string }
   | { ok: false; response: NextResponse };
 
+export type MdpMarketDataAuthorizationResult =
+  | { ok: true; principal: VerifiedWebPrincipal; token: string; gatewayDelegation?: string }
+  | { ok: false; response: NextResponse };
+
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_REQUEST_BODY_MS = 5_000;
 
 function jsonError(status: number, error: string): NextResponse {
   return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+async function signGatewayMarketReadToken(
+  principal: VerifiedWebPrincipal,
+  mode: "terminal" | "research",
+): Promise<string | null> {
+  const secret = mode === "research" ? process.env.EQO_RESEARCH_JWT_SECRET : process.env.EQO_GATEWAY_JWT_SECRET;
+  const runtimeConfigured = mode === "research" ? isResearchAuthRuntimeConfigured() : isAuthRuntimeConfigured();
+  if (!runtimeConfigured || !secret || secret.length < 64) return null;
+
+  const expiration = Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000);
+  if (expiration <= Math.floor(Date.now() / 1000)) return null;
+  return new SignJWT({
+    idp_iss: principal.identityIssuer,
+    scope: ["market:read"],
+    jti: randomUUID(),
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: mode === "research" ? "research" : "bff" })
+    .setIssuer(mode === "research" ? "openterminal-research" : "eqoboard-openterminal")
+    .setAudience("eqoboard-gateway")
+    .setSubject(principal.subject)
+    .setIssuedAt()
+    .setExpirationTime(expiration)
+    .sign(new TextEncoder().encode(secret));
 }
 
 export function researchModeRouteUnavailable(): NextResponse | null {
@@ -179,30 +207,19 @@ export async function authorizeResearchGatewayRequest(request: Request): Promise
 
   const identity = await authorizeOidcPrincipal("market:read");
   if (!identity.ok) return identity;
-  const secret = process.env.EQO_RESEARCH_JWT_SECRET;
-  if (!secret || secret.length < 64) {
-    return { ok: false, response: jsonError(503, "identity_service_unavailable") };
-  }
-
   const principal = identity.principal;
-  const token = await new SignJWT({
-    idp_iss: principal.identityIssuer,
-    scope: ["market:read"],
-    jti: randomUUID(),
-  })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: "research" })
-    .setIssuer("openterminal-research")
-    .setAudience("eqoboard-gateway")
-    .setSubject(principal.subject)
-    .setIssuedAt()
-    .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))
-    .sign(new TextEncoder().encode(secret));
+  const token = await signGatewayMarketReadToken(principal, "research");
+  if (!token) return { ok: false, response: jsonError(503, "identity_service_unavailable") };
 
   return { ok: true, principal, token };
 }
 
 /** Mint an MDP-only market:read token for the key assigned to this hostname. */
-export async function authorizeMdpMarketDataRequest(request: Request): Promise<AuthorizationResult> {
+export async function authorizeMdpMarketDataRequest(
+  request: Request,
+  requiredScope: "market:read" | "research:read" = "market:read",
+  includeGatewayDelegation = false,
+): Promise<MdpMarketDataAuthorizationResult> {
   const boundaryError = validRequestHeaders(request);
   if (boundaryError) return { ok: false, response: boundaryError };
   const expectedOrigin = publicAppOrigin();
@@ -219,10 +236,12 @@ export async function authorizeMdpMarketDataRequest(request: Request): Promise<A
   const runtimeConfigured = mode === "research"
     ? isResearchAuthRuntimeConfigured()
     : isAuthRuntimeConfigured();
-  if (!runtimeConfigured || !isOidcConfigured()) {
+  if (!runtimeConfigured || (mode === "research" && !isOidcConfigured())) {
     return { ok: false, response: jsonError(503, "identity_service_unavailable") };
   }
-  const identity = await authorizeOidcPrincipal("market:read");
+  const identity = mode === "research"
+    ? await authorizeOidcPrincipal(requiredScope)
+    : await authorizeTerminalPrincipal(request, requiredScope);
   if (!identity.ok) return identity;
 
   const signer = mdpMarketDataSigner(mode);
@@ -241,7 +260,10 @@ export async function authorizeMdpMarketDataRequest(request: Request): Promise<A
     .setExpirationTime(Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000))
     .sign(new TextEncoder().encode(signer.secret));
 
-  return { ok: true, principal, token };
+  const gatewayDelegation = includeGatewayDelegation
+    ? await signGatewayMarketReadToken(principal, mode)
+    : undefined;
+  return { ok: true, principal, token, ...(gatewayDelegation ? { gatewayDelegation } : {}) };
 }
 
 /** Sign a Quant-only private research lookup after its separate OIDC role check. */

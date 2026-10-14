@@ -155,7 +155,7 @@ function decimalParts(value: unknown): DecimalParts | null {
   return { negative, integer, fraction };
 }
 
-function compareDecimals(leftValue: unknown, rightValue: unknown): number | null {
+export function compareDecimals(leftValue: unknown, rightValue: unknown): number | null {
   const left = decimalParts(leftValue);
   const right = decimalParts(rightValue);
   if (!left || !right) return null;
@@ -335,7 +335,7 @@ export function validateMdpBarsResponse(value: unknown, expected: ExpectedReques
   return value as unknown as MdpBarsResponseV1;
 }
 
-function mdpBaseUrl(): URL | null {
+export function mdpBaseUrl(): URL | null {
   const raw = process.env.EQO_MDP_URL;
   if (!raw || raw.length > 2_048 || raw.trim() !== raw) return null;
   try {

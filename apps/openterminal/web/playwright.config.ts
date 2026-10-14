@@ -80,6 +80,7 @@ export default defineConfig({
         EQO_RESEARCH_PUBLIC_ORIGIN: process.env.E2E_RESEARCH_PUBLIC_ORIGIN ?? "",
         EQO_RUST_URL: `http://127.0.0.1:${gatewayPort}`,
         EQO_MDP_URL: mdpUrl,
+        EQO_MDP_MARKET_BARS_ENABLED: process.env.E2E_MDP_MARKET_BARS_ENABLED ?? "false",
         EQO_QUANT_RESEARCH_URL: quantUrl,
         EQO_ENGINE_URL: `http://127.0.0.1:${enginePort}`,
         API_URL: `http://127.0.0.1:${researchPort}`,
