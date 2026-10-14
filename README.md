@@ -55,6 +55,7 @@ docker compose up --build
 需要启用可选研究工作台时，按 [部署说明](docs/DEPLOYMENT.md) 配置独立 research OIDC/session secrets、管理员凭据与不同 hostname 的公开 origin，然后执行：
 
 ```bash
+# 仅本机开发用途；不能作为 CI、release 或部署验收证据。
 docker compose --profile openbb build
 docker compose --profile openbb up --build --wait
 ```
@@ -99,9 +100,9 @@ npm run dev
 
 ## GitHub Actions 与本地行情工具
 
-公共 Actions 仅运行无私密凭据的 CI、CodeQL 和源码供应链检查。真实 Alpaca 只读 smoke、配额诊断、历史 QQQ SIP 导出及专用 App 自动合并均不由 Actions 执行；对应 workflows 已从 `.github/workflows` 移除，行情脚本保留为本地入口，专用 App 自动合并当前未启用。操作者若获准，可在隔离的本机进程中显式运行这些只读脚本；输出可能受行情许可约束，必须保存在仓库之外，不能提交或上传公开 artifact。入口和限制见 [安全边界](docs/SECURITY.md)、[部署说明](docs/DEPLOYMENT.md) 与 [PR 合并治理](docs/AUTOMERGE.md)。
+公共 Actions 不读取组织行情、OAuth、Drive 或 GitHub App 凭据，也不执行真实 Alpaca smoke、配额诊断、行情导出、artifact 清理或自动合并。专用 App 自动合并当前未启用；获准操作者可在隔离的本机进程中显式运行只读行情脚本，输出必须保存在仓库外且不得提交或上传公开 artifact。入口和限制见 [安全边界](docs/SECURITY.md)、[部署说明](docs/DEPLOYMENT.md) 与 [PR 合并治理](docs/AUTOMERGE.md)。
 
-OpenTerminal required CI job 保留无条件的应用构建和容器回归；只有 PR 且改动完全落在路由脚本的精确 UI allowlist 时，才跳过较重的原生 OpenBB Lite 浏览器生命周期验收。主分支 push、手动触发、共享运行时/BFF/身份/行情契约/依赖/Docker/Compose/CI/测试工具改动，以及无法可靠计算的 diff 都运行完整验收。该 job 使用按镜像隔离的 GitHub Actions BuildKit 缓存；缓存导出失败只减少后续复用机会，不会放宽测试。
+核心 CI 只负责 Rust、market contract 和 OpenTerminal/Next.js 检查。OpenBB Lite 的源码/recipe 校验、source SBOM、运行镜像构建与 SBOM、原生容器和浏览器 E2E 由独立 `.github/workflows/openbb.yml`（`OpenBB Optional CI`）执行，不进入核心 required workflow。每次 PR/push 都运行轻量路径路由和稳定 required check `OpenBB optional validation gate`；没有 OpenBB 或共享集成改动时，source/runtime 重型 lane 跳过而 gate 成功。OpenBB source/recipe 与 research/BFF、身份、Gateway、市场契约、依赖、Docker/Compose、CI 或测试工具等共享改动会触发相关重型 lane。手动触发和每周运行完整 source 与 runtime 验收；无法可靠计算路径时 fail closed 并运行完整验收。OpenBB 的 CI、release 和部署验收证据必须来自该 GitHub Actions workflow；上面的 Compose build 命令仅供本机开发尝试。
 
 ## 交付矩阵与当前验收状态
 
