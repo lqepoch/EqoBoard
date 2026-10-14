@@ -15,6 +15,7 @@ import {
 import { fmt, fmtBig } from "../../lib/api";
 import {
   CHART_RANGES,
+  MAX_HISTORY_PAGES,
   displayHistoryValue,
   historyDowngradeReason,
   historyResolution,
@@ -509,6 +510,13 @@ export default function MainChartPanel() {
       </div>
       {history.error && <div role="alert" className="px-3 py-1 text-[10px] text-rose-400" data-testid="main-chart-history-error">History unavailable: {(history.error as Error).message}</div>}
       {history.projectionError && <div role="alert" className="px-3 py-1 text-[10px] text-rose-400">{history.projectionError}</div>}
+      {history.pageLimitReached && (
+        <div role="status" className="px-3 py-1 text-[10px] text-amber-400" data-testid="main-chart-history-page-limit">
+          {range === "MAX"
+            ? `MAX history is incomplete: the ${MAX_HISTORY_PAGES}-page limit was reached; older bars remain unloaded.`
+            : `History reached the ${MAX_HISTORY_PAGES}-page limit; older bars remain unloaded.`}
+        </div>
+      )}
       {history.isLoading && <div className="px-3 py-1 text-[10px] text-slate-500">Loading history…</div>}
 
       <div className="flex-1 flex min-h-0 overflow-hidden relative">

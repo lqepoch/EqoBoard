@@ -15,6 +15,7 @@ import {
 import { apiGet, fmt, fmtBig } from "../../lib/api";
 import {
   CHART_RANGES,
+  MAX_HISTORY_PAGES,
   displayHistoryValue,
   historyDowngradeReason,
   historyResolution,
@@ -628,6 +629,13 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       </div>
       {error && <div role="alert" className="p-2 down" data-testid="chart-history-error">History unavailable: {(error as Error).message}</div>}
       {dataMode === "provider" && history.projectionError && <div role="alert" className="p-2 down">{history.projectionError}</div>}
+      {dataMode === "provider" && history.pageLimitReached && (
+        <div role="status" className="px-2 py-1 text-[10px] dim" data-testid="chart-history-page-limit">
+          {range === "MAX"
+            ? `MAX history is incomplete: the ${MAX_HISTORY_PAGES}-page limit was reached; older bars remain unloaded.`
+            : `History reached the ${MAX_HISTORY_PAGES}-page limit; older bars remain unloaded.`}
+        </div>
+      )}
       {dataMode === "provider" && history.isLoading && <div className="px-2 py-1 text-[10px] dim">Loading history…</div>}
       {dataMode === "mdp-diagnostic" && datasetId === null && !error &&
         <div className="px-2 py-1 text-[10px] dim">Enter a diagnostic dataset ID to load archived bars.</div>}

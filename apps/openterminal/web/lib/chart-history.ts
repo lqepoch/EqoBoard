@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import type { Candle } from "./api";
 
@@ -63,6 +63,9 @@ type CursorPageParam = {
 
 const MAX_PRICE = 1_000_000_000_000;
 const MAX_VOLUME = 1_000_000_000_000_000;
+export const MAX_HISTORY_PAGES = 20;
+const MAX_CURSOR_PAGES = MAX_HISTORY_PAGES - 1;
+const LIVE_HEAD_REFRESH_INTERVAL_MS = 8_000;
 const DECIMAL = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const UTC_RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$/;
 const HISTORY_CACHE_SCOPE = createBrowserCacheScope();
@@ -251,41 +254,79 @@ export function useChartHistory(
   enabled = true,
 ) {
   const resolution = resolutionForRange(range);
+  const queryClient = useQueryClient();
+  const queryKey = [
+    "chart-history",
+    HISTORY_CACHE_SCOPE,
+    symbol,
+    range,
+    resolution,
+    "provider",
+    providerMode,
+    "all",
+    "unadjusted",
+    assetClass,
+  ] as const;
+  const latestPageQueryKey = [...queryKey, "latest-page"] as const;
   const query = useInfiniteQuery({
-    queryKey: [
-      "chart-history",
-      HISTORY_CACHE_SCOPE,
-      symbol,
-      range,
-      resolution,
-      "provider",
-      providerMode,
-      "all",
-      "unadjusted",
-      assetClass,
-    ],
+    queryKey,
     initialPageParam: null as CursorPageParam | null,
-    queryFn: ({ pageParam, signal }) => fetchHistoryPage(
-      symbol, range, resolution, providerMode, assetClass, pageParam, signal,
-    ),
-    getNextPageParam: (lastPage) => requestCursor(lastPage),
+    queryFn: async ({ pageParam, signal }) => {
+      const page = await fetchHistoryPage(
+        symbol, range, resolution, providerMode, assetClass, pageParam, signal,
+      );
+      // Seed the independently refreshed latest-page query from the first snapshot
+      // so mounting its observer does not issue a duplicate initial request.
+      if (pageParam === null) {
+        queryClient.setQueryData<ChartHistoryResponse>(latestPageQueryKey, page);
+      }
+      return page;
+    },
+    getNextPageParam: (lastPage, allPages) => allPages.length >= MAX_CURSOR_PAGES
+      ? undefined
+      : requestCursor(lastPage),
     enabled: enabled && Boolean(symbol),
-    refetchInterval: range === "1D" ? 8_000 : 60_000,
-    refetchIntervalInBackground: false,
-    maxPages: 20,
+    // Refetching this infinite query would revisit every loaded opaque cursor.
+    // The latest page below has its own bounded query and refresh interval.
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    // Reserve one of the bounded page slots for the independently refreshed head.
+    maxPages: MAX_CURSOR_PAGES,
   });
 
+  const firstPage = query.data?.pages[0];
+  const latestPageQuery = useQuery({
+    queryKey: latestPageQueryKey,
+    queryFn: ({ signal }) => fetchHistoryPage(
+      symbol, range, resolution, providerMode, assetClass, null, signal,
+    ),
+    enabled: enabled && Boolean(firstPage),
+    initialData: firstPage,
+    staleTime: range === "1D" ? LIVE_HEAD_REFRESH_INTERVAL_MS : 60_000,
+    refetchInterval: range === "1D" ? LIVE_HEAD_REFRESH_INTERVAL_MS : 60_000,
+    refetchIntervalInBackground: false,
+  });
+  const pages = query.data?.pages ?? [];
+  const lastPage = pages[pages.length - 1];
+  const latestPage = latestPageQuery.data ?? firstPage;
+  const pageLimitReached = pages.length >= MAX_CURSOR_PAGES && Boolean(lastPage && requestCursor(lastPage));
+  const hasNextPage = Boolean(query.hasNextPage) && !pageLimitReached;
+
   const projected = useMemo(() => {
-    const pages = query.data?.pages ?? [];
-    if (pages.length === 0) return { bars: undefined as ChartHistoryCandle[] | undefined, error: null as string | null };
-    const pageResolution = pages.map(responseResolution);
+    const currentPages = [
+      ...(latestPageQuery.data ? [latestPageQuery.data] : []),
+      ...pages,
+    ];
+    if (currentPages.length === 0) return { bars: undefined as ChartHistoryCandle[] | undefined, error: null as string | null };
+    const pageResolution = currentPages.map(responseResolution);
     const knownResolutions = new Set(pageResolution.filter((value): value is string => value !== null));
     if (knownResolutions.size > 1) {
       return { bars: null, error: "History pages returned inconsistent effective resolutions; data was not plotted." };
     }
     const firstByTimestamp = new Map<string, ChartHistoryCandle>();
     const effectiveResolution = pageResolution[0] ?? "unknown";
-    for (const page of pages) {
+    for (const page of currentPages) {
       for (const rawBar of page.bars) {
         const bar = projectBar(rawBar);
         if (!bar) return { bars: null, error: "History values exceed the bounded chart projection or contain invalid OHLCV; no bars were plotted." };
@@ -295,13 +336,16 @@ export function useChartHistory(
       }
     }
     return { bars: [...firstByTimestamp.values()].sort((left, right) => left.time - right.time), error: null };
-  }, [query.data?.pages]);
+  }, [latestPageQuery.data, pages]);
 
   return {
     ...query,
+    error: latestPageQuery.error ?? query.error,
+    hasNextPage,
+    latestPage,
     bars: projected.bars,
     projectionError: projected.error,
-    latestPage: query.data?.pages[0],
+    pageLimitReached,
     requestedResolution: resolution,
   };
 }

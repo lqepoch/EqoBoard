@@ -157,6 +157,7 @@ test.beforeEach(async ({ request }) => resetDownstream(request));
 test("ChartWidget reads history through the BFF, pages older bars while panning at the left edge, and shows provenance", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
   const historyRequests = captureHistoryRequests(page);
+  const historyResponses = captureHistoryResponses(page);
   const initial = marketBarsResponse({ requestedResolution: "1d", assetClass: "stock", startsMinutesAgo: [{ minutes: 20, close: "500.00" }] });
   await configureMocks(request, { marketBars: { enabled: true, response: initial } });
   await page.goto(WEB_ORIGIN);
@@ -219,15 +220,26 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
   const canvas = widget.getByTestId("chart-widget-canvas");
   await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
   const rangeBeforePan = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
+  expect(rangeBeforePan.from).toBeLessThanOrEqual(0.5);
   const canvasBounds = await canvas.boundingBox();
   if (!canvasBounds) throw new Error("Chart canvas is not visible");
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.2, canvasBounds.y + canvasBounds.height * 0.55);
   await page.mouse.down();
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.65, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
   await page.mouse.up();
-  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR)).toBe(true);
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR), {
+    intervals: [50, 100, 250],
+    timeout: 5_000,
+  }).toBe(true);
+  await expect.poll(() => historyResponses.some((url) => url.searchParams.get("cursor") === CURSOR), {
+    intervals: [50, 100, 250],
+    timeout: 750,
+  }).toBe(false);
   const rangeWhileOlderPageIsPending = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
-  expect(rangeWhileOlderPageIsPending.from).toBeLessThan(rangeBeforePan.from - 0.5);
+  expect(rangeWhileOlderPageIsPending.from).toBeLessThanOrEqual(0.5);
+  expect(visibleRangeSpan(`${rangeWhileOlderPageIsPending.from}:${rangeWhileOlderPageIsPending.to}`))
+    .toBeCloseTo(visibleRangeSpan(`${rangeBeforePan.from}:${rangeBeforePan.to}`), 1);
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
   const pageCalls = (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
   const cursorCallIndex = pageCalls.findIndex((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR);
   if (cursorCallIndex < 0) throw new Error("Continuation request was not recorded");
@@ -305,6 +317,7 @@ test("all chart ranges request the documented resolution through the BFF", async
 test("MAX pans to a real daily cursor page and preserves unknown feed and exact decimals", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
   const historyRequests = captureHistoryRequests(page);
+  const historyResponses = captureHistoryResponses(page);
   const anchorMs = Date.now();
   const firstPage = marketBarsResponse({
     requestedResolution: "1d",
@@ -360,6 +373,7 @@ test("MAX pans to a real daily cursor page and preserves unknown feed and exact 
   const canvas = widget.getByTestId("chart-widget-canvas");
   await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
   const beforeMaxPan = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
+  expect(beforeMaxPan.from).toBeLessThanOrEqual(0.5);
   const canvasBounds = await canvas.boundingBox();
   if (!canvasBounds) throw new Error("Chart canvas is not visible");
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.2, canvasBounds.y + canvasBounds.height * 0.55);
@@ -368,8 +382,15 @@ test("MAX pans to a real daily cursor page and preserves unknown feed and exact 
   await page.mouse.up();
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { start?: string; cursor?: string } }) =>
     call.query.start === initialCall.query.start && call.query.cursor === CURSOR)).toBe(true);
+  await expect.poll(() => historyResponses.some((url) => url.searchParams.get("cursor") === CURSOR), {
+    intervals: [50, 100, 250],
+    timeout: 750,
+  }).toBe(false);
   const rangeWhileOlderPageIsPending = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
-  expect(rangeWhileOlderPageIsPending.from).toBeLessThan(beforeMaxPan.from - 0.5);
+  expect(rangeWhileOlderPageIsPending.from).toBeLessThanOrEqual(0.5);
+  expect(visibleRangeSpan(`${rangeWhileOlderPageIsPending.from}:${rangeWhileOlderPageIsPending.to}`))
+    .toBeCloseTo(visibleRangeSpan(`${beforeMaxPan.from}:${beforeMaxPan.to}`), 1);
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
   await configureMocks(request, {
     marketBars: { enabled: true, response: firstPage, responsesByCursor: { [CURSOR]: olderPage }, delayMs: 0 },
   });
@@ -394,6 +415,105 @@ test("MAX pans to a real daily cursor page and preserves unknown feed and exact 
   await configureMocks(request, {
     marketBars: { enabled: true, response: firstPage, responsesByCursor: { [CURSOR]: olderPage }, delayMs: 0 },
   });
+});
+
+test("1D automatic polling refreshes only the latest page without following its older cursor", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const historyRequests = captureHistoryRequests(page);
+  const historyResponses = captureHistoryResponses(page);
+  const anchorMs = Date.now();
+  const initialDaily = marketBarsResponse({ requestedResolution: "1d", startsMinutesAgo: [{ minutes: 6_000, close: "500.00" }] });
+  await configureMocks(request, { marketBars: { enabled: true, response: initialDaily } });
+  await page.goto(WEB_ORIGIN);
+  const widget = page.getByTestId("chart-widget");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
+
+  const initialIntraday = marketBarsResponse({
+    requestedResolution: "1m",
+    anchorMs,
+    startsMinutesAgo: [{ minutes: 5, close: "501.00" }, { minutes: 3, close: "502.00" }],
+    cursor: CURSOR,
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: initialIntraday } });
+  const responseStart = historyResponses.length;
+  const requestStart = historyRequests.length;
+  await widget.getByRole("button", { name: "1D", exact: true }).click();
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Resolution 1m → 1m");
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) =>
+    call.query.resolution === "1m").length).toBe(1);
+  const canvas = widget.getByTestId("chart-widget-canvas");
+  await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
+  const rangeBeforeRefresh = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
+
+  const refreshedIntraday = marketBarsResponse({
+    requestedResolution: "1m",
+    anchorMs,
+    startsMinutesAgo: [{ minutes: 5, close: "511.00" }, { minutes: 3, close: "512.00" }],
+    cursor: CURSOR,
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: refreshedIntraday, delayMs: 0 } });
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string; cursor?: string } }) =>
+    call.query.resolution === "1m" && !call.query.cursor).length, { timeout: 15_000 }).toBe(2);
+  const rangeAfterRefresh = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
+  expect(rangeAfterRefresh.from).toBeCloseTo(rangeBeforeRefresh.from, 1);
+  expect(rangeAfterRefresh.to).toBeCloseTo(rangeBeforeRefresh.to, 1);
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Chart canvas is not visible");
+  await page.mouse.move(bounds.x + bounds.width * 0.65, bounds.y + bounds.height * 0.55);
+  await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
+
+  const intradayCalls = (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
+  expect(intradayCalls.filter((call: { query: { cursor?: string } }) => Boolean(call.query.cursor))).toHaveLength(0);
+  const refreshedRequests = historyRequests.slice(requestStart).filter((url) => url.searchParams.get("range") === "1D");
+  expect(refreshedRequests.filter((url) => !url.searchParams.has("cursor"))).toHaveLength(2);
+  expect(refreshedRequests.filter((url) => url.searchParams.has("cursor"))).toHaveLength(0);
+  expect(historyResponses.slice(responseStart).some((url) => url.searchParams.get("range") === "1D" && !url.searchParams.has("cursor"))).toBe(true);
+});
+
+test("MAX pagination stops at the bounded page limit and reports incomplete history", async ({ page, request }) => {
+  const pageLimit = 20;
+  const cursorPageLimit = pageLimit - 1;
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const anchorMs = Date.now();
+  const pageCursor = (pageNumber: number) => `max-page-cursor-${pageNumber}`;
+  const responsesByCursor: Record<string, ReturnType<typeof marketBarsResponse>> = {};
+  for (let pageNumber = 1; pageNumber < cursorPageLimit; pageNumber += 1) {
+    responsesByCursor[pageCursor(pageNumber)] = marketBarsResponse({
+      requestedResolution: "1d",
+      anchorMs,
+      startsMinutesAgo: [{ minutes: 3_000 + pageNumber * 1_440, close: `${500 + pageNumber}.00` }],
+      cursor: pageCursor(pageNumber + 1),
+    });
+  }
+  const firstPage = marketBarsResponse({
+    requestedResolution: "1d",
+    anchorMs,
+    startsMinutesAgo: [{ minutes: 3_000, close: "500.00" }],
+    cursor: pageCursor(1),
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: firstPage, responsesByCursor } });
+  await page.goto(WEB_ORIGIN);
+  const widget = page.getByTestId("chart-widget");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
+  await widget.getByRole("button", { name: "MAX", exact: true }).click();
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Resolution 1d → 1d");
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("1 bars");
+  const maxStart = "1970-01-01T00:00:00.000Z";
+
+  for (let loadedPageCount = 2; loadedPageCount <= cursorPageLimit; loadedPageCount += 1) {
+    await widget.getByTestId("chart-load-older").click();
+    const expectedCursorCalls = loadedPageCount - 1;
+    await expect.poll(async () => (await metrics(request)).mdpMarketBars.filter((call: { query: { start?: string; cursor?: string } }) =>
+      call.query.start === maxStart && Boolean(call.query.cursor)).length).toBe(expectedCursorCalls);
+    await expect(widget.getByTestId("chart-bar-count")).toHaveText(`${loadedPageCount} bars`);
+  }
+
+  await expect(widget.getByTestId("chart-history-page-limit")).toContainText("MAX history is incomplete");
+  await expect(widget.getByTestId("chart-history-page-limit")).toContainText("20-page limit");
+  await expect(widget.getByTestId("chart-load-older")).toHaveCount(0);
+  expect((await metrics(request)).mdpMarketBars.filter((call: { query: { start?: string; cursor?: string } }) =>
+    call.query.start === maxStart && Boolean(call.query.cursor))).toHaveLength(cursorPageLimit - 1);
 });
 
 test("a delayed older page cannot overwrite a newer 1D refresh and can be retried", async ({ page, request }) => {
@@ -485,7 +605,13 @@ test("a delayed older page cannot overwrite a newer 1D refresh and can be retrie
   }, { timeout: 12_000 }).toBe(true);
   await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
 
-  await expect.poll(async () => (await metrics(request)).mdp.inFlight, { timeout: 20_000 }).toBe(0);
+  await expect.poll(() => historyResponses.slice(raceResponseStart).some((url) =>
+    url.searchParams.get("range") === "1D" && url.searchParams.get("cursor") === CURSOR), { timeout: 20_000 }).toBe(true);
+  const raceCalls = (await metrics(request)).mdpMarketBars.slice(raceStart)
+    .filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
+  expect(raceCalls).toHaveLength(2);
+  expect(raceCalls.some((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR)).toBe(true);
+  expect(raceCalls.some((call: { query: { cursor?: string } }) => !call.query.cursor)).toBe(true);
   const countAfterRefresh = Number((await widget.getByTestId("chart-bar-count").textContent())?.match(/^(\d+) bars$/)?.[1]);
   expect([2, 3]).toContain(countAfterRefresh);
   await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
@@ -495,9 +621,7 @@ test("a delayed older page cannot overwrite a newer 1D refresh and can be retrie
   const refreshResponseIndex = responsesAfterRace.findIndex((url) => !url.searchParams.has("cursor"));
   const delayedCursorResponseIndex = responsesAfterRace.findIndex((url) => url.searchParams.get("cursor") === CURSOR);
   expect(refreshResponseIndex).toBeGreaterThanOrEqual(0);
-  if (delayedCursorResponseIndex >= 0) {
-    expect(refreshResponseIndex).toBeLessThan(delayedCursorResponseIndex);
-  }
+  expect(delayedCursorResponseIndex).toBeGreaterThan(refreshResponseIndex);
 
   await configureMocks(request, {
     marketBars: {
