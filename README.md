@@ -101,6 +101,8 @@ npm run dev
 
 公共 Actions 仅运行无私密凭据的 CI、CodeQL 和源码供应链检查。真实 Alpaca 只读 smoke、配额诊断、历史 QQQ SIP 导出及专用 App 自动合并均不由 Actions 执行；对应 workflows 已从 `.github/workflows` 移除，行情脚本保留为本地入口，专用 App 自动合并当前未启用。操作者若获准，可在隔离的本机进程中显式运行这些只读脚本；输出可能受行情许可约束，必须保存在仓库之外，不能提交或上传公开 artifact。入口和限制见 [安全边界](docs/SECURITY.md)、[部署说明](docs/DEPLOYMENT.md) 与 [PR 合并治理](docs/AUTOMERGE.md)。
 
+OpenTerminal required CI job 保留无条件的应用构建和容器回归；只有 PR 且改动完全落在路由脚本的精确 UI allowlist 时，才跳过较重的原生 OpenBB Lite 浏览器生命周期验收。主分支 push、手动触发、共享运行时/BFF/身份/行情契约/依赖/Docker/Compose/CI/测试工具改动，以及无法可靠计算的 diff 都运行完整验收。该 job 使用按镜像隔离的 GitHub Actions BuildKit 缓存；缓存导出失败只减少后续复用机会，不会放宽测试。
+
 ## 交付矩阵与当前验收状态
 
 | 范围 | 当前状态 |
