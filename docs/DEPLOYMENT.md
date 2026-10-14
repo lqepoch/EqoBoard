@@ -42,9 +42,12 @@ profile 的 Lite 登录仍是上游原生邮箱/密码登录，OIDC 只控制是
 本机启动命令：
 
 ```bash
+# 本机开发用途；此命令产生的镜像不是 CI、release 或部署验收证据。
 docker compose --profile openbb build
 docker compose --profile openbb up --build --wait
 ```
+
+OpenBB Lite 的正式源码、recipe、镜像、SBOM 和浏览器/容器验收由独立 GitHub Actions workflow 完成，见 [OpenBB supply-chain runbook](OPENBB_SUPPLY_CHAIN.md)。本机运行或构建可用于开发调试，但不能替代 Actions 结果。release/部署只接受记录好的不可变 OCI manifest digest 或 registry RepoDigest；不能把本地 Compose tag 或 image ID 当作发布身份。
 
 These commands build the locked source locally. The full-identity Compose tag
 selects the source and recipe; it does not guarantee immutable image bytes.
@@ -140,9 +143,9 @@ bash tools/container-e2e.sh
 
 此脚本会先在 Compose 启动前运行三个开发态预览/订单边界 smoke，再使用专属 Compose project 和临时 env file；Docker Compose 清除继承的 Alpaca/OIDC/service secret，host 侧 Playwright、mock server 和开发态 Next 进程只通过 `env -i` 接收测试所需 allowlist。它使用仅供测试的身份 key 和 loopback mock，不读取真实市场 key、不向 broker 下单。脚本输出实际 image ID、entrypoint/command、端口映射、运行用户、rootfs 权限、health/readiness、重启和 cache volume 重建结果，并通过 Playwright 驱动生产模式 Next 容器。失败时会先输出本次 Compose logs，再清理该专属 project 与 volumes。
 
-GitHub Actions 在 `OpenTerminal / AG Grid / Next.js` required job 中运行此容器验收，并预先用同一个 Buildx builder 构建 Gateway、OpenTerminal runtime 和 Compose E2E 镜像，再加载到 Docker daemon。之后的 `docker compose up --build` 通过 Compose Bake 复用该 builder 的本地层。GitHub Actions BuildKit 缓存按镜像/target 使用独立 scope；缓存导出失败只减少后续复用机会，cache miss 不改变验收范围。GitHub 的 cache ref 权限允许 PR workflow 读取 base/default branch cache，而 PR 写入限于该 PR merge ref；main push 与目标为 main 的 `workflow_dispatch` 维护默认分支 cache ref，其它 ref 的 dispatch 使用相应分支 cache ref，因此不需要为 PR 扩大 cache 写权限。CI 只把 builder 名称和 Bake 开关传入 E2E 脚本，GitHub 缓存授权由固定版本的 Docker Actions 管理，不写入 Compose 配置或测试 artifact。
+GitHub Actions 在 `OpenTerminal / AG Grid / Next.js` 核心 required job 中运行核心容器验收，并预先用同一个 Buildx builder 构建 Gateway、OpenTerminal runtime 和 Compose E2E 镜像，再加载到 Docker daemon。之后的 `docker compose up --build` 通过 Compose Bake 复用该 builder 的本地层。GitHub Actions BuildKit 缓存按镜像/target 使用独立 scope；缓存导出失败只减少后续复用机会，cache miss 不改变验收范围。GitHub 的 cache ref 权限允许 PR workflow 读取 base/default branch cache，而 PR 写入限于该 PR merge ref；main push 与目标为 main 的 `workflow_dispatch` 维护默认分支 cache ref，其它 ref 的 dispatch 使用相应分支 cache ref，因此不需要为 PR 扩大 cache 写权限。CI 只把 builder 名称和 Bake 开关传入 E2E 脚本，GitHub 缓存授权由固定版本的 Docker Actions 管理，不写入 Compose 配置或测试 artifact。
 
-同一 required job 只会对 PR 路径做保守分类：只有所有改动都是普通修改，且每个路径都命中 `tools/ci/openbb-e2e-route.mjs` 中的小型 UI allowlist 时，才跳过 native OpenBB Lite E2E。新增、删除、重命名、混合路径、auth/research 导航、终端 shell/order entry，以及 Cargo/Gateway/市场契约、BFF、依赖锁、Dockerfile、Compose、测试工具和 CI 配置都运行完整套件。merge-base、SHA 或 diff 缺失/歧义、空 diff、无法解析的变更状态均 fail closed。主分支 push 和 `workflow_dispatch` 总是运行完整 OpenBB 验收。应用测试与容器验收仍执行，required job 名称不变。
+OpenBB 使用独立 `.github/workflows/openbb.yml`（`OpenBB Optional CI`）。PR/push 均由轻量路由决定是否运行 source supply-chain 与 native runtime E2E；稳定 required context `OpenBB optional validation gate` 始终产生当前 head 结果。OpenBB source/recipe 和研究 BFF、认证、Gateway、市场契约、依赖、Docker/Compose、CI、测试等共享路径触发对应完整 lane；没有 OpenBB 相关变更时两个重型 lane 可跳过且 gate 成功。路径或 diff 状态不完整时按完整验收处理。手动 `workflow_dispatch` 和每周 schedule 均执行 source 与 runtime 重型 lane。核心和 OpenBB workflow 均只在 GitHub Actions 构建；本机 profile 命令留作开发调试，不能作为候选、release 或部署验收。
 
 生产 Next 容器的浏览器阶段也会运行 `compose.e2e.yaml` 中的本地 MDP HTTP mock：容器只访问 loopback `E2E_MDP_PORT`（固定 14313），并使用 overlay 内独立的 MDP 测试 signer key。`tools/container-e2e.sh` 会清除宿主传入的 MDP origin、端口与 signer 变量，避免覆盖隔离配置。该 mock 只返回合成 fixture，不启动真实 MDP、rclone、Drive 或行情连接；它验证的是生产 Next BFF/容器路径，不是外部存储连通性。
 

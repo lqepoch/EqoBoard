@@ -1,0 +1,47 @@
+{
+  "source": "synthetic contract fixture; not a GitHub observation",
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "check_suite_id": 778,
+  "check_runs": [
+    {
+      "id": 2001,
+      "name": "OpenBB optional validation gate",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-14T00:10:00Z",
+      "app": { "id": 15368, "slug": "github-actions" },
+      "check_suite": { "id": 778 }
+    },
+    {
+      "id": 2002,
+      "name": "OpenBB change routing",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-14T00:09:00Z",
+      "app": { "id": 15368, "slug": "github-actions" },
+      "check_suite": { "id": 778 }
+    },
+    {
+      "id": 2003,
+      "name": "OpenBB source supply chain",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "completed",
+      "conclusion": "skipped",
+      "started_at": "2026-10-14T00:09:00Z",
+      "app": { "id": 15368, "slug": "github-actions" },
+      "check_suite": { "id": 778 }
+    },
+    {
+      "id": 2004,
+      "name": "OpenBB native runtime E2E",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "completed",
+      "conclusion": "skipped",
+      "started_at": "2026-10-14T00:09:00Z",
+      "app": { "id": 15368, "slug": "github-actions" },
+      "check_suite": { "id": 778 }
+    }
+  ]
+}

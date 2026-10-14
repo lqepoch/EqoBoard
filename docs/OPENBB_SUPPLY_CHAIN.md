@@ -6,9 +6,19 @@ adapter patch, and image recipe are pinned in
 commit, codeload archive SHA-256, license records, patch support file hashes,
 and recipe hash. Never follow the archived upstream's moving default branch.
 
+## GitHub Actions validation
+
+The independent workflow is [`.github/workflows/openbb.yml`](../.github/workflows/openbb.yml), named `OpenBB Optional CI`. Its lightweight path router runs for every PR and push. Each workflow suite emits four same-head checks: `OpenBB change routing`, `OpenBB source supply chain`, `OpenBB native runtime E2E`, and the stable required check `OpenBB optional validation gate`. The route and aggregate checks must pass. When a change does not affect OpenBB source or its shared integration, both heavy-lane checks complete as `skipped` and the gate succeeds; the check runs are still present. OpenBB source/recipe changes and shared research/BFF, identity, Gateway, market-contract, dependency, Docker/Compose, CI, or test infrastructure changes select the relevant heavy lane. Missing or ambiguous path/diff evidence fails closed and selects full validation.
+
+The `OpenBB source supply chain` lane verifies the pinned source archive and license records, generates upstream and community-patched source SPDX SBOMs, and records the drift report. The `OpenBB native runtime E2E` lane builds the pinned Lite image and runs the isolated container/browser acceptance. Manual `workflow_dispatch` and the weekly schedule run both lanes. These Actions results bind the current candidate's source checks, two source-only SBOMs, tested image, and browser evidence. The workflow does not produce a runtime image SBOM or approve release/deployment; those gates remain separate. Consequently, local development builds or runs are not CI, release, or deployment evidence. The workflow uses public sources and synthetic test fixtures only, with no market-data credentials.
+
 ## Verify and review source changes
 
-From the repository root, run:
+For a PR or candidate source update, use the source artifacts and logs from the
+`OpenBB Optional CI` run bound to that commit. The commands below are the
+implementation invoked by the Actions lane; a local invocation may help
+diagnose a failure, but must not replace the run or be recorded as CI/release
+evidence.
 
 ```sh
 bash tools/openbb/fetch-upstream.sh
@@ -205,20 +215,14 @@ every bundled dependency.
 
 ## Build and rollback
 
-`bash tools/openbb/build-lite.sh` verifies the locked source and support files,
-applies the pinned patch in a temporary tree, checks the resulting build
-inputs, and uses the pinned recipe for a local build. The lock's
-`local-buildable` state permits that source/recipe operation only; it does not
-mean the image built, passed health checks, integrated in a browser, or is
-approved for deployment. Runtime Compose may use the same root-context
-Dockerfile, but direct Compose builds bypass the helper's local tag conflict
-guard and process lock. Helper builds hold an owner-private XDG cache lock by
-full build identity and image tag, shared across worktrees for the same local
-user. The lock serializes cooperating helper processes only; manual Docker or
-Compose builds do not participate. Build records include the full identity,
-use a unique filename, and fail rather than replace an existing record. Neither
-a Compose tag nor the helper's content-specific local tag is an immutable image
-digest. Debian APT package bytes do not come from a frozen
+The `OpenBB native runtime E2E` Actions lane uses the pinned recipe to build
+and exercise the candidate image. `bash tools/openbb/build-lite.sh` and the
+Compose `build` commands remain local development/debugging helpers only; they
+do not establish acceptance for a candidate, release, or deployment. The lock's
+`local-buildable` status describes whether locked source and recipe inputs may
+be attempted; it does not mean an image built, passed health checks, integrated
+in a browser, or is approved for deployment. A Compose tag or helper tag is not
+an immutable image digest. Debian APT package bytes do not come from a frozen
 snapshot, pip bootstrap installs have version pins but no artifact hashes, and
 the upstream frontend downloads webfonts without a font digest. Therefore a
 repeat build can produce different image bytes even when source and recipe
