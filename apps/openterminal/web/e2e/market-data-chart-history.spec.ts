@@ -157,6 +157,80 @@ function marketBarsResponse({
   };
 }
 
+function cross2016DailyResponse() {
+  const yahooProvenanceId = "fixture-yfinance-pre-2016";
+  const alpacaProvenanceId = "fixture-alpaca-post-2016";
+  const yahooSessionId = "fixture-yahoo-session-2015-12-31";
+  const alpacaSessionId = "fixture-alpaca-session-2016-01-04";
+  const yahooRow = {
+    ...bar("2015-12-31T00:00:00.000Z", "1d", "501.123456", "etf"),
+    provenance_id: yahooProvenanceId,
+    session_instance_id: yahooSessionId,
+    validation_state: "provisional" as const,
+  };
+  const alpacaRow = {
+    ...bar("2016-01-04T00:00:00.000Z", "1d", "502.234567", "etf"),
+    provenance_id: alpacaProvenanceId,
+    session_instance_id: alpacaSessionId,
+    validation_state: "provisional" as const,
+  };
+  const fetchedAt = new Date().toISOString();
+
+  return {
+    schema_version: 1,
+    requested_resolution: "1d",
+    effective_resolution: "1d",
+    adjustment: "unadjusted",
+    rows: [yahooRow, { ...yahooRow }, alpacaRow],
+    coverage_status: "partial",
+    segments: [
+      {
+        start_utc: yahooRow.bar_start_utc,
+        end_exclusive_utc: yahooRow.bar_end_exclusive_utc,
+        coverage_status: "partial",
+        provenance_id: yahooProvenanceId,
+        session_instance_id: yahooSessionId,
+      },
+      {
+        start_utc: alpacaRow.bar_start_utc,
+        end_exclusive_utc: alpacaRow.bar_end_exclusive_utc,
+        coverage_status: "partial",
+        provenance_id: alpacaProvenanceId,
+        session_instance_id: alpacaSessionId,
+      },
+    ],
+    gaps: [],
+    source_provenance: [
+      {
+        provenance_id: yahooProvenanceId,
+        provider: "yfinance",
+        feed: "unknown",
+        source: "Yahoo Finance synthetic fixture; unverified",
+        entitlement_status: "unknown",
+        numeric_encoding: "decimal_token",
+      },
+      {
+        provenance_id: alpacaProvenanceId,
+        provider: "alpaca",
+        feed: "unknown",
+        source: "Alpaca synthetic fixture; unverified",
+        entitlement_status: "unknown",
+        numeric_encoding: "decimal_token",
+      },
+    ],
+    provider: "mixed",
+    feed: "unknown",
+    entitlement_status: "unknown",
+    as_of: alpacaRow.bar_start_utc,
+    fetched_at: fetchedAt,
+    verified_at: null,
+    cache_status: "miss",
+    market_calendar_version: null,
+    continuation_cursor: null,
+    truncated: false,
+  };
+}
+
 test.beforeEach(async ({ request }) => {
   test.skip(!marketBarsEnabled,
     "requires E2E_MDP_MARKET_BARS_ENABLED=true; exercised by the dedicated enabled-mode E2E step");
@@ -321,6 +395,160 @@ test("all chart ranges request the documented resolution through the BFF", async
     const matchingCall = (await metrics(request)).mdpMarketBars.slice(countBefore).find((call: { query: { resolution?: string } }) => call.query.resolution === resolution);
     expect(matchingCall?.query).toMatchObject({ resolution, provider_mode: "auto", adjustment: "unadjusted", session_scope: "all" });
   }
+});
+
+test("MAX preserves mixed Yahoo and Alpaca daily provenance across the 2016 boundary and deduplicates timestamps", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const historyRequests = captureHistoryRequests(page);
+  const initialDaily = marketBarsResponse({
+    requestedResolution: "1d",
+    assetClass: "etf",
+    startsMinutesAgo: [{ minutes: 6_000, close: "500.00" }],
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: initialDaily } });
+  await page.goto(WEB_ORIGIN);
+
+  const widget = page.getByTestId("chart-widget");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
+  const crossBoundary = cross2016DailyResponse();
+  await configureMocks(request, { marketBars: { enabled: true, response: crossBoundary } });
+  const maxResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === `/api/history/${SYMBOL}` && url.searchParams.get("range") === "MAX" &&
+      url.searchParams.get("resolution") === "1d";
+  });
+  await widget.getByRole("button", { name: "MAX", exact: true }).click();
+  const maxResponse = await maxResponsePromise;
+  expect(maxResponse.status()).toBe(200);
+  const payload = await maxResponse.json() as {
+    request_start?: string;
+    requested_resolution?: string;
+    effective_resolution?: string;
+    bars?: Array<{
+      time?: number;
+      resolution?: string;
+      source_mode?: string;
+      source_label?: string;
+      exact?: { close?: string };
+    }>;
+  };
+  expect(payload.request_start).toBe("1970-01-01T00:00:00.000Z");
+  expect(payload.requested_resolution).toBe("1d");
+  expect(payload.effective_resolution).toBe("1d");
+  expect(payload.bars).toHaveLength(3);
+  expect(payload.bars?.every((row) => row.resolution === "1d")).toBe(true);
+  expect(payload.bars?.map((row) => [row.source_mode, row.source_label])).toEqual([
+    ["yfinance", "Yahoo Finance synthetic fixture; unverified"],
+    ["yfinance", "Yahoo Finance synthetic fixture; unverified"],
+    ["alpaca", "Alpaca synthetic fixture; unverified"],
+  ]);
+  const expectedTimes = [
+    Date.parse("2015-12-31T00:00:00.000Z") / 1_000,
+    Date.parse("2016-01-04T00:00:00.000Z") / 1_000,
+  ];
+  expect(payload.bars?.map((row) => row.time).filter((time): time is number => typeof time === "number"))
+    .toEqual([expectedTimes[0], expectedTimes[0], expectedTimes[1]]);
+  expect(historyRequests.some((url) => url.searchParams.get("range") === "MAX" &&
+    url.searchParams.get("resolution") === "1d")).toBe(true);
+
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider mixed");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Feed unknown");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Coverage partial");
+  await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Segments 2");
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
+  await widget.getByText("Coverage, gaps and provenance detail").click();
+  const provenanceDetails = widget.locator("details pre");
+  await expect(provenanceDetails).toContainText("2015-12-31T00:00:00.000Z");
+  await expect(provenanceDetails).toContainText("2016-01-04T00:00:00.000Z");
+  await expect(provenanceDetails).toContainText("yfinance");
+  await expect(provenanceDetails).toContainText("Yahoo Finance synthetic fixture; unverified");
+  await expect(provenanceDetails).toContainText("alpaca");
+  await expect(provenanceDetails).toContainText("Alpaca synthetic fixture; unverified");
+});
+
+test("MAX explicit 15m keeps the request visible when the BFF returns a daily downgrade", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const historyRequests = captureHistoryRequests(page);
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      response: marketBarsResponse({
+        requestedResolution: "1m",
+        assetClass: "etf",
+        startsMinutesAgo: [{ minutes: 5, close: "500.00" }],
+      }),
+    },
+  });
+  await page.goto(WEB_ORIGIN);
+  await page.getByRole("button", { name: /pro trading/i }).click();
+
+  const chart = page.getByTestId("main-chart-panel");
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("Resolution 1m → 1m");
+  const maxDaily = marketBarsResponse({
+    requestedResolution: "1d",
+    assetClass: "etf",
+    feed: "unknown",
+    startsMinutesAgo: [{ minutes: 6_000, close: "500.00" }],
+    includeGap: false,
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: maxDaily } });
+  const maxResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === `/api/history/${SYMBOL}` && url.searchParams.get("range") === "MAX" &&
+      url.searchParams.get("resolution") === "1d";
+  });
+  await chart.getByTestId("main-chart-range-MAX").click();
+  const maxResponse = await maxResponsePromise;
+  expect(maxResponse.status()).toBe(200);
+
+  const dailyDowngrade = marketBarsResponse({
+    requestedResolution: "15m",
+    effectiveResolution: "1d",
+    assetClass: "etf",
+    feed: "unknown",
+    startsMinutesAgo: [
+      { minutes: 4_440, close: "501.00" },
+      { minutes: 3_000, close: "502.00" },
+    ],
+    includeGap: false,
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: dailyDowngrade } });
+  const downgradeResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === `/api/history/${SYMBOL}` && url.searchParams.get("range") === "MAX" &&
+      url.searchParams.get("resolution") === "15m";
+  });
+  await chart.getByTestId("main-chart-interval-15m").click();
+  const downgradeResponse = await downgradeResponsePromise;
+  expect(downgradeResponse.status()).toBe(200);
+  const payload = await downgradeResponse.json() as {
+    requested_resolution?: string;
+    effective_resolution?: string;
+    downgrade_reason?: string;
+    resolution?: { requested?: string; effective?: string; downgrade_reason?: string | null };
+    bars?: Array<{ time?: number; resolution?: string }>;
+  };
+  expect(payload.requested_resolution).toBe("15m");
+  expect(payload.effective_resolution).toBe("1d");
+  expect(payload.downgrade_reason).toBe("unknown");
+  expect(payload.resolution).toEqual({ requested: "15m", effective: "1d", downgrade_reason: "unknown" });
+  expect(payload.bars).toHaveLength(2);
+  expect(payload.bars?.every((row) => row.resolution === "1d")).toBe(true);
+  const dailyTimes = (payload.bars ?? []).map((row) => row.time)
+    .filter((time): time is number => typeof time === "number").sort((left, right) => left - right);
+  expect(dailyTimes).toHaveLength(2);
+  expect(dailyTimes[1]! - dailyTimes[0]!).toBe(24 * 60 * 60);
+
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("Resolution 15m → 1d");
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("Downgrade unknown");
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("Feed unknown");
+  await expect(chart.getByTestId("main-chart-interval-15m")).toHaveAttribute("aria-pressed", "true");
+  const mdpRequest = (await metrics(request)).mdpMarketBars.filter((call: {
+    query: { range?: string; resolution?: string; allow_daily_downgrade?: string };
+  }) => call.query.resolution === "15m").at(-1);
+  expect(mdpRequest).toMatchObject({ path: "/v1/market/bars", query: { resolution: "15m", allow_daily_downgrade: "true" } });
+  expect(historyRequests.some((url) => url.searchParams.get("range") === "MAX" &&
+    url.searchParams.get("resolution") === "15m" && url.searchParams.get("allow_daily_downgrade") === "true")).toBe(true);
 });
 
 test("MAX pans to a real daily cursor page and preserves unknown feed and exact decimals", async ({ page, request }) => {
