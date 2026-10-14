@@ -13,6 +13,7 @@ const SYMBOL = "QQQ";
 const CURSOR = "older-page-cursor-e2e";
 const OLDEST_CURSOR = "oldest-page-cursor-e2e";
 const PROVENANCE_ID = "fixture-provenance-v1";
+const marketBarsEnabled = process.env.E2E_MDP_MARKET_BARS_ENABLED === "true";
 
 type Resolution = "1m" | "5m" | "15m" | "1h" | "1d";
 type AssetClass = "stock" | "etf";
@@ -152,7 +153,11 @@ function marketBarsResponse({
   };
 }
 
-test.beforeEach(async ({ request }) => resetDownstream(request));
+test.beforeEach(async ({ request }) => {
+  test.skip(!marketBarsEnabled,
+    "requires E2E_MDP_MARKET_BARS_ENABLED=true; exercised by the dedicated enabled-mode E2E step");
+  await resetDownstream(request);
+});
 
 test("ChartWidget reads history through the BFF, pages older bars while panning at the left edge, and shows provenance", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
