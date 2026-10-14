@@ -325,6 +325,7 @@ export async function getMarketBars(request: NextRequest, rawSymbol: string): Pr
     symbol: parsed.symbol,
     assetClass: parsed.assetClass,
     requestedResolution: parsed.resolution,
+    allowDailyDowngrade: parsed.allowDailyDowngrade,
     adjustment: parsed.adjustment,
     start: window.start,
     end: window.end,

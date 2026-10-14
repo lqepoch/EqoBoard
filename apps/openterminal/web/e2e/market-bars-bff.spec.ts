@@ -4,6 +4,7 @@ import {
   loginWithOidc,
   metrics,
   resetDownstream,
+  setRoles,
   test,
   WEB_ORIGIN,
 } from "./fixtures";
@@ -12,6 +13,7 @@ type FixtureOptions = {
   symbol?: string;
   assetClass?: "stock" | "etf";
   resolution?: "1m" | "5m" | "15m" | "1h" | "1d";
+  effectiveResolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   adjustment?: "unadjusted" | "split" | "dividend" | "all";
   olderMinutes?: number;
   continuationCursor?: string | null;
@@ -22,6 +24,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
   const symbol = options.symbol ?? "QQQ";
   const assetClass = options.assetClass ?? "stock";
   const resolution = options.resolution ?? "5m";
+  const effectiveResolution = options.effectiveResolution ?? resolution;
   const adjustment = options.adjustment ?? "unadjusted";
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
@@ -32,7 +35,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
     "1h": 60 * 60_000,
     "1d": 24 * 60 * 60_000,
   };
-  const interval = intervalMs[resolution];
+  const interval = intervalMs[effectiveResolution];
   const barStart = new Date(Math.floor(nowMs / interval) * interval - (options.olderMinutes ?? 2) * interval).toISOString();
   const barEnd = new Date(Date.parse(barStart) + interval).toISOString();
   const cursor = options.continuationCursor ?? null;
@@ -45,7 +48,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
     feed: "synthetic",
     entitlement_status: "unknown",
     requested_resolution: resolution,
-    effective_resolution: resolution,
+    effective_resolution: effectiveResolution,
     adjustment,
     coverage_status: "partial",
     segments: [{
@@ -74,7 +77,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
     rows: [{
       symbol,
       asset_class: assetClass,
-      resolution,
+      resolution: effectiveResolution,
       adjustment,
       bar_start_utc: barStart,
       bar_end_exclusive_utc: barEnd,
@@ -93,6 +96,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
 }
 
 const featureEnabled = process.env.E2E_MDP_MARKET_BARS_ENABLED === "true";
+const gatewaySignerDisabled = process.env.E2E_GATEWAY_SIGNER_DISABLED === "true";
 
 test.beforeEach(async ({ request }) => {
   await resetDownstream(request);
@@ -121,7 +125,7 @@ test("default-off history preserves the legacy route and rejects an unapplied pr
 });
 
 test("enabled history validates and projects the Core envelope with short independent delegations", async ({ page, request }) => {
-  test.skip(!featureEnabled, "requires E2E_MDP_MARKET_BARS_ENABLED=true");
+  test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
   await configureMocks(request, { marketBars: { enabled: true, response: makeCoreEnvelope({ assetClass: "etf" }) } });
 
@@ -223,7 +227,7 @@ test("enabled history validates and projects the Core envelope with short indepe
 });
 
 test("cursor pages preserve the first request window and opaque cursor", async ({ page, request }) => {
-  test.skip(!featureEnabled, "requires E2E_MDP_MARKET_BARS_ENABLED=true");
+  test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
   const cursor = "opaque+older-page/v1";
   const firstPage = makeCoreEnvelope({ olderMinutes: 2, continuationCursor: cursor });
@@ -280,7 +284,7 @@ test("research provider mode requires the research scope before calling MDP", as
 });
 
 test("invalid inputs, unsupported symbols, and malformed Core envelopes fail without source fallback", async ({ page, request }) => {
-  test.skip(!featureEnabled, "requires E2E_MDP_MARKET_BARS_ENABLED=true");
+  test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
 
   for (const path of [
@@ -301,8 +305,55 @@ test("invalid inputs, unsupported symbols, and malformed Core envelopes fail wit
   expect(invalidResponse.status()).toBe(502);
   expect((await invalidResponse.json()).error).toBe("invalid_market_data_response");
 
+  const unrequestedDowngrade = makeCoreEnvelope({ resolution: "5m", effectiveResolution: "1d" });
+  await configureMocks(request, { marketBars: { enabled: true, response: unrequestedDowngrade } });
+  const downgradeResponse = await page.context().request.get(
+    `${WEB_ORIGIN}/api/history/QQQ?range=5D&resolution=5m&allow_daily_downgrade=false`,
+  );
+  expect(downgradeResponse.status()).toBe(502);
+  expect((await downgradeResponse.json()).error).toBe("invalid_market_data_response");
+
   const observed = await metrics(request);
   expect(observed.gateway.requests["/api/v1/stocks/bars"]).toBeUndefined();
   expect(observed.research.requests).toEqual({});
+  expect(observed.mdpMarketBars).toHaveLength(2);
+});
+
+test("enabled history works when the optional terminal Gateway signer is absent", async ({ page, request }) => {
+  test.skip(!featureEnabled || !gatewaySignerDisabled,
+    "requires E2E_MDP_MARKET_BARS_ENABLED=true and E2E_GATEWAY_SIGNER_DISABLED=true");
+  await configureMocks(request, { marketBars: { enabled: true, response: makeCoreEnvelope({ assetClass: "etf" }) } });
+  await setRoles(request, ["eqoboard-market-reader"]);
+  await page.goto("/");
+  await page.getByRole("button", { name: /organization identity provider/i }).click();
+  await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
+  const session = await page.evaluate(async () => {
+    const response = await fetch("/api/auth/session", { cache: "no-store" });
+    return { status: response.status, body: await response.json() };
+  });
+  expect(session.status).toBe(200);
+  expect(session.body.user.roles).toEqual(["eqoboard-market-reader"]);
+  await page.goto("/api/healthz");
+
+  const response = await page.context().request.get(
+    `${WEB_ORIGIN}/api/history/QQQ?range=5D&resolution=5m&asset_class=etf`,
+  );
+  expect(response.status()).toBe(200);
+  expect((await response.json()).bars).toHaveLength(1);
+
+  const observed = await metrics(request);
+  expect(observed.mdp.authorized).toBe(1);
+  expect(observed.mdp.rejected).toBe(0);
   expect(observed.mdpMarketBars).toHaveLength(1);
+  expect(observed.mdpMarketBars[0]).toMatchObject({
+    path: "/v1/market/bars",
+    bearer_present: true,
+    gateway_delegation_present: false,
+    kid: "mdp-terminal",
+    issuer: "eqoboard-openterminal",
+    audience: "lqepoch-market-data",
+    subject: "subject-e2e",
+    scope: ["market:read"],
+  });
+  expect(observed.gateway.requests["/api/v1/stocks/bars"]).toBeUndefined();
 });

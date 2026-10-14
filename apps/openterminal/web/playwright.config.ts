@@ -71,7 +71,7 @@ export default defineConfig({
         EQO_OIDC_ISSUER: oidcUrl,
         EQO_OIDC_CLIENT_ID: "eqo-test",
         EQO_OIDC_CLIENT_SECRET: "test-secret",
-        EQO_GATEWAY_JWT_SECRET: "b".repeat(64),
+        EQO_GATEWAY_JWT_SECRET: process.env.E2E_GATEWAY_SIGNER_DISABLED === "true" ? "" : "b".repeat(64),
         EQO_RESEARCH_JWT_SECRET: "r".repeat(64),
         EQO_RESEARCH_API_KEY: "research-service-test-key-that-is-at-least-32-bytes",
         MDP_TERMINAL_JWT_SECRET: "m".repeat(64),

@@ -8,6 +8,7 @@ import {
   engineOfflinePreviewSigner,
   isAuthRuntimeConfigured,
   isCurrentOidcIssuer,
+  isMdpTerminalPrincipalRuntimeConfigured,
   isResearchAuthRuntimeConfigured,
   isOidcConfigured,
   mdpMarketDataSigner,
@@ -235,7 +236,7 @@ export async function authorizeMdpMarketDataRequest(
   const mode = process.env.EQO_BFF_MODE === "research" ? "research" : "terminal";
   const runtimeConfigured = mode === "research"
     ? isResearchAuthRuntimeConfigured()
-    : isAuthRuntimeConfigured();
+    : isMdpTerminalPrincipalRuntimeConfigured();
   if (!runtimeConfigured || (mode === "research" && !isOidcConfigured())) {
     return { ok: false, response: jsonError(503, "identity_service_unavailable") };
   }

@@ -28,6 +28,6 @@ The browser may select `auto`, `alpaca_only`, or `futu_only` as read-only routin
 
 ## Tests and rollback
 
-`web/e2e/market-bars-bff.spec.ts` exercises default-off compatibility and, when `E2E_MDP_MARKET_BARS_ENABLED=true`, the real same-origin Next BFF route against the isolated bounded loopback MDP fixture. Fixture provenance is explicitly synthetic; it is never evidence of provider availability or entitlement. The fixture supports separate Core envelopes keyed by opaque cursor so continuation behavior can be tested through the same route.
+`web/e2e/market-bars-bff.spec.ts` exercises default-off compatibility and, when `E2E_MDP_MARKET_BARS_ENABLED=true`, the real same-origin Next BFF route against the isolated bounded loopback MDP fixture. Set `E2E_GATEWAY_SIGNER_DISABLED=true` for the additional case that proves an authorized MDP read still works without the optional terminal Gateway signer. Fixture provenance is explicitly synthetic; it is never evidence of provider availability or entitlement. The fixture supports separate Core envelopes keyed by opaque cursor so continuation behavior can be tested through the same route.
 
 Rollback is immediate: unset `EQO_MDP_MARKET_BARS_ENABLED` or set it to `false`, then restart the OpenTerminal web process. `provider_mode=auto` returns to the existing history route; explicit provider preferences fail with the documented `501` instead of silently selecting a different source. No schema or stored market data migration is required.

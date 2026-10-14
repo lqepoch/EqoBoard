@@ -60,6 +60,7 @@ export type MarketBarRequestIdentity = {
   symbol: string;
   assetClass: MarketBarAssetClass;
   requestedResolution: MarketBarResolution;
+  allowDailyDowngrade: boolean;
   adjustment: MarketBarAdjustment;
   start: string;
   end: string;
@@ -288,6 +289,8 @@ export function validateMdpMarketBarsResponse(
   if (!isRecord(value) || value.schema_version !== 1 ||
       value.requested_resolution !== identity.requestedResolution ||
       !MARKET_BAR_RESOLUTIONS.includes(value.effective_resolution as MarketBarResolution) ||
+      (value.effective_resolution !== identity.requestedResolution &&
+        (!identity.allowDailyDowngrade || value.effective_resolution !== "1d")) ||
       value.adjustment !== identity.adjustment ||
       !MARKET_BAR_COVERAGE.includes(value.coverage_status as (typeof MARKET_BAR_COVERAGE)[number]) ||
       !safeLabel(value.provider, 128) || !safeLabel(value.feed, 128) ||
