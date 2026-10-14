@@ -126,4 +126,3 @@ class ContractTestSplitTests(unittest.TestCase):
                 check=True,
                 cwd=ROOT,
             )
-

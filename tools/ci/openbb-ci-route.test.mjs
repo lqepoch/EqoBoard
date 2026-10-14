@@ -313,4 +313,3 @@ test("CLI writes machine-readable route outputs separately from its summary", ()
     rmSync(root, { recursive: true, force: true });
   }
 });
-
