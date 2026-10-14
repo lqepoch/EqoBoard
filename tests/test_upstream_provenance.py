@@ -12,7 +12,6 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(len(sources["OpenTerminal"]["commit"]),40)
         self.assertEqual(sources["OpenTerminal"]["license"],"MIT")
         self.assertEqual(sources["AG Grid Community"]["version"],"36.2.0")
-        self.assertEqual(sources["OpenBB Workspace"]["license"],"Apache-2.0")
         core_source = sources["trading-core TypeScript contracts"]
         expected_core_rust_commit = "b2679e757576f8da7850cd4b5ea2958bc9a2354c"
         expected_core_npm_commit = "b2679e757576f8da7850cd4b5ea2958bc9a2354c"
@@ -73,6 +72,9 @@ class ProvenanceTests(unittest.TestCase):
         self.assertIn("applyTransactionAsync",option)
 
     def test_openbb_read_only_versioned_contract(self):
+        upstreams=json.loads((ROOT/"third_party/upstreams.lock.json").read_text())
+        sources={x["name"]:x for x in upstreams["sources"]}
+        self.assertEqual(sources["OpenBB Workspace"]["license"], "Apache-2.0")
         gateway=(ROOT/"apps/gateway/src/main.rs").read_text()
         for path in ('"/openbb/v1/stocks"','"/openbb/v1/options"','"/openbb/v1/bars"'):
             self.assertIn(path,gateway)

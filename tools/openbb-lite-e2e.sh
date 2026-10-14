@@ -217,6 +217,8 @@ EOF
   exit "${status}"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 cd "${ROOT_DIR}"
 : >"${RUN_LOG}"
