@@ -561,7 +561,8 @@ test("a delayed older page cannot overwrite a newer 1D refresh and can be retrie
       enabled: true,
       response: initialIntraday,
       responsesByCursor: { [CURSOR]: delayedOlderPage },
-      delayMs: 10_000,
+      // Keep the cursor pending across more than one head-refresh tick so the race does not depend on gesture timing.
+      delayMs: 18_000,
     },
   });
   const canvas = widget.getByTestId("chart-widget-canvas");
@@ -599,8 +600,8 @@ test("a delayed older page cannot overwrite a newer 1D refresh and can be retrie
     const calls = (await metrics(request)).mdpMarketBars.slice(raceStart);
     const cursorIndex = calls.findIndex((call: { query: { resolution?: string; cursor?: string } }) =>
       call.query.resolution === "1m" && call.query.cursor === CURSOR);
-    const refreshIndex = calls.findIndex((call: { query: { resolution?: string; cursor?: string } }) =>
-      call.query.resolution === "1m" && !call.query.cursor);
+    const refreshIndex = calls.findIndex((call: { query: { resolution?: string; cursor?: string } }, index: number) =>
+      index > cursorIndex && call.query.resolution === "1m" && !call.query.cursor);
     return cursorIndex >= 0 && refreshIndex > cursorIndex;
   }, { timeout: 12_000 }).toBe(true);
   await expect(widget.getByText("512.00", { exact: true })).toBeVisible();
@@ -609,8 +610,8 @@ test("a delayed older page cannot overwrite a newer 1D refresh and can be retrie
     url.searchParams.get("range") === "1D" && url.searchParams.get("cursor") === CURSOR), { timeout: 20_000 }).toBe(true);
   const raceCalls = (await metrics(request)).mdpMarketBars.slice(raceStart)
     .filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
-  expect(raceCalls).toHaveLength(2);
-  expect(raceCalls.some((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR)).toBe(true);
+  expect(raceCalls.length).toBeLessThanOrEqual(4);
+  expect(raceCalls.filter((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR)).toHaveLength(1);
   expect(raceCalls.some((call: { query: { cursor?: string } }) => !call.query.cursor)).toBe(true);
   const countAfterRefresh = Number((await widget.getByTestId("chart-bar-count").textContent())?.match(/^(\d+) bars$/)?.[1]);
   expect([2, 3]).toContain(countAfterRefresh);
