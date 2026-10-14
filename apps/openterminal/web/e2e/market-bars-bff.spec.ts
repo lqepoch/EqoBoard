@@ -16,6 +16,7 @@ type FixtureOptions = {
   resolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   effectiveResolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   adjustment?: "unadjusted" | "split" | "dividend" | "all";
+  coverageStatus?: "complete" | "partial";
   olderMinutes?: number;
   includeGap?: boolean;
   continuationCursor?: string | null;
@@ -47,6 +48,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
     reason_code: "source_gap",
   }] : [];
   const cursor = options.continuationCursor ?? null;
+  const coverageStatus = options.coverageStatus ?? "partial";
   const provenanceId = "synthetic-e2e-provenance";
   const sessionInstanceId = "synthetic-e2e-session";
 
@@ -58,11 +60,11 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
     requested_resolution: resolution,
     effective_resolution: effectiveResolution,
     adjustment,
-    coverage_status: "partial",
+    coverage_status: coverageStatus,
     segments: [{
       start_utc: barStart,
       end_exclusive_utc: barEnd,
-      coverage_status: "partial",
+      coverage_status: coverageStatus,
       provenance_id: provenanceId,
       session_instance_id: sessionInstanceId,
     }],
@@ -267,6 +269,29 @@ test("enabled history preserves valid HTTP 206 coverage, rows, gaps, and source 
   });
   expect(observed.mdpMarketBars[0].exp - observed.mdpMarketBars[0].iat).toBeLessThanOrEqual(60);
   expect(observed.mdpMarketBars[0].gateway_delegation.exp - observed.mdpMarketBars[0].gateway_delegation.iat).toBeLessThanOrEqual(60);
+});
+
+test("enabled history preserves valid HTTP 200 complete coverage", async ({ page, request }) => {
+  test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      status: 200,
+      response: makeCoreEnvelope({ coverageStatus: "complete" }),
+    },
+  });
+
+  const response = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?range=5D&resolution=5m`);
+  expect(response.status()).toBe(200);
+  expect(response.headers()["cache-control"]).toBe("no-store");
+  expect(await response.json()).toMatchObject({
+    coverage_status: "complete",
+    bars: [{ symbol: "QQQ", exact: { close: "512.7500" } }],
+    segments: [{ coverage_status: "complete" }],
+    gaps: [],
+  });
+  expect((await metrics(request)).mdpMarketBars).toHaveLength(1);
 });
 
 test("cursor pages preserve the first request window and opaque cursor", async ({ page, request }) => {
