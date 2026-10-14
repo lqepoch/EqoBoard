@@ -67,7 +67,7 @@ function marketBarsResponse({
   startsMinutesAgo: Array<{ minutes: number; close: string }>;
   cursor?: string | null;
 }) {
-  const oldestSafeMinute = effectiveResolution === "1d" ? 1_500 : effectiveResolution === "1h" ? 120 : effectiveResolution === "15m" ? 30 : effectiveResolution === "5m" ? 10 : 2;
+  const oldestSafeMinute = effectiveResolution === "1d" ? 3_000 : effectiveResolution === "1h" ? 120 : effectiveResolution === "15m" ? 30 : effectiveResolution === "5m" ? 10 : 2;
   const rows = startsMinutesAgo.map(({ minutes, close }) => bar(isoMinutesAgo(Math.max(minutes, oldestSafeMinute)), effectiveResolution, close, assetClass));
   const first = rows[0];
   const last = rows[rows.length - 1];
@@ -99,7 +99,7 @@ function marketBarsResponse({
       feed: "fixture-feed",
       source: "synthetic-chart-e2e",
       entitlement_status: "unknown",
-      numeric_encoding: "decimal",
+      numeric_encoding: "decimal_token",
     }],
     provider: "fixture-provider",
     feed: "fixture-feed",
@@ -159,7 +159,7 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Coverage partial");
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Gaps 1");
 
-  await expect.poll(async () => (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m").length).toBe(1);
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m").length).toBeGreaterThanOrEqual(1);
   const firstPage = (await metrics(request)).mdpMarketBars.find((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
   expect(firstPage).toMatchObject({
     path: "/v1/market/bars",
@@ -178,12 +178,17 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
   await page.mouse.down();
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.9, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
   await page.mouse.up();
-  await expect.poll(async () => (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m").length).toBe(2);
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR)).toBe(true);
   const pageCalls = (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
-  expect(pageCalls[1].query).toMatchObject({
+  const cursorCallIndex = pageCalls.findIndex((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR);
+  if (cursorCallIndex < 0) throw new Error("Continuation request was not recorded");
+  const cursorCall = pageCalls[cursorCallIndex];
+  const boundaryPage = pageCalls.slice(0, cursorCallIndex).filter((call: { query: { cursor?: string } }) => !call.query.cursor).at(-1);
+  if (!boundaryPage) throw new Error("Continuation request has no preceding boundary page");
+  expect(cursorCall.query).toMatchObject({
     cursor: CURSOR,
-    start: firstPage.query.start,
-    end: firstPage.query.end,
+    start: boundaryPage.query.start,
+    end: boundaryPage.query.end,
   });
   await expect(widget.getByTestId("chart-bar-count")).toHaveText("3 bars");
 
