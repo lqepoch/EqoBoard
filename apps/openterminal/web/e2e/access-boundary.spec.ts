@@ -118,6 +118,8 @@ test("status route shows market readiness separately from configured endpoints a
     ibkr: { paper: { enabled: false, implementation: "disabled" } },
     schwab: { paper: { enabled: false, implementation: "disabled" } },
   });
+  await page.route(/\/api\/quotes\?/, (route) => route.abort());
+  await page.route(/\/api\/options\/[^/?]+\?/, (route) => route.abort());
   await page.goto("/");
   await expect(page.getByLabel("Broker").locator("option").filter({ hasText: "IBKR · Paper disabled" })).toHaveCount(1);
   await expect(page.getByTestId("market-readiness-status")).toHaveText(
@@ -134,7 +136,7 @@ test("status route shows market readiness separately from configured endpoints a
     "Market data: not ready · awaiting upstream",
   );
 
-  await page.unrouteAll();
+  await page.unroute("**/api/status");
   await page.route("**/api/status", (route) => route.fulfill({
     status: 503,
     contentType: "application/json",
@@ -144,10 +146,14 @@ test("status route shows market readiness separately from configured endpoints a
   await expect(page.getByTestId("market-readiness-status")).toHaveText(
     "Market data: unknown · status unknown",
   );
-  await page.unrouteAll();
+  await page.unroute("**/api/status");
   const observed = await metrics(request);
   expect(observed.gateway.requests["/api/v1/status"]).toBeGreaterThanOrEqual(1);
   expect(observed.gateway.authorized).toBeGreaterThanOrEqual(1);
+
+  await page.goto(`${WEB_ORIGIN}/api/healthz`);
+  // Stop authenticated status polling and drain its requests before the next test asserts no downstream calls.
+  await resetDownstream(request);
 });
 
 test("anonymous, forged identity, read-only, and cross-origin writes never reach protected services", async ({ page, request }) => {
