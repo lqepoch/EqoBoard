@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -12,23 +12,30 @@ import {
   type IChartApi,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { apiGet, fmt, fmtBig, type Candle } from "../../lib/api";
-import type { EqoHistory } from "../../lib/eqo-market";
+import { apiGet, fmt, fmtBig } from "../../lib/api";
+import {
+  CHART_RANGES,
+  displayHistoryValue,
+  historyDowngradeReason,
+  historyResolution,
+  useChartHistory,
+  type ChartAssetClass,
+  type ChartHistoryCandle,
+  type ChartRange,
+} from "../../lib/chart-history";
 import type { MdpBarsResponseV1, TradeMinuteBarV1 } from "../../lib/mdp-market-data-contract";
 import { sma, ema, vwap, rsi, macd, bollinger, type Point } from "../../lib/indicators";
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
+import { useTradingStore } from "../../store/trading-terminal";
 
-const RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const;
 const CHART_TYPES = ["candles", "bars", "line", "area"] as const;
 const INDICATORS = ["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "BOLL", "RSI", "MACD"] as const;
 
-type Range = (typeof RANGES)[number];
+type Range = ChartRange;
 type ChartType = (typeof CHART_TYPES)[number];
 type Indicator = (typeof INDICATORS)[number];
 type DataMode = "provider" | "mdp-diagnostic";
-type ChartCandle = Candle & {
-  exact?: { open: string; high: string; low: string; close: string; volume: string };
-};
+type ChartCandle = ChartHistoryCandle;
 
 const DATASET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const MAX_CHART_PRICE = 1_000_000_000_000;
@@ -71,23 +78,43 @@ const INDICATOR_COLOR: Record<string, string> = {
 
 export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   const symbol = useWidgetSymbol(widget);
+  const providerMode = useTradingStore((state) => state.providerMode);
+  const setProviderMode = useTradingStore((state) => state.setProviderMode);
   const [dataMode, setDataMode] = useState<DataMode>("provider");
   const [datasetDraft, setDatasetDraft] = useState("");
   const [datasetId, setDatasetId] = useState<string | null>(null);
   const [datasetInputError, setDatasetInputError] = useState<string | null>(null);
   const [range, setRange] = useState<Range>("6M");
+  const [assetClass, setAssetClass] = useState<ChartAssetClass>("stock");
   const [chartType, setChartType] = useState<ChartType>("candles");
   const [active, setActive] = useState<Set<Indicator>>(new Set(["SMA20"]));
   const [legend, setLegend] = useState<ChartCandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const viewportRef = useRef<{
+    identity: string;
+    firstTime: number;
+    logicalFrom: number;
+    logicalTo: number;
+    visibleCount: number;
+    rightOffset: number;
+    atRightEdge: boolean;
+  } | null>(null);
+  const pointerGestureRef = useRef(false);
+  const pagingLockRef = useRef(false);
 
-  const { data: history, error: historyError } = useQuery({
-    queryKey: ["history", symbol, range],
-    queryFn: () => apiGet<EqoHistory>(`/api/history/${encodeURIComponent(symbol)}?range=${range}`),
-    refetchInterval: range === "1D" ? 8_000 : 60_000,
-    enabled: dataMode === "provider",
-  });
+  const history = useChartHistory(symbol, range, providerMode, assetClass, dataMode === "provider");
+  const historyResponse = history.latestPage;
+  const historyError = history.error;
+  const requestOlder = useCallback(() => {
+    if (!history.hasNextPage || history.isFetchingNextPage || pagingLockRef.current) return;
+    pagingLockRef.current = true;
+    void history.fetchNextPage().finally(() => { pagingLockRef.current = false; });
+  }, [history.fetchNextPage, history.hasNextPage, history.isFetchingNextPage]);
+  const requestOlderRef = useRef(requestOlder);
+  requestOlderRef.current = requestOlder;
+  const canFetchOlderRef = useRef(false);
+  canFetchOlderRef.current = dataMode === "provider" && Boolean(history.hasNextPage);
   const { data: archive, error: archiveError } = useQuery({
     queryKey: ["mdp-diagnostic-bars", datasetId, symbol],
     queryFn: () => apiGet<MdpBarsResponseV1>(
@@ -104,9 +131,12 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
     return rows as ChartCandle[];
   }, [archive]);
   const candles: ChartCandle[] | undefined = dataMode === "provider"
-    ? history?.bars
+    ? history.bars ?? undefined
     : archiveCandles ?? undefined;
   const error = dataMode === "provider" ? historyError : archiveError;
+  const historyIdentity = `${symbol}|${range}|${history.requestedResolution}`;
+  const gapCount = Array.isArray(historyResponse?.gaps) ? historyResponse.gaps.length : "unknown";
+  const segmentCount = Array.isArray(historyResponse?.segments) ? historyResponse.segments.length : "unknown";
 
   // Fast time -> candle lookup for the crosshair legend, independent of chart type.
   const byTime = useMemo(() => {
@@ -190,6 +220,8 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !candles || candles.length === 0) return;
+
+    const previousViewport = viewportRef.current;
 
     const chart = createChart(el, {
       layout: { background: { color: "#0a0a0a" }, textColor: "#808080", fontSize: 10, attributionLogo: false },
@@ -278,12 +310,61 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       if (hit) setLegend(hit);
     });
 
-    chart.timeScale().fitContent();
+    const visibleRangeListener = () => {
+      const visible = chart.timeScale().getVisibleLogicalRange();
+      if (visible) {
+        el.dataset.visibleLogicalRange = `${visible.from.toFixed(3)}:${visible.to.toFixed(3)}`;
+      }
+      if (pointerGestureRef.current && visible && visible.from <= 12 && canFetchOlderRef.current) {
+        requestOlderRef.current();
+      }
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(visibleRangeListener);
+
+    if (previousViewport?.identity === historyIdentity) {
+      const firstIndex = candles.findIndex((candle) => candle.time === previousViewport.firstTime);
+      const prependShift = firstIndex >= 0 ? firstIndex : 0;
+      try {
+        if (previousViewport.atRightEdge) {
+          const to = candles.length - 1 + previousViewport.rightOffset;
+          chart.timeScale().setVisibleLogicalRange({
+            from: to - previousViewport.visibleCount,
+            to,
+          });
+        } else {
+          chart.timeScale().setVisibleLogicalRange({
+            from: previousViewport.logicalFrom + prependShift,
+            to: previousViewport.logicalTo + prependShift,
+          });
+        }
+      } catch {
+        chart.timeScale().fitContent();
+      }
+    } else {
+      chart.timeScale().fitContent();
+    }
+    const initialVisibleRange = chart.timeScale().getVisibleLogicalRange();
+    if (initialVisibleRange) {
+      el.dataset.visibleLogicalRange = `${initialVisibleRange.from.toFixed(3)}:${initialVisibleRange.to.toFixed(3)}`;
+    }
     return () => {
+      const logical = chart.timeScale().getVisibleLogicalRange();
+      if (logical) {
+        viewportRef.current = {
+          identity: historyIdentity,
+          firstTime: candles[0].time,
+          logicalFrom: logical.from,
+          logicalTo: logical.to,
+          visibleCount: logical.to - logical.from,
+          rightOffset: logical.to - (candles.length - 1),
+          atRightEdge: logical.to >= candles.length - 2,
+        };
+      }
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(visibleRangeListener);
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, chartType, indicatorData, range, byTime]);
+  }, [candles, chartType, indicatorData, range, byTime, historyIdentity]);
 
   const toggleIndicator = (ind: Indicator) =>
     setActive((prev) => {
@@ -320,11 +401,48 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
         <button className={`term-btn ${dataMode === "mdp-diagnostic" ? "active" : ""}`} onClick={() => switchDataMode("mdp-diagnostic")}>
           MDP DIAGNOSTIC
         </button>
-        {dataMode === "provider" && RANGES.map((r) => (
+        {dataMode === "provider" && <>
+          <label className="sr-only" htmlFor={`chart-provider-${widget.id}`}>Chart provider mode</label>
+          <select
+            id={`chart-provider-${widget.id}`}
+            aria-label="Chart provider mode"
+            data-testid="chart-provider-mode"
+            className="term-btn bg-[#111]"
+            value={providerMode}
+            onChange={(event) => setProviderMode(event.target.value as typeof providerMode)}
+          >
+            <option value="auto">Auto</option>
+            <option value="alpaca_only">Alpaca only</option>
+            <option value="futu_only">Futu only</option>
+          </select>
+          <label className="sr-only" htmlFor={`chart-asset-class-${widget.id}`}>Caller-declared asset class</label>
+          <select
+            id={`chart-asset-class-${widget.id}`}
+            aria-label="Caller-declared asset class"
+            data-testid="chart-asset-class"
+            className="term-btn bg-[#111]"
+            value={assetClass}
+            onChange={(event) => setAssetClass(event.target.value as ChartAssetClass)}
+          >
+            <option value="stock">Stock</option>
+            <option value="etf">ETF</option>
+          </select>
+        </>}
+        {dataMode === "provider" && CHART_RANGES.map((r) => (
           <button key={r} className={`term-btn ${range === r ? "active" : ""}`} onClick={() => setRange(r)}>
             {r}
           </button>
         ))}
+        {dataMode === "provider" && history.hasNextPage && (
+          <button
+            className="term-btn"
+            data-testid="chart-load-older"
+            disabled={history.isFetchingNextPage}
+            onClick={requestOlder}
+          >
+            {history.isFetchingNextPage ? "LOADING OLDER…" : "LOAD OLDER"}
+          </button>
+        )}
         <span className="w-2" />
         {CHART_TYPES.map((t) => (
           <button key={t} className={`term-btn ${chartType === t ? "active" : ""}`} onClick={() => setChartType(t)}>
@@ -357,21 +475,53 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       )}
       {dataMode === "mdp-diagnostic" && datasetInputError &&
         <div role="alert" className="px-2 py-1 text-[10px] down">{datasetInputError}</div>}
-      <div className="px-2 py-1 border-b border-[#1c1c1c] text-[9px] dim">
-        {dataMode === "provider"
-          ? <>Source {history?.source ?? "unknown"} · as of {history?.asOf ?? "unknown"} · bar volume source follows the listed feed</>
-          : archive?.summary
+      <div
+        className="px-2 py-1 border-b border-[#1c1c1c] text-[9px] dim flex flex-wrap gap-x-3 gap-y-1"
+        data-testid="chart-widget-history-status"
+      >
+        {dataMode === "provider" ? <>
+          <span>Source {displayHistoryValue(historyResponse?.source_label ?? historyResponse?.source)}</span>
+          <span>Provider {displayHistoryValue(historyResponse?.provider)}</span>
+          <span>Feed {displayHistoryValue(historyResponse?.feed)}</span>
+          <span>Delay {displayHistoryValue(historyResponse?.delay)}</span>
+          <span>Verification {displayHistoryValue(historyResponse?.verification ?? historyResponse?.verified_at)}</span>
+          <span>Resolution {historyResolution(historyResponse, "requested_resolution")} → {historyResolution(historyResponse, "effective_resolution")}</span>
+          <span>Downgrade {historyDowngradeReason(historyResponse)}</span>
+          <span>Coverage {displayHistoryValue(historyResponse?.coverage_status)}</span>
+          <span>Segments {segmentCount} · Gaps {gapCount}</span>
+          <span>As of {displayHistoryValue(historyResponse?.as_of ?? historyResponse?.asOf)}</span>
+          <span>Asset class {assetClass} (caller declared)</span>
+          <span data-testid="chart-bar-count">{candles?.length ?? 0} bars</span>
+          {historyResponse && <details className="basis-full text-[9px]">
+            <summary className="cursor-pointer">Coverage, gaps and provenance detail</summary>
+            <pre className="max-h-24 overflow-auto whitespace-pre-wrap">{JSON.stringify({
+              coverage_status: historyResponse.coverage_status,
+              segments: historyResponse.segments,
+              gaps: historyResponse.gaps,
+              source_provenance: historyResponse.source_provenance,
+            }, null, 2).slice(0, 4_000)}</pre>
+          </details>}
+        </> : archive?.summary
           ? <>Diagnostic archive · {archive.summary.source.provider}/{archive.summary.source.feed}/{archive.summary.source.entitlement} · {archive.rows[0]?.completion_mode ?? "empty"} · {archive.summary.dataset_id} · NOT LIVE · promotion unavailable</>
             : <>Diagnostic archive · source unknown · no dataset loaded · NOT LIVE</>}
       </div>
-      {error && <div className="p-2 down">Error: {(error as Error).message}</div>}
+      {error && <div role="alert" className="p-2 down" data-testid="chart-history-error">History unavailable: {(error as Error).message}</div>}
+      {dataMode === "provider" && history.projectionError && <div role="alert" className="p-2 down">{history.projectionError}</div>}
+      {dataMode === "provider" && history.isLoading && <div className="px-2 py-1 text-[10px] dim">Loading history…</div>}
       {dataMode === "mdp-diagnostic" && datasetId === null && !error &&
         <div className="px-2 py-1 text-[10px] dim">Enter a diagnostic dataset ID to load archived bars.</div>}
       {dataMode === "mdp-diagnostic" && archiveCandles === null &&
         <div role="alert" className="px-2 py-1 text-[10px] down">Archive values exceed the bounded chart projection; no bars were plotted.</div>}
       {dataMode === "mdp-diagnostic" && archive && archive.rows.length === 0 &&
         <div className="px-2 py-1 text-[10px] dim">The validated diagnostic dataset contains no bars for this symbol.</div>}
-      <div className="relative flex-1 min-h-0">
+      <div
+        className="relative flex-1 min-h-0"
+        onPointerDownCapture={() => { pointerGestureRef.current = true; }}
+        onPointerUpCapture={() => { window.setTimeout(() => { pointerGestureRef.current = false; }, 120); }}
+        onPointerCancelCapture={() => { pointerGestureRef.current = false; }}
+        onTouchStartCapture={() => { pointerGestureRef.current = true; }}
+        onTouchEndCapture={() => { window.setTimeout(() => { pointerGestureRef.current = false; }, 120); }}
+      >
         {legend && (
           <div className="absolute top-1 left-2 z-10 flex flex-col gap-0.5 text-[11px] pointer-events-none bg-[rgba(10,10,10,0.7)] px-2 py-1 rounded max-w-[95%]">
             <div className="flex gap-3">
@@ -392,7 +542,7 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
             )}
           </div>
         )}
-        <div ref={containerRef} className="w-full h-full" />
+        <div ref={containerRef} className="w-full h-full" data-testid="chart-widget-canvas" />
       </div>
     </div>
   );

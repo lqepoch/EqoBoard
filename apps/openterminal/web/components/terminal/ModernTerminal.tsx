@@ -16,15 +16,14 @@ export default function ModernTerminal({
   researchOrigin?: string | null;
   onSwitchToWorkspace?: () => void;
 }) {
-  const { fetchMarketData, fetchKlineData, fetchAccountData } = useTradingStore();
+  const { fetchMarketData, fetchAccountData } = useTradingStore();
   const [selectedBookPrice, setSelectedBookPrice] = useState<number | null>(null);
 
   // 初始化加载所有核心量化行情与账户状态
   useEffect(() => {
     fetchMarketData();
-    fetchKlineData();
     fetchAccountData();
-  }, [fetchMarketData, fetchKlineData, fetchAccountData]);
+  }, [fetchMarketData, fetchAccountData]);
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-[#07090e] text-slate-100 font-sans antialiased">
