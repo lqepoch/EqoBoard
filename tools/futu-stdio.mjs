@@ -1,10 +1,12 @@
 // Local-only, read-only official-SDK transport. Rust owns HTTP authentication and browser SSE.
 import { createRequire } from 'node:module';
 import readline from 'node:readline';
+import { FutuHistory } from './futu-history.mjs';
 import { StockSubscriptions } from './futu-subscriptions.mjs';
 const require = createRequire(new URL('../apps/openterminal/server/package.json', import.meta.url));
 const SDK = require('futu-api').default;
 const { ftCmdID } = require('futu-api');
+const protoRoot = require('futu-api/proto');
 console.debug = console.log = console.warn = console.error = () => {}; // SDK logs may contain raw responses.
 const emit = data => process.stdout.write(JSON.stringify(data) + '\n');
 const host = process.env.FUTU_OPEND_HOST ?? '127.0.0.1';
@@ -14,13 +16,19 @@ if (host !== '127.0.0.1' || !Number.isSafeInteger(port) || port < 1 || port > 65
 }
 const sdk = new SDK();
 const policy = new StockSubscriptions(sdk);
+const history = new FutuHistory(sdk, {
+  klTypes: protoRoot.lookupEnum('Qot_Common.KLType').values,
+  klFields: protoRoot.lookupEnum('Qot_Common.KLFields').values,
+  rehabTypeNone: protoRoot.lookupEnum('Qot_Common.RehabType').values.RehabType_None,
+  sessionAll: protoRoot.lookupEnum('Common.Session').values.Session_ALL,
+});
 let connected = false;
 const finite = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
 const volume = v => { const n = Number(v?.toString()); return Number.isSafeInteger(n) && n >= 0 ? n : null; };
 const timestamp = v => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1e11
   ? new Date(v * 1000).toISOString() : null;
 sdk.onlogin = ok => {
-  connected = Boolean(ok); policy.entries.clear();
+  connected = Boolean(ok); policy.entries.clear(); history.connectionChanged(connected);
   emit({ kind: 'connection', connected });
 };
 sdk.onPush = (cmd, response) => {
@@ -70,7 +78,7 @@ async function dispatch(request) {
         received_at: new Date().toISOString(), source_mode: 'futu', source_label: 'Futu OpenD',
       })) };
   }
-  if (request.method === 'bars') throw new Error('futu_history_not_enabled');
+  if (request.method === 'bars') return history.bars(request);
   throw new Error('unsupported_read_operation');
 }
 // Serialize requests, quota observations and all subscription mutations.
@@ -85,7 +93,10 @@ input.on('line', line => {
     try { emit({ id: request.id, result: await dispatch(request) }); }
     catch (e) {
       const allowed = ['quota_waiting_for_release', 'quota_unknown', 'stock_buffer_full', 'invalid_symbols',
-        'futu_request_rejected', 'subscription_required', 'futu_disconnected', 'futu_history_not_enabled'];
+        'futu_request_rejected', 'subscription_required', 'futu_disconnected', 'futu_queue_full',
+        'UNSUPPORTED_PROVIDER_CAPABILITY', 'invalid_bars_query', 'invalid_limit', 'invalid_days',
+        'invalid_start', 'invalid_end', 'invalid_cursor', 'cursor_query_mismatch', 'futu_timeout',
+        'futu_rate_limited', 'futu_history_permission_denied', 'futu_invalid_response', 'futu_read_failed'];
       emit({ id: request.id, error: allowed.includes(e?.message) ? e.message : 'futu_read_failed' });
     } finally { --pending; }
   });

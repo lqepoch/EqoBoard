@@ -1,23 +1,75 @@
 //! Local-only read transport using the official SDK over a private child-process pipe.
 //! No listener, browser credential, order operation or provider protocol decoder is added.
 use crate::market_stream::{ChannelSymbols, FeedStatusSnapshot, MarketPublisher};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     process::Stdio,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{ChildStdin, Command},
-    sync::{oneshot, watch, Mutex},
+    sync::{Mutex, oneshot, watch},
 };
 
 type Reply = Result<Value, String>;
+
+/// Range and pagination fields passed unchanged to the local Futu history helper.
+/// The helper response remains a raw `Value` so source timestamps and precision metadata survive.
+#[derive(Clone, Debug)]
+pub(crate) struct HistoryBarsRequest {
+    pub(crate) symbol: String,
+    pub(crate) timeframe: String,
+    pub(crate) limit: usize,
+    pub(crate) days: Option<i64>,
+    pub(crate) start: Option<String>,
+    pub(crate) end: Option<String>,
+    pub(crate) cursor: Option<String>,
+}
+
+fn history_bars_payload(query: &HistoryBarsRequest) -> Result<Value, String> {
+    if query.start.is_some() != query.end.is_some() {
+        return Err("invalid_bars_query".into());
+    }
+    if query.cursor.as_ref().is_some_and(|cursor| {
+        cursor.len() != 32
+            || !cursor
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    }) {
+        return Err("invalid_cursor".into());
+    }
+    if query.start.as_ref().is_some_and(|value| value.len() > 35)
+        || query.end.as_ref().is_some_and(|value| value.len() > 35)
+    {
+        return Err("invalid_bars_query".into());
+    }
+    let mut request = json!({
+        "method": "bars",
+        "symbol": query.symbol,
+        "timeframe": query.timeframe,
+        "limit": query.limit,
+    });
+    if let Some(days) = query.days {
+        request["days"] = json!(days);
+    }
+    if let Some(start) = &query.start {
+        request["start"] = json!(start);
+    }
+    if let Some(end) = &query.end {
+        request["end"] = json!(end);
+    }
+    if let Some(cursor) = &query.cursor {
+        request["cursor"] = json!(cursor);
+    }
+    Ok(request)
+}
+
 #[derive(Clone)]
 pub(crate) struct FutuLocal {
     input: Arc<Mutex<ChildStdin>>,
@@ -175,5 +227,68 @@ impl FutuLocal {
         response
             .map_err(|_| "futu_timeout".to_string())?
             .map_err(|_| "futu_disconnected".to_string())?
+    }
+
+    /// Request one history page from the existing loopback worker, preserving its raw metadata.
+    pub(crate) async fn history_bars(&self, query: &HistoryBarsRequest) -> Reply {
+        self.request(history_bars_payload(query)?).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HistoryBarsRequest, history_bars_payload};
+    use serde_json::json;
+
+    fn query() -> HistoryBarsRequest {
+        HistoryBarsRequest {
+            symbol: "AAPL".into(),
+            timeframe: "1Min".into(),
+            limit: 500,
+            days: None,
+            start: Some("2026-10-14T13:30:00.000Z".into()),
+            end: Some("2026-10-14T14:30:00+00:00".into()),
+            cursor: Some("o".repeat(32)),
+        }
+    }
+
+    #[test]
+    fn history_payload_preserves_range_and_cursor_without_normalizing_them() {
+        let value = history_bars_payload(&query()).unwrap();
+        assert_eq!(
+            value,
+            json!({
+                "method": "bars",
+                "symbol": "AAPL",
+                "timeframe": "1Min",
+                "limit": 500,
+                "start": "2026-10-14T13:30:00.000Z",
+                "end": "2026-10-14T14:30:00+00:00",
+                "cursor": "oooooooooooooooooooooooooooooooo",
+            })
+        );
+    }
+
+    #[test]
+    fn legacy_days_remain_available_and_mismatched_ranges_fail_closed() {
+        let mut legacy = query();
+        legacy.start = None;
+        legacy.end = None;
+        legacy.cursor = None;
+        legacy.days = Some(30);
+        assert_eq!(history_bars_payload(&legacy).unwrap()["days"], 30);
+
+        legacy.end = Some("2026-10-14T14:30:00Z".into());
+        assert_eq!(
+            history_bars_payload(&legacy).unwrap_err(),
+            "invalid_bars_query"
+        );
+    }
+
+    #[test]
+    fn cursor_is_bounded_before_it_reaches_the_worker_pipe() {
+        let mut query = query();
+        query.cursor = Some("x".repeat(16_384));
+        assert_eq!(history_bars_payload(&query).unwrap_err(), "invalid_cursor");
     }
 }
