@@ -1,0 +1,276 @@
+name: OpenBB Optional CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 23 * * 0' # Monday 07:17 Asia/Shanghai; GitHub schedules use UTC.
+
+permissions:
+  contents: read
+
+# PR supersession cancels stale evidence; manual/weekly checks queue independently.
+concurrency:
+  group: openbb-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.run_id || 'superseding' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+
+jobs:
+  route:
+    name: OpenBB change routing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      source: ${{ steps.route.outputs.source }}
+      runtime: ${{ steps.route.outputs.runtime }}
+      reason: ${{ steps.route.outputs.reason }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.4.0
+        with:
+          node-version: 22.23.3
+      - name: Test conditional OpenBB routing and gate
+        run: node --test tools/ci/openbb-ci-route.test.mjs tools/ci/openbb-ci-gate.test.mjs
+      - name: Select OpenBB validation lanes
+        id: route
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node tools/ci/openbb-ci-route.mjs "$EVENT_NAME" "${BASE_SHA:-}" "${HEAD_SHA:-}"
+      - name: Record route
+        env:
+          SOURCE_SELECTED: ${{ steps.route.outputs.source }}
+          RUNTIME_SELECTED: ${{ steps.route.outputs.runtime }}
+          ROUTE_REASON: ${{ steps.route.outputs.reason }}
+        run: |
+          printf 'OpenBB source=%s runtime=%s (%s)\n' "$SOURCE_SELECTED" "$RUNTIME_SELECTED" "$ROUTE_REASON" >> "$GITHUB_STEP_SUMMARY"
+
+  source:
+    name: OpenBB source supply chain
+    needs: route
+    if: needs.route.outputs.source == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: 3.12.15
+      - name: Verify Python toolchain
+        run: test "$(python --version)" = 'Python 3.12.15'
+      - name: Run optional OpenBB contract tests
+        run: python3 tools/ci/run-contract-tests.py openbb
+      - name: Fetch and verify pinned OpenBB source archive and licenses
+        run: |
+          bash tools/openbb/fetch-upstream.sh
+          bash tools/openbb/verify-upstream.sh
+      - name: Generate pinned OpenBB source SPDX SBOM
+        run: bash tools/openbb/source-sbom.sh
+      - name: Generate pinned OpenBB patched-source SPDX SBOM
+        id: openbb-patched-source
+        run: |
+          bash tools/openbb/patched-source-sbom.sh > build/openbb/patched-source-sbom-report.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("build/openbb/patched-source-sbom-report.json").read_text(encoding="utf-8"))
+          path = Path(report["output"]).resolve().relative_to(Path.cwd()).as_posix()
+          print(f"path={path}")
+          PY
+      - name: Generate OpenBB upstream drift report
+        run: bash tools/openbb/upstream-diff.sh
+      - name: Upload OpenBB source-only SBOM
+        id: openbb-source-sbom
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-source-sbom-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/openbb/workspace-source-be00e95019a55d57af146919ee46b7e1a4859226.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+      - name: Upload OpenBB patched-source SPDX SBOM
+        id: openbb-patched-source-sbom
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-patched-source-sbom-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.openbb-patched-source.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+      - name: Upload OpenBB upstream drift report
+        id: openbb-upstream-diff
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-upstream-diff-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/openbb/workspace-diff-be00e95019a55d57af146919ee46b7e1a4859226.json
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false
+      - name: Record source SBOM artifact and file digests
+        env:
+          ARTIFACT_DIGEST: ${{ steps.openbb-source-sbom.outputs.artifact-digest }}
+          SBOM_PATH: build/openbb/workspace-source-be00e95019a55d57af146919ee46b7e1a4859226.spdx.json
+          DIFF_ARTIFACT_DIGEST: ${{ steps.openbb-upstream-diff.outputs.artifact-digest }}
+          DIFF_PATH: build/openbb/workspace-diff-be00e95019a55d57af146919ee46b7e1a4859226.json
+          PATCHED_SBOM_ARTIFACT_DIGEST: ${{ steps.openbb-patched-source-sbom.outputs.artifact-digest }}
+          PATCHED_SBOM_PATH: ${{ steps.openbb-patched-source.outputs.path }}
+          PATCHED_SBOM_REPORT: build/openbb/patched-source-sbom-report.json
+        run: |
+          test -n "$ARTIFACT_DIGEST"
+          test -n "$DIFF_ARTIFACT_DIGEST"
+          test -n "$PATCHED_SBOM_ARTIFACT_DIGEST"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["DIFF_PATH"]).read_text(encoding="utf-8"))
+          patched_sbom = json.loads(Path(os.environ["PATCHED_SBOM_REPORT"]).read_text(encoding="utf-8"))
+          counts = report["counts"]
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a", encoding="utf-8") as stream:
+              stream.write("### OpenBB pinned upstream drift (source patch; not an image SBOM)\n\n")
+              stream.write(f"Upstream: `{report['upstream']['commit']}` / archive SHA-256 `{report['upstream']['source_archive_sha256']}`\n\n")
+              stream.write(f"Recipe SHA-256: `{report['recipe']['sha256']}`; patched tree SHA-256 `{report['patched_tree_sha256']}`\n\n")
+              stream.write("| Exact upstream | Modified upstream | EqoBoard-only | Deleted upstream | Remaining build findings |\n")
+              stream.write("| ---: | ---: | ---: | ---: | ---: |\n")
+              stream.write(f"| {counts['exact_upstream_files']} | {counts['modified_upstream_files']} | {counts['eqoboard_only_files']} | {counts['deleted_upstream_files']} | {len(report['remaining_build_findings'])} |\n\n")
+              stream.write(f"Drift artifact digest: `{os.environ['DIFF_ARTIFACT_DIGEST']}`; report file SHA-256: `{hashlib.sha256(Path(os.environ['DIFF_PATH']).read_bytes()).hexdigest()}`\n\n")
+              stream.write("The report compares the SHA-256-verified source archive with the source tree produced by hash-pinned patch support files. It is not an image inventory or proof of browser integration.\n")
+              stream.write("### OpenBB community-patched source SBOM (not an image SBOM)\n\n")
+              stream.write(f"Patched tree SHA-256: `{patched_sbom['source_tree_sha256']}`; normalized package identities: {patched_sbom['normalized_package_identity_count']}\n\n")
+              stream.write(f"Artifact digest: `{os.environ['PATCHED_SBOM_ARTIFACT_DIGEST']}`; SBOM file SHA-256: `{hashlib.sha256(Path(os.environ['PATCHED_SBOM_PATH']).read_bytes()).hexdigest()}`\n\n")
+              stream.write("The runtime image contains a compiled Vite bundle without Bun/npm metadata. This source SBOM records the locked frontend dependency graph, not the runtime image inventory.\n\n")
+          PY
+          {
+            echo '### OpenBB source SBOM (not an image SBOM)'
+            echo
+            echo "Artifact archive SHA-256: \`$ARTIFACT_DIGEST\`"
+            echo "SBOM file SHA-256: \`$(sha256sum "$SBOM_PATH" | cut -d ' ' -f 1)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  runtime:
+    name: OpenBB native runtime E2E
+    needs: route
+    if: needs.route.outputs.runtime == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/openterminal
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.4.0
+        with:
+          node-version: 22.23.3
+          cache: npm
+          cache-dependency-path: apps/openterminal/package-lock.json
+      - name: Verify Node toolchain
+        run: test "$(node --version)" = 'v22.23.3'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: 3.12.15
+      - run: npm ci
+      - name: Install browser for native OpenBB E2E
+        run: npx playwright install --with-deps chromium
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver: docker-container
+          use: true
+      - name: Prewarm Gateway image with isolated BuildKit cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: eqoboard:ci-cache
+          builder: ${{ steps.buildx.outputs.name }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=eqoboard-gateway,version=2
+          cache-to: type=gha,scope=eqoboard-gateway,mode=max,version=2,ignore-error=true
+      - name: Prewarm OpenTerminal runtime image with isolated BuildKit cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./apps/openterminal/Dockerfile
+          target: runtime
+          tags: eqoboard-openterminal-runtime:local
+          builder: ${{ steps.buildx.outputs.name }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=openterminal-runtime,version=2
+          cache-to: type=gha,scope=openterminal-runtime,mode=max,version=2,ignore-error=true
+      - name: Prewarm Compose E2E image with isolated BuildKit cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./apps/openterminal/Dockerfile
+          target: compose-e2e
+          tags: eqoboard-openterminal-compose-e2e:local
+          builder: ${{ steps.buildx.outputs.name }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=openterminal-compose-e2e,version=2
+          cache-to: type=gha,scope=openterminal-compose-e2e,mode=max,version=2,ignore-error=true
+      - name: Prewarm OpenBB Lite image with isolated BuildKit cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./tools/openbb/community/Dockerfile
+          tags: eqoboard/openbb-workspace-lite:ci-cache
+          builder: ${{ steps.buildx.outputs.name }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=openbb-workspace-lite,version=2
+          cache-to: type=gha,scope=openbb-workspace-lite,mode=max,version=2,ignore-error=true
+      - name: Build and exercise the controlled native OpenBB Lite profile
+        id: openbb-lite-e2e
+        working-directory: .
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+          COMPOSE_BAKE: "true"
+          OPENBB_E2E_ARTIFACT_DIR: ${{ runner.temp }}/eqoboard-openbb-runtime-e2e
+        run: bash tools/openbb-lite-e2e.sh
+      - name: Upload native OpenBB browser and runtime evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openbb-native-runtime-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/eqoboard-openbb-runtime-e2e/
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/openbb-lite-compose-image.docker.tar
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/openbb-lite-compose-image.oci.tar
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/native-user-storage-state.json
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/trace.zip
+            !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/*.webm
+          if-no-files-found: warn
+          retention-days: 30
+          overwrite: false
+
+  required:
+    name: OpenBB optional validation gate
+    needs: [route, source, runtime]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.4.0
+        with:
+          node-version: 22.23.3
+      - name: Require selected lanes to succeed and unrelated lanes to skip
+        env:
+          ROUTE_RESULT: ${{ needs.route.result }}
+          SOURCE_SELECTED: ${{ needs.route.outputs.source }}
+          SOURCE_RESULT: ${{ needs.source.result }}
+          RUNTIME_SELECTED: ${{ needs.route.outputs.runtime }}
+          RUNTIME_RESULT: ${{ needs.runtime.result }}
+        run: node tools/ci/openbb-ci-gate.mjs
