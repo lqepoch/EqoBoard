@@ -16,7 +16,7 @@ type FixtureOptions = {
   resolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   effectiveResolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   adjustment?: "unadjusted" | "split" | "dividend" | "all";
-  coverageStatus?: "complete" | "partial";
+  coverageStatus?: "complete" | "partial" | "unsupported";
   olderMinutes?: number;
   includeGap?: boolean;
   continuationCursor?: string | null;
@@ -29,6 +29,8 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
   const feed = options.feed ?? "synthetic";
   const resolution = options.resolution ?? "5m";
   const effectiveResolution = options.effectiveResolution ?? resolution;
+  const coverageStatus = options.coverageStatus ?? "partial";
+  const unsupported = coverageStatus === "unsupported";
   const adjustment = options.adjustment ?? "unadjusted";
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
@@ -42,26 +44,29 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
   const interval = intervalMs[effectiveResolution];
   const barStart = new Date(Math.floor(nowMs / interval) * interval - (options.olderMinutes ?? 2) * interval).toISOString();
   const barEnd = new Date(Date.parse(barStart) + interval).toISOString();
-  const gaps = options.includeGap ? [{
+  const gaps = unsupported ? [{
+    start_utc: new Date(Date.parse(barStart) - interval).toISOString(),
+    end_exclusive_utc: barStart,
+    reason_code: "unsupported_resolution",
+  }] : options.includeGap ? [{
     start_utc: new Date(Date.parse(barStart) - interval).toISOString(),
     end_exclusive_utc: barStart,
     reason_code: "source_gap",
   }] : [];
   const cursor = options.continuationCursor ?? null;
-  const coverageStatus = options.coverageStatus ?? "partial";
   const provenanceId = "synthetic-e2e-provenance";
   const sessionInstanceId = "synthetic-e2e-session";
 
   return {
     schema_version: 1,
-    provider: "synthetic",
-    feed,
+    provider: unsupported ? "unknown" : "synthetic",
+    feed: unsupported ? "unknown" : feed,
     entitlement_status: "unknown",
     requested_resolution: resolution,
     effective_resolution: effectiveResolution,
     adjustment,
     coverage_status: coverageStatus,
-    segments: [{
+    segments: unsupported ? [] : [{
       start_utc: barStart,
       end_exclusive_utc: barEnd,
       coverage_status: coverageStatus,
@@ -69,7 +74,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
       session_instance_id: sessionInstanceId,
     }],
     gaps,
-    source_provenance: [{
+    source_provenance: unsupported ? [] : [{
       provenance_id: provenanceId,
       provider: "synthetic",
       feed,
@@ -77,14 +82,14 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
       entitlement_status: "unknown",
       numeric_encoding: "decimal_token",
     }],
-    as_of: now,
+    as_of: unsupported ? null : now,
     fetched_at: now,
     verified_at: null,
     cache_status: "miss",
     market_calendar_version: null,
     continuation_cursor: cursor,
     truncated: cursor !== null,
-    rows: [{
+    rows: unsupported ? [] : [{
       symbol,
       asset_class: assetClass,
       resolution: effectiveResolution,
@@ -154,7 +159,6 @@ test("enabled history preserves valid HTTP 206 coverage, rows, gaps, and source 
   await configureMocks(request, {
     marketBars: {
       enabled: true,
-      status: 206,
       response: makeCoreEnvelope({ assetClass: "etf", feed: "unknown", includeGap: true }),
     },
   });
@@ -294,6 +298,32 @@ test("enabled history preserves valid HTTP 200 complete coverage", async ({ page
   expect((await metrics(request)).mdpMarketBars).toHaveLength(1);
 });
 
+test("typed unsupported coverage keeps its validated reason on HTTP 422", async ({ page, request }) => {
+  test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const unsupported = makeCoreEnvelope({ coverageStatus: "unsupported" });
+  await configureMocks(request, { marketBars: { enabled: true, response: unsupported } });
+
+  const response = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?range=5D&resolution=5m`);
+  expect(response.status()).toBe(422);
+  expect(await response.json()).toMatchObject({
+    error: "market_data_unsupported",
+    coverage_status: "unsupported",
+    feed: "unknown",
+    rows: [],
+    bars: [],
+    segments: [],
+    gaps: [{ reason_code: "unsupported_resolution" }],
+    source_provenance: [],
+  });
+
+  await configureMocks(request, { marketBars: { enabled: true, status: 206, response: unsupported } });
+  const mismatched = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?range=5D&resolution=5m`);
+  expect(mismatched.status()).toBe(502);
+  expect((await mismatched.json()).error).toBe("invalid_market_data_response");
+  expect((await metrics(request)).mdpMarketBars).toHaveLength(2);
+});
+
 test("cursor pages preserve the first request window and opaque cursor", async ({ page, request }) => {
   test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
@@ -303,7 +333,6 @@ test("cursor pages preserve the first request window and opaque cursor", async (
   await configureMocks(request, {
     marketBars: {
       enabled: true,
-      status: 206,
       responsesByCursor: { "": firstPage, [cursor]: olderPage },
     },
   });

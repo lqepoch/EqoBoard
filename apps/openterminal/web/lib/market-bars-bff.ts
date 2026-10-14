@@ -279,10 +279,16 @@ function marketBarsTransportStatusMatchesCoverage(body: unknown, status: number)
   if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
   const coverageStatus = (body as Record<string, unknown>).coverage_status;
   if (status === 200) return coverageStatus === "complete" || coverageStatus === "empty";
-  if (status === 206) {
-    return coverageStatus === "partial" || coverageStatus === "unknown" || coverageStatus === "unsupported";
-  }
+  if (status === 206) return coverageStatus === "partial" || coverageStatus === "unknown";
+  if (status === 422) return coverageStatus === "unsupported";
   return false;
+}
+
+function hasMarketBarsCoverageStatus(body: unknown): boolean {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+  return ["complete", "empty", "partial", "unknown", "unsupported"].includes(
+    String((body as Record<string, unknown>).coverage_status),
+  );
 }
 
 async function readJsonResponse(response: Response): Promise<unknown | null> {
@@ -379,15 +385,18 @@ export async function getMarketBars(request: NextRequest, rawSymbol: string): Pr
       redirect: "manual",
       signal: controller.signal,
     });
-    if (upstream.status !== 200 && upstream.status !== 206) {
+    if (upstream.status !== 200 && upstream.status !== 206 && upstream.status !== 422) {
       void upstream.body?.cancel().catch(() => undefined);
       return deadlineExpired ? jsonError(504, "query_timeout") : upstreamError(upstream.status);
     }
     const body = await readJsonResponse(upstream);
+    if (deadlineExpired) return jsonError(504, "query_timeout");
     if (body === null) {
-      return deadlineExpired ? jsonError(504, "query_timeout") : jsonError(502, "invalid_market_data_response");
+      if (upstream.status === 422) return upstreamError(422);
+      return jsonError(502, "invalid_market_data_response");
     }
     const validated = validateMdpMarketBarsResponse(body, identity);
+    if (upstream.status === 422 && !hasMarketBarsCoverageStatus(body)) return upstreamError(422);
     if (!validated || !marketBarsTransportStatusMatchesCoverage(body, upstream.status)) {
       return jsonError(502, "invalid_market_data_response");
     }
@@ -397,6 +406,12 @@ export async function getMarketBars(request: NextRequest, rawSymbol: string): Pr
       cursor: parsed.cursor,
     });
     if (!projected) return jsonError(502, "invalid_market_data_response");
+    if (upstream.status === 422) {
+      return NextResponse.json({ ...projected, error: "market_data_unsupported" }, {
+        status: upstream.status,
+        headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
+      });
+    }
     return NextResponse.json(projected, {
       status: upstream.status,
       headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },

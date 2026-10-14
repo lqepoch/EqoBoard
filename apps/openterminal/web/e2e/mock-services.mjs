@@ -52,13 +52,29 @@ const mdpControl = {
 };
 const mdpMarketBarsControl = {
   enabled: false,
-  status: 200,
+  status: null,
   response: null,
   responsesByCursor: null,
   location: null,
   bodyBytes: 0,
   delayMs: 0,
 };
+
+function marketBarsStatusForResponse(response) {
+  if (!response || typeof response !== "object" || Array.isArray(response)) return 200;
+  switch (response.coverage_status) {
+    case "complete":
+    case "empty":
+      return 200;
+    case "partial":
+    case "unknown":
+      return 206;
+    case "unsupported":
+      return 422;
+    default:
+      return 200;
+  }
+}
 const quantControl = {
   status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
   protoJsonText: null, publicProjectionBase64: null, publicProjectionSha256: null, factorFeatureSummary: null,
@@ -254,7 +270,7 @@ const oidc = createServer(async (req, res) => {
       location: null, bodyBytes: 0, delayMs: 0,
     });
     Object.assign(mdpMarketBarsControl, {
-      enabled: false, status: 200, response: null, responsesByCursor: null,
+      enabled: false, status: null, response: null, responsesByCursor: null,
       location: null, bodyBytes: 0, delayMs: 0,
     });
     Object.assign(quantControl, {
@@ -832,8 +848,13 @@ const mdp = createServer(async (req, res) => {
     if (mdpMarketBarsControl.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(mdpMarketBarsControl.delayMs, 130_000)));
     }
+    const response = mdpMarketBarsControl.responsesByCursor &&
+      Object.hasOwn(mdpMarketBarsControl.responsesByCursor, url.searchParams.get("cursor") ?? "")
+      ? mdpMarketBarsControl.responsesByCursor[url.searchParams.get("cursor") ?? ""]
+      : mdpMarketBarsControl.response ?? { error: "market_bars_fixture_not_configured" };
+    const responseStatus = mdpMarketBarsControl.status ?? marketBarsStatusForResponse(response);
     if (mdpMarketBarsControl.location) {
-      res.writeHead(mdpMarketBarsControl.status, {
+      res.writeHead(responseStatus, {
         location: mdpMarketBarsControl.location,
         "cache-control": "no-store",
         "content-length": "0",
@@ -842,13 +863,8 @@ const mdp = createServer(async (req, res) => {
     }
     const bytes = mdpMarketBarsControl.bodyBytes > 0
       ? Buffer.alloc(mdpMarketBarsControl.bodyBytes, 0x20)
-      : Buffer.from(JSON.stringify(
-        mdpMarketBarsControl.responsesByCursor &&
-          Object.hasOwn(mdpMarketBarsControl.responsesByCursor, url.searchParams.get("cursor") ?? "")
-          ? mdpMarketBarsControl.responsesByCursor[url.searchParams.get("cursor") ?? ""]
-          : mdpMarketBarsControl.response ?? { error: "market_bars_fixture_not_configured" },
-      ));
-    return res.writeHead(mdpMarketBarsControl.status, {
+      : Buffer.from(JSON.stringify(response));
+    return res.writeHead(responseStatus, {
       "content-type": "application/json",
       "content-length": String(bytes.byteLength),
       "cache-control": "no-store",

@@ -424,7 +424,7 @@ test("MAX preserves mixed Yahoo and Alpaca daily provenance across the 2016 boun
   });
   await widget.getByRole("button", { name: "MAX", exact: true }).click();
   const maxResponse = await maxResponsePromise;
-  expect(maxResponse.status()).toBe(200);
+  expect(maxResponse.status()).toBe(206);
   const payload = await maxResponse.json() as {
     request_start?: string;
     requested_resolution?: string;
@@ -544,7 +544,7 @@ test("MAX explicit 15m keeps the request visible when the BFF returns a daily do
   });
   await chart.getByTestId("main-chart-range-MAX").click();
   const maxResponse = await maxResponsePromise;
-  expect(maxResponse.status()).toBe(200);
+  expect(maxResponse.status()).toBe(206);
 
   const dailyDowngrade = marketBarsResponse({
     requestedResolution: "15m",
@@ -565,7 +565,7 @@ test("MAX explicit 15m keeps the request visible when the BFF returns a daily do
   });
   await chart.getByTestId("main-chart-interval-15m").click();
   const downgradeResponse = await downgradeResponsePromise;
-  expect(downgradeResponse.status()).toBe(200);
+  expect(downgradeResponse.status()).toBe(206);
   const payload = await downgradeResponse.json() as {
     requested_resolution?: string;
     effective_resolution?: string;
