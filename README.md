@@ -102,7 +102,7 @@ npm run dev
 
 公共 Actions 不读取组织行情、OAuth、Drive 或 GitHub App 凭据，也不执行真实 Alpaca smoke、配额诊断、行情导出、artifact 清理或自动合并。专用 App 自动合并当前未启用；获准操作者可在隔离的本机进程中显式运行只读行情脚本，输出必须保存在仓库外且不得提交或上传公开 artifact。入口和限制见 [安全边界](docs/SECURITY.md)、[部署说明](docs/DEPLOYMENT.md) 与 [PR 合并治理](docs/AUTOMERGE.md)。
 
-核心 CI 只负责 Rust、market contract 和 OpenTerminal/Next.js 检查。OpenBB Lite 的源码/recipe 校验、source SBOM、运行镜像构建与 SBOM、原生容器和浏览器 E2E 由独立 `.github/workflows/openbb.yml`（`OpenBB Optional CI`）执行，不进入核心 required workflow。每次 PR/push 都运行轻量路径路由和稳定 required check `OpenBB optional validation gate`；没有 OpenBB 或共享集成改动时，source/runtime 重型 lane 跳过而 gate 成功。OpenBB source/recipe 与 research/BFF、身份、Gateway、市场契约、依赖、Docker/Compose、CI 或测试工具等共享改动会触发相关重型 lane。手动触发和每周运行完整 source 与 runtime 验收；无法可靠计算路径时 fail closed 并运行完整验收。OpenBB 的 CI、release 和部署验收证据必须来自该 GitHub Actions workflow；上面的 Compose build 命令仅供本机开发尝试。
+核心 CI 只负责 Rust、market contract 和 OpenTerminal/Next.js 检查。OpenBB Lite 的源码/recipe 校验、上游及 patched-source SBOM、运行镜像构建、原生容器和浏览器 E2E 由独立 `.github/workflows/openbb.yml`（`OpenBB Optional CI`）执行，不进入核心 required workflow。每次 PR/push 都运行轻量路径路由和稳定 required check `OpenBB optional validation gate`；没有 OpenBB 或共享集成改动时，source/runtime 重型 lane 跳过而 gate 成功。OpenBB source/recipe 与 research/BFF、身份、Gateway、市场契约、依赖、Docker/Compose、CI 或测试工具等共享改动会触发相关重型 lane。手动触发和每周运行完整 source 与 runtime 验收；无法可靠计算路径时 fail closed 并运行完整验收。当前 workflow 生成源码 SBOM，尚不生成镜像 SBOM，也不批准 release 或部署；OpenBB CI 构建验收证据必须来自该 GitHub Actions workflow；上面的 Compose build 命令仅供本机开发尝试。
 
 ## 交付矩阵与当前验收状态
 
