@@ -2,6 +2,8 @@
 
 The main trading chart and the Workspace Chart widget use the same browser history client and the same origin route, `/api/history/{symbol}`. The browser sends the selected range, requested resolution, caller-selected provider mode, caller-declared asset class, `session_scope=all`, `adjustment=unadjusted`, and `allow_daily_downgrade=true`. Provider mode is one of `auto`, `alpaca_only`, or `futu_only`; it is a read preference and does not assert which provider returned the bars. `asset_class` is a caller declaration (`stock` or `etf`), not a security-master classification.
 
+The interval control defaults to `Auto`, which follows these range-to-resolution defaults. Choosing a supported interval overrides the range default without changing the selected date range. Supported explicit intervals are `1m`, `5m`, `15m`, `1h`, and `1D` (sent as `1d`). Legacy controls that have no market-bars resolution remain visible but disabled with an explanation; they never fall back to another interval. `Auto` avoids pinning `1D` to `1m` when the user later selects `MAX`.
+
 Range-to-resolution defaults are:
 
 | Range | Requested resolution |
@@ -24,3 +26,5 @@ Bars are plotted only after bounded finite numeric projection checks. When the B
 The MDP diagnostic archive remains a separate, opt-in Workspace view. It is explicitly diagnostic/NOT LIVE and is not substituted for provider history when the provider route is unavailable.
 
 The MDP-backed chart E2E cases in `web/e2e/market-data-chart-history.spec.ts` run with `E2E_MDP_MARKET_BARS_ENABLED=true` in the dedicated enabled-mode CI step. In the default-off suite, this spec reports an explicit skip because its fixture-provider assertions require the enabled BFF route; the default-off compatibility check and existing legacy chart E2E cases continue to run.
+
+The MainChartPanel keeps its interval toolbar, drawing-tool selection state, indicator controls, chart-type controls, and four-card Intelligence Dashboard. Its Day Range card is populated only by a same-symbol quote explicitly marked real; RSI uses the shared bar-history calculation. 52-week and Quant Research cards remain unavailable without qualified coverage/signal metadata. These cards do not synthesize values from a quote or create bars from a quote snapshot.

@@ -23,11 +23,35 @@ import {
   type ChartAssetClass,
   type ChartHistoryCandle,
   type ChartRange,
+  type ChartResolution,
 } from "../../lib/chart-history";
 import { bollinger, ema, macd, rsi, sma, vwap } from "../../lib/indicators";
-import { useTradingStore, type ChartType, type IndicatorKey } from "../../store/trading-terminal";
+import { useTradingStore, type ChartType, type IndicatorKey, type KlineInterval } from "../../store/trading-terminal";
 
 const CHART_TYPES: ChartType[] = ["candles", "bars", "line", "area"];
+const KLINE_INTERVALS: Array<{ id: KlineInterval; label: string }> = [
+  { id: "AUTO", label: "Auto" },
+  { id: "1s", label: "[1s]" }, { id: "5s", label: "[5s]" }, { id: "10s", label: "[10s]" },
+  { id: "1m", label: "[1m]" }, { id: "5m", label: "[5m]" }, { id: "10m", label: "[10m]" },
+  { id: "15m", label: "[15m]" }, { id: "30m", label: "[30m]" }, { id: "1h", label: "[1h]" },
+  { id: "2h", label: "[2h]" }, { id: "4h", label: "[4h]" }, { id: "1D", label: "[1D]" },
+  { id: "1W", label: "[1W]" },
+];
+const QUERYABLE_INTERVALS: Partial<Record<KlineInterval, ChartResolution>> = {
+  "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "1D": "1d",
+};
+const UNSUPPORTED_INTERVAL_REASON = "Unavailable: market bars supports 1m, 5m, 15m, 1h, and 1d; no substitute interval is requested.";
+const DRAWING_TOOLS = [
+  { id: "crosshair", icon: "✛", title: "Crosshair" },
+  { id: "line", icon: "╱", title: "Trend Line" },
+  { id: "fib", icon: "≡", title: "Fibonacci" },
+  { id: "brush", icon: "✎", title: "Brush" },
+  { id: "text", icon: "T", title: "Text Annotation" },
+  { id: "pattern", icon: "☺", title: "Patterns" },
+  { id: "ruler", icon: "📏", title: "Ruler" },
+  { id: "measure", icon: "🔍", title: "Measure" },
+  { id: "lock", icon: "🔒", title: "Lock Elements" },
+] as const;
 const INDICATORS: Array<{ key: IndicatorKey; label: string; color: string }> = [
   { key: "SMA20", label: "SMA20", color: "text-amber-400" },
   { key: "SMA50", label: "SMA50", color: "text-cyan-400" },
@@ -82,6 +106,9 @@ export default function MainChartPanel() {
   const toggleIndicator = useTradingStore((state) => state.toggleIndicator);
   const providerMode = useTradingStore((state) => state.providerMode);
   const setProviderMode = useTradingStore((state) => state.setProviderMode);
+  const klineInterval = useTradingStore((state) => state.klineInterval);
+  const setKlineInterval = useTradingStore((state) => state.setKlineInterval);
+  const currentQuote = useTradingStore((state) => state.currentQuote);
   const setHoveredBar = useTradingStore((state) => state.setHoveredBar);
   const [range, setRange] = useState<ChartRange>("1D");
   const [assetClass, setAssetClass] = useState<ChartAssetClass>(activeSymbol === "QQQ" ? "etf" : "stock");
@@ -110,11 +137,20 @@ export default function MainChartPanel() {
     setHoveredBar(null);
   }, [activeSymbol, setHoveredBar]);
 
-  const history = useChartHistory(activeSymbol, range, providerMode, assetClass);
+  const selectedResolution = klineInterval === "AUTO" ? undefined : QUERYABLE_INTERVALS[klineInterval] ?? null;
+  const history = useChartHistory(
+    activeSymbol, range, providerMode, assetClass, selectedResolution !== null, selectedResolution,
+  );
   const bars = history.bars;
   const historyResponse = history.latestPage;
-  const historyIdentity = `${activeSymbol}|${range}|${history.requestedResolution}`;
-  const timeVisible = historyResolution(historyResponse, "effective_resolution") !== "1d";
+  const historyIdentityResolution = selectedResolution === null
+    ? `unsupported:${klineInterval}`
+    : selectedResolution ?? history.requestedResolution ?? "unknown";
+  const historyIdentity = `${activeSymbol}|${range}|${historyIdentityResolution}`;
+  const effectiveResolution = historyResolution(historyResponse, "effective_resolution");
+  const timeVisible = effectiveResolution === "unknown"
+    ? (selectedResolution ?? history.requestedResolution) !== "1d"
+    : effectiveResolution !== "1d";
   const requestOlder = useCallback(() => {
     if (!history.hasNextPage || history.isFetchingNextPage || pagingLockRef.current) return;
     pagingLockRef.current = true;
@@ -149,6 +185,19 @@ export default function MainChartPanel() {
   const segments = Array.isArray(historyResponse?.segments) ? historyResponse.segments : null;
   const displayBar = hoveredBar ?? bars?.[bars.length - 1] ?? null;
   const isBarUp = displayBar ? displayBar.close >= displayBar.open : true;
+  const realQuote = currentQuote !== null && currentQuote.symbol === activeSymbol &&
+    "isRealFutu" in currentQuote && currentQuote.isRealFutu === true
+    ? currentQuote
+    : null;
+  const quoteDayRange = realQuote?.dayRange;
+  const dayRangePosition = realQuote && quoteDayRange && Number.isFinite(quoteDayRange.low) && Number.isFinite(quoteDayRange.high) &&
+    Number.isFinite(realQuote.price) && quoteDayRange.low < quoteDayRange.high && realQuote.price > 0
+    ? Math.max(0, Math.min(100, ((realQuote.price - quoteDayRange.low) / (quoteDayRange.high - quoteDayRange.low)) * 100))
+    : null;
+  const dashboardRsi = useMemo(() => {
+    const latest = bars?.length ? rsi(bars).at(-1)?.value : undefined;
+    return typeof latest === "number" && Number.isFinite(latest) ? latest : null;
+  }, [bars]);
   barsRef.current = bars ?? [];
   currentIdentityRef.current = historyIdentity;
   currentTimeVisibleRef.current = timeVisible;
@@ -412,6 +461,7 @@ export default function MainChartPanel() {
           <button
             key={item}
             data-testid={`main-chart-range-${item}`}
+            aria-label={`Chart range ${item}`}
             aria-pressed={range === item}
             onClick={() => setRange(item)}
             className={`px-1.5 py-0.5 text-[10px] font-mono rounded ${range === item ? "bg-cyan-950/80 text-cyan-300 border border-cyan-600/80" : "text-slate-400 hover:text-slate-200"}`}
@@ -419,6 +469,30 @@ export default function MainChartPanel() {
             {item}
           </button>
         ))}
+        <div role="group" aria-label="Chart interval" className="flex items-center gap-0.5 border-l border-[#1a2233] pl-2 ml-1" data-testid="main-chart-interval-controls">
+          {KLINE_INTERVALS.map((item) => {
+            const resolution = QUERYABLE_INTERVALS[item.id];
+            const auto = item.id === "AUTO";
+            const supported = auto || resolution !== undefined;
+            return (
+              <button
+                key={item.id}
+                data-testid={`main-chart-interval-${item.id}`}
+                data-resolution={auto ? "auto" : resolution ?? "unsupported"}
+                aria-label={auto ? "Chart interval Auto (range default)" : supported ? `Chart interval ${item.id}` : `Chart interval ${item.id} unavailable`}
+                aria-pressed={klineInterval === item.id}
+                title={auto ? "Use the documented resolution for the selected range" : supported ? `Request ${resolution} bars` : UNSUPPORTED_INTERVAL_REASON}
+                disabled={!supported}
+                onClick={() => { if (supported) setKlineInterval(item.id); }}
+                className={`px-1 py-0.5 text-[9px] font-mono rounded ${supported
+                  ? klineInterval === item.id ? "bg-cyan-950/80 text-cyan-300 border border-cyan-600/80" : "text-slate-400 hover:text-slate-200"
+                  : "cursor-not-allowed text-slate-600"}`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
         <label className="sr-only" htmlFor="main-chart-provider-mode">Chart provider mode</label>
         <select
           id="main-chart-provider-mode"
@@ -481,7 +555,7 @@ export default function MainChartPanel() {
       </div>
 
       <div className="min-h-8 bg-[#0a0d14] border-b border-[#141b28] px-3 py-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-slate-400 shrink-0" data-testid="main-chart-history-status">
-        <span className="font-bold text-slate-200">{activeSymbol} · {range} · {bars?.length ?? 0} bars</span>
+        <span className="font-bold text-slate-200">{activeSymbol} · {range} · {klineInterval === "AUTO" ? "Auto" : klineInterval} · {bars?.length ?? 0} bars</span>
         <span>Mode {providerMode}</span>
         <span>Source {displayHistoryValue(historyResponse?.source_label ?? historyResponse?.source)}</span>
         <span>Provider {displayHistoryValue(historyResponse?.provider)}</span>
@@ -508,6 +582,7 @@ export default function MainChartPanel() {
           </details>
         )}
       </div>
+      {selectedResolution === null && <div role="status" className="px-3 py-1 text-[10px] text-amber-400" data-testid="main-chart-resolution-unavailable">History unavailable for {klineInterval}: {UNSUPPORTED_INTERVAL_REASON}</div>}
       {history.error && <div role="alert" className="px-3 py-1 text-[10px] text-rose-400" data-testid="main-chart-history-error">History unavailable: {(history.error as Error).message}</div>}
       {history.projectionError && <div role="alert" className="px-3 py-1 text-[10px] text-rose-400">{history.projectionError}</div>}
       {history.pageLimitReached && (
@@ -517,20 +592,16 @@ export default function MainChartPanel() {
             : `History reached the ${MAX_HISTORY_PAGES}-page limit; older bars remain unloaded.`}
         </div>
       )}
-      {history.isLoading && <div className="px-3 py-1 text-[10px] text-slate-500">Loading history…</div>}
+      {selectedResolution !== null && history.isLoading && <div className="px-3 py-1 text-[10px] text-slate-500">Loading history…</div>}
 
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         <div className="w-8 bg-[#0a0d14] border-r border-[#141b28] flex flex-col items-center py-2 gap-2 text-slate-500 text-xs shrink-0 select-none">
-          {[
-            { id: "crosshair", icon: "✛", title: "Crosshair" },
-            { id: "line", icon: "╱", title: "Trend Line" },
-            { id: "fib", icon: "≡", title: "Fibonacci" },
-            { id: "brush", icon: "✎", title: "Brush" },
-            { id: "text", icon: "T", title: "Text Annotation" },
-            { id: "ruler", icon: "📏", title: "Ruler" },
-          ].map((tool) => (
+          {DRAWING_TOOLS.map((tool) => (
             <button
               key={tool.id}
+              data-testid={`main-chart-tool-${tool.id}`}
+              aria-label={tool.title}
+              aria-pressed={activeDrawingTool === tool.id}
               onClick={() => setActiveDrawingTool(tool.id)}
               className={`w-6 h-6 rounded flex items-center justify-center ${activeDrawingTool === tool.id ? "bg-cyan-950/80 text-cyan-300 border border-cyan-700/60" : "hover:bg-[#141b27] hover:text-slate-300"}`}
               title={tool.title}
@@ -558,6 +629,50 @@ export default function MainChartPanel() {
           )}
         </div>
       </div>
+      <section className="h-32 bg-[#0b0e16] border-t border-[#182133] px-3 py-2 flex flex-col gap-2 shrink-0" aria-label="Intelligence Dashboard" data-testid="main-chart-intelligence-dashboard">
+        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+          <span className="font-semibold text-slate-300">Intelligence Dashboard</span>
+          <span className="text-slate-600 text-xs">⋯</span>
+        </div>
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 h-24 min-h-0">
+          <article className="bg-[#0f1422] border border-[#1a2438] rounded p-2 flex flex-col justify-between min-w-0" data-testid="main-chart-day-range">
+            <span className="text-[10px] font-mono text-slate-400">Day Range</span>
+            {realQuote && quoteDayRange && dayRangePosition !== null ? (
+              <>
+                <div className="relative py-1.5" aria-label={`Quote price position in day range ${dayRangePosition.toFixed(1)} percent`}>
+                  <div className="h-1.5 bg-slate-800 rounded-full" />
+                  <span className="absolute top-0 text-cyan-300 text-[10px] -translate-x-1/2" style={{ left: `${dayRangePosition}%` }}>▼</span>
+                </div>
+                <div className="flex justify-between text-[9px] font-mono text-slate-400 tabular-nums">
+                  <span>{fmt(quoteDayRange.low)}</span><span>{fmt(quoteDayRange.high)}</span>
+                </div>
+                <span className="text-[8px] text-slate-500 truncate" data-testid="main-chart-day-range-source">
+                  {fmt(realQuote.price)} · {displayHistoryValue(realQuote.source)} · {displayHistoryValue(realQuote.timestamp)}
+                </span>
+              </>
+            ) : (
+              <span className="text-[10px] text-slate-500" data-testid="main-chart-day-range-unavailable">Unavailable · no real same-symbol quote</span>
+            )}
+          </article>
+          <article className="bg-[#0f1422] border border-[#1a2438] rounded p-2 flex flex-col justify-between min-w-0" data-testid="main-chart-52-week-range">
+            <span className="text-[10px] font-mono text-slate-400">52-Week Range</span>
+            <span className="text-xs font-mono text-slate-500" data-testid="main-chart-52-week-unavailable">Unavailable</span>
+            <span className="text-[8px] text-slate-500">Verified 52-week coverage metadata is unavailable.</span>
+          </article>
+          <article className="bg-[#0f1422] border border-[#1a2438] rounded p-2 flex flex-col justify-between min-w-0" data-testid="main-chart-rsi-card">
+            <span className="text-[10px] font-mono text-slate-400">RSI(14)</span>
+            <span className="text-xs font-mono font-bold text-slate-100 tabular-nums" data-testid="main-chart-rsi-value">
+              {dashboardRsi === null ? "Unavailable" : fmt(dashboardRsi, 1)}
+            </span>
+            <span className="text-[8px] text-slate-500">Shared calculation · {bars?.length ?? 0} history bars</span>
+          </article>
+          <article className="bg-[#0f1422] border border-[#1a2438] rounded p-2 flex flex-col justify-between min-w-0" data-testid="main-chart-quant-signal">
+            <span className="text-[10px] font-mono text-slate-400">Quant Multi-Factor Signal</span>
+            <span className="text-xs font-mono text-slate-500" data-testid="main-chart-quant-unavailable">Unavailable</span>
+            <span className="text-[8px] text-slate-500">No verified Quant Research qualification is connected.</span>
+          </article>
+        </div>
+      </section>
     </div>
   );
 }

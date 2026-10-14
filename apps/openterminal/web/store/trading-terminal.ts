@@ -5,6 +5,9 @@ import { create } from "zustand";
 export type ChartType = "candles" | "line" | "area" | "bars";
 export type IndicatorKey = "SMA20" | "SMA50" | "SMA200" | "EMA20" | "VWAP" | "BOLL" | "RSI" | "MACD" | "VOL";
 export type ProviderMode = "auto" | "alpaca_only" | "futu_only";
+export type KlineInterval =
+  | "AUTO" | "1s" | "5s" | "10s" | "1m" | "5m" | "10m" | "15m" | "30m"
+  | "1h" | "2h" | "4h" | "THIS_WEEK" | "1D" | "1W" | "1Y";
 
 export type StockQuote = {
   symbol: string;
@@ -127,6 +130,8 @@ interface TradingState {
   // Charting controls
   chartType: ChartType;
   setChartType: (type: ChartType) => void;
+  klineInterval: KlineInterval;
+  setKlineInterval: (interval: KlineInterval) => void;
   indicators: Record<IndicatorKey, boolean>;
   toggleIndicator: (ind: IndicatorKey) => void;
   providerMode: ProviderMode;
@@ -190,6 +195,8 @@ export const useTradingStore = create<TradingState>((set, get) => ({
 
   chartType: "candles",
   setChartType: (chartType) => set({ chartType }),
+  klineInterval: "AUTO",
+  setKlineInterval: (klineInterval) => set({ klineInterval }),
   indicators: {
     SMA20: true,
     SMA50: true,

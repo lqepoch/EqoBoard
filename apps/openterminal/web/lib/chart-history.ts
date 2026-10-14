@@ -6,7 +6,7 @@ import type { Candle } from "./api";
 
 export const CHART_RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const;
 export type ChartRange = (typeof CHART_RANGES)[number];
-export type ChartResolution = "1m" | "5m" | "1h" | "1d";
+export type ChartResolution = "1m" | "5m" | "15m" | "1h" | "1d";
 export type ChartProviderMode = "auto" | "alpaca_only" | "futu_only";
 export type ChartAssetClass = "stock" | "etf";
 export type ExactChartValues = { open: string; high: string; low: string; close: string; volume: string };
@@ -252,8 +252,11 @@ export function useChartHistory(
   providerMode: ChartProviderMode,
   assetClass: ChartAssetClass,
   enabled = true,
+  resolutionOverride: ChartResolution | null | undefined = undefined,
 ) {
-  const resolution = resolutionForRange(range);
+  const resolution = resolutionOverride === undefined ? resolutionForRange(range) : resolutionOverride;
+  const queryResolution = resolution ?? resolutionForRange(range);
+  const queryEnabled = enabled && Boolean(symbol) && resolution !== null;
   const queryClient = useQueryClient();
   const queryKey = [
     "chart-history",
@@ -273,7 +276,7 @@ export function useChartHistory(
     initialPageParam: null as CursorPageParam | null,
     queryFn: async ({ pageParam, signal }) => {
       const page = await fetchHistoryPage(
-        symbol, range, resolution, providerMode, assetClass, pageParam, signal,
+        symbol, range, queryResolution, providerMode, assetClass, pageParam, signal,
       );
       // Seed the independently refreshed latest-page query from the first snapshot
       // so mounting its observer does not issue a duplicate initial request.
@@ -285,7 +288,7 @@ export function useChartHistory(
     getNextPageParam: (lastPage, allPages) => allPages.length >= MAX_CURSOR_PAGES
       ? undefined
       : requestCursor(lastPage),
-    enabled: enabled && Boolean(symbol),
+    enabled: queryEnabled,
     // Refetching this infinite query would revisit every loaded opaque cursor.
     // The latest page below has its own bounded query and refresh interval.
     refetchOnMount: false,
@@ -299,9 +302,9 @@ export function useChartHistory(
   const latestPageQuery = useQuery({
     queryKey: latestPageQueryKey,
     queryFn: ({ signal }) => fetchHistoryPage(
-      symbol, range, resolution, providerMode, assetClass, null, signal,
+      symbol, range, queryResolution, providerMode, assetClass, null, signal,
     ),
-    enabled: enabled && Boolean(firstPage),
+    enabled: queryEnabled && Boolean(firstPage),
     initialData: firstPage,
     staleTime: range === "1D" ? LIVE_HEAD_REFRESH_INTERVAL_MS : 60_000,
     refetchInterval: range === "1D" ? LIVE_HEAD_REFRESH_INTERVAL_MS : 60_000,

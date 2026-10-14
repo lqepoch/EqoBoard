@@ -95,6 +95,7 @@ function marketBarsResponse({
   anchorMs = Date.now(),
   startsMinutesAgo,
   cursor = null,
+  includeGap = true,
 }: {
   requestedResolution: Resolution;
   effectiveResolution?: Resolution;
@@ -103,8 +104,9 @@ function marketBarsResponse({
   anchorMs?: number;
   startsMinutesAgo: Array<{ minutes: number; close: string }>;
   cursor?: string | null;
+  includeGap?: boolean;
 }) {
-  const oldestSafeMinute = effectiveResolution === "1d" ? 3_000 : effectiveResolution === "1h" ? 120 : effectiveResolution === "15m" ? 30 : effectiveResolution === "5m" ? 10 : 2;
+  const oldestSafeMinute = effectiveResolution === "1d" ? 3_000 : effectiveResolution === "1h" ? 120 : effectiveResolution === "15m" ? 15 : effectiveResolution === "5m" ? 10 : 2;
   const rows = startsMinutesAgo.map(({ minutes, close }) => bar(
     isoMinutesAgo(Math.max(minutes, oldestSafeMinute), anchorMs), effectiveResolution, close, assetClass,
   ));
@@ -116,7 +118,9 @@ function marketBarsResponse({
   const gapStart = first.bar_end_exclusive_utc;
   const gapEnd = new Date(Date.parse(gapStart) + intervalMs).toISOString();
   const segmentStart = first.bar_start_utc;
-  const segmentEnd = new Date(Math.max(Date.parse(last.bar_end_exclusive_utc), Date.parse(gapEnd))).toISOString();
+  const segmentEnd = new Date(includeGap
+    ? Math.max(Date.parse(last.bar_end_exclusive_utc), Date.parse(gapEnd))
+    : Date.parse(last.bar_end_exclusive_utc)).toISOString();
   return {
     schema_version: 1,
     requested_resolution: requestedResolution,
@@ -131,7 +135,7 @@ function marketBarsResponse({
       provenance_id: PROVENANCE_ID,
       session_instance_id: "fixture-session-regular",
     }],
-    gaps: [{ start_utc: gapStart, end_exclusive_utc: gapEnd, reason_code: "source_gap" }],
+    gaps: includeGap ? [{ start_utc: gapStart, end_exclusive_utc: gapEnd, reason_code: "source_gap" }] : [],
     source_provenance: [{
       provenance_id: PROVENANCE_ID,
       provider: "fixture-provider",
@@ -714,4 +718,109 @@ test("MainChartPanel shares the provider history client and does not request Fut
   const legacyKlineRequests = await page.evaluate(() => performance.getEntriesByType("resource")
     .filter((entry) => entry.name.includes("/api/futu/kline")).length);
   expect(legacyKlineRequests).toBe(0);
+});
+
+test("MainChartPanel keeps range independent from interval and sends 15m through the BFF while retaining chart controls", async ({ page, request }) => {
+  await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const historyRequests = captureHistoryRequests(page);
+  const anchorMs = Date.now();
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      response: marketBarsResponse({
+        requestedResolution: "1m",
+        assetClass: "etf",
+        anchorMs,
+        startsMinutesAgo: [{ minutes: 5, close: "500.00" }, { minutes: 3, close: "501.00" }],
+      }),
+    },
+  });
+  await page.goto(WEB_ORIGIN);
+  await page.getByRole("button", { name: /pro trading/i }).click();
+
+  const chart = page.getByTestId("main-chart-panel");
+  const canvas = chart.getByTestId("main-chart-canvas");
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("Resolution 1m → 1m");
+  await expect(chart.getByTestId("main-chart-interval-AUTO")).toHaveAttribute("aria-pressed", "true");
+  const chartInstance = await canvas.getAttribute("data-chart-instance-generation");
+
+  await configureMocks(request, {
+    marketBars: {
+      enabled: true,
+      response: marketBarsResponse({
+        requestedResolution: "5m",
+        assetClass: "etf",
+        anchorMs,
+        includeGap: false,
+        startsMinutesAgo: [{ minutes: 20, close: "500.00" }, { minutes: 15, close: "501.00" }],
+      }),
+    },
+  });
+  const automaticRangeResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith(`/${SYMBOL}`) && url.searchParams.get("range") === "5D" &&
+      url.searchParams.get("resolution") === "5m";
+  });
+  await chart.getByTestId("main-chart-range-5D").click();
+  const rangeResponse = await automaticRangeResponse;
+  expect((await rangeResponse.json()).requested_resolution).toBe("5m");
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("QQQ · 5D · Auto");
+  expect(await canvas.getAttribute("data-chart-instance-generation")).toBe(chartInstance);
+
+  const starts15m = [240, 225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75, 60, 45, 30, 15];
+  const rows15m = marketBarsResponse({
+    requestedResolution: "15m",
+    assetClass: "etf",
+    feed: "unknown",
+    anchorMs,
+    includeGap: false,
+    startsMinutesAgo: starts15m.map((minutes, index) => ({ minutes, close: (500 + index).toFixed(2) })),
+  });
+  await configureMocks(request, { marketBars: { enabled: true, response: rows15m } });
+  const resolutionResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith(`/${SYMBOL}`) && url.searchParams.get("range") === "5D" &&
+      url.searchParams.get("resolution") === "15m";
+  });
+  await chart.getByTestId("main-chart-interval-15m").click();
+  const response = await resolutionResponse;
+  const payload = await response.json() as {
+    requested_resolution?: string;
+    effective_resolution?: string;
+    bars?: Array<{ time?: number; resolution?: string; exact?: { close?: string } }>;
+  };
+  expect(payload.requested_resolution).toBe("15m");
+  expect(payload.effective_resolution).toBe("15m");
+  expect(payload.bars).toHaveLength(16);
+  expect(payload.bars?.every((row) => row.resolution === "15m")).toBe(true);
+  const times = (payload.bars ?? []).map((row) => row.time).filter((time): time is number => typeof time === "number").sort((left, right) => left - right);
+  expect(times).toHaveLength(16);
+  expect(times.slice(1).map((time, index) => time - times[index])).toEqual(Array(15).fill(15 * 60));
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("Resolution 15m → 15m");
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("Feed unknown");
+  await expect(chart.getByTestId("main-chart-history-status")).toContainText("16 bars");
+  await expect(chart.getByTestId("main-chart-range-5D")).toHaveAttribute("aria-pressed", "true");
+  await expect(chart.getByTestId("main-chart-interval-15m")).toHaveAttribute("aria-pressed", "true");
+  await expect(chart.getByRole("button", { name: "Chart range 1D", exact: true })).toBeVisible();
+  await expect(chart.getByRole("button", { name: "Chart interval 1D", exact: true })).toBeVisible();
+  await expect(chart.getByTestId("main-chart-interval-1s")).toBeDisabled();
+  await expect(chart.getByTestId("main-chart-interval-1s")).toHaveAttribute("title", /no substitute interval is requested/);
+  expect(await canvas.getAttribute("data-chart-instance-generation")).toBe(chartInstance);
+
+  await expect(chart.getByTestId("main-chart-intelligence-dashboard")).toBeVisible();
+  await expect(chart.getByTestId("main-chart-rsi-value")).not.toHaveText("Unavailable");
+  await expect(chart.getByTestId("main-chart-52-week-unavailable")).toHaveText("Unavailable");
+  await expect(chart.getByTestId("main-chart-quant-unavailable")).toHaveText("Unavailable");
+  await expect(chart.getByRole("button", { name: "SMA20", exact: true })).toBeVisible();
+  await expect(chart.getByRole("button", { name: "candles", exact: true })).toBeVisible();
+  for (const tool of ["pattern", "measure", "lock"]) {
+    const button = chart.getByTestId(`main-chart-tool-${tool}`);
+    await expect(button).toBeVisible();
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+  }
+
+  const actualQuery = (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "15m").at(-1);
+  expect(actualQuery).toMatchObject({ path: "/v1/market/bars", query: { symbol: SYMBOL, resolution: "15m", provider_mode: "auto", asset_class: "etf" } });
+  expect(historyRequests.some((url) => url.searchParams.get("range") === "5D" && url.searchParams.get("resolution") === "15m")).toBe(true);
 });
