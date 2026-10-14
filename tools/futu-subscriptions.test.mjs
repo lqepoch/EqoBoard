@@ -227,6 +227,27 @@ test('history preserves missing volume and exact int64 text without claiming exa
   assert.equal(result.numeric_encoding, 'binary_float_projection');
 });
 
+test('binary float prices expand exponent notation without rounding and stay within Core decimal bounds', async () => {
+  const f = historyFixture({ pages: [() => ({ retType: 0, s2c: { klList: [bar(
+    '2026-01-05 09:30:00',
+    { openPrice: 1e-7, highPrice: 1e21, lowPrice: 1e-28, closePrice: 1e38 },
+  )] } })] });
+  const result = await f.history.bars(baseRange);
+  assert.deepEqual(
+    [result.bars[0].open, result.bars[0].high, result.bars[0].low, result.bars[0].close],
+    ['0.0000001', '1000000000000000000000', '0.0000000000000000000000000001',
+      '100000000000000000000000000000000000000'],
+  );
+  assert.equal(result.numeric_encoding, 'binary_float_projection');
+
+  for (const unsupported of [1e-29, 1e39, 1e100]) {
+    const rejected = historyFixture({ pages: [() => ({ retType: 0, s2c: { klList: [
+      bar('2026-01-05 09:30:00', { openPrice: unsupported }),
+    ] } })] });
+    await assert.rejects(rejected.history.bars(baseRange), /UNSUPPORTED_PROVIDER_CAPABILITY/);
+  }
+});
+
 test('history request timeout recovers on the next SDK request and provider errors stay sanitized', async () => {
   let calls = 0;
   const f = historyFixture({ requestTimeoutMs: 5, pages: [

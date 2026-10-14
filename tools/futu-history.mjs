@@ -7,6 +7,9 @@ const MAX_CURSORS = 256;
 const CURSOR_TTL_MS = 30 * 60 * 1000;
 const HISTORY_REQUEST_INTERVAL_MS = 500;
 const REQUEST_TIMEOUT_MS = 10_000;
+const MAX_DECIMAL_INPUT_BYTES = 128;
+const MAX_DECIMAL_SCALE = 28;
+const MAX_DECIMAL_COEFFICIENT = (1n << 127n) - 1n;
 const NEW_YORK = 'America/New_York';
 
 const ET_FORMATTER = new Intl.DateTimeFormat('en-US', {
@@ -165,11 +168,45 @@ function normalizeRequest(request, nowMs) {
 
 function numberText(value) {
   if (typeof value !== 'number' || !Number.isFinite(value)) invalid('futu_invalid_response');
-  const text = String(value);
-  const numeric = Number(text);
-  if (!Number.isFinite(numeric) || numeric <= 0 ||
-      !/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)) {
-    invalid('futu_invalid_response');
+  if (value <= 0) invalid('futu_invalid_response');
+  const source = String(value);
+  const match = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(source);
+  if (!match) invalid('futu_invalid_response');
+  const integer = match[1];
+  const fraction = match[2] ?? '';
+  const exponent = Number(match[3] ?? 0);
+  if (!Number.isSafeInteger(exponent)) invalid('UNSUPPORTED_PROVIDER_CAPABILITY');
+
+  const digits = integer + fraction;
+  const decimalPoint = integer.length + exponent;
+  let text;
+  let expandedLength;
+  if (decimalPoint <= 0) {
+    expandedLength = 2 + -decimalPoint + digits.length;
+    if (expandedLength > MAX_DECIMAL_INPUT_BYTES) invalid('UNSUPPORTED_PROVIDER_CAPABILITY');
+    text = `0.${'0'.repeat(-decimalPoint)}${digits}`;
+  } else if (decimalPoint >= digits.length) {
+    expandedLength = decimalPoint;
+    if (expandedLength > MAX_DECIMAL_INPUT_BYTES) invalid('UNSUPPORTED_PROVIDER_CAPABILITY');
+    text = `${digits}${'0'.repeat(decimalPoint - digits.length)}`;
+  } else {
+    expandedLength = digits.length + 1;
+    if (expandedLength > MAX_DECIMAL_INPUT_BYTES) invalid('UNSUPPORTED_PROVIDER_CAPABILITY');
+    text = `${digits.slice(0, decimalPoint)}.${digits.slice(decimalPoint)}`;
+  }
+
+  if (text.length > MAX_DECIMAL_INPUT_BYTES || !/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(text)) {
+    invalid('UNSUPPORTED_PROVIDER_CAPABILITY');
+  }
+  const [whole, decimal = ''] = text.split('.');
+  let coefficientDigits = `${whole}${decimal}`.replace(/^0+/, '') || '0';
+  let scale = decimal.length;
+  while (scale > 0 && coefficientDigits.endsWith('0')) {
+    coefficientDigits = coefficientDigits.slice(0, -1);
+    scale -= 1;
+  }
+  if (scale > MAX_DECIMAL_SCALE || BigInt(coefficientDigits) > MAX_DECIMAL_COEFFICIENT) {
+    invalid('UNSUPPORTED_PROVIDER_CAPABILITY');
   }
   return text;
 }

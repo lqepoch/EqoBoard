@@ -23,13 +23,15 @@ const history = new FutuHistory(sdk, {
   sessionAll: protoRoot.lookupEnum('Common.Session').values.Session_ALL,
 });
 let connected = false;
+let connectionError = 'futu_disconnected';
 const finite = v => typeof v === 'number' && Number.isFinite(v) ? v : null;
 const volume = v => { const n = Number(v?.toString()); return Number.isSafeInteger(n) && n >= 0 ? n : null; };
 const timestamp = v => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1e11
   ? new Date(v * 1000).toISOString() : null;
 sdk.onlogin = ok => {
   connected = Boolean(ok); policy.entries.clear(); history.connectionChanged(connected);
-  emit({ kind: 'connection', connected });
+  connectionError = connected ? null : 'futu_login_rejected';
+  emit({ kind: 'connection', connected, ...(connected ? {} : { error: connectionError }) });
 };
 sdk.onPush = (cmd, response) => {
   if (!connected || response.retType !== 0 || !response.s2c) return;
@@ -55,7 +57,7 @@ async function call(name, c2s) {
   const response = await sdk[name]({ c2s }); policy.check(response); if (!response.s2c) throw new Error('futu_read_failed'); return response.s2c;
 }
 async function dispatch(request) {
-  if (!connected) throw new Error('futu_disconnected');
+  if (!connected) throw new Error(connectionError ?? 'futu_disconnected');
   if (request.method === 'subscriptions') return policy.update(request.symbols);
   if (request.method === 'status') {
     const q = await call('GetSubInfo', { isReqAllConn: true });
@@ -93,7 +95,7 @@ input.on('line', line => {
     try { emit({ id: request.id, result: await dispatch(request) }); }
     catch (e) {
       const allowed = ['quota_waiting_for_release', 'quota_unknown', 'stock_buffer_full', 'invalid_symbols',
-        'futu_request_rejected', 'subscription_required', 'futu_disconnected', 'futu_queue_full',
+        'futu_request_rejected', 'subscription_required', 'futu_disconnected', 'futu_login_rejected', 'futu_queue_full',
         'UNSUPPORTED_PROVIDER_CAPABILITY', 'invalid_bars_query', 'invalid_limit', 'invalid_days',
         'invalid_start', 'invalid_end', 'invalid_cursor', 'cursor_query_mismatch', 'futu_timeout',
         'futu_rate_limited', 'futu_history_permission_denied', 'futu_invalid_response', 'futu_read_failed'];

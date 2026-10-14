@@ -35,8 +35,9 @@ cursor 绑定完整查询并保留 SDK 原始 `nextReqKey`；cursor 在常驻进
 至少 500ms，按不超过每 30 秒 60 次限制执行，包括后续页。若 OpenD 重连，
 旧 cursor 失效，应从首页重试。
 
-SDK 用 protobuf `double` 返回 OHLC；价格按十进制文本投影并明确标记
-`numeric_encoding=binary_float_projection`，不能当作来源精确十进制。成交量
+SDK 用 protobuf `double` 返回 OHLC；价格按十进制文本投影，科学计数法只做词法展开，
+不舍入，并明确标记 `numeric_encoding=binary_float_projection`，不能当作来源精确
+十进制。投影超出 Core `DecimalString` 的长度、scale 或系数范围时整页拒绝。成交量
 保留为整数十进制文本，来源缺值为 `null`；固定使用 `rehabType=None`，响应标记
 `adjustment=none`。不填零、不造 tick-bar 或成交量。
 官方历史 K 线额度按股票在滚动 7 天内计算，与实时订阅额度分开；读取历史页
@@ -89,7 +90,9 @@ Gateway 的 `EQO_FUTU_SCRIPT` 指向本仓 `tools/futu-stdio.mjs`；
 `FUTU_OPEND_WEBSOCKET_SSL`、`FUTU_OPEND_WEBSOCKET_KEY` 仅传给 Gateway
 和其 SDK 子进程。当前 WebSocket 为 127.0.0.1:33333，TCP 为 11111，不能混用。
 Gateway 启动一个常驻 SDK 子进程，不按请求新建连接；stdin/stdout 使用有界
-NDJSON 队列。`method=bars` 请求接收 `days` 或成对 `start`/`end`，以及可选
+NDJSON 队列，Gateway 单行读取预算为 1 MiB，超限会关闭 worker 并结束待处理请求。
+OpenD 登录拒绝以脱敏错误码 `futu_login_rejected` 返回，不转发 SDK 原始错误。
+`method=bars` 请求接收 `days` 或成对 `start`/`end`，以及可选
 `cursor`；opaque cursor 仅在该 worker 进程存活期间有效，重启后须从首页查询。
 SDK 原始日志禁用，不调用 Futu 解锁/交易 API。
 
