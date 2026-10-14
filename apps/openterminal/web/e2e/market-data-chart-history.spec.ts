@@ -144,9 +144,9 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
         [CURSOR]: marketBarsResponse({
           requestedResolution: "1m",
           startsMinutesAgo: [
+            { minutes: 20, close: "499.00" },
             { minutes: 5, close: "501.00" },
             { minutes: 3, close: "502.00" },
-            { minutes: 20, close: "499.00" },
           ],
         }),
       },
