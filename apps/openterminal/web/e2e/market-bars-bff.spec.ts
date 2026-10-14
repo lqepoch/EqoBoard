@@ -17,6 +17,7 @@ type FixtureOptions = {
   effectiveResolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   adjustment?: "unadjusted" | "split" | "dividend" | "all";
   olderMinutes?: number;
+  includeGap?: boolean;
   continuationCursor?: string | null;
   truncated?: boolean;
 };
@@ -40,6 +41,11 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
   const interval = intervalMs[effectiveResolution];
   const barStart = new Date(Math.floor(nowMs / interval) * interval - (options.olderMinutes ?? 2) * interval).toISOString();
   const barEnd = new Date(Date.parse(barStart) + interval).toISOString();
+  const gaps = options.includeGap ? [{
+    start_utc: new Date(Date.parse(barStart) - interval).toISOString(),
+    end_exclusive_utc: barStart,
+    reason_code: "source_gap",
+  }] : [];
   const cursor = options.continuationCursor ?? null;
   const provenanceId = "synthetic-e2e-provenance";
   const sessionInstanceId = "synthetic-e2e-session";
@@ -60,7 +66,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
       provenance_id: provenanceId,
       session_instance_id: sessionInstanceId,
     }],
-    gaps: [],
+    gaps,
     source_provenance: [{
       provenance_id: provenanceId,
       provider: "synthetic",
@@ -140,11 +146,15 @@ test("default-off history preserves the legacy route and rejects an unapplied pr
   expect(observed.mdpMarketBars).toEqual([]);
 });
 
-test("enabled history accepts unknown feed evidence and projects the Core envelope", async ({ page, request }) => {
+test("enabled history preserves valid HTTP 206 coverage, rows, gaps, and source facts", async ({ page, request }) => {
   test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
   await configureMocks(request, {
-    marketBars: { enabled: true, response: makeCoreEnvelope({ assetClass: "etf", feed: "unknown" }) },
+    marketBars: {
+      enabled: true,
+      status: 206,
+      response: makeCoreEnvelope({ assetClass: "etf", feed: "unknown", includeGap: true }),
+    },
   });
 
   const query = new URLSearchParams({
@@ -157,7 +167,7 @@ test("enabled history accepts unknown feed evidence and projects the Core envelo
     allow_daily_downgrade: "true",
   });
   const response = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?${query}`);
-  expect(response.status()).toBe(200);
+  expect(response.status()).toBe(206);
   expect(response.headers()["cache-control"]).toBe("no-store");
   expect(response.headers()["x-content-type-options"]).toBe("nosniff");
   const body = await response.json();
@@ -199,6 +209,21 @@ test("enabled history accepts unknown feed evidence and projects the Core envelo
         close: "512.7500",
         volume: "123456.000",
       },
+    }],
+    segments: [{
+      coverage_status: "partial",
+      provenance_id: "synthetic-e2e-provenance",
+      session_instance_id: "synthetic-e2e-session",
+    }],
+    gaps: [{
+      reason_code: "source_gap",
+    }],
+    source_provenance: [{
+      provenance_id: "synthetic-e2e-provenance",
+      provider: "synthetic",
+      feed: "unknown",
+      source: "synthetic-e2e-fixture",
+      entitlement_status: "unknown",
     }],
   });
   expect(body.request_start).toMatch(/^\d{4}-\d\d-\d\dT.*Z$/);
@@ -253,13 +278,14 @@ test("cursor pages preserve the first request window and opaque cursor", async (
   await configureMocks(request, {
     marketBars: {
       enabled: true,
+      status: 206,
       responsesByCursor: { "": firstPage, [cursor]: olderPage },
     },
   });
 
   const initial = new URLSearchParams({ range: "5D", provider_mode: "auto", resolution: "5m" });
   const firstResponse = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?${initial}`);
-  expect(firstResponse.status()).toBe(200);
+  expect(firstResponse.status()).toBe(206);
   const firstBody = await firstResponse.json();
   expect(firstBody).toMatchObject({ has_more: true, truncated: true, next_cursor: cursor });
 
@@ -276,7 +302,7 @@ test("cursor pages preserve the first request window and opaque cursor", async (
     request_end: firstBody.request_end,
   });
   const olderResponse = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?${older}`);
-  expect(olderResponse.status()).toBe(200);
+  expect(olderResponse.status()).toBe(206);
   const olderBody = await olderResponse.json();
   expect(olderBody).toMatchObject({ has_more: false, truncated: false, next_cursor: null });
 
@@ -301,7 +327,7 @@ test("research provider mode requires the research scope before calling MDP", as
   expect((await metrics(request)).mdpMarketBars).toEqual([]);
 });
 
-test("invalid inputs, unsupported symbols, and malformed Core envelopes fail without source fallback", async ({ page, request }) => {
+test("invalid inputs, unsupported symbols, and mismatched Core responses fail without source fallback", async ({ page, request }) => {
   test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
 
@@ -331,16 +357,25 @@ test("invalid inputs, unsupported symbols, and malformed Core envelopes fail wit
   expect(downgradeResponse.status()).toBe(502);
   expect((await downgradeResponse.json()).error).toBe("invalid_market_data_response");
 
+  await configureMocks(request, {
+    marketBars: { enabled: true, status: 200, response: makeCoreEnvelope() },
+  });
+  const mismatchedCoverage = await page.context().request.get(`${WEB_ORIGIN}/api/history/QQQ?range=5D`);
+  expect(mismatchedCoverage.status()).toBe(502);
+  expect((await mismatchedCoverage.json()).error).toBe("invalid_market_data_response");
+
   const observed = await metrics(request);
   expect(observed.gateway.requests["/api/v1/stocks/bars"]).toBeUndefined();
   expectNoResearchBarsRequests(observed.research.calls);
-  expect(observed.mdpMarketBars).toHaveLength(2);
+  expect(observed.mdpMarketBars).toHaveLength(3);
 });
 
 test("enabled history works when the optional terminal Gateway signer is absent", async ({ page, request }) => {
   test.skip(!featureEnabled || !gatewaySignerDisabled,
     "requires E2E_MDP_MARKET_BARS_ENABLED=true and E2E_GATEWAY_SIGNER_DISABLED=true");
-  await configureMocks(request, { marketBars: { enabled: true, response: makeCoreEnvelope({ assetClass: "etf" }) } });
+  await configureMocks(request, {
+    marketBars: { enabled: true, status: 206, response: makeCoreEnvelope({ assetClass: "etf" }) },
+  });
   await setRoles(request, ["eqoboard-market-reader"]);
   await page.goto("/");
   await page.getByRole("button", { name: /organization identity provider/i }).click();
@@ -356,7 +391,7 @@ test("enabled history works when the optional terminal Gateway signer is absent"
   const response = await page.context().request.get(
     `${WEB_ORIGIN}/api/history/QQQ?range=5D&resolution=5m&asset_class=etf`,
   );
-  expect(response.status()).toBe(200);
+  expect(response.status()).toBe(206);
   expect((await response.json()).bars).toHaveLength(1);
 
   const observed = await metrics(request);
@@ -380,12 +415,14 @@ test("Alpaca-only history does not receive a Gateway delegation", async ({ page,
   test.skip(!featureEnabled || gatewaySignerDisabled,
     "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
-  await configureMocks(request, { marketBars: { enabled: true, response: makeCoreEnvelope() } });
+  await configureMocks(request, {
+    marketBars: { enabled: true, status: 206, response: makeCoreEnvelope() },
+  });
 
   const response = await page.context().request.get(
     `${WEB_ORIGIN}/api/history/QQQ?range=5D&provider_mode=alpaca_only`,
   );
-  expect(response.status()).toBe(200);
+  expect(response.status()).toBe(206);
   const calls = (await metrics(request)).mdpMarketBars;
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatchObject({

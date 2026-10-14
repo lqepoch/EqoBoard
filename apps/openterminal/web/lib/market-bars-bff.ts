@@ -275,6 +275,16 @@ function upstreamError(status: number): NextResponse {
   return jsonError(503, "market_data_service_unavailable");
 }
 
+function marketBarsTransportStatusMatchesCoverage(body: unknown, status: number): boolean {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return false;
+  const coverageStatus = (body as Record<string, unknown>).coverage_status;
+  if (status === 200) return coverageStatus === "complete" || coverageStatus === "empty";
+  if (status === 206) {
+    return coverageStatus === "partial" || coverageStatus === "unknown" || coverageStatus === "unsupported";
+  }
+  return false;
+}
+
 async function readJsonResponse(response: Response): Promise<unknown | null> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
@@ -369,7 +379,7 @@ export async function getMarketBars(request: NextRequest, rawSymbol: string): Pr
       redirect: "manual",
       signal: controller.signal,
     });
-    if (upstream.status !== 200) {
+    if (upstream.status !== 200 && upstream.status !== 206) {
       void upstream.body?.cancel().catch(() => undefined);
       return deadlineExpired ? jsonError(504, "query_timeout") : upstreamError(upstream.status);
     }
@@ -378,7 +388,9 @@ export async function getMarketBars(request: NextRequest, rawSymbol: string): Pr
       return deadlineExpired ? jsonError(504, "query_timeout") : jsonError(502, "invalid_market_data_response");
     }
     const validated = validateMdpMarketBarsResponse(body, identity);
-    if (!validated) return jsonError(502, "invalid_market_data_response");
+    if (!validated || !marketBarsTransportStatusMatchesCoverage(body, upstream.status)) {
+      return jsonError(502, "invalid_market_data_response");
+    }
     const projected = projectMdpMarketBarsResponse(validated, {
       ...identity,
       providerMode: parsed.providerMode,
@@ -386,6 +398,7 @@ export async function getMarketBars(request: NextRequest, rawSymbol: string): Pr
     });
     if (!projected) return jsonError(502, "invalid_market_data_response");
     return NextResponse.json(projected, {
+      status: upstream.status,
       headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
     });
   } catch {
