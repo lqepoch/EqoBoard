@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import {
   configureMocks,
   expect,
@@ -15,6 +16,15 @@ const PROVENANCE_ID = "fixture-provenance-v1";
 
 type Resolution = "1m" | "5m" | "15m" | "1h" | "1d";
 type AssetClass = "stock" | "etf";
+
+function captureHistoryRequests(page: Page): URL[] {
+  const requests: URL[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/history/")) requests.push(url);
+  });
+  return requests;
+}
 
 function isoMinutesAgo(minutes: number, anchorMs = Date.now()): string {
   const rounded = Math.floor((anchorMs - minutes * 60_000) / 60_000) * 60_000;
@@ -131,6 +141,7 @@ test.beforeEach(async ({ request }) => resetDownstream(request));
 
 test("ChartWidget reads history through the BFF, pages older bars while panning at the left edge, and shows provenance", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const historyRequests = captureHistoryRequests(page);
   const initial = marketBarsResponse({ requestedResolution: "1d", assetClass: "stock", startsMinutesAgo: [{ minutes: 20, close: "500.00" }] });
   await configureMocks(request, { marketBars: { enabled: true, response: initial } });
   await page.goto(WEB_ORIGIN);
@@ -187,12 +198,16 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
   await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
 
   const canvas = widget.getByTestId("chart-widget-canvas");
+  await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
+  const rangeBeforePan = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
   const canvasBounds = await canvas.boundingBox();
   if (!canvasBounds) throw new Error("Chart canvas is not visible");
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.2, canvasBounds.y + canvasBounds.height * 0.55);
   await page.mouse.down();
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.65, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
   await page.mouse.up();
+  await expect.poll(async () => visibleRange(await canvas.getAttribute("data-visible-logical-range")).from)
+    .toBeLessThan(rangeBeforePan.from - 0.5);
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR)).toBe(true);
   const pageCalls = (await metrics(request)).mdpMarketBars.filter((call: { query: { resolution?: string } }) => call.query.resolution === "1m");
   const cursorCallIndex = pageCalls.findIndex((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR);
@@ -210,45 +225,52 @@ test("ChartWidget reads history through the BFF, pages older bars while panning 
   await configureMocks(request, {
     marketBars: { enabled: true, response: marketBarsResponse({ requestedResolution: "1m", assetClass: "etf", startsMinutesAgo: [{ minutes: 5, close: "501.00" }] }) },
   });
+  const chartInstanceBeforeProviderSwitch = await canvas.getAttribute("data-chart-instance-generation");
+  const requestCountBeforeProviderSwitch = historyRequests.length;
   await widget.getByLabel("Chart provider mode").selectOption("alpaca_only");
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { provider_mode?: string; resolution?: string } }) => call.query.provider_mode === "alpaca_only" && call.query.resolution === "1m")).toBe(true);
+  await expect.poll(() => historyRequests.slice(requestCountBeforeProviderSwitch).some((url) => url.searchParams.get("provider_mode") === "alpaca_only")).toBe(true);
+  expect(await canvas.getAttribute("data-chart-instance-generation")).toBe(chartInstanceBeforeProviderSwitch);
 });
 
 test("all chart ranges request the documented resolution through the BFF", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const historyRequests = captureHistoryRequests(page);
   await configureMocks(request, {
     marketBars: { enabled: true, response: marketBarsResponse({ requestedResolution: "1d", startsMinutesAgo: [{ minutes: 20, close: "500.00" }] }) },
   });
   await page.goto(WEB_ORIGIN);
   const widget = page.getByTestId("chart-widget");
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
-  const initial = (await metrics(request)).mdpMarketBars.find((call: { query: { range?: string } }) => call.query.range === "6M");
-  expect(initial?.query).toMatchObject({ range: "6M", resolution: "1d", provider_mode: "auto" });
+  await expect.poll(() => historyRequests.some((url) => url.pathname.endsWith(`/${SYMBOL}`) && url.searchParams.get("range") === "6M")).toBe(true);
+  const initial = (await metrics(request)).mdpMarketBars.find((call: { query: { resolution?: string } }) => call.query.resolution === "1d");
+  expect(initial?.query).toMatchObject({ resolution: "1d", provider_mode: "auto" });
   const mappings: Array<[string, Resolution]> = [
     ["1D", "1m"], ["5D", "5m"], ["1M", "1h"], ["6M", "1d"],
     ["YTD", "1d"], ["1Y", "1d"], ["5Y", "1d"], ["MAX", "1d"],
   ];
   for (const [range, resolution] of mappings) {
     if (range === "6M") {
-      expect((await metrics(request)).mdpMarketBars.at(-1).query.resolution).toBe("1d");
+      expect(historyRequests.some((url) => url.pathname.endsWith(`/${SYMBOL}`) && url.searchParams.get("range") === "6M")).toBe(true);
       continue;
     }
     const countBefore = (await metrics(request)).mdpMarketBars.length;
+    const requestCountBefore = historyRequests.length;
     await configureMocks(request, {
       marketBars: { enabled: true, response: marketBarsResponse({ requestedResolution: resolution, assetClass: "stock", startsMinutesAgo: [{ minutes: 20, close: "500.00" }] }) },
     });
     await widget.getByRole("button", { name: range, exact: true }).click();
+    await expect.poll(() => historyRequests.slice(requestCountBefore).some((url) =>
+      url.pathname.endsWith(`/${SYMBOL}`) && url.searchParams.get("range") === range && url.searchParams.get("resolution") === resolution)).toBe(true);
     await expect.poll(async () => (await metrics(request)).mdpMarketBars.length).toBeGreaterThan(countBefore);
-    const latest = (await metrics(request)).mdpMarketBars.at(-1);
-    expect(latest.query.resolution).toBe(resolution);
-    expect(latest.query.provider_mode).toBe("auto");
-    expect(latest.query.adjustment).toBe("unadjusted");
-    expect(latest.query.session_scope).toBe("all");
+    const matchingCall = (await metrics(request)).mdpMarketBars.slice(countBefore).find((call: { query: { resolution?: string } }) => call.query.resolution === resolution);
+    expect(matchingCall?.query).toMatchObject({ resolution, provider_mode: "auto", adjustment: "unadjusted", session_scope: "all" });
   }
 });
 
 test("MAX pans to a real daily cursor page and preserves unknown feed and exact decimals", async ({ page, request }) => {
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
+  const historyRequests = captureHistoryRequests(page);
   const anchorMs = Date.now();
   const firstPage = marketBarsResponse({
     requestedResolution: "1d",
@@ -279,6 +301,7 @@ test("MAX pans to a real daily cursor page and preserves unknown feed and exact 
 
   const widget = page.getByTestId("chart-widget");
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
+  const beforeMaxCount = (await metrics(request)).mdpMarketBars.length;
   await widget.getByRole("button", { name: "MAX", exact: true }).click();
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Resolution 1d → 1d");
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Feed unknown");
@@ -289,14 +312,17 @@ test("MAX pans to a real daily cursor page and preserves unknown feed and exact 
   await widget.getByText("Coverage, gaps and provenance detail").click();
   await expect(widget.locator("details pre")).toContainText("source_gap");
 
-  const initialCall = (await metrics(request)).mdpMarketBars.find((call: { query: { range?: string } }) => call.query.range === "MAX");
+  await expect.poll(() => historyRequests.some((url) => url.pathname.endsWith(`/${SYMBOL}`) && url.searchParams.get("range") === "MAX")).toBe(true);
+  const initialCall = (await metrics(request)).mdpMarketBars.slice(beforeMaxCount).find((call: { query: { resolution?: string; cursor?: string } }) => call.query.resolution === "1d" && !call.query.cursor);
   if (!initialCall) throw new Error("MAX history request was not recorded");
-  expect(initialCall.query).toMatchObject({ range: "MAX", resolution: "1d" });
+  expect(initialCall.query).toMatchObject({ resolution: "1d" });
   expect(initialCall.query.cursor).toBeUndefined();
   expect(initialCall.query.start).toBe("1970-01-01T00:00:00.000Z");
   expect(initialCall.query.end).toMatch(/^\d{4}-\d\d-\d\dT.*Z$/);
 
   const canvas = widget.getByTestId("chart-widget-canvas");
+  await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
+  const beforeMaxPan = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
   const canvasBounds = await canvas.boundingBox();
   if (!canvasBounds) throw new Error("Chart canvas is not visible");
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.2, canvasBounds.y + canvasBounds.height * 0.55);
@@ -304,9 +330,12 @@ test("MAX pans to a real daily cursor page and preserves unknown feed and exact 
   await page.mouse.move(canvasBounds.x + canvasBounds.width * 0.65, canvasBounds.y + canvasBounds.height * 0.55, { steps: 5 });
   await page.mouse.up();
 
-  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { range?: string; cursor?: string } }) =>
-    call.query.range === "MAX" && call.query.cursor === CURSOR)).toBe(true);
-  const calls = (await metrics(request)).mdpMarketBars.filter((call: { query: { range?: string } }) => call.query.range === "MAX");
+  await expect.poll(async () => visibleRange(await canvas.getAttribute("data-visible-logical-range")).from)
+    .toBeLessThan(beforeMaxPan.from - 0.5);
+
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { start?: string; cursor?: string } }) =>
+    call.query.start === initialCall.query.start && call.query.cursor === CURSOR)).toBe(true);
+  const calls = (await metrics(request)).mdpMarketBars.filter((call: { query: { start?: string } }) => call.query.start === initialCall.query.start);
   const cursorIndex = calls.findIndex((call: { query: { cursor?: string } }) => call.query.cursor === CURSOR);
   const cursorCall = calls[cursorIndex];
   if (cursorIndex <= 0 || !cursorCall) throw new Error("MAX continuation request was not recorded after its first page");
@@ -372,7 +401,6 @@ test("a delayed older page cannot overwrite a newer 1D refresh and can be retrie
   await page.mouse.up();
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: { query: { resolution?: string; cursor?: string } }) =>
     call.query.resolution === "1m" && call.query.cursor === CURSOR)).toBe(true);
-  await page.waitForTimeout(500);
 
   const refreshedIntraday = marketBarsResponse({
     requestedResolution: "1m",
@@ -455,6 +483,7 @@ test("MainChartPanel shares the provider history client and does not request Fut
   await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
   const initialVisibleRange = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
   const initialViewportSpan = visibleRangeSpan(await canvas.getAttribute("data-visible-logical-range"));
+  const chartInstanceBeforeProviderSwitch = await canvas.getAttribute("data-chart-instance-generation");
   const call = (await metrics(request)).mdpMarketBars.at(-1);
   expect(call).toMatchObject({
     path: "/v1/market/bars",
@@ -481,6 +510,7 @@ test("MainChartPanel shares the provider history client and does not request Fut
   await chart.getByLabel("Main chart provider mode").selectOption("futu_only");
   await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((entry: { query: { provider_mode?: string } }) => entry.query.provider_mode === "futu_only")).toBe(true);
   await expect(chart.getByTestId("main-chart-history-status")).toContainText("4 bars");
+  expect(await canvas.getAttribute("data-chart-instance-generation")).toBe(chartInstanceBeforeProviderSwitch);
   const switchedVisibleRange = visibleRange(await canvas.getAttribute("data-visible-logical-range"));
   const switchedViewportSpan = visibleRangeSpan(await canvas.getAttribute("data-visible-logical-range"));
   expect(switchedViewportSpan).toBeCloseTo(initialViewportSpan, 2);

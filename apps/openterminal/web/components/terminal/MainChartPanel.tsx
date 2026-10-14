@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -43,6 +43,26 @@ const INDICATOR_COLORS: Record<string, string> = {
   VWAP: "#5eead4", RSI: "#fdba74", MACD: "#7dd3fc",
 };
 const ts = (time: number) => time as UTCTimestamp;
+type ChartSeries = ReturnType<IChartApi["addSeries"]>;
+type MainChartSeriesSet = {
+  main: ChartSeries;
+  volume: ChartSeries | null;
+  overlays: Map<string, ChartSeries>;
+  pane: ChartSeries[];
+  paneSignature: string;
+};
+type SavedChartViewport = { identity: string; from: number; to: number; anchorIndex: number; anchorTime: number | null };
+
+function saveChartViewport(identity: string, range: { from: number; to: number }, bars: ChartHistoryCandle[]): SavedChartViewport {
+  const anchorIndex = bars.length > 0 ? Math.max(0, Math.min(bars.length - 1, Math.floor(range.from))) : 0;
+  return { identity, from: range.from, to: range.to, anchorIndex, anchorTime: bars[anchorIndex]?.time ?? null };
+}
+
+function setSeriesData(series: ChartSeries, data: unknown[]) {
+  series.setData(data as never);
+}
+
+type PointerPan = { startX: number; movedOlder: boolean; requested: boolean; active: boolean };
 
 function safeDetails(value: unknown): string {
   try {
@@ -68,16 +88,19 @@ export default function MainChartPanel() {
   const [activeDrawingTool, setActiveDrawingTool] = useState("crosshair");
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const viewportRef = useRef<{
-    identity: string;
-    firstTime: number;
-    logicalFrom: number;
-    logicalTo: number;
-    visibleCount: number;
-    rightOffset: number;
-    atRightEdge: boolean;
-  } | null>(null);
-  const pointerGestureRef = useRef(false);
+  const seriesRef = useRef<MainChartSeriesSet | null>(null);
+  const barsRef = useRef<ChartHistoryCandle[]>([]);
+  const barByTimeRef = useRef<Map<number, ChartHistoryCandle>>(new Map());
+  const appliedBarsRef = useRef<ChartHistoryCandle[]>([]);
+  const appliedIdentityRef = useRef<string | null>(null);
+  const forceFitIdentityRef = useRef<string | null>(null);
+  const currentIdentityRef = useRef("");
+  const currentTimeVisibleRef = useRef(true);
+  const savedViewportRef = useRef<SavedChartViewport | null>(null);
+  const chartGenerationRef = useRef(0);
+  const setHoveredBarRef = useRef(setHoveredBar);
+  const setLocalHoveredBarRef = useRef(setLocalHoveredBar);
+  const pointerPanRef = useRef<PointerPan | null>(null);
   const pagingLockRef = useRef(false);
 
   useEffect(() => {
@@ -90,6 +113,7 @@ export default function MainChartPanel() {
   const bars = history.bars;
   const historyResponse = history.latestPage;
   const historyIdentity = `${activeSymbol}|${range}|${history.requestedResolution}`;
+  const timeVisible = historyResolution(historyResponse, "effective_resolution") !== "1d";
   const requestOlder = useCallback(() => {
     if (!history.hasNextPage || history.isFetchingNextPage || pagingLockRef.current) return;
     pagingLockRef.current = true;
@@ -99,6 +123,12 @@ export default function MainChartPanel() {
   requestOlderRef.current = requestOlder;
   const canFetchOlderRef = useRef(false);
   canFetchOlderRef.current = Boolean(history.hasNextPage);
+  const maybeRequestOlder = useCallback((visibleFrom: number) => {
+    const pan = pointerPanRef.current;
+    if (!pan?.movedOlder || pan.requested || visibleFrom > 12 || !canFetchOlderRef.current) return;
+    pan.requested = true;
+    requestOlderRef.current();
+  }, []);
 
   const calculated = useMemo(() => {
     if (!bars || bars.length === 0) return null;
@@ -118,11 +148,15 @@ export default function MainChartPanel() {
   const segments = Array.isArray(historyResponse?.segments) ? historyResponse.segments : null;
   const displayBar = hoveredBar ?? bars?.[bars.length - 1] ?? null;
   const isBarUp = displayBar ? displayBar.close >= displayBar.open : true;
+  barsRef.current = bars ?? [];
+  currentIdentityRef.current = historyIdentity;
+  currentTimeVisibleRef.current = timeVisible;
+  setHoveredBarRef.current = setHoveredBar;
+  setLocalHoveredBarRef.current = setLocalHoveredBar;
 
   useEffect(() => {
     const element = containerRef.current;
-    if (!element || !bars || bars.length === 0) return;
-    const previousViewport = viewportRef.current;
+    if (!element) return;
     const chart = createChart(element, {
       layout: {
         background: { color: "#080b11" },
@@ -135,7 +169,7 @@ export default function MainChartPanel() {
       crosshair: { mode: 0, vertLine: { color: "#38bdf8", width: 1, style: LineStyle.Dotted }, horzLine: { color: "#38bdf8", width: 1, style: LineStyle.Dotted } },
       timeScale: {
         borderColor: "#1a2233",
-        timeVisible: historyResolution(historyResponse, "effective_resolution") !== "1d",
+        timeVisible: currentTimeVisibleRef.current,
         secondsVisible: false,
       },
       rightPriceScale: { borderColor: "#1a2233", scaleMargins: { top: 0.08, bottom: 0.22 } },
@@ -144,74 +178,30 @@ export default function MainChartPanel() {
       handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
     });
     chartRef.current = chart;
+    element.dataset.chartInstanceGeneration = String(++chartGenerationRef.current);
 
     const upColor = "#10b981";
     const downColor = "#ef4444";
-    const ohlc = bars.map((bar) => ({ time: ts(bar.time), open: bar.open, high: bar.high, low: bar.low, close: bar.close }));
-    let main: ReturnType<typeof chart.addSeries>;
+    let main: ChartSeries;
     if (chartType === "candles") {
       main = chart.addSeries(CandlestickSeries, {
         upColor, downColor, borderUpColor: upColor, borderDownColor: downColor, wickUpColor: upColor, wickDownColor: downColor,
       });
-      main.setData(ohlc);
     } else if (chartType === "bars") {
       main = chart.addSeries(BarSeries, { upColor, downColor });
-      main.setData(ohlc);
     } else if (chartType === "line") {
       main = chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 2 });
-      main.setData(bars.map((bar) => ({ time: ts(bar.time), value: bar.close })));
     } else {
       main = chart.addSeries(AreaSeries, { lineColor: "#38bdf8", topColor: "rgba(56,189,248,0.3)", bottomColor: "rgba(56,189,248,0)", lineWidth: 2 });
-      main.setData(bars.map((bar) => ({ time: ts(bar.time), value: bar.close })));
     }
+    seriesRef.current = { main, volume: null, overlays: new Map(), pane: [], paneSignature: "" };
 
-    if (indicators.VOL) {
-      const volume = chart.addSeries(HistogramSeries, { priceScaleId: "volume", priceFormat: { type: "volume" } });
-      volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-      volume.setData(bars.map((bar) => ({
-        time: ts(bar.time),
-        value: bar.volume,
-        color: bar.close >= bar.open ? "rgba(16,185,129,0.45)" : "rgba(239,68,68,0.45)",
-      })));
-    }
-
-    const overlay = (points: Array<{ time: number; value: number }>, color: string, style?: LineStyle) => {
-      chart.addSeries(LineSeries, { color, lineWidth: 1, lineStyle: style, priceLineVisible: false, lastValueVisible: false })
-        .setData(points.map((point) => ({ time: ts(point.time), value: point.value })));
-    };
-    if (calculated?.SMA20) overlay(calculated.SMA20, INDICATOR_COLORS.SMA20);
-    if (calculated?.SMA50) overlay(calculated.SMA50, INDICATOR_COLORS.SMA50);
-    if (calculated?.SMA200) overlay(calculated.SMA200, INDICATOR_COLORS.SMA200);
-    if (calculated?.EMA20) overlay(calculated.EMA20, INDICATOR_COLORS.EMA20);
-    if (calculated?.VWAP) overlay(calculated.VWAP, INDICATOR_COLORS.VWAP);
-    if (calculated?.BOLL) {
-      overlay(calculated.BOLL.upper, "rgba(167,139,250,0.75)", LineStyle.Dashed);
-      overlay(calculated.BOLL.middle, "rgba(196,181,253,0.85)");
-      overlay(calculated.BOLL.lower, "rgba(167,139,250,0.75)", LineStyle.Dashed);
-    }
-
-    let pane = 1;
-    if (calculated?.RSI) {
-      chart.addSeries(LineSeries, { color: INDICATOR_COLORS.RSI, lineWidth: 1, priceLineVisible: false }, pane++)
-        .setData(calculated.RSI.map((point) => ({ time: ts(point.time), value: point.value })));
-    }
-    if (calculated?.MACD) {
-      const currentPane = pane++;
-      chart.addSeries(HistogramSeries, { color: "#7dd3fc", priceLineVisible: false }, currentPane).setData(
-        calculated.MACD.histogram.map((point) => ({ time: ts(point.time), value: point.value, color: point.value >= 0 ? "rgba(16,185,129,0.65)" : "rgba(239,68,68,0.65)" })),
-      );
-      chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 1, priceLineVisible: false }, currentPane)
-        .setData(calculated.MACD.macd.map((point) => ({ time: ts(point.time), value: point.value })));
-      chart.addSeries(LineSeries, { color: "#e2e8f0", lineWidth: 1, priceLineVisible: false }, currentPane)
-        .setData(calculated.MACD.signal.map((point) => ({ time: ts(point.time), value: point.value })));
-    }
-
-    const barByTime = new Map(bars.map((bar) => [bar.time, bar]));
     const crosshairListener = (param: { time?: unknown }) => {
-      const selected = typeof param.time === "number" ? barByTime.get(param.time) : undefined;
-      const next = selected ?? bars[bars.length - 1];
-      setLocalHoveredBar(next);
-      setHoveredBar(next ? { ...next, change: next.close - next.open, changePercent: next.open === 0 ? 0 : ((next.close - next.open) / next.open) * 100 } : null);
+      const latestBars = barsRef.current;
+      const selected = typeof param.time === "number" ? barByTimeRef.current.get(param.time) : undefined;
+      const next = selected ?? latestBars[latestBars.length - 1];
+      setLocalHoveredBarRef.current(next ?? null);
+      setHoveredBarRef.current(next ? { ...next, change: next.close - next.open, changePercent: next.open === 0 ? 0 : ((next.close - next.open) / next.open) * 100 } : null);
     };
     chart.subscribeCrosshairMove(crosshairListener);
 
@@ -220,54 +210,199 @@ export default function MainChartPanel() {
       if (visible) {
         element.dataset.visibleLogicalRange = `${visible.from.toFixed(3)}:${visible.to.toFixed(3)}`;
       }
-      if (pointerGestureRef.current && visible && visible.from <= 12 && canFetchOlderRef.current) requestOlderRef.current();
+      if (visible) maybeRequestOlder(visible.from);
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(visibleRangeListener);
-
-    if (previousViewport?.identity === historyIdentity) {
-      const firstIndex = bars.findIndex((bar) => bar.time === previousViewport.firstTime);
-      const prependShift = firstIndex >= 0 ? firstIndex : 0;
-      try {
-        if (previousViewport.atRightEdge) {
-          const to = bars.length - 1 + previousViewport.rightOffset;
-          chart.timeScale().setVisibleLogicalRange({ from: to - previousViewport.visibleCount, to });
-        } else {
-          chart.timeScale().setVisibleLogicalRange({ from: previousViewport.logicalFrom + prependShift, to: previousViewport.logicalTo + prependShift });
-        }
-      } catch {
-        chart.timeScale().fitContent();
-      }
-    } else {
-      chart.timeScale().fitContent();
-    }
-    const initialVisibleRange = chart.timeScale().getVisibleLogicalRange();
-    if (initialVisibleRange) {
-      element.dataset.visibleLogicalRange = `${initialVisibleRange.from.toFixed(3)}:${initialVisibleRange.to.toFixed(3)}`;
-    }
 
     return () => {
       const visible = chart.timeScale().getVisibleLogicalRange();
       if (visible) {
-        viewportRef.current = {
-          identity: historyIdentity,
-          firstTime: bars[0].time,
-          logicalFrom: visible.from,
-          logicalTo: visible.to,
-          visibleCount: visible.to - visible.from,
-          rightOffset: visible.to - (bars.length - 1),
-          atRightEdge: visible.to >= bars.length - 2,
-        };
+        savedViewportRef.current = saveChartViewport(currentIdentityRef.current, visible, appliedBarsRef.current);
       }
       chart.unsubscribeCrosshairMove(crosshairListener);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(visibleRangeListener);
       chart.remove();
-      chartRef.current = null;
+      if (chartRef.current === chart) chartRef.current = null;
+      seriesRef.current = null;
     };
-  }, [bars, calculated, chartType, historyIdentity, historyResponse, indicators.VOL, range, setHoveredBar]);
+  }, [chartType, maybeRequestOlder]);
 
-  const requestPointerEnd = () => {
-    window.setTimeout(() => { pointerGestureRef.current = false; }, 120);
-  };
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    const nextBars = bars ?? [];
+    const previousBars = appliedBarsRef.current;
+    const previousIdentity = appliedIdentityRef.current;
+    const identityChanged = previousIdentity !== historyIdentity;
+    if (identityChanged) {
+      forceFitIdentityRef.current = historyIdentity;
+      savedViewportRef.current = null;
+      pointerPanRef.current = null;
+    }
+
+    const visible = chart.timeScale().getVisibleLogicalRange();
+    const savedViewport = savedViewportRef.current?.identity === historyIdentity ? savedViewportRef.current : null;
+    const previousVisible = savedViewport && previousBars.length === 0
+      ? { from: savedViewport.from, to: savedViewport.to }
+      : visible ?? (savedViewport ? { from: savedViewport.from, to: savedViewport.to } : null);
+    if (nextBars.length === 0 && previousBars.length > 0 && !identityChanged && previousVisible) {
+      savedViewportRef.current = saveChartViewport(historyIdentity, previousVisible, previousBars);
+    }
+    barByTimeRef.current = new Map(nextBars.map((bar) => [bar.time, bar]));
+
+    if (chartType === "candles" || chartType === "bars") {
+      setSeriesData(series.main, nextBars.map((bar) => ({ time: ts(bar.time), open: bar.open, high: bar.high, low: bar.low, close: bar.close })));
+    } else {
+      setSeriesData(series.main, nextBars.map((bar) => ({ time: ts(bar.time), value: bar.close })));
+    }
+
+    if (indicators.VOL && !series.volume) {
+      series.volume = chart.addSeries(HistogramSeries, { priceScaleId: "volume", priceFormat: { type: "volume" } });
+      series.volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    } else if (!indicators.VOL && series.volume) {
+      chart.removeSeries(series.volume);
+      series.volume = null;
+    }
+    if (series.volume) {
+      setSeriesData(series.volume, nextBars.map((bar) => ({
+        time: ts(bar.time), value: bar.volume,
+        color: bar.close >= bar.open ? "rgba(16,185,129,0.45)" : "rgba(239,68,68,0.45)",
+      })));
+    }
+
+    const overlayData: Array<[string, Array<{ time: number; value: number }> | null | undefined, string, LineStyle?]> = [
+      ["SMA20", calculated?.SMA20, INDICATOR_COLORS.SMA20],
+      ["SMA50", calculated?.SMA50, INDICATOR_COLORS.SMA50],
+      ["SMA200", calculated?.SMA200, INDICATOR_COLORS.SMA200],
+      ["EMA20", calculated?.EMA20, INDICATOR_COLORS.EMA20],
+      ["VWAP", calculated?.VWAP, INDICATOR_COLORS.VWAP],
+      ["BOLL_U", calculated?.BOLL?.upper, "rgba(167,139,250,0.75)", LineStyle.Dashed],
+      ["BOLL_M", calculated?.BOLL?.middle, "rgba(196,181,253,0.85)"],
+      ["BOLL_L", calculated?.BOLL?.lower, "rgba(167,139,250,0.75)", LineStyle.Dashed],
+    ];
+    const desiredOverlayKeys = new Set(overlayData.filter(([, points]) => points).map(([key]) => key));
+    for (const [key, existing] of series.overlays) {
+      if (!desiredOverlayKeys.has(key)) {
+        chart.removeSeries(existing);
+        series.overlays.delete(key);
+      }
+    }
+    for (const [key, points, color, style] of overlayData) {
+      if (!points) continue;
+      let line = series.overlays.get(key);
+      if (!line) {
+        line = chart.addSeries(LineSeries, { color, lineWidth: 1, lineStyle: style, priceLineVisible: false, lastValueVisible: false });
+        series.overlays.set(key, line);
+      }
+      setSeriesData(line, points.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+
+    const paneSignature = [calculated?.RSI ? "RSI" : "", calculated?.MACD ? "MACD" : ""].filter(Boolean).join("|");
+    if (paneSignature !== series.paneSignature) {
+      for (const paneSeries of series.pane) chart.removeSeries(paneSeries);
+      series.pane = [];
+      series.paneSignature = paneSignature;
+      let paneIndex = 1;
+      if (calculated?.RSI) {
+        series.pane.push(chart.addSeries(LineSeries, { color: INDICATOR_COLORS.RSI, lineWidth: 1, priceLineVisible: false }, paneIndex++));
+      }
+      if (calculated?.MACD) {
+        const macdPane = paneIndex++;
+        series.pane.push(chart.addSeries(HistogramSeries, { color: "#7dd3fc", priceLineVisible: false }, macdPane));
+        series.pane.push(chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 1, priceLineVisible: false }, macdPane));
+        series.pane.push(chart.addSeries(LineSeries, { color: "#e2e8f0", lineWidth: 1, priceLineVisible: false }, macdPane));
+      }
+    }
+    let paneSeriesIndex = 0;
+    if (calculated?.RSI) {
+      setSeriesData(series.pane[paneSeriesIndex++]!, calculated.RSI.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+    if (calculated?.MACD) {
+      const macd = calculated.MACD;
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.histogram.map((point) => ({
+        time: ts(point.time), value: point.value,
+        color: point.value >= 0 ? "rgba(16,185,129,0.65)" : "rgba(239,68,68,0.65)",
+      })));
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.macd.map((point) => ({ time: ts(point.time), value: point.value })));
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.signal.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+
+    chart.applyOptions({ timeScale: { timeVisible } });
+    if (nextBars.length > 0) {
+      if (forceFitIdentityRef.current === historyIdentity || (previousBars.length === 0 && !savedViewport)) {
+        chart.timeScale().fitContent();
+        if (forceFitIdentityRef.current === historyIdentity) forceFitIdentityRef.current = null;
+      } else if (previousVisible) {
+        const oldIndex = savedViewport && previousBars.length === 0
+          ? savedViewport.anchorIndex
+          : Math.max(0, Math.min(previousBars.length - 1, Math.floor(previousVisible.from)));
+        const oldAnchorTime = savedViewport && previousBars.length === 0
+          ? savedViewport.anchorTime
+          : previousBars[oldIndex]?.time ?? null;
+        const newIndex = oldAnchorTime === null ? -1 : nextBars.findIndex((bar) => bar.time === oldAnchorTime);
+        const shift = newIndex >= 0 ? newIndex - oldIndex : 0;
+        try {
+          chart.timeScale().setVisibleLogicalRange({ from: previousVisible.from + shift, to: previousVisible.to + shift });
+        } catch {
+          // If the new page is shorter than the old viewport, keep the current logical range.
+        }
+      } else {
+        chart.timeScale().fitContent();
+      }
+    }
+
+    appliedBarsRef.current = nextBars;
+    appliedIdentityRef.current = historyIdentity;
+    if (nextBars.length > 0 || identityChanged) savedViewportRef.current = null;
+    const updatedVisible = chart.timeScale().getVisibleLogicalRange();
+    if (updatedVisible) {
+      const element = containerRef.current;
+      if (element) element.dataset.visibleLogicalRange = `${updatedVisible.from.toFixed(3)}:${updatedVisible.to.toFixed(3)}`;
+    } else if (containerRef.current) {
+      delete containerRef.current.dataset.visibleLogicalRange;
+    }
+  }, [bars, calculated, chartType, historyIdentity, indicators.VOL, timeVisible]);
+
+  function beginPointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    pointerPanRef.current = { startX: event.clientX, movedOlder: false, requested: false, active: true };
+  }
+
+  function movePointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = pointerPanRef.current;
+    if (!pan?.active) return;
+    if (event.clientX - pan.startX >= 8) pan.movedOlder = true;
+    const visible = chartRef.current?.timeScale().getVisibleLogicalRange();
+    if (pan.movedOlder && visible) maybeRequestOlder(visible.from);
+  }
+
+  function finishPointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = pointerPanRef.current;
+    if (!pan) return;
+    if (event.clientX - pan.startX >= 8) pan.movedOlder = true;
+    pan.active = false;
+    if (!pan.movedOlder) {
+      pointerPanRef.current = null;
+      return;
+    }
+    const checkFinalRange = () => {
+      if (pointerPanRef.current !== pan || pan.requested) return;
+      const visible = chartRef.current?.timeScale().getVisibleLogicalRange();
+      if (visible) maybeRequestOlder(visible.from);
+    };
+    checkFinalRange();
+    if (!pan.requested) {
+      requestAnimationFrame(() => {
+        checkFinalRange();
+        if (!pan.requested && pointerPanRef.current === pan) pointerPanRef.current = null;
+      });
+    }
+  }
+
+  function cancelPointerPan() {
+    pointerPanRef.current = null;
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#07090e] overflow-hidden select-none" data-testid="main-chart-panel">
@@ -398,13 +533,12 @@ export default function MainChartPanel() {
         </div>
         <div
           className="flex-1 relative w-full h-full min-h-0 overflow-hidden"
-          onPointerDownCapture={() => { pointerGestureRef.current = true; }}
-          onPointerUpCapture={requestPointerEnd}
-          onPointerCancelCapture={() => { pointerGestureRef.current = false; }}
-          onTouchStartCapture={() => { pointerGestureRef.current = true; }}
-          onTouchEndCapture={requestPointerEnd}
+          onPointerDownCapture={beginPointerPan}
+          onPointerMoveCapture={movePointerPan}
+          onPointerUp={finishPointerPan}
+          onPointerCancel={cancelPointerPan}
         >
-          <div ref={containerRef} className="w-full h-full" data-testid="main-chart-canvas" />
+          <div ref={containerRef} className="w-full h-full" data-testid="main-chart-canvas" data-chart-instance-generation="0" />
           {displayBar && (
             <div className="absolute top-1 left-2 z-10 flex flex-wrap gap-x-3 bg-[rgba(8,11,17,0.8)] px-2 py-1 text-[10px] font-mono pointer-events-none">
               <span>O {displayBar.exact?.open ?? fmt(displayBar.open)}</span>

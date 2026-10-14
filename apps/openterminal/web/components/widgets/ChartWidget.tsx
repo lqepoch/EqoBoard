@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -70,6 +70,26 @@ function projectMdpBar(row: TradeMinuteBarV1): ChartCandle | null {
 
 const ts = (t: number) => t as UTCTimestamp;
 const toMap = (pts: Point[]) => new Map(pts.map((p) => [p.time, p.value]));
+type ChartSeries = ReturnType<IChartApi["addSeries"]>;
+type WidgetSeriesSet = {
+  main: ChartSeries;
+  volume: ChartSeries;
+  overlays: Map<string, ChartSeries>;
+  pane: ChartSeries[];
+  paneSignature: string;
+};
+type SavedChartViewport = { identity: string; from: number; to: number; anchorIndex: number; anchorTime: number | null };
+
+function saveChartViewport(identity: string, range: { from: number; to: number }, candles: ChartCandle[]): SavedChartViewport {
+  const anchorIndex = candles.length > 0 ? Math.max(0, Math.min(candles.length - 1, Math.floor(range.from))) : 0;
+  return { identity, from: range.from, to: range.to, anchorIndex, anchorTime: candles[anchorIndex]?.time ?? null };
+}
+
+function setSeriesData(series: ChartSeries, data: unknown[]) {
+  series.setData(data as never);
+}
+
+type PointerPan = { startX: number; movedOlder: boolean; requested: boolean; active: boolean };
 
 const INDICATOR_COLOR: Record<string, string> = {
   SMA20: "#ffd966", SMA50: "#4fc3f7", SMA200: "#ba68c8", EMA20: "#ff8a65",
@@ -91,16 +111,17 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   const [legend, setLegend] = useState<ChartCandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const viewportRef = useRef<{
-    identity: string;
-    firstTime: number;
-    logicalFrom: number;
-    logicalTo: number;
-    visibleCount: number;
-    rightOffset: number;
-    atRightEdge: boolean;
-  } | null>(null);
-  const pointerGestureRef = useRef(false);
+  const seriesRef = useRef<WidgetSeriesSet | null>(null);
+  const candlesRef = useRef<ChartCandle[]>([]);
+  const byTimeRef = useRef<Map<number, ChartCandle>>(new Map());
+  const appliedCandlesRef = useRef<ChartCandle[]>([]);
+  const appliedIdentityRef = useRef<string | null>(null);
+  const forceFitIdentityRef = useRef<string | null>(null);
+  const currentIdentityRef = useRef("");
+  const currentTimeVisibleRef = useRef(true);
+  const savedViewportRef = useRef<SavedChartViewport | null>(null);
+  const chartGenerationRef = useRef(0);
+  const pointerPanRef = useRef<PointerPan | null>(null);
   const pagingLockRef = useRef(false);
 
   const history = useChartHistory(symbol, range, providerMode, assetClass, dataMode === "provider");
@@ -115,6 +136,12 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   requestOlderRef.current = requestOlder;
   const canFetchOlderRef = useRef(false);
   canFetchOlderRef.current = dataMode === "provider" && Boolean(history.hasNextPage);
+  const maybeRequestOlder = useCallback((visibleFrom: number) => {
+    const pan = pointerPanRef.current;
+    if (!pan?.movedOlder || pan.requested || visibleFrom > 12 || !canFetchOlderRef.current) return;
+    pan.requested = true;
+    requestOlderRef.current();
+  }, []);
   const { data: archive, error: archiveError } = useQuery({
     queryKey: ["mdp-diagnostic-bars", datasetId, symbol],
     queryFn: () => apiGet<MdpBarsResponseV1>(
@@ -135,6 +162,8 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
     : archiveCandles ?? undefined;
   const error = dataMode === "provider" ? historyError : archiveError;
   const historyIdentity = `${symbol}|${range}|${history.requestedResolution}`;
+  const chartIdentity = dataMode === "provider" ? historyIdentity : `${historyIdentity}|diagnostic|${datasetId ?? "empty"}`;
+  const timeVisible = historyResolution(historyResponse, "effective_resolution") !== "1d";
   const gapCount = Array.isArray(historyResponse?.gaps) ? historyResponse.gaps.length : "unknown";
   const segmentCount = Array.isArray(historyResponse?.segments) ? historyResponse.segments.length : "unknown";
 
@@ -144,6 +173,10 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
     for (const c of candles ?? []) m.set(c.time, c);
     return m;
   }, [candles]);
+  candlesRef.current = candles ?? [];
+  byTimeRef.current = byTime;
+  currentIdentityRef.current = chartIdentity;
+  currentTimeVisibleRef.current = timeVisible;
 
   // Computed once per candles/active change, shared by both the chart overlays
   // below and the hover legend — avoids recomputing the same series twice.
@@ -219,15 +252,13 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
 
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !candles || candles.length === 0) return;
-
-    const previousViewport = viewportRef.current;
+    if (!el) return;
 
     const chart = createChart(el, {
       layout: { background: { color: "#0a0a0a" }, textColor: "#808080", fontSize: 10, attributionLogo: false },
       grid: { vertLines: { color: "#1a1a1a" }, horzLines: { color: "#1a1a1a" } },
       crosshair: { mode: 0 },
-      timeScale: { borderColor: "#262626", timeVisible: historyResolution(historyResponse, "effective_resolution") !== "1d" },
+      timeScale: { borderColor: "#262626", timeVisible: currentTimeVisibleRef.current },
       rightPriceScale: { borderColor: "#262626" },
       autoSize: true,
       // Mouse-wheel is left free for page scrolling — zoom via drag, pinch, or the range buttons instead.
@@ -235,78 +266,35 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
     });
     chartRef.current = chart;
+    el.dataset.chartInstanceGeneration = String(++chartGenerationRef.current);
 
     const upColor = "#00c853";
     const downColor = "#ff3d3d";
-
+    let main: ChartSeries;
     if (chartType === "candles") {
-      chart
-        .addSeries(CandlestickSeries, {
-          upColor, downColor, borderUpColor: upColor, borderDownColor: downColor,
-          wickUpColor: upColor, wickDownColor: downColor,
-        })
-        .setData(candles.map((c) => ({ time: ts(c.time), open: c.open, high: c.high, low: c.low, close: c.close })));
+      main = chart.addSeries(CandlestickSeries, {
+        upColor, downColor, borderUpColor: upColor, borderDownColor: downColor,
+        wickUpColor: upColor, wickDownColor: downColor,
+      });
     } else if (chartType === "bars") {
-      chart
-        .addSeries(BarSeries, { upColor, downColor })
-        .setData(candles.map((c) => ({ time: ts(c.time), open: c.open, high: c.high, low: c.low, close: c.close })));
+      main = chart.addSeries(BarSeries, { upColor, downColor });
     } else if (chartType === "line") {
-      chart
-        .addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 })
-        .setData(candles.map((c) => ({ time: ts(c.time), value: c.close })));
+      main = chart.addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 });
     } else {
-      chart
-        .addSeries(AreaSeries, { lineColor: "#ff9900", topColor: "rgba(255,153,0,0.25)", bottomColor: "rgba(255,153,0,0)" })
-        .setData(candles.map((c) => ({ time: ts(c.time), value: c.close })));
+      main = chart.addSeries(AreaSeries, { lineColor: "#ff9900", topColor: "rgba(255,153,0,0.25)", bottomColor: "rgba(255,153,0,0)" });
     }
 
-    // volume histogram on its own scale at the bottom of the main pane
     const vol = chart.addSeries(HistogramSeries, { priceScaleId: "vol", priceFormat: { type: "volume" } });
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
-    vol.setData(
-      candles.map((c) => ({ time: ts(c.time), value: c.volume, color: c.close >= c.open ? "rgba(0,200,83,0.4)" : "rgba(255,61,61,0.4)" }))
-    );
-
-    const overlay = (points: Point[], color: string) =>
-      chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-        .setData(points.map((p) => ({ time: ts(p.time), value: p.value })));
-
-    if (indicatorData?.SMA20) overlay(indicatorData.SMA20, INDICATOR_COLOR.SMA20);
-    if (indicatorData?.SMA50) overlay(indicatorData.SMA50, INDICATOR_COLOR.SMA50);
-    if (indicatorData?.SMA200) overlay(indicatorData.SMA200, INDICATOR_COLOR.SMA200);
-    if (indicatorData?.EMA20) overlay(indicatorData.EMA20, INDICATOR_COLOR.EMA20);
-    if (indicatorData?.VWAP) overlay(indicatorData.VWAP, INDICATOR_COLOR.VWAP);
-    if (indicatorData?.BOLL) {
-      overlay(indicatorData.BOLL.upper, "rgba(255,153,0,0.5)");
-      overlay(indicatorData.BOLL.middle, "rgba(255,153,0,0.8)");
-      overlay(indicatorData.BOLL.lower, "rgba(255,153,0,0.5)");
-    }
-
-    let paneIdx = 1;
-    if (indicatorData?.RSI) {
-      const s = chart.addSeries(LineSeries, { color: INDICATOR_COLOR.RSI, lineWidth: 1 }, paneIdx++);
-      s.setData(indicatorData.RSI.map((p) => ({ time: ts(p.time), value: p.value })));
-    }
-    if (indicatorData?.MACD) {
-      const m = indicatorData.MACD;
-      const pane = paneIdx++;
-      chart.addSeries(HistogramSeries, { color: "#4fc3f7" }, pane).setData(
-        m.histogram.map((p) => ({ time: ts(p.time), value: p.value, color: p.value >= 0 ? "rgba(0,200,83,0.6)" : "rgba(255,61,61,0.6)" }))
-      );
-      chart.addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 }, pane).setData(
-        m.macd.map((p) => ({ time: ts(p.time), value: p.value }))
-      );
-      chart.addSeries(LineSeries, { color: "#ffffff", lineWidth: 1 }, pane).setData(
-        m.signal.map((p) => ({ time: ts(p.time), value: p.value }))
-      );
-    }
+    seriesRef.current = { main, volume: vol, overlays: new Map(), pane: [], paneSignature: "" };
 
     chart.subscribeCrosshairMove((param) => {
+      const latestCandles = candlesRef.current;
       if (!param.time) {
-        setLegend(candles[candles.length - 1]);
+        setLegend(latestCandles[latestCandles.length - 1] ?? null);
         return;
       }
-      const hit = byTime.get(param.time as number);
+      const hit = byTimeRef.current.get(param.time as number);
       if (hit) setLegend(hit);
     });
 
@@ -315,56 +303,150 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       if (visible) {
         el.dataset.visibleLogicalRange = `${visible.from.toFixed(3)}:${visible.to.toFixed(3)}`;
       }
-      if (pointerGestureRef.current && visible && visible.from <= 12 && canFetchOlderRef.current) {
-        requestOlderRef.current();
-      }
+      if (visible) maybeRequestOlder(visible.from);
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(visibleRangeListener);
 
-    if (previousViewport?.identity === historyIdentity) {
-      const firstIndex = candles.findIndex((candle) => candle.time === previousViewport.firstTime);
-      const prependShift = firstIndex >= 0 ? firstIndex : 0;
-      try {
-        if (previousViewport.atRightEdge) {
-          const to = candles.length - 1 + previousViewport.rightOffset;
-          chart.timeScale().setVisibleLogicalRange({
-            from: to - previousViewport.visibleCount,
-            to,
-          });
-        } else {
-          chart.timeScale().setVisibleLogicalRange({
-            from: previousViewport.logicalFrom + prependShift,
-            to: previousViewport.logicalTo + prependShift,
-          });
-        }
-      } catch {
-        chart.timeScale().fitContent();
-      }
-    } else {
-      chart.timeScale().fitContent();
-    }
-    const initialVisibleRange = chart.timeScale().getVisibleLogicalRange();
-    if (initialVisibleRange) {
-      el.dataset.visibleLogicalRange = `${initialVisibleRange.from.toFixed(3)}:${initialVisibleRange.to.toFixed(3)}`;
-    }
     return () => {
       const logical = chart.timeScale().getVisibleLogicalRange();
       if (logical) {
-        viewportRef.current = {
-          identity: historyIdentity,
-          firstTime: candles[0].time,
-          logicalFrom: logical.from,
-          logicalTo: logical.to,
-          visibleCount: logical.to - logical.from,
-          rightOffset: logical.to - (candles.length - 1),
-          atRightEdge: logical.to >= candles.length - 2,
-        };
+        savedViewportRef.current = saveChartViewport(currentIdentityRef.current, logical, appliedCandlesRef.current);
       }
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(visibleRangeListener);
       chart.remove();
-      chartRef.current = null;
+      if (chartRef.current === chart) chartRef.current = null;
+      seriesRef.current = null;
     };
-  }, [candles, chartType, indicatorData, range, byTime, historyIdentity]);
+  }, [chartType, maybeRequestOlder]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    const nextCandles = candles ?? [];
+    const previousCandles = appliedCandlesRef.current;
+    const previousIdentity = appliedIdentityRef.current;
+    const identityChanged = previousIdentity !== chartIdentity;
+    if (identityChanged) {
+      forceFitIdentityRef.current = chartIdentity;
+      savedViewportRef.current = null;
+    }
+
+    const visible = chart.timeScale().getVisibleLogicalRange();
+    const savedViewport = savedViewportRef.current?.identity === chartIdentity ? savedViewportRef.current : null;
+    const previousVisible = savedViewport && previousCandles.length === 0
+      ? { from: savedViewport.from, to: savedViewport.to }
+      : visible ?? (savedViewport ? { from: savedViewport.from, to: savedViewport.to } : null);
+    if (nextCandles.length === 0 && previousCandles.length > 0 && !identityChanged && previousVisible) {
+      savedViewportRef.current = saveChartViewport(chartIdentity, previousVisible, previousCandles);
+    }
+
+    if (chartType === "candles" || chartType === "bars") {
+      setSeriesData(series.main, nextCandles.map((candle) => ({
+        time: ts(candle.time), open: candle.open, high: candle.high, low: candle.low, close: candle.close,
+      })));
+    } else {
+      setSeriesData(series.main, nextCandles.map((candle) => ({ time: ts(candle.time), value: candle.close })));
+    }
+    setSeriesData(series.volume, nextCandles.map((candle) => ({
+      time: ts(candle.time),
+      value: candle.volume,
+      color: candle.close >= candle.open ? "rgba(0,200,83,0.4)" : "rgba(255,61,61,0.4)",
+    })));
+
+    const overlayData: Array<[string, Point[] | null | undefined, string]> = [
+      ["SMA20", indicatorData?.SMA20, INDICATOR_COLOR.SMA20],
+      ["SMA50", indicatorData?.SMA50, INDICATOR_COLOR.SMA50],
+      ["SMA200", indicatorData?.SMA200, INDICATOR_COLOR.SMA200],
+      ["EMA20", indicatorData?.EMA20, INDICATOR_COLOR.EMA20],
+      ["VWAP", indicatorData?.VWAP, INDICATOR_COLOR.VWAP],
+      ["BOLL_U", indicatorData?.BOLL?.upper, "rgba(255,153,0,0.5)"],
+      ["BOLL_M", indicatorData?.BOLL?.middle, "rgba(255,153,0,0.8)"],
+      ["BOLL_L", indicatorData?.BOLL?.lower, "rgba(255,153,0,0.5)"],
+    ];
+    const desiredOverlayKeys = new Set(overlayData.filter(([, points]) => points).map(([key]) => key));
+    for (const [key, existing] of series.overlays) {
+      if (!desiredOverlayKeys.has(key)) {
+        chart.removeSeries(existing);
+        series.overlays.delete(key);
+      }
+    }
+    for (const [key, points, color] of overlayData) {
+      if (!points) continue;
+      let line = series.overlays.get(key);
+      if (!line) {
+        line = chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+        series.overlays.set(key, line);
+      }
+      setSeriesData(line, points.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+
+    const paneSignature = [indicatorData?.RSI ? "RSI" : "", indicatorData?.MACD ? "MACD" : ""].filter(Boolean).join("|");
+    if (paneSignature !== series.paneSignature) {
+      for (const paneSeries of series.pane) chart.removeSeries(paneSeries);
+      series.pane = [];
+      series.paneSignature = paneSignature;
+      let paneIndex = 1;
+      if (indicatorData?.RSI) {
+        series.pane.push(chart.addSeries(LineSeries, { color: INDICATOR_COLOR.RSI, lineWidth: 1 }, paneIndex++));
+      }
+      if (indicatorData?.MACD) {
+        const macdPane = paneIndex++;
+        series.pane.push(chart.addSeries(HistogramSeries, { color: "#4fc3f7" }, macdPane));
+        series.pane.push(chart.addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 }, macdPane));
+        series.pane.push(chart.addSeries(LineSeries, { color: "#ffffff", lineWidth: 1 }, macdPane));
+      }
+    }
+    let paneSeriesIndex = 0;
+    if (indicatorData?.RSI) {
+      setSeriesData(series.pane[paneSeriesIndex++]!, indicatorData.RSI.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+    if (indicatorData?.MACD) {
+      const macd = indicatorData.MACD;
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.histogram.map((point) => ({
+        time: ts(point.time), value: point.value,
+        color: point.value >= 0 ? "rgba(0,200,83,0.6)" : "rgba(255,61,61,0.6)",
+      })));
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.macd.map((point) => ({ time: ts(point.time), value: point.value })));
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.signal.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+
+    chart.applyOptions({ timeScale: { timeVisible } });
+    if (nextCandles.length > 0) {
+      if (forceFitIdentityRef.current === chartIdentity || (previousCandles.length === 0 && !savedViewport)) {
+        chart.timeScale().fitContent();
+        if (forceFitIdentityRef.current === chartIdentity) forceFitIdentityRef.current = null;
+      } else if (previousVisible) {
+        const oldIndex = savedViewport && previousCandles.length === 0
+          ? savedViewport.anchorIndex
+          : Math.max(0, Math.min(previousCandles.length - 1, Math.floor(previousVisible.from)));
+        const oldAnchorTime = savedViewport && previousCandles.length === 0
+          ? savedViewport.anchorTime
+          : previousCandles[oldIndex]?.time ?? null;
+        const newIndex = oldAnchorTime === null ? -1 : nextCandles.findIndex((candle) => candle.time === oldAnchorTime);
+        const shift = newIndex >= 0 ? newIndex - oldIndex : 0;
+        try {
+          chart.timeScale().setVisibleLogicalRange({ from: previousVisible.from + shift, to: previousVisible.to + shift });
+        } catch {
+          // The selected interval may have fewer bars than the old viewport; retain the chart's current range.
+        }
+      } else {
+        chart.timeScale().fitContent();
+      }
+    }
+
+    appliedCandlesRef.current = nextCandles;
+    appliedIdentityRef.current = chartIdentity;
+    if (nextCandles.length > 0 || identityChanged) savedViewportRef.current = null;
+    const updatedVisible = chart.timeScale().getVisibleLogicalRange();
+    if (updatedVisible) {
+      const el = containerRef.current;
+      if (el) el.dataset.visibleLogicalRange = `${updatedVisible.from.toFixed(3)}:${updatedVisible.to.toFixed(3)}`;
+    } else if (containerRef.current) {
+      delete containerRef.current.dataset.visibleLogicalRange;
+    }
+  }, [candles, chartIdentity, chartType, indicatorData, timeVisible]);
 
   const toggleIndicator = (ind: Indicator) =>
     setActive((prev) => {
@@ -373,6 +455,45 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       else next.add(ind);
       return next;
     });
+
+  function beginPointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    pointerPanRef.current = { startX: event.clientX, movedOlder: false, requested: false, active: true };
+  }
+
+  function movePointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = pointerPanRef.current;
+    if (!pan?.active) return;
+    if (event.clientX - pan.startX >= 8) pan.movedOlder = true;
+    const visible = chartRef.current?.timeScale().getVisibleLogicalRange();
+    if (pan.movedOlder && visible) maybeRequestOlder(visible.from);
+  }
+
+  function finishPointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = pointerPanRef.current;
+    if (!pan) return;
+    if (event.clientX - pan.startX >= 8) pan.movedOlder = true;
+    pan.active = false;
+    if (!pan.movedOlder) {
+      pointerPanRef.current = null;
+      return;
+    }
+    const checkFinalRange = () => {
+      if (pointerPanRef.current !== pan || pan.requested) return;
+      const visible = chartRef.current?.timeScale().getVisibleLogicalRange();
+      if (visible) maybeRequestOlder(visible.from);
+    };
+    checkFinalRange();
+    if (!pan.requested) {
+      requestAnimationFrame(() => {
+        checkFinalRange();
+        if (!pan.requested && pointerPanRef.current === pan) pointerPanRef.current = null;
+      });
+    }
+  }
+
+  function cancelPointerPan() {
+    pointerPanRef.current = null;
+  }
 
   function loadDataset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -516,11 +637,10 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
         <div className="px-2 py-1 text-[10px] dim">The validated diagnostic dataset contains no bars for this symbol.</div>}
       <div
         className="relative flex-1 min-h-0"
-        onPointerDownCapture={() => { pointerGestureRef.current = true; }}
-        onPointerUpCapture={() => { window.setTimeout(() => { pointerGestureRef.current = false; }, 120); }}
-        onPointerCancelCapture={() => { pointerGestureRef.current = false; }}
-        onTouchStartCapture={() => { pointerGestureRef.current = true; }}
-        onTouchEndCapture={() => { window.setTimeout(() => { pointerGestureRef.current = false; }, 120); }}
+        onPointerDownCapture={beginPointerPan}
+        onPointerMoveCapture={movePointerPan}
+        onPointerUp={finishPointerPan}
+        onPointerCancel={cancelPointerPan}
       >
         {legend && (
           <div className="absolute top-1 left-2 z-10 flex flex-col gap-0.5 text-[11px] pointer-events-none bg-[rgba(10,10,10,0.7)] px-2 py-1 rounded max-w-[95%]">
@@ -542,7 +662,7 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
             )}
           </div>
         )}
-        <div ref={containerRef} className="w-full h-full" data-testid="chart-widget-canvas" />
+        <div ref={containerRef} className="w-full h-full" data-testid="chart-widget-canvas" data-chart-instance-generation="0" />
       </div>
     </div>
   );
