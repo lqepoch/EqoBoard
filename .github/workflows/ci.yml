@@ -82,6 +82,22 @@ jobs:
       - run: npm run build -w web
       - name: Install browser for end-to-end checks
         run: npx playwright install --with-deps chromium
+      - name: Verify unified history BFF and chart consumers with isolated synthetic providers
+        working-directory: apps/openterminal/web
+        env:
+          E2E_MDP_MARKET_BARS_ENABLED: "true"
+        run: npx playwright test -c playwright.config.ts e2e/market-bars-bff.spec.ts e2e/market-data-chart-history.spec.ts
+      - name: Verify legacy history rollback
+        working-directory: apps/openterminal/web
+        env:
+          E2E_MDP_MARKET_BARS_ENABLED: "false"
+        run: npx playwright test -c playwright.config.ts e2e/market-bars-bff.spec.ts --grep 'disabled|legacy|rollback'
+      - name: Verify MDP history without optional Gateway signer
+        working-directory: apps/openterminal/web
+        env:
+          E2E_MDP_MARKET_BARS_ENABLED: "true"
+          E2E_GATEWAY_SIGNER_DISABLED: "true"
+        run: npx playwright test -c playwright.config.ts e2e/market-bars-bff.spec.ts --grep 'Gateway|signer'
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

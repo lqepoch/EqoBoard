@@ -1,21 +1,21 @@
 //! Local-only read transport using the official SDK over a private child-process pipe.
 //! No listener, browser credential, order operation or provider protocol decoder is added.
 use crate::market_stream::{ChannelSymbols, FeedStatusSnapshot, MarketPublisher};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     io,
     process::Stdio,
     sync::{
-        Arc,
         atomic::{AtomicU64, Ordering},
+        Arc,
     },
     time::Duration,
 };
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{ChildStdin, Command},
-    sync::{Mutex, oneshot, watch},
+    sync::{oneshot, watch, Mutex},
 };
 
 type Reply = Result<Value, String>;
@@ -298,8 +298,8 @@ impl FutuLocal {
 #[cfg(test)]
 mod tests {
     use super::{
-        HistoryBarsRequest, MAX_WORKER_LINE_BYTES, connection_failure, history_bars_payload,
-        read_worker_line,
+        connection_failure, history_bars_payload, read_worker_line, HistoryBarsRequest,
+        MAX_WORKER_LINE_BYTES,
     };
     use serde_json::json;
     use tokio::io::BufReader;
