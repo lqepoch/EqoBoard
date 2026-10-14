@@ -3,13 +3,13 @@
 该目录源于 OpenTerminal MIT 上游。通用功能优先保留上游实现。
 
 - 上游基线见 `docs/THIRD_PARTY.md`。
-- 实时股票/期权价格、K线、Option Chain 走 `web/lib/eqo-market.ts` → Rust Gateway；离线归档分钟 bars 只读入口是 `/api/eqo/market-data/datasets/{dataset_id}/bars`，由同源 Next BFF 转发到独立 MDP HTTP API，不替代 Gateway 实时接口。
+- 实时股票/期权价格、实时 K 线和 Option Chain 走 `web/lib/eqo-market.ts` → Rust Gateway；离线归档分钟 bars 只读入口是 `/api/eqo/market-data/datasets/{dataset_id}/bars`。显式启用 `EQO_MDP_MARKET_BARS_ENABLED` 后，统一股票/ETF 历史 bars 走同源 `/api/history/{symbol}` → MDP，与 Gateway 实时路径分开。
 - Web/Node 只消费 Gateway 提供的可信来源/时间/状态字段，不推断 `feed=sip|opra` 就代表 Alpaca。OPRA Gateway 路径现在消费 Broker typed ACK 并发布 generation/epoch/coverage 状态，但 auth、entitlement 和 provider 来源仍为 unknown；legacy SIP/REST 数值缺少来源或事件时间时必须继续显示 unknown，legacy SIP stream 不得显示 LIVE。#3 的真实 provider/entitlement 验收未由 Web/Node 测试代替。
 - FRED/SEC/FINRA/新闻等补充研究 Provider 可沿用上游 server。
 - EqoBoard 自有 widget 放在 `web/components/widgets`，优先复用当前依赖，避免再引入同类 UI 框架。
 - 可选 OpenBB Research 入口只扩展原生 Sidebar/Command Palette，使用服务端验证后的 `EQO_RESEARCH_PUBLIC_ORIGIN` 在新标签打开独立 origin；变量必须是 HTTPS 或精确 loopback HTTP 纯 origin，hostname 与 `EQO_PUBLIC_ORIGIN` 不同。缺省或非法配置隐藏入口且不影响终端；这只是外链，不共享 OIDC 会话、凭据或 Gateway 状态。
 - Option Chain 固定 AG Grid Community；空 IV/Greeks 不转换成 0。
-- 所有 U.S. 股票/ETF 的价格、涨跌、成交量、历史 bars、财报价格变动请求 `Alpaca SIP`；TradingView 只用于市场元数据和明确标注的研究字段。SIP 403/缺失时显示 unavailable，不回退到免费行情源；缺少可信来源字段的 legacy 数值需显示 source/as-of unknown。
+- 所有 U.S. 股票/ETF 的当前价格、涨跌、成交量、实时 bars 和财报价格变动请求使用 `Alpaca SIP`；旧历史路径也使用 SIP。启用统一历史 bars 的 MDP BFF 路径保留上游实际 provider、feed、coverage 和 gaps，不根据请求选择器改写来源标签。TradingView 只用于市场元数据和明确标注的研究字段。SIP 403/缺失时显示 unavailable，不回退到免费行情源；MDP 部分、未知或不支持的覆盖必须如实保留，缺少可信来源字段的 legacy 数值需显示 source/as-of unknown。
 - 期权 quote/trade 请求 `Alpaca OPRA`。IV/Greeks 是 Alpaca REST snapshot 的 vendor/model 字段，不是 OPRA 原生字段；没有独立模型时间就显示 `model as-of unknown`，不能继承 quote/trade 或 Gateway response 时间。
 - Widget 将浏览器 SSE、上游认证、订阅 ACK、覆盖率和逐事件新鲜度分开显示。只有 Gateway ACK 能确认订阅；浏览器连接或 REST lease accepted 不能代表上游 ready/live。OPRA Gateway 路径会发布 typed ACK coverage，但 source/auth/entitlement 仍为 unknown；legacy SIP 仍无 typed ACK。缺失 event time 保持 unknown。
 - OptionsWidget 不因实时租约裁剪 REST 返回行（上游 `truncated` 仍单独标记），只按 Gateway 返回的有效 coverage limit 申请去重后的有限实时租约，优先选择最接近 underlying 的合约；limit 缺失或无效时不申请实时租约。limit 仅作为当前 `gateway_instance_id` 的配置元数据：同一 Gateway 的浏览器 SSE 短暂断开可保留该 limit，但连接状态、ACK、实时值和 freshness 仍清空；收到新 Gateway 实例或同实例明确缺失/无效的 limit 后必须清除。有限租约不表示整条链已覆盖，也不改变 source/auth/entitlement 的 unknown 状态。REST chain response 只能在其浏览器捕获的 `clientGatewayInstanceGeneration` 仍等于当前 generation 时展示或形成租约；新实例 cap 到达而新 REST chain 尚未返回期间，旧 generation 的 chain 不得用于新租约。

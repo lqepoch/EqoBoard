@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # toolchain 1.99.0
         with:
           toolchain: 1.99.0
@@ -35,6 +37,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: 3.12.15
@@ -54,6 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -82,6 +87,22 @@ jobs:
       - run: npm run build -w web
       - name: Install browser for end-to-end checks
         run: npx playwright install --with-deps chromium
+      - name: Verify unified history BFF and chart consumers with isolated synthetic providers
+        working-directory: apps/openterminal/web
+        env:
+          E2E_MDP_MARKET_BARS_ENABLED: "true"
+        run: npx playwright test -c playwright.config.ts e2e/market-bars-bff.spec.ts e2e/market-data-chart-history.spec.ts
+      - name: Verify legacy history rollback
+        working-directory: apps/openterminal/web
+        env:
+          E2E_MDP_MARKET_BARS_ENABLED: "false"
+        run: npx playwright test -c playwright.config.ts e2e/market-bars-bff.spec.ts --grep 'disabled|legacy|rollback'
+      - name: Verify MDP history without optional Gateway signer
+        working-directory: apps/openterminal/web
+        env:
+          E2E_MDP_MARKET_BARS_ENABLED: "true"
+          E2E_GATEWAY_SIGNER_DISABLED: "true"
+        run: npx playwright test -c playwright.config.ts e2e/market-bars-bff.spec.ts --grep 'Gateway|signer'
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

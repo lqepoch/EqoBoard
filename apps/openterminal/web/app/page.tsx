@@ -1,6 +1,12 @@
 import { localAccessOrigin } from "@/lib/local-access";
 import { getServerSession } from "next-auth";
-import { authOptions, isAuthRuntimeConfigured, isCurrentOidcIssuer, publicResearchOrigin } from "@/auth";
+import {
+  authOptions,
+  isAuthRuntimeConfigured,
+  isCurrentOidcIssuer,
+  isMdpTerminalRuntimeConfigured,
+  publicResearchOrigin,
+} from "@/auth";
 import { scopesForRoles } from "@/lib/permissions";
 import TerminalShell from "../components/TerminalShell";
 import SignOutButton from "../components/SignOutButton";
@@ -9,9 +15,9 @@ import SignInButton from "../components/SignInButton";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  if (!isAuthRuntimeConfigured()) {
+  if (!isAuthRuntimeConfigured() && !isMdpTerminalRuntimeConfigured()) {
     return <AuthMessage title="Sign-in is not configured">
-      Configure the OIDC issuer, client, session secret, gateway signing keys, and public HTTPS origin before using the terminal.
+      Configure an OIDC or terminal-local principal and a dedicated Gateway or MDP signer before using the terminal.
     </AuthMessage>;
   }
 

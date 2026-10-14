@@ -1,4 +1,5 @@
 //! HTTP/WS gateway. Credentials and broker execution remain server-side.
+mod futu_history_api;
 mod futu_local;
 mod market_stream;
 mod openbb;
@@ -599,6 +600,9 @@ struct BarsQuery {
     timeframe: Option<String>,
     limit: Option<usize>,
     days: Option<i64>,
+    start: Option<String>,
+    end: Option<String>,
+    cursor: Option<String>,
 }
 async fn stock_bars(
     Extension(principal): Extension<GatewayPrincipal>,
@@ -608,13 +612,6 @@ async fn stock_bars(
     if let Some(response) = require_scope(&principal, "market:read") {
         return response;
     }
-    if state.futu.is_some() {
-        return fail(StatusCode::SERVICE_UNAVAILABLE, "futu_feature_disabled", "Futu local mode currently supports stock quotes and tickers; options and history are not enabled");
-    }
-
-    let Some(data) = &state.data else {
-        return data_failure(DataError::MissingCredentials);
-    };
     let symbol = query.symbol.to_uppercase();
     let timeframe = query.timeframe.unwrap_or_else(|| "1Min".into());
     if !safe_symbol(&symbol)
@@ -639,6 +636,38 @@ async fn stock_bars(
             "days must be 1..11000",
         );
     }
+    if query.start.is_some() != query.end.is_some() {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            "invalid_bars_query",
+            "start and end are required together",
+        );
+    }
+    if let Some(futu) = &state.futu {
+        return futu_history_api::read(
+            futu,
+            &futu_local::HistoryBarsRequest {
+                symbol,
+                timeframe,
+                limit,
+                days: Some(days),
+                start: query.start,
+                end: query.end,
+                cursor: query.cursor,
+            },
+        )
+        .await;
+    }
+    if query.start.is_some() || query.cursor.is_some() {
+        return fail(
+            StatusCode::NOT_IMPLEMENTED,
+            "UNSUPPORTED_PROVIDER_CAPABILITY",
+            "explicit intervals and cursors require the unified market service or Futu history",
+        );
+    }
+    let Some(data) = &state.data else {
+        return data_failure(DataError::MissingCredentials);
+    };
     match data.stock_bars(&symbol, &timeframe, limit, days).await {
         Ok(bars) => {
             Json(json!({"symbol":symbol,"timeframe":timeframe,"feed":state.stock_feed,"bars":bars}))
@@ -834,6 +863,13 @@ async fn openbb_bars(
 ) -> Response {
     if let Some(response) = require_scope(&principal, "market:read") {
         return response;
+    }
+    if query.start.is_some() || query.end.is_some() || query.cursor.is_some() {
+        return fail(
+            StatusCode::NOT_IMPLEMENTED,
+            "UNSUPPORTED_PROVIDER_CAPABILITY",
+            "explicit intervals and cursors are not supported by the legacy OpenBB bars adapter",
+        );
     }
     let Some(data) = &state.data else {
         return data_failure(DataError::MissingCredentials);

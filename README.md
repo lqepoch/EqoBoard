@@ -133,3 +133,7 @@ npm run build -w web
 安全、BrokerAdapter、行情与演进说明见 `docs/` 与 `.agents/skills/`。Owner 自合并授权与自动合并 App 的边界、检查要求和当前验收状态见 [PR 合并与自动合并治理](docs/AUTOMERGE.md)。
 
 本机 Futu、免登录与 Alpaca Paper 账户配置的范围及未完成执行边界见 [本机接入说明](docs/FUTU_LOCAL_MARKET_DATA.md)。
+
+### Unified stock/ETF history (opt-in)
+
+`EQO_MDP_MARKET_BARS_ENABLED=true` routes both existing charts through the authenticated same-origin `/api/history/{symbol}` BFF and MDP Bars V1. The default is disabled. Range, resolution, session scope, adjustment and provider mode are query identities; fixed-window cursors preserve pagination. Per-row exact values and per-segment provenance remain distinct from UI float projections. Unknown entitlement/feed or provider-native adjustment stays unknown; partial coverage and daily downgrade are visible. Quotes/watchlists, legacy dataset diagnostics and execution authority retain their existing paths. See `apps/openterminal/docs/MARKET_BFF_ROUTING.md` and `docs/MARKET_CHART_ROUTING.md`. Public builds and browser E2E run in GitHub Actions on the PR head, using explicitly synthetic bounded mocks; actual provider acceptance is separate. Disable the flag and restart web for rollback.

@@ -36,6 +36,7 @@ const metrics = {
   },
   research: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   mdp: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
+  mdpMarketBars: [],
   quant: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   engine: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
 };
@@ -49,6 +50,31 @@ const mdpControl = {
   bodyBytes: 0,
   delayMs: 0,
 };
+const mdpMarketBarsControl = {
+  enabled: false,
+  status: null,
+  response: null,
+  responsesByCursor: null,
+  location: null,
+  bodyBytes: 0,
+  delayMs: 0,
+};
+
+function marketBarsStatusForResponse(response) {
+  if (!response || typeof response !== "object" || Array.isArray(response)) return 200;
+  switch (response.coverage_status) {
+    case "complete":
+    case "empty":
+      return 200;
+    case "partial":
+    case "unknown":
+      return 206;
+    case "unsupported":
+      return 422;
+    default:
+      return 200;
+  }
+}
 const quantControl = {
   status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
   protoJsonText: null, publicProjectionBase64: null, publicProjectionSha256: null, factorFeatureSummary: null,
@@ -217,6 +243,10 @@ const oidc = createServer(async (req, res) => {
   if (url.pathname === "/__test/metrics" && req.method === "GET") return sendJson(res, 200, metrics);
   if (url.pathname === "/__test/reset" && req.method === "POST") {
     for (const service of Object.values(metrics)) {
+      if (Array.isArray(service)) {
+        service.length = 0;
+        continue;
+      }
       for (const key of Object.keys(service.requests)) delete service.requests[key];
       service.authorized = 0;
       service.rejected = 0;
@@ -237,6 +267,10 @@ const oidc = createServer(async (req, res) => {
     });
     Object.assign(mdpControl, {
       status: 200, response: null, contentType: "application/json", cacheControl: "no-store",
+      location: null, bodyBytes: 0, delayMs: 0,
+    });
+    Object.assign(mdpMarketBarsControl, {
+      enabled: false, status: null, response: null, responsesByCursor: null,
       location: null, bodyBytes: 0, delayMs: 0,
     });
     Object.assign(quantControl, {
@@ -272,6 +306,22 @@ const oidc = createServer(async (req, res) => {
         mdpControl[key] = body[`mdp${key[0].toUpperCase()}${key.slice(1)}`];
       }
     }
+    if (Object.hasOwn(body, "marketBars")) {
+      const control = body.marketBars;
+      const allowed = new Set(["enabled", "status", "response", "responsesByCursor", "location", "bodyBytes", "delayMs"]);
+      if (!control || typeof control !== "object" || Array.isArray(control) ||
+          Object.keys(control).some((key) => !allowed.has(key)) ||
+          (Object.hasOwn(control, "enabled") && typeof control.enabled !== "boolean") ||
+          (Object.hasOwn(control, "status") && (!Number.isInteger(control.status) || control.status < 100 || control.status > 599)) ||
+          (Object.hasOwn(control, "bodyBytes") && (!Number.isSafeInteger(control.bodyBytes) || control.bodyBytes < 0)) ||
+          (Object.hasOwn(control, "delayMs") && (!Number.isFinite(control.delayMs) || control.delayMs < 0)) ||
+          (Object.hasOwn(control, "responsesByCursor") && control.responsesByCursor !== null &&
+            (typeof control.responsesByCursor !== "object" || Array.isArray(control.responsesByCursor))) ||
+          (Object.hasOwn(control, "location") && control.location !== null && typeof control.location !== "string")) {
+        return sendJson(res, 400, { error: "invalid_market_bars_control" });
+      }
+      Object.assign(mdpMarketBarsControl, control);
+    }
     for (const key of [
       "status", "response", "location", "delayMs", "finiteReceiptBinding", "protoJsonText",
       "publicProjectionBase64", "publicProjectionSha256", "factorFeatureSummary",
@@ -299,6 +349,7 @@ const oidc = createServer(async (req, res) => {
       closedSseStreams,
       config: gatewayControl,
       mdp: mdpControl,
+      marketBars: mdpMarketBarsControl,
       engine: { ...engineControl, statusText: undefined, previewText: undefined },
     });
   }
@@ -575,6 +626,36 @@ async function verifyMdpRequest(req) {
   return { payload, kid: header.kid };
 }
 
+async function verifyOptionalGatewayDelegation(raw) {
+  if (!raw) return null;
+  const header = decodeProtectedHeader(raw);
+  if (header.alg !== "HS256" || !["bff", "research"].includes(header.kid)) {
+    throw new Error("Gateway delegation signer rejected");
+  }
+  const research = header.kid === "research";
+  const { payload } = await jwtVerify(raw, new TextEncoder().encode(research ? researchKey : bffKey), {
+    algorithms: ["HS256"],
+    issuer: research ? "openterminal-research" : "eqoboard-openterminal",
+    audience: "eqoboard-gateway",
+  });
+  const now = Math.floor(Date.now() / 1000);
+  if (!Array.isArray(payload.scope) || payload.scope.length !== 1 || payload.scope[0] !== "market:read" ||
+      typeof payload.sub !== "string" || typeof payload.idp_iss !== "string" ||
+      typeof payload.iat !== "number" || typeof payload.exp !== "number" ||
+      payload.iat > now + 5 || payload.exp <= payload.iat || payload.exp - payload.iat > 60) {
+    throw new Error("Gateway delegation claims rejected");
+  }
+  return {
+    kid: header.kid,
+    issuer: payload.iss,
+    audience: payload.aud,
+    subject: payload.sub,
+    scope: payload.scope,
+    iat: payload.iat,
+    exp: payload.exp,
+  };
+}
+
 async function verifyQuantRequest(req) {
   const raw = req.headers.authorization ?? "";
   if (!raw.startsWith("Bearer ")) throw new Error("bearer required");
@@ -729,6 +810,66 @@ const mdp = createServer(async (req, res) => {
   trackResponse(metrics.mdp, res);
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${mdpPort}`);
   countRequest(metrics.mdp, url.pathname);
+  if (url.pathname === "/v1/market/bars") {
+    const call = {
+      method: req.method,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams.entries()),
+      query_entries: [...url.searchParams.entries()],
+      bearer_present: Boolean(req.headers.authorization),
+      gateway_delegation_present: Boolean(req.headers["x-eqo-gateway-delegation"]),
+    };
+    metrics.mdpMarketBars.push(call);
+    if (!mdpMarketBarsControl.enabled) return sendJson(res, 404, { error: "not_found" });
+    if (req.method !== "GET") return sendJson(res, 405, { error: "method_not_allowed" });
+    let verified;
+    try {
+      verified = await verifyMdpRequest(req);
+      metrics.mdp.authorized += 1;
+    } catch {
+      metrics.mdp.rejected += 1;
+      return sendJson(res, 401, { error: "unauthorized" });
+    }
+    Object.assign(call, {
+      subject: verified.payload.sub,
+      scope: verified.payload.scope,
+      issuer: verified.payload.iss,
+      audience: verified.payload.aud,
+      iat: verified.payload.iat,
+      exp: verified.payload.exp,
+      kid: verified.kid,
+    });
+    try {
+      call.gateway_delegation = await verifyOptionalGatewayDelegation(req.headers["x-eqo-gateway-delegation"]);
+    } catch {
+      metrics.mdp.rejected += 1;
+      return sendJson(res, 401, { error: "invalid_gateway_delegation" });
+    }
+    if (mdpMarketBarsControl.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(mdpMarketBarsControl.delayMs, 130_000)));
+    }
+    const response = mdpMarketBarsControl.responsesByCursor &&
+      Object.hasOwn(mdpMarketBarsControl.responsesByCursor, url.searchParams.get("cursor") ?? "")
+      ? mdpMarketBarsControl.responsesByCursor[url.searchParams.get("cursor") ?? ""]
+      : mdpMarketBarsControl.response ?? { error: "market_bars_fixture_not_configured" };
+    const responseStatus = mdpMarketBarsControl.status ?? marketBarsStatusForResponse(response);
+    if (mdpMarketBarsControl.location) {
+      res.writeHead(responseStatus, {
+        location: mdpMarketBarsControl.location,
+        "cache-control": "no-store",
+        "content-length": "0",
+      });
+      return res.end();
+    }
+    const bytes = mdpMarketBarsControl.bodyBytes > 0
+      ? Buffer.alloc(mdpMarketBarsControl.bodyBytes, 0x20)
+      : Buffer.from(JSON.stringify(response));
+    return res.writeHead(responseStatus, {
+      "content-type": "application/json",
+      "content-length": String(bytes.byteLength),
+      "cache-control": "no-store",
+    }).end(bytes);
+  }
   const call = {
     method: req.method,
     path: url.pathname,

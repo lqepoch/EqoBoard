@@ -4,6 +4,7 @@ use crate::market_stream::{ChannelSymbols, FeedStatusSnapshot, MarketPublisher};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
+    io,
     process::Stdio,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -12,12 +13,106 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{ChildStdin, Command},
     sync::{oneshot, watch, Mutex},
 };
 
 type Reply = Result<Value, String>;
+const MAX_WORKER_LINE_BYTES: usize = 1024 * 1024;
+
+async fn read_worker_line<R>(reader: &mut R, line: &mut Vec<u8>) -> io::Result<bool>
+where
+    R: AsyncBufRead + Unpin,
+{
+    line.clear();
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            return Ok(!line.is_empty());
+        }
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let count = newline.map_or(available.len(), |index| index + 1);
+        if line.len().saturating_add(count) > MAX_WORKER_LINE_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Futu worker reply exceeds byte limit",
+            ));
+        }
+        line.extend_from_slice(&available[..count]);
+        reader.consume(count);
+        if newline.is_some() {
+            line.pop();
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            return Ok(true);
+        }
+    }
+}
+
+fn connection_failure(connected: bool, error: Option<&str>) -> Option<&'static str> {
+    if connected {
+        None
+    } else {
+        Some(match error {
+            Some("futu_login_rejected") => "futu_login_rejected",
+            _ => "futu_disconnected",
+        })
+    }
+}
+
+/// Range and pagination fields passed unchanged to the local Futu history helper.
+/// The helper response remains a raw `Value` so source timestamps and precision metadata survive.
+#[derive(Clone, Debug)]
+pub(crate) struct HistoryBarsRequest {
+    pub(crate) symbol: String,
+    pub(crate) timeframe: String,
+    pub(crate) limit: usize,
+    pub(crate) days: Option<i64>,
+    pub(crate) start: Option<String>,
+    pub(crate) end: Option<String>,
+    pub(crate) cursor: Option<String>,
+}
+
+fn history_bars_payload(query: &HistoryBarsRequest) -> Result<Value, String> {
+    if query.start.is_some() != query.end.is_some() {
+        return Err("invalid_bars_query".into());
+    }
+    if query.cursor.as_ref().is_some_and(|cursor| {
+        cursor.len() != 32
+            || !cursor
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    }) {
+        return Err("invalid_cursor".into());
+    }
+    if query.start.as_ref().is_some_and(|value| value.len() > 35)
+        || query.end.as_ref().is_some_and(|value| value.len() > 35)
+    {
+        return Err("invalid_bars_query".into());
+    }
+    let mut request = json!({
+        "method": "bars",
+        "symbol": query.symbol,
+        "timeframe": query.timeframe,
+        "limit": query.limit,
+    });
+    if let Some(days) = query.days {
+        request["days"] = json!(days);
+    }
+    if let Some(start) = &query.start {
+        request["start"] = json!(start);
+    }
+    if let Some(end) = &query.end {
+        request["end"] = json!(end);
+    }
+    if let Some(cursor) = &query.cursor {
+        request["cursor"] = json!(cursor);
+    }
+    Ok(request)
+}
+
 #[derive(Clone)]
 pub(crate) struct FutuLocal {
     input: Arc<Mutex<ChildStdin>>,
@@ -64,13 +159,18 @@ impl FutuLocal {
         let pending = client.pending.clone();
         let (connected, mut connected_rx) = watch::channel(false);
         tokio::spawn(async move {
-            let mut lines = BufReader::new(output).lines();
+            let mut reader = BufReader::new(output);
+            let mut line = Vec::with_capacity(4096);
             let mut epoch = 0u64;
-            while let Ok(Some(line)) = lines.next_line().await {
-                if line.len() > 262_144 {
-                    break;
+            loop {
+                match read_worker_line(&mut reader, &mut line).await {
+                    Ok(true) => {}
+                    Ok(false) | Err(_) => break,
                 }
-                let Ok(value) = serde_json::from_str::<Value>(&line) else {
+                if line.is_empty() {
+                    continue;
+                }
+                let Ok(value) = serde_json::from_slice::<Value>(&line) else {
                     break;
                 };
                 if let Some(id) = value["id"].as_u64() {
@@ -84,8 +184,14 @@ impl FutuLocal {
                     }
                 } else if value["kind"] == "connection" {
                     let ready = value["connected"] == true;
+                    let failure = connection_failure(ready, value["error"].as_str());
                     epoch = epoch.saturating_add(1);
                     connected.send_replace(ready);
+                    if let Some(error) = failure {
+                        for (_, reply) in pending.lock().await.drain() {
+                            let _ = reply.send(Err(error.into()));
+                        }
+                    }
                     publisher.publish_status(FeedStatusSnapshot {
                         feed: "stocks".into(),
                         transport: if ready { "connected" } else { "disconnected" }.into(),
@@ -98,7 +204,10 @@ impl FutuLocal {
                         coverage_limit: Some(32),
                         coverage_complete: false,
                         connection_epoch: epoch,
-                        last_error: None,
+                        last_error: failure.map(|class| crate::market_stream::FeedError {
+                            code: None,
+                            class: class.into(),
+                        }),
                         decode_error_count: 0,
                         resync_required: true,
                     });
@@ -119,7 +228,10 @@ impl FutuLocal {
                 coverage_limit: Some(32),
                 coverage_complete: false,
                 connection_epoch: epoch,
-                last_error: None,
+                last_error: Some(crate::market_stream::FeedError {
+                    code: None,
+                    class: "futu_disconnected".into(),
+                }),
                 decode_error_count: 0,
                 resync_required: true,
             });
@@ -175,5 +287,114 @@ impl FutuLocal {
         response
             .map_err(|_| "futu_timeout".to_string())?
             .map_err(|_| "futu_disconnected".to_string())?
+    }
+
+    /// Request one history page from the existing loopback worker, preserving its raw metadata.
+    pub(crate) async fn history_bars(&self, query: &HistoryBarsRequest) -> Reply {
+        self.request(history_bars_payload(query)?).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        connection_failure, history_bars_payload, read_worker_line, HistoryBarsRequest,
+        MAX_WORKER_LINE_BYTES,
+    };
+    use serde_json::json;
+    use tokio::io::BufReader;
+
+    #[tokio::test]
+    async fn worker_reader_accepts_a_valid_json_line_at_the_byte_budget() {
+        let prefix = b"{\"payload\":\"";
+        let suffix = b"\"}\n";
+        let payload_len = MAX_WORKER_LINE_BYTES - prefix.len() - suffix.len();
+        let mut bytes = Vec::with_capacity(MAX_WORKER_LINE_BYTES);
+        bytes.extend_from_slice(prefix);
+        bytes.resize(bytes.len() + payload_len, b'a');
+        bytes.extend_from_slice(suffix);
+        assert_eq!(bytes.len(), MAX_WORKER_LINE_BYTES);
+
+        let mut reader = BufReader::new(bytes.as_slice());
+        let mut line = Vec::new();
+        assert!(read_worker_line(&mut reader, &mut line).await.unwrap());
+        let value: serde_json::Value = serde_json::from_slice(&line).unwrap();
+        assert_eq!(value["payload"].as_str().unwrap().len(), payload_len);
+        assert!(!read_worker_line(&mut reader, &mut line).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn worker_reader_rejects_a_line_over_the_byte_budget() {
+        let bytes = vec![b'a'; MAX_WORKER_LINE_BYTES + 1];
+        let mut reader = BufReader::new(bytes.as_slice());
+        let mut line = Vec::new();
+        let error = read_worker_line(&mut reader, &mut line).await.unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(line.len(), MAX_WORKER_LINE_BYTES);
+    }
+
+    #[test]
+    fn login_failure_is_secret_free_and_unknown_messages_are_not_forwarded() {
+        assert_eq!(
+            connection_failure(false, Some("futu_login_rejected")),
+            Some("futu_login_rejected")
+        );
+        assert_eq!(
+            connection_failure(false, Some("untrusted provider detail")),
+            Some("futu_disconnected")
+        );
+        assert_eq!(connection_failure(true, Some("futu_login_rejected")), None);
+    }
+
+    fn query() -> HistoryBarsRequest {
+        HistoryBarsRequest {
+            symbol: "AAPL".into(),
+            timeframe: "1Min".into(),
+            limit: 500,
+            days: None,
+            start: Some("2026-10-14T13:30:00.000Z".into()),
+            end: Some("2026-10-14T14:30:00+00:00".into()),
+            cursor: Some("o".repeat(32)),
+        }
+    }
+
+    #[test]
+    fn history_payload_preserves_range_and_cursor_without_normalizing_them() {
+        let value = history_bars_payload(&query()).unwrap();
+        assert_eq!(
+            value,
+            json!({
+                "method": "bars",
+                "symbol": "AAPL",
+                "timeframe": "1Min",
+                "limit": 500,
+                "start": "2026-10-14T13:30:00.000Z",
+                "end": "2026-10-14T14:30:00+00:00",
+                "cursor": "oooooooooooooooooooooooooooooooo",
+            })
+        );
+    }
+
+    #[test]
+    fn legacy_days_remain_available_and_mismatched_ranges_fail_closed() {
+        let mut legacy = query();
+        legacy.start = None;
+        legacy.end = None;
+        legacy.cursor = None;
+        legacy.days = Some(30);
+        assert_eq!(history_bars_payload(&legacy).unwrap()["days"], 30);
+
+        legacy.end = Some("2026-10-14T14:30:00Z".into());
+        assert_eq!(
+            history_bars_payload(&legacy).unwrap_err(),
+            "invalid_bars_query"
+        );
+    }
+
+    #[test]
+    fn cursor_is_bounded_before_it_reaches_the_worker_pipe() {
+        let mut query = query();
+        query.cursor = Some("x".repeat(16_384));
+        assert_eq!(history_bars_payload(&query).unwrap_err(), "invalid_cursor");
     }
 }

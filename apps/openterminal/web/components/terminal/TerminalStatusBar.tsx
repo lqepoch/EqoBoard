@@ -10,7 +10,6 @@ export default function TerminalStatusBar() {
   const [etTime, setEtTime] = useState("");
 
   useEffect(() => {
-    let tickCount = 0;
     const timer = setInterval(() => {
       const now = new Date();
       setLocalTime(now.toTimeString().split(" ")[0]);
@@ -26,12 +25,6 @@ export default function TerminalStatusBar() {
 
       // 每秒刷新盘口、当前价、逐笔流水
       fetchMarketData();
-
-      // 每 3 秒同步一次 K 线走势与动态聚合数据
-      tickCount++;
-      if (tickCount % 3 === 0) {
-        useTradingStore.getState().fetchKlineData();
-      }
     }, 1000);
 
     return () => clearInterval(timer);

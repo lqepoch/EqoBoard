@@ -39,21 +39,21 @@ OpenBB 上游差异报告、许可证检查和镜像回滚流程见 [`docs/OPENB
 
 - Repository: https://github.com/lqepoch/trading-core
 - Crate: `market-contracts`
-- Pinned revision: `b2679e757576f8da7850cd4b5ea2958bc9a2354c`
+- Pinned revision: `f793be47ab90ebff9f530c8b08f41db5e774e4e5`
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `crates/domain` re-exports the pinned crate's `legacy` module to preserve existing `eqo_domain::*` consumers and JSON shape. New versioned market wire contracts should use the shared crate directly; legacy `f64` DTOs are not exact-decimal archival contracts.
 
 ## Read-only Broker market-data adapter
 
 - Repository: https://github.com/lqepoch/broker-connectors
-- Pinned revision: `873337e3fafe64344dfb9ac7719fad54f157a9c0`
-- Shared Core revision: `b2679e757576f8da7850cd4b5ea2958bc9a2354c`
+- Pinned revision: `99e1d36f864d1e89e8cfba95651d29920e2f4c5a`
+- Shared Core revision: `f793be47ab90ebff9f530c8b08f41db5e774e4e5`
 - The selected revision pins Tokio `1.53.2` and zeroize `1.9.1`; EqoBoard's workspace lock resolves those patched versions. This dependency pin does not enable provider access or establish SIP/OPRA entitlement.
 - Declared license: `MIT OR Apache-2.0`
 - EqoBoard usage: `apps/gateway` consumes `broker-ports` and `alpaca-stream` for one read-only OPRA options session and its ordered event/control lane. Provider decoding and ACK validation remain owned by Broker; Gateway only adapts valid records into the existing browser contract. This does not establish real provider availability, authentication, entitlement, durable raw capture, or SIP subscription ACK.
 - The adapter and its fixtures are covered by the Broker workspace's native tests; EqoBoard's Gateway integration is verified separately. No provider request or OAuth flow is run by this integration.
 
-The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`, currently pinned at `b2679e757576f8da7850cd4b5ea2958bc9a2354c` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. This pin retains the upstream fix that keeps its locked TypeScript build dependency available when the parent npm install omits development dependencies. The prior reviewed update from `b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4` to `7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2` added strict control-event uint64 ProtoJSON parsing and UTF-8 byte-limit validators, and protected schema validation from mutation of the exported compatibility set. The own-property validation update at `105e42896eaa62afe7377a24478f0dd5632b1155` prevents inherited object properties from satisfying required uint64 fields. The current `b2679e757576f8da7850cd4b5ea2958bc9a2354c` update also rejects BarV2 Arrow nanosecond timestamps outside signed-i64 range. Existing prediction and Engine parser entry points remain present and are still used by the BFFs. The Quant BFF uses `parsePredictionEnvelopeProtoJsonText` for its bounded public ProtoJSON, while the Engine BFF uses `parseEngineStatusResponseV1ProtoJsonText` and `parseSyntheticOfflinePreviewV1ProtoJsonText` for Engine status and preview. These generated parsers enforce exact fields, duplicate-key and alias rejection, and bounded numeric representations. The browser receives only public projections or generated type-only contracts after server-side validation.
+The same repository also publishes the npm Git package `@lqepoch/trading-core-contracts`, currently pinned at `f793be47ab90ebff9f530c8b08f41db5e774e4e5` in `apps/openterminal/web/package.json` and `package-lock.json`; the declared license is `MIT OR Apache-2.0`. This pin retains the upstream fix that keeps its locked TypeScript build dependency available when the parent npm install omits development dependencies. The prior reviewed update from `b2d9d5da6cd0ce01ce41fdd67d9858b01bc0c3a4` to `7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2` added strict control-event uint64 ProtoJSON parsing and UTF-8 byte-limit validators, and protected schema validation from mutation of the exported compatibility set. The own-property validation update at `105e42896eaa62afe7377a24478f0dd5632b1155` prevents inherited object properties from satisfying required uint64 fields. The current `f793be47ab90ebff9f530c8b08f41db5e774e4e5` update also rejects BarV2 Arrow nanosecond timestamps outside signed-i64 range. Existing prediction and Engine parser entry points remain present and are still used by the BFFs. The Quant BFF uses `parsePredictionEnvelopeProtoJsonText` for its bounded public ProtoJSON, while the Engine BFF uses `parseEngineStatusResponseV1ProtoJsonText` and `parseSyntheticOfflinePreviewV1ProtoJsonText` for Engine status and preview. These generated parsers enforce exact fields, duplicate-key and alias rejection, and bounded numeric representations. The browser receives only public projections or generated type-only contracts after server-side validation.
 
 The Broker pin advanced from `de121017b6698601c5720e705ce298683aa3fdff` to `2359bb2bde052d070174d650a14fe040b6cd1e84`, aligning its shared Core dependencies with `7bf9cf78f06ef1bb5a49a933bd5893a2df76b8a2`. It retains the reviewed rejection of stale or future-dated option trades before the shared event contract, which has no freshness field; the adapter emits a failed connection control instead of publishing those trades. This is a read-only normalization boundary and does not prove provider authentication, OPRA entitlement, or real-source readiness.
 
@@ -79,3 +79,5 @@ Previous CHG-2026-001 dependency refresh (2026-10-12): the Broker consumer pin m
 Official npm package `futu-api@10.11.7108` (ISC), stock-only server transport in
 `tools/futu-stdio.mjs`. `protobufjs` override 7.6.6; package integrity in lockfile.
 No trading API calls or browser provider credentials.
+
+- 2026-10-14 unified historical bars: Core candidate `f793be47ab90ebff9f530c8b08f41db5e774e4e5` adds Bars V1 and trusted Parquet schema; Broker candidate `99e1d36f864d1e89e8cfba95651d29920e2f4c5a` closes the same Core dependency. Candidate CI and provider acceptance are separate; this pin does not establish entitlement or release acceptance.

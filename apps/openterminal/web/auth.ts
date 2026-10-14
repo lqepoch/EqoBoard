@@ -108,6 +108,17 @@ export function isAuthRuntimeConfigured(): boolean {
 }
 
 /**
+ * MDP history reads authenticate the browser principal directly and sign a
+ * separate MDP token. They do not require the optional legacy Gateway signer
+ * used only to delegate requests to Gateway-backed providers such as Futu.
+ */
+export function isMdpTerminalPrincipalRuntimeConfigured(): boolean {
+  const mode = process.env.EQO_BFF_MODE;
+  return (mode === undefined || mode === "terminal") &&
+    (isOidcConfigured() || Boolean(localAccessOrigin()));
+}
+
+/**
  * The isolated OpenBB BFF can sign only Gateway research tokens. It must not
  * receive the terminal BFF key, the Node research API's static service key,
  * or any provider market credentials.
@@ -136,6 +147,37 @@ export type MdpMarketDataSigner = {
   kid: "mdp-terminal" | "mdp-research";
 };
 
+const MDP_SIGNING_SECRET_ENV_NAMES = [
+  "NEXTAUTH_SECRET",
+  "EQO_GATEWAY_JWT_SECRET",
+  "EQO_RESEARCH_JWT_SECRET",
+  "MDP_TERMINAL_JWT_SECRET",
+  "MDP_RESEARCH_JWT_SECRET",
+  "QUANT_TERMINAL_JWT_SECRET",
+  "QUANT_RESEARCH_JWT_SECRET",
+  "ENGINE_TERMINAL_JWT_SECRET",
+  "ENGINE_RESEARCH_JWT_SECRET",
+  "EQO_OIDC_CLIENT_SECRET",
+  "EQO_OPENBB_OIDC_CLIENT_SECRET",
+  "EQO_RESEARCH_API_KEY",
+  "ALPACA_KEY",
+  "ALPACA_SECRET",
+  "EQO_ADAPTER_ALPACA_TOKEN",
+  "EQO_ADAPTER_IBKR_TOKEN",
+  "EQO_ADAPTER_SCHWAB_TOKEN",
+] as const;
+
+type MdpSigningSecretEnvironmentName = (typeof MDP_SIGNING_SECRET_ENV_NAMES)[number];
+
+function mdpSecretConflictsWithOtherRuntimeKey(
+  secret: string,
+  ownKey: MdpSigningSecretEnvironmentName,
+): boolean {
+  return MDP_SIGNING_SECRET_ENV_NAMES.some((name) =>
+    name !== ownKey && process.env[name] !== undefined && process.env[name] === secret,
+  );
+}
+
 export type QuantResearchRuntimeMode = "terminal" | "research";
 export type QuantResearchSigner = {
   secret: string;
@@ -155,16 +197,12 @@ export type EngineOfflinePreviewSigner = {
  * the opposite hostname is a configuration error, not a fallback.
  */
 export function mdpMarketDataSigner(mode: MdpMarketDataRuntimeMode): MdpMarketDataSigner | null {
-  const nextAuthSecret = process.env.NEXTAUTH_SECRET;
-  const gatewaySecret = process.env.EQO_GATEWAY_JWT_SECRET;
-  const researchGatewaySecret = process.env.EQO_RESEARCH_JWT_SECRET;
-
   if (mode === "terminal") {
     const secret = process.env.MDP_TERMINAL_JWT_SECRET;
     if (process.env.EQO_BFF_MODE === "research" ||
         Object.hasOwn(process.env, "MDP_RESEARCH_JWT_SECRET") ||
-        !isAuthRuntimeConfigured() || !validHmacSecret(secret) ||
-        [nextAuthSecret, gatewaySecret, researchGatewaySecret].includes(secret)) {
+        !isMdpTerminalPrincipalRuntimeConfigured() || !validHmacSecret(secret) ||
+        mdpSecretConflictsWithOtherRuntimeKey(secret, "MDP_TERMINAL_JWT_SECRET")) {
       return null;
     }
     return { secret, issuer: "eqoboard-openterminal", kid: "mdp-terminal" };
@@ -174,10 +212,14 @@ export function mdpMarketDataSigner(mode: MdpMarketDataRuntimeMode): MdpMarketDa
   if (process.env.EQO_BFF_MODE !== "research" ||
       Object.hasOwn(process.env, "MDP_TERMINAL_JWT_SECRET") ||
       !isResearchAuthRuntimeConfigured() || !validHmacSecret(secret) ||
-      [nextAuthSecret, gatewaySecret, researchGatewaySecret].includes(secret)) {
+      mdpSecretConflictsWithOtherRuntimeKey(secret, "MDP_RESEARCH_JWT_SECRET")) {
     return null;
   }
   return { secret, issuer: "openterminal-research", kid: "mdp-research" };
+}
+
+export function isMdpTerminalRuntimeConfigured(): boolean {
+  return mdpMarketDataSigner("terminal") !== null;
 }
 
 /** Return only this hostname's dedicated, private prediction-read key. */
@@ -253,7 +295,7 @@ export function engineOfflinePreviewSigner(): EngineOfflinePreviewSigner | null 
 export function isCurrentRuntimeReady(): boolean {
   return process.env.EQO_BFF_MODE === "research"
     ? isResearchAuthRuntimeConfigured()
-    : isAuthRuntimeConfigured();
+    : isAuthRuntimeConfigured() || isMdpTerminalRuntimeConfigured();
 }
 
 function researchCookies(): NonNullable<NextAuthOptions["cookies"]> | undefined {

@@ -3,23 +3,11 @@
 import { create } from "zustand";
 
 export type ChartType = "candles" | "line" | "area" | "bars";
+export type IndicatorKey = "SMA20" | "SMA50" | "SMA200" | "EMA20" | "VWAP" | "BOLL" | "RSI" | "MACD" | "VOL";
+export type ProviderMode = "auto" | "alpaca_only" | "futu_only";
 export type KlineInterval =
-  | "1s"
-  | "5s"
-  | "10s"
-  | "1m"
-  | "5m"
-  | "10m"
-  | "30m"
-  | "1h"
-  | "2h"
-  | "4h"
-  | "THIS_WEEK"
-  | "1D"
-  | "1W"
-  | "1Y";
-
-export type IndicatorKey = "SMA20" | "SMA50" | "EMA20" | "BOLL" | "VOL";
+  | "AUTO" | "1s" | "5s" | "10s" | "1m" | "5m" | "10m" | "15m" | "30m"
+  | "1h" | "2h" | "4h" | "THIS_WEEK" | "1D" | "1W" | "1Y";
 
 export type StockQuote = {
   symbol: string;
@@ -146,17 +134,13 @@ interface TradingState {
   setKlineInterval: (interval: KlineInterval) => void;
   indicators: Record<IndicatorKey, boolean>;
   toggleIndicator: (ind: IndicatorKey) => void;
+  providerMode: ProviderMode;
+  setProviderMode: (mode: ProviderMode) => void;
 
   // Real-time market data
   currentQuote: StockQuote | null;
   orderBook: OrderBook | null;
   trades: TradeTick[];
-  klineBars: BarData[];
-  klineMeta: {
-    quotaGuarded: boolean;
-    is180dCached: boolean;
-    quotaMessage: string;
-  } | null;
 
   // Crosshair HUD hover data
   hoveredBar: (BarData & { change?: number; changePercent?: number }) | null;
@@ -176,7 +160,6 @@ interface TradingState {
 
   // Sync actions
   fetchMarketData: () => Promise<void>;
-  fetchKlineData: () => Promise<void>;
   fetchAccountData: () => Promise<void>;
 }
 
@@ -187,7 +170,6 @@ export const useTradingStore = create<TradingState>((set, get) => ({
     if (!sym || sym === get().activeSymbol) return;
     set({ activeSymbol: sym, hoveredBar: null });
     get().fetchMarketData();
-    get().fetchKlineData();
   },
 
   watchlist: PRESET_GROUPS.ALL,
@@ -213,16 +195,17 @@ export const useTradingStore = create<TradingState>((set, get) => ({
 
   chartType: "candles",
   setChartType: (chartType) => set({ chartType }),
-  klineInterval: "1D",
-  setKlineInterval: (klineInterval) => {
-    set({ klineInterval });
-    get().fetchKlineData();
-  },
+  klineInterval: "AUTO",
+  setKlineInterval: (klineInterval) => set({ klineInterval }),
   indicators: {
     SMA20: true,
     SMA50: true,
+    SMA200: false,
     EMA20: false,
+    VWAP: false,
     BOLL: true,
+    RSI: false,
+    MACD: false,
     VOL: true,
   },
   toggleIndicator: (ind) => {
@@ -230,12 +213,12 @@ export const useTradingStore = create<TradingState>((set, get) => ({
       indicators: { ...state.indicators, [ind]: !state.indicators[ind] },
     }));
   },
+  providerMode: "auto",
+  setProviderMode: (providerMode) => set({ providerMode }),
 
   currentQuote: null,
   orderBook: null,
   trades: [],
-  klineBars: [],
-  klineMeta: null,
   hoveredBar: null,
   setHoveredBar: (bar) => set({ hoveredBar: bar }),
 
@@ -286,18 +269,6 @@ export const useTradingStore = create<TradingState>((set, get) => ({
       if (qRes.ok) {
         const quote = await qRes.json();
         set({ currentQuote: quote });
-
-        // 核心实时走势同步：根据当前实际时间与实时价格，动态跳动最新一根 Bar
-        const bars = get().klineBars;
-        if (bars && bars.length > 0 && quote.price > 0) {
-          const updatedBars = [...bars];
-          const lastBar = { ...updatedBars[updatedBars.length - 1] };
-          lastBar.close = quote.price;
-          lastBar.high = Math.max(lastBar.high, quote.price);
-          lastBar.low = Math.min(lastBar.low, quote.price);
-          updatedBars[updatedBars.length - 1] = lastBar;
-          set({ klineBars: updatedBars });
-        }
       }
 
       // 2. 获取盘口 (极速 1s 高频刷新)
@@ -327,27 +298,6 @@ export const useTradingStore = create<TradingState>((set, get) => ({
       }
     } catch (e) {
       console.error("fetchMarketData error", e);
-    }
-  },
-
-  fetchKlineData: async () => {
-    const symbol = get().activeSymbol;
-    const interval = get().klineInterval;
-    try {
-      const res = await fetch(`/api/futu/kline?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`);
-      if (res.ok) {
-        const data = await res.json();
-        set({
-          klineBars: data.bars || [],
-          klineMeta: {
-            quotaGuarded: Boolean(data.quotaGuarded),
-            is180dCached: Boolean(data.is180dCached),
-            quotaMessage: data.quotaMessage || "",
-          },
-        });
-      }
-    } catch (e) {
-      console.error("fetchKlineData error", e);
     }
   },
 

@@ -1,5 +1,5 @@
 {
-  "last_verified": "2026-10-13",
+  "last_verified": "2026-10-14",
   "sources": [
     {
       "name": "OpenTerminal",
@@ -20,33 +20,37 @@
     {
       "name": "trading-core TypeScript contracts",
       "repository": "lqepoch/trading-core",
-      "commit": "b2679e757576f8da7850cd4b5ea2958bc9a2354c",
+      "commit": "f793be47ab90ebff9f530c8b08f41db5e774e4e5",
       "license": "MIT OR Apache-2.0",
       "package": "@lqepoch/trading-core-contracts",
-      "previous_commit": "105e42896eaa62afe7377a24478f0dd5632b1155",
-      "reviewed_at": "2026-10-13",
-      "reviewed_change": "Advances the shared Rust and TypeScript contracts to merged Core main b2679e7. The TypeScript BarV2 parser rejects Arrow nanosecond timestamps outside the signed-i64 range; existing Prediction and Engine parser entry points remain in use. This is a source-pin refresh and does not qualify provider data or entitlement.",
-      "integration": "server-side PredictionEnvelopeV1 and Engine offline-preview ProtoJSON validation through the supported generated TypeScript package",
+      "previous_commit": "b2679e757576f8da7850cd4b5ea2958bc9a2354c",
+      "reviewed_at": "2026-10-14",
+      "reviewed_change": "Advances the shared Rust and TypeScript contracts to frozen Core Bars V1 candidate f793be4. The TypeScript BarV2 parser rejects Arrow nanosecond timestamps outside the signed-i64 range; existing Prediction and Engine parser entry points remain in use. This is a source-pin refresh and does not qualify provider data or entitlement.",
+      "integration": "server-side PredictionEnvelopeV1 and Engine offline-preview ProtoJSON validation through the supported generated TypeScript package; generated BarsResponseV1Schema for historical bars",
       "downstream_paths": [
         "apps/openterminal/web/lib/quant-predictions.ts",
-        "apps/openterminal/web/lib/engine-preview.ts"
+        "apps/openterminal/web/lib/engine-preview.ts",
+        "apps/openterminal/web/lib/market-bars-contract.ts"
       ]
     },
     {
       "name": "broker-connectors read-only market adapter",
       "repository": "lqepoch/broker-connectors",
-      "commit": "873337e3fafe64344dfb9ac7719fad54f157a9c0",
-      "previous_commit": "dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9",
-      "reviewed_at": "2026-10-13",
-      "reviewed_change": "Advances the read-only Broker dependency pin to merged main 873337e, whose shared Core dependency is trading-core b2679e7. Gateway integration remains read-only; provider access, source identity, and entitlement are not implied.",
+      "commit": "99e1d36f864d1e89e8cfba95651d29920e2f4c5a",
+      "previous_commit": "873337e3fafe64344dfb9ac7719fad54f157a9c0",
+      "reviewed_at": "2026-10-14",
+      "reviewed_change": "Advances the read-only Broker dependency pin to frozen Broker historical-bars candidate 99e1d36, whose shared Core dependency is trading-core f793be4. Gateway integration remains read-only; provider access, source identity, and entitlement are not implied.",
       "license": "MIT OR Apache-2.0",
-      "packages": ["broker-ports", "alpaca-stream"],
+      "packages": [
+        "broker-ports",
+        "alpaca-stream"
+      ],
       "integration": "Rust Gateway OPRA session and ordered event/control lane; no provider access or entitlement claim is implied.",
       "downstream_paths": [
         "Cargo.toml",
         "apps/gateway/src"
       ],
-      "shared_core_commit": "b2679e757576f8da7850cd4b5ea2958bc9a2354c"
+      "shared_core_commit": "f793be47ab90ebff9f530c8b08f41db5e774e4e5"
     },
     {
       "name": "OpenBB Workspace",

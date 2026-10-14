@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -12,23 +12,31 @@ import {
   type IChartApi,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { apiGet, fmt, fmtBig, type Candle } from "../../lib/api";
-import type { EqoHistory } from "../../lib/eqo-market";
+import { apiGet, fmt, fmtBig } from "../../lib/api";
+import {
+  CHART_RANGES,
+  MAX_HISTORY_PAGES,
+  displayHistoryValue,
+  historyDowngradeReason,
+  historyResolution,
+  useChartHistory,
+  type ChartAssetClass,
+  type ChartHistoryCandle,
+  type ChartRange,
+} from "../../lib/chart-history";
 import type { MdpBarsResponseV1, TradeMinuteBarV1 } from "../../lib/mdp-market-data-contract";
 import { sma, ema, vwap, rsi, macd, bollinger, type Point } from "../../lib/indicators";
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
+import { useTradingStore } from "../../store/trading-terminal";
 
-const RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const;
 const CHART_TYPES = ["candles", "bars", "line", "area"] as const;
 const INDICATORS = ["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "BOLL", "RSI", "MACD"] as const;
 
-type Range = (typeof RANGES)[number];
+type Range = ChartRange;
 type ChartType = (typeof CHART_TYPES)[number];
 type Indicator = (typeof INDICATORS)[number];
 type DataMode = "provider" | "mdp-diagnostic";
-type ChartCandle = Candle & {
-  exact?: { open: string; high: string; low: string; close: string; volume: string };
-};
+type ChartCandle = ChartHistoryCandle;
 
 const DATASET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const MAX_CHART_PRICE = 1_000_000_000_000;
@@ -63,6 +71,26 @@ function projectMdpBar(row: TradeMinuteBarV1): ChartCandle | null {
 
 const ts = (t: number) => t as UTCTimestamp;
 const toMap = (pts: Point[]) => new Map(pts.map((p) => [p.time, p.value]));
+type ChartSeries = ReturnType<IChartApi["addSeries"]>;
+type WidgetSeriesSet = {
+  main: ChartSeries;
+  volume: ChartSeries;
+  overlays: Map<string, ChartSeries>;
+  pane: ChartSeries[];
+  paneSignature: string;
+};
+type SavedChartViewport = { identity: string; from: number; to: number; anchorIndex: number; anchorTime: number | null };
+
+function saveChartViewport(identity: string, range: { from: number; to: number }, candles: ChartCandle[]): SavedChartViewport {
+  const anchorIndex = candles.length > 0 ? Math.max(0, Math.min(candles.length - 1, Math.floor(range.from))) : 0;
+  return { identity, from: range.from, to: range.to, anchorIndex, anchorTime: candles[anchorIndex]?.time ?? null };
+}
+
+function setSeriesData(series: ChartSeries, data: unknown[]) {
+  series.setData(data as never);
+}
+
+type PointerPan = { startX: number; movedOlder: boolean; requested: boolean; active: boolean };
 
 const INDICATOR_COLOR: Record<string, string> = {
   SMA20: "#ffd966", SMA50: "#4fc3f7", SMA200: "#ba68c8", EMA20: "#ff8a65",
@@ -71,23 +99,50 @@ const INDICATOR_COLOR: Record<string, string> = {
 
 export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   const symbol = useWidgetSymbol(widget);
+  const providerMode = useTradingStore((state) => state.providerMode);
+  const setProviderMode = useTradingStore((state) => state.setProviderMode);
   const [dataMode, setDataMode] = useState<DataMode>("provider");
   const [datasetDraft, setDatasetDraft] = useState("");
   const [datasetId, setDatasetId] = useState<string | null>(null);
   const [datasetInputError, setDatasetInputError] = useState<string | null>(null);
   const [range, setRange] = useState<Range>("6M");
+  const [assetClass, setAssetClass] = useState<ChartAssetClass>("stock");
   const [chartType, setChartType] = useState<ChartType>("candles");
   const [active, setActive] = useState<Set<Indicator>>(new Set(["SMA20"]));
   const [legend, setLegend] = useState<ChartCandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<WidgetSeriesSet | null>(null);
+  const candlesRef = useRef<ChartCandle[]>([]);
+  const byTimeRef = useRef<Map<number, ChartCandle>>(new Map());
+  const appliedCandlesRef = useRef<ChartCandle[]>([]);
+  const appliedIdentityRef = useRef<string | null>(null);
+  const forceFitIdentityRef = useRef<string | null>(null);
+  const currentIdentityRef = useRef("");
+  const currentTimeVisibleRef = useRef(true);
+  const savedViewportRef = useRef<SavedChartViewport | null>(null);
+  const chartGenerationRef = useRef(0);
+  const pointerPanRef = useRef<PointerPan | null>(null);
+  const pagingLockRef = useRef(false);
 
-  const { data: history, error: historyError } = useQuery({
-    queryKey: ["history", symbol, range],
-    queryFn: () => apiGet<EqoHistory>(`/api/history/${encodeURIComponent(symbol)}?range=${range}`),
-    refetchInterval: range === "1D" ? 8_000 : 60_000,
-    enabled: dataMode === "provider",
-  });
+  const history = useChartHistory(symbol, range, providerMode, assetClass, dataMode === "provider");
+  const historyResponse = history.latestPage;
+  const historyError = history.error;
+  const requestOlder = useCallback(() => {
+    if (!history.hasNextPage || history.isFetchingNextPage || pagingLockRef.current) return;
+    pagingLockRef.current = true;
+    void history.fetchNextPage().finally(() => { pagingLockRef.current = false; });
+  }, [history.fetchNextPage, history.hasNextPage, history.isFetchingNextPage]);
+  const requestOlderRef = useRef(requestOlder);
+  requestOlderRef.current = requestOlder;
+  const canFetchOlderRef = useRef(false);
+  canFetchOlderRef.current = dataMode === "provider" && Boolean(history.hasNextPage);
+  const maybeRequestOlder = useCallback((visibleFrom: number) => {
+    const pan = pointerPanRef.current;
+    if (!pan?.movedOlder || pan.requested || visibleFrom > 12 || !canFetchOlderRef.current) return;
+    pan.requested = true;
+    requestOlderRef.current();
+  }, []);
   const { data: archive, error: archiveError } = useQuery({
     queryKey: ["mdp-diagnostic-bars", datasetId, symbol],
     queryFn: () => apiGet<MdpBarsResponseV1>(
@@ -104,9 +159,14 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
     return rows as ChartCandle[];
   }, [archive]);
   const candles: ChartCandle[] | undefined = dataMode === "provider"
-    ? history?.bars
+    ? history.bars ?? undefined
     : archiveCandles ?? undefined;
   const error = dataMode === "provider" ? historyError : archiveError;
+  const historyIdentity = `${symbol}|${range}|${history.requestedResolution}`;
+  const chartIdentity = dataMode === "provider" ? historyIdentity : `${historyIdentity}|diagnostic|${datasetId ?? "empty"}`;
+  const timeVisible = historyResolution(historyResponse, "effective_resolution") !== "1d";
+  const gapCount = Array.isArray(historyResponse?.gaps) ? historyResponse.gaps.length : "unknown";
+  const segmentCount = Array.isArray(historyResponse?.segments) ? historyResponse.segments.length : "unknown";
 
   // Fast time -> candle lookup for the crosshair legend, independent of chart type.
   const byTime = useMemo(() => {
@@ -114,6 +174,10 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
     for (const c of candles ?? []) m.set(c.time, c);
     return m;
   }, [candles]);
+  candlesRef.current = candles ?? [];
+  byTimeRef.current = byTime;
+  currentIdentityRef.current = chartIdentity;
+  currentTimeVisibleRef.current = timeVisible;
 
   // Computed once per candles/active change, shared by both the chart overlays
   // below and the hover legend — avoids recomputing the same series twice.
@@ -189,13 +253,13 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
 
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || !candles || candles.length === 0) return;
+    if (!el) return;
 
     const chart = createChart(el, {
       layout: { background: { color: "#0a0a0a" }, textColor: "#808080", fontSize: 10, attributionLogo: false },
       grid: { vertLines: { color: "#1a1a1a" }, horzLines: { color: "#1a1a1a" } },
       crosshair: { mode: 0 },
-      timeScale: { borderColor: "#262626", timeVisible: range === "1D" || range === "5D" },
+      timeScale: { borderColor: "#262626", timeVisible: currentTimeVisibleRef.current },
       rightPriceScale: { borderColor: "#262626" },
       autoSize: true,
       // Mouse-wheel is left free for page scrolling — zoom via drag, pinch, or the range buttons instead.
@@ -203,87 +267,187 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
     });
     chartRef.current = chart;
+    el.dataset.chartInstanceGeneration = String(++chartGenerationRef.current);
 
     const upColor = "#00c853";
     const downColor = "#ff3d3d";
-
+    let main: ChartSeries;
     if (chartType === "candles") {
-      chart
-        .addSeries(CandlestickSeries, {
-          upColor, downColor, borderUpColor: upColor, borderDownColor: downColor,
-          wickUpColor: upColor, wickDownColor: downColor,
-        })
-        .setData(candles.map((c) => ({ time: ts(c.time), open: c.open, high: c.high, low: c.low, close: c.close })));
+      main = chart.addSeries(CandlestickSeries, {
+        upColor, downColor, borderUpColor: upColor, borderDownColor: downColor,
+        wickUpColor: upColor, wickDownColor: downColor,
+      });
     } else if (chartType === "bars") {
-      chart
-        .addSeries(BarSeries, { upColor, downColor })
-        .setData(candles.map((c) => ({ time: ts(c.time), open: c.open, high: c.high, low: c.low, close: c.close })));
+      main = chart.addSeries(BarSeries, { upColor, downColor });
     } else if (chartType === "line") {
-      chart
-        .addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 })
-        .setData(candles.map((c) => ({ time: ts(c.time), value: c.close })));
+      main = chart.addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 });
     } else {
-      chart
-        .addSeries(AreaSeries, { lineColor: "#ff9900", topColor: "rgba(255,153,0,0.25)", bottomColor: "rgba(255,153,0,0)" })
-        .setData(candles.map((c) => ({ time: ts(c.time), value: c.close })));
+      main = chart.addSeries(AreaSeries, { lineColor: "#ff9900", topColor: "rgba(255,153,0,0.25)", bottomColor: "rgba(255,153,0,0)" });
     }
 
-    // volume histogram on its own scale at the bottom of the main pane
     const vol = chart.addSeries(HistogramSeries, { priceScaleId: "vol", priceFormat: { type: "volume" } });
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
-    vol.setData(
-      candles.map((c) => ({ time: ts(c.time), value: c.volume, color: c.close >= c.open ? "rgba(0,200,83,0.4)" : "rgba(255,61,61,0.4)" }))
-    );
-
-    const overlay = (points: Point[], color: string) =>
-      chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-        .setData(points.map((p) => ({ time: ts(p.time), value: p.value })));
-
-    if (indicatorData?.SMA20) overlay(indicatorData.SMA20, INDICATOR_COLOR.SMA20);
-    if (indicatorData?.SMA50) overlay(indicatorData.SMA50, INDICATOR_COLOR.SMA50);
-    if (indicatorData?.SMA200) overlay(indicatorData.SMA200, INDICATOR_COLOR.SMA200);
-    if (indicatorData?.EMA20) overlay(indicatorData.EMA20, INDICATOR_COLOR.EMA20);
-    if (indicatorData?.VWAP) overlay(indicatorData.VWAP, INDICATOR_COLOR.VWAP);
-    if (indicatorData?.BOLL) {
-      overlay(indicatorData.BOLL.upper, "rgba(255,153,0,0.5)");
-      overlay(indicatorData.BOLL.middle, "rgba(255,153,0,0.8)");
-      overlay(indicatorData.BOLL.lower, "rgba(255,153,0,0.5)");
-    }
-
-    let paneIdx = 1;
-    if (indicatorData?.RSI) {
-      const s = chart.addSeries(LineSeries, { color: INDICATOR_COLOR.RSI, lineWidth: 1 }, paneIdx++);
-      s.setData(indicatorData.RSI.map((p) => ({ time: ts(p.time), value: p.value })));
-    }
-    if (indicatorData?.MACD) {
-      const m = indicatorData.MACD;
-      const pane = paneIdx++;
-      chart.addSeries(HistogramSeries, { color: "#4fc3f7" }, pane).setData(
-        m.histogram.map((p) => ({ time: ts(p.time), value: p.value, color: p.value >= 0 ? "rgba(0,200,83,0.6)" : "rgba(255,61,61,0.6)" }))
-      );
-      chart.addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 }, pane).setData(
-        m.macd.map((p) => ({ time: ts(p.time), value: p.value }))
-      );
-      chart.addSeries(LineSeries, { color: "#ffffff", lineWidth: 1 }, pane).setData(
-        m.signal.map((p) => ({ time: ts(p.time), value: p.value }))
-      );
-    }
+    seriesRef.current = { main, volume: vol, overlays: new Map(), pane: [], paneSignature: "" };
 
     chart.subscribeCrosshairMove((param) => {
+      const latestCandles = candlesRef.current;
       if (!param.time) {
-        setLegend(candles[candles.length - 1]);
+        setLegend(latestCandles[latestCandles.length - 1] ?? null);
         return;
       }
-      const hit = byTime.get(param.time as number);
+      const hit = byTimeRef.current.get(param.time as number);
       if (hit) setLegend(hit);
     });
 
-    chart.timeScale().fitContent();
-    return () => {
-      chart.remove();
-      chartRef.current = null;
+    const visibleRangeListener = () => {
+      const visible = chart.timeScale().getVisibleLogicalRange();
+      if (visible) {
+        el.dataset.visibleLogicalRange = `${visible.from.toFixed(3)}:${visible.to.toFixed(3)}`;
+      }
+      if (visible) maybeRequestOlder(visible.from);
     };
-  }, [candles, chartType, indicatorData, range, byTime]);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(visibleRangeListener);
+
+    return () => {
+      const logical = chart.timeScale().getVisibleLogicalRange();
+      if (logical) {
+        savedViewportRef.current = saveChartViewport(currentIdentityRef.current, logical, appliedCandlesRef.current);
+      }
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(visibleRangeListener);
+      chart.remove();
+      if (chartRef.current === chart) chartRef.current = null;
+      seriesRef.current = null;
+    };
+  }, [chartType, maybeRequestOlder]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    const nextCandles = candles ?? [];
+    const previousCandles = appliedCandlesRef.current;
+    const previousIdentity = appliedIdentityRef.current;
+    const identityChanged = previousIdentity !== chartIdentity;
+    if (identityChanged) {
+      forceFitIdentityRef.current = chartIdentity;
+      savedViewportRef.current = null;
+    }
+
+    const visible = chart.timeScale().getVisibleLogicalRange();
+    const savedViewport = savedViewportRef.current?.identity === chartIdentity ? savedViewportRef.current : null;
+    const previousVisible = savedViewport && previousCandles.length === 0
+      ? { from: savedViewport.from, to: savedViewport.to }
+      : visible ?? (savedViewport ? { from: savedViewport.from, to: savedViewport.to } : null);
+    if (nextCandles.length === 0 && previousCandles.length > 0 && !identityChanged && previousVisible) {
+      savedViewportRef.current = saveChartViewport(chartIdentity, previousVisible, previousCandles);
+    }
+
+    if (chartType === "candles" || chartType === "bars") {
+      setSeriesData(series.main, nextCandles.map((candle) => ({
+        time: ts(candle.time), open: candle.open, high: candle.high, low: candle.low, close: candle.close,
+      })));
+    } else {
+      setSeriesData(series.main, nextCandles.map((candle) => ({ time: ts(candle.time), value: candle.close })));
+    }
+    setSeriesData(series.volume, nextCandles.map((candle) => ({
+      time: ts(candle.time),
+      value: candle.volume,
+      color: candle.close >= candle.open ? "rgba(0,200,83,0.4)" : "rgba(255,61,61,0.4)",
+    })));
+
+    const overlayData: Array<[string, Point[] | null | undefined, string]> = [
+      ["SMA20", indicatorData?.SMA20, INDICATOR_COLOR.SMA20],
+      ["SMA50", indicatorData?.SMA50, INDICATOR_COLOR.SMA50],
+      ["SMA200", indicatorData?.SMA200, INDICATOR_COLOR.SMA200],
+      ["EMA20", indicatorData?.EMA20, INDICATOR_COLOR.EMA20],
+      ["VWAP", indicatorData?.VWAP, INDICATOR_COLOR.VWAP],
+      ["BOLL_U", indicatorData?.BOLL?.upper, "rgba(255,153,0,0.5)"],
+      ["BOLL_M", indicatorData?.BOLL?.middle, "rgba(255,153,0,0.8)"],
+      ["BOLL_L", indicatorData?.BOLL?.lower, "rgba(255,153,0,0.5)"],
+    ];
+    const desiredOverlayKeys = new Set(overlayData.filter(([, points]) => points).map(([key]) => key));
+    for (const [key, existing] of series.overlays) {
+      if (!desiredOverlayKeys.has(key)) {
+        chart.removeSeries(existing);
+        series.overlays.delete(key);
+      }
+    }
+    for (const [key, points, color] of overlayData) {
+      if (!points) continue;
+      let line = series.overlays.get(key);
+      if (!line) {
+        line = chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+        series.overlays.set(key, line);
+      }
+      setSeriesData(line, points.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+
+    const paneSignature = [indicatorData?.RSI ? "RSI" : "", indicatorData?.MACD ? "MACD" : ""].filter(Boolean).join("|");
+    if (paneSignature !== series.paneSignature) {
+      for (const paneSeries of series.pane) chart.removeSeries(paneSeries);
+      series.pane = [];
+      series.paneSignature = paneSignature;
+      let paneIndex = 1;
+      if (indicatorData?.RSI) {
+        series.pane.push(chart.addSeries(LineSeries, { color: INDICATOR_COLOR.RSI, lineWidth: 1 }, paneIndex++));
+      }
+      if (indicatorData?.MACD) {
+        const macdPane = paneIndex++;
+        series.pane.push(chart.addSeries(HistogramSeries, { color: "#4fc3f7" }, macdPane));
+        series.pane.push(chart.addSeries(LineSeries, { color: "#ff9900", lineWidth: 1 }, macdPane));
+        series.pane.push(chart.addSeries(LineSeries, { color: "#ffffff", lineWidth: 1 }, macdPane));
+      }
+    }
+    let paneSeriesIndex = 0;
+    if (indicatorData?.RSI) {
+      setSeriesData(series.pane[paneSeriesIndex++]!, indicatorData.RSI.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+    if (indicatorData?.MACD) {
+      const macd = indicatorData.MACD;
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.histogram.map((point) => ({
+        time: ts(point.time), value: point.value,
+        color: point.value >= 0 ? "rgba(0,200,83,0.6)" : "rgba(255,61,61,0.6)",
+      })));
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.macd.map((point) => ({ time: ts(point.time), value: point.value })));
+      setSeriesData(series.pane[paneSeriesIndex++]!, macd.signal.map((point) => ({ time: ts(point.time), value: point.value })));
+    }
+
+    chart.applyOptions({ timeScale: { timeVisible } });
+    if (nextCandles.length > 0) {
+      if (forceFitIdentityRef.current === chartIdentity || (previousCandles.length === 0 && !savedViewport)) {
+        chart.timeScale().fitContent();
+        if (forceFitIdentityRef.current === chartIdentity) forceFitIdentityRef.current = null;
+      } else if (previousVisible) {
+        const oldIndex = savedViewport && previousCandles.length === 0
+          ? savedViewport.anchorIndex
+          : Math.max(0, Math.min(previousCandles.length - 1, Math.floor(previousVisible.from)));
+        const oldAnchorTime = savedViewport && previousCandles.length === 0
+          ? savedViewport.anchorTime
+          : previousCandles[oldIndex]?.time ?? null;
+        const newIndex = oldAnchorTime === null ? -1 : nextCandles.findIndex((candle) => candle.time === oldAnchorTime);
+        const shift = newIndex >= 0 ? newIndex - oldIndex : 0;
+        try {
+          chart.timeScale().setVisibleLogicalRange({ from: previousVisible.from + shift, to: previousVisible.to + shift });
+        } catch {
+          // The selected interval may have fewer bars than the old viewport; retain the chart's current range.
+        }
+      } else {
+        chart.timeScale().fitContent();
+      }
+    }
+
+    appliedCandlesRef.current = nextCandles;
+    appliedIdentityRef.current = chartIdentity;
+    if (nextCandles.length > 0 || identityChanged) savedViewportRef.current = null;
+    const updatedVisible = chart.timeScale().getVisibleLogicalRange();
+    if (updatedVisible) {
+      const el = containerRef.current;
+      if (el) el.dataset.visibleLogicalRange = `${updatedVisible.from.toFixed(3)}:${updatedVisible.to.toFixed(3)}`;
+    } else if (containerRef.current) {
+      delete containerRef.current.dataset.visibleLogicalRange;
+    }
+  }, [candles, chartIdentity, chartType, indicatorData, timeVisible]);
 
   const toggleIndicator = (ind: Indicator) =>
     setActive((prev) => {
@@ -292,6 +456,45 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       else next.add(ind);
       return next;
     });
+
+  function beginPointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    pointerPanRef.current = { startX: event.clientX, movedOlder: false, requested: false, active: true };
+  }
+
+  function movePointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = pointerPanRef.current;
+    if (!pan?.active) return;
+    if (event.clientX - pan.startX >= 8) pan.movedOlder = true;
+    const visible = chartRef.current?.timeScale().getVisibleLogicalRange();
+    if (pan.movedOlder && visible) maybeRequestOlder(visible.from);
+  }
+
+  function finishPointerPan(event: ReactPointerEvent<HTMLDivElement>) {
+    const pan = pointerPanRef.current;
+    if (!pan) return;
+    if (event.clientX - pan.startX >= 8) pan.movedOlder = true;
+    pan.active = false;
+    if (!pan.movedOlder) {
+      pointerPanRef.current = null;
+      return;
+    }
+    const checkFinalRange = () => {
+      if (pointerPanRef.current !== pan || pan.requested) return;
+      const visible = chartRef.current?.timeScale().getVisibleLogicalRange();
+      if (visible) maybeRequestOlder(visible.from);
+    };
+    checkFinalRange();
+    if (!pan.requested) {
+      requestAnimationFrame(() => {
+        checkFinalRange();
+        if (!pan.requested && pointerPanRef.current === pan) pointerPanRef.current = null;
+      });
+    }
+  }
+
+  function cancelPointerPan() {
+    pointerPanRef.current = null;
+  }
 
   function loadDataset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -320,11 +523,48 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
         <button className={`term-btn ${dataMode === "mdp-diagnostic" ? "active" : ""}`} onClick={() => switchDataMode("mdp-diagnostic")}>
           MDP DIAGNOSTIC
         </button>
-        {dataMode === "provider" && RANGES.map((r) => (
+        {dataMode === "provider" && <>
+          <label className="sr-only" htmlFor={`chart-provider-${widget.id}`}>Chart provider mode</label>
+          <select
+            id={`chart-provider-${widget.id}`}
+            aria-label="Chart provider mode"
+            data-testid="chart-provider-mode"
+            className="term-btn bg-[#111]"
+            value={providerMode}
+            onChange={(event) => setProviderMode(event.target.value as typeof providerMode)}
+          >
+            <option value="auto">Auto</option>
+            <option value="alpaca_only">Alpaca only</option>
+            <option value="futu_only">Futu only</option>
+          </select>
+          <label className="sr-only" htmlFor={`chart-asset-class-${widget.id}`}>Caller-declared asset class</label>
+          <select
+            id={`chart-asset-class-${widget.id}`}
+            aria-label="Caller-declared asset class"
+            data-testid="chart-asset-class"
+            className="term-btn bg-[#111]"
+            value={assetClass}
+            onChange={(event) => setAssetClass(event.target.value as ChartAssetClass)}
+          >
+            <option value="stock">Stock</option>
+            <option value="etf">ETF</option>
+          </select>
+        </>}
+        {dataMode === "provider" && CHART_RANGES.map((r) => (
           <button key={r} className={`term-btn ${range === r ? "active" : ""}`} onClick={() => setRange(r)}>
             {r}
           </button>
         ))}
+        {dataMode === "provider" && history.hasNextPage && (
+          <button
+            className="term-btn"
+            data-testid="chart-load-older"
+            disabled={history.isFetchingNextPage}
+            onClick={requestOlder}
+          >
+            {history.isFetchingNextPage ? "LOADING OLDER…" : "LOAD OLDER"}
+          </button>
+        )}
         <span className="w-2" />
         {CHART_TYPES.map((t) => (
           <button key={t} className={`term-btn ${chartType === t ? "active" : ""}`} onClick={() => setChartType(t)}>
@@ -357,21 +597,59 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       )}
       {dataMode === "mdp-diagnostic" && datasetInputError &&
         <div role="alert" className="px-2 py-1 text-[10px] down">{datasetInputError}</div>}
-      <div className="px-2 py-1 border-b border-[#1c1c1c] text-[9px] dim">
-        {dataMode === "provider"
-          ? <>Source {history?.source ?? "unknown"} · as of {history?.asOf ?? "unknown"} · bar volume source follows the listed feed</>
-          : archive?.summary
+      <div
+        className="px-2 py-1 border-b border-[#1c1c1c] text-[9px] dim flex flex-wrap gap-x-3 gap-y-1"
+        data-testid="chart-widget-history-status"
+      >
+        {dataMode === "provider" ? <>
+          <span>Source {displayHistoryValue(historyResponse?.source_label ?? historyResponse?.source)}</span>
+          <span>Provider {displayHistoryValue(historyResponse?.provider)}</span>
+          <span>Feed {displayHistoryValue(historyResponse?.feed)}</span>
+          <span>Delay {displayHistoryValue(historyResponse?.delay)}</span>
+          <span>Verification {displayHistoryValue(historyResponse?.verification ?? historyResponse?.verified_at)}</span>
+          <span>Resolution {historyResolution(historyResponse, "requested_resolution")} → {historyResolution(historyResponse, "effective_resolution")}</span>
+          <span>Downgrade {historyDowngradeReason(historyResponse)}</span>
+          <span>Coverage {displayHistoryValue(historyResponse?.coverage_status)}</span>
+          <span>Segments {segmentCount} · Gaps {gapCount}</span>
+          <span>As of {displayHistoryValue(historyResponse?.as_of ?? historyResponse?.asOf)}</span>
+          <span>Asset class {assetClass} (caller declared)</span>
+          <span data-testid="chart-bar-count">{candles?.length ?? 0} bars</span>
+          {historyResponse && <details className="basis-full text-[9px]">
+            <summary className="cursor-pointer">Coverage, gaps and provenance detail</summary>
+            <pre className="max-h-24 overflow-auto whitespace-pre-wrap">{JSON.stringify({
+              coverage_status: historyResponse.coverage_status,
+              segments: historyResponse.segments,
+              gaps: historyResponse.gaps,
+              source_provenance: historyResponse.source_provenance,
+            }, null, 2).slice(0, 4_000)}</pre>
+          </details>}
+        </> : archive?.summary
           ? <>Diagnostic archive · {archive.summary.source.provider}/{archive.summary.source.feed}/{archive.summary.source.entitlement} · {archive.rows[0]?.completion_mode ?? "empty"} · {archive.summary.dataset_id} · NOT LIVE · promotion unavailable</>
             : <>Diagnostic archive · source unknown · no dataset loaded · NOT LIVE</>}
       </div>
-      {error && <div className="p-2 down">Error: {(error as Error).message}</div>}
+      {error && <div role="alert" className="p-2 down" data-testid="chart-history-error">History unavailable: {(error as Error).message}</div>}
+      {dataMode === "provider" && history.projectionError && <div role="alert" className="p-2 down">{history.projectionError}</div>}
+      {dataMode === "provider" && history.pageLimitReached && (
+        <div role="status" className="px-2 py-1 text-[10px] dim" data-testid="chart-history-page-limit">
+          {range === "MAX"
+            ? `MAX history is incomplete: the ${MAX_HISTORY_PAGES}-page limit was reached; older bars remain unloaded.`
+            : `History reached the ${MAX_HISTORY_PAGES}-page limit; older bars remain unloaded.`}
+        </div>
+      )}
+      {dataMode === "provider" && history.isLoading && <div className="px-2 py-1 text-[10px] dim">Loading history…</div>}
       {dataMode === "mdp-diagnostic" && datasetId === null && !error &&
         <div className="px-2 py-1 text-[10px] dim">Enter a diagnostic dataset ID to load archived bars.</div>}
       {dataMode === "mdp-diagnostic" && archiveCandles === null &&
         <div role="alert" className="px-2 py-1 text-[10px] down">Archive values exceed the bounded chart projection; no bars were plotted.</div>}
       {dataMode === "mdp-diagnostic" && archive && archive.rows.length === 0 &&
         <div className="px-2 py-1 text-[10px] dim">The validated diagnostic dataset contains no bars for this symbol.</div>}
-      <div className="relative flex-1 min-h-0">
+      <div
+        className="relative flex-1 min-h-0"
+        onPointerDownCapture={beginPointerPan}
+        onPointerMoveCapture={movePointerPan}
+        onPointerUp={finishPointerPan}
+        onPointerCancel={cancelPointerPan}
+      >
         {legend && (
           <div className="absolute top-1 left-2 z-10 flex flex-col gap-0.5 text-[11px] pointer-events-none bg-[rgba(10,10,10,0.7)] px-2 py-1 rounded max-w-[95%]">
             <div className="flex gap-3">
@@ -392,7 +670,7 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
             )}
           </div>
         )}
-        <div ref={containerRef} className="w-full h-full" />
+        <div ref={containerRef} className="w-full h-full" data-testid="chart-widget-canvas" data-chart-instance-generation="0" />
       </div>
     </div>
   );

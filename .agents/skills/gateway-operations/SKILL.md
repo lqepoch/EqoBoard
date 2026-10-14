@@ -21,3 +21,5 @@ description: 维护 Rust Axum 网关鉴权、SIP/OPRA 订阅租约、WebSocket �
 - 浏览器默认只维持一个 SSE；若引入新实时 Widget，优先订阅共享 market store。
 
 本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。
+
+统一股票历史路由使用 MDP `/v1/market/bars` 与 Core Bars V1；旧 dataset V1 的 diagnostic 限制保留。Gateway 的 Futu `/api/v1/stocks/bars` 复用唯一 FutuLocal 子进程，只读历史分页，start/end 成对且 UTC 半开；无授权、缺 volume 或不支持时段不得补画数据。MDP 短时委托不包含签名 key，且不能用于授权 MDP 自身。
