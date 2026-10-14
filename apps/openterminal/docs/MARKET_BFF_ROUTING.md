@@ -2,7 +2,7 @@
 
 The same-origin `GET /api/history/{symbol}` route is the browser boundary for historical OHLCV. `EQO_MDP_MARKET_BARS_ENABLED` is an explicit server-side rollout switch and defaults to `false`. With the switch off, `provider_mode=auto` retains the existing Gateway/Express routing and response. An explicit provider choice returns `501 provider_selector_unavailable`; it never changes a source label to imply that a provider choice was applied.
 
-When enabled, the BFF sends a bounded read request to the configured `EQO_MDP_URL` at `/v1/market/bars`. It validates the versioned Core envelope, row identity, timestamps, provenance links, decimal OHLCV, adjustment, cursor consistency, and finite numeric projection before it returns data. Invalid or unavailable MDP responses fail closed; the BFF does not retry through Gateway, Express, or a research provider.
+When enabled, the BFF sends a bounded read request to the configured `EQO_MDP_URL` at `/v1/market/bars`. It first parses the wire with the pinned Core `BarsResponseV1Schema`, then checks request identity, UTC nanosecond timestamps, provenance links, decimal OHLCV, permitted resolution downgrade, adjustment, cursor consistency, and finite numeric projection before it returns data. Invalid or unavailable MDP responses fail closed; the BFF does not retry through Gateway, Express, or a research provider.
 
 ## Request and window
 
@@ -14,7 +14,7 @@ The first page omits `cursor` and boundaries. A continuation request includes th
 
 ## Response and source facts
 
-The response preserves the Core V1 snake-case envelope, including rows, coverage, segments, gaps, source provenance, provider/feed, entitlement, timestamps, cache state, calendar version, cursor, and truncation. It also includes `request_start` and `request_end`, and projects legacy chart-compatible `bars` entries with Unix-second `time`, finite numeric OHLCV, `asOf`, and `bars[].exact` decimal strings. Decimal strings remain authoritative for precision; the numeric values are a bounded display projection only.
+The response preserves the Core V1 snake-case envelope, including rows, coverage, segments, gaps, source provenance, provider/feed, entitlement, timestamps, cache state, calendar version, cursor, and truncation. It also includes `request_start` and `request_end`, and projects legacy chart-compatible `bars` entries with Unix-second `time`, finite numeric OHLCV, `asOf`, and `bars[].exact` decimal strings. Decimal strings remain authoritative for precision; the numeric values are a bounded display projection only. An upstream `feed=unknown` remains `unknown`; the BFF accepts it only as a source fact, not as proof of a named feed.
 
 The compatibility fields `source`, `source_mode`, and `source_label` reflect returned provider/provenance facts. `asset_class_source` is `caller_declared`. `verification` remains `unknown`: structural row validation, a Core `validated` row state, or a `verified_at` timestamp alone does not prove Alpaca source identity, entitlement, or cache acceptance. If a resolution downgrade is reported without a reason from the upstream contract, `downgrade_reason` is `unknown`. Unknown delays remain `null`.
 
@@ -22,7 +22,7 @@ U.S. equity/ETF symbols use the shared symbol router for basic route eligibility
 
 ## Authorization and provider behavior
 
-The BFF verifies the existing OIDC or explicitly configured terminal-local principal and required action scope before proxying. The MDP bearer is a short-lived `market:read` token with the MDP audience and terminal/research signer identity. `provider_mode=research` additionally requires the existing `research:read` scope. A terminal Gateway delegation is optional and is sent only as a server-to-server header for the MDP to reuse the already-running local Gateway/Futu surface; its absence does not prevent Alpaca-only or research reads. Neither token is returned to the browser or written into request metrics.
+The BFF verifies the existing OIDC or explicitly configured terminal-local principal and required action scope before proxying. The MDP bearer is a short-lived `market:read` token with the MDP audience and terminal/research signer identity. `provider_mode=research` additionally requires the existing `research:read` scope. Terminal readiness accepts either the existing full Gateway runtime or a separate terminal MDP signer; a terminal Gateway delegation is optional and is sent only as a server-to-server header for the MDP to reuse the already-running local Gateway/Futu surface. Its absence does not prevent Alpaca-only reads. Neither token is returned to the browser or written into request metrics.
 
 The browser may select `auto`, `alpaca_only`, or `futu_only` as read-only routing preferences. These values do not grant entitlement or trading authority. `research` is accepted only after server-side scope validation and is not exposed by the current chart selector. Effective execution remains disabled.
 

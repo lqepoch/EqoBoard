@@ -12,6 +12,7 @@ import {
 type FixtureOptions = {
   symbol?: string;
   assetClass?: "stock" | "etf";
+  feed?: string;
   resolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   effectiveResolution?: "1m" | "5m" | "15m" | "1h" | "1d";
   adjustment?: "unadjusted" | "split" | "dividend" | "all";
@@ -23,6 +24,7 @@ type FixtureOptions = {
 function makeCoreEnvelope(options: FixtureOptions = {}) {
   const symbol = options.symbol ?? "QQQ";
   const assetClass = options.assetClass ?? "stock";
+  const feed = options.feed ?? "synthetic";
   const resolution = options.resolution ?? "5m";
   const effectiveResolution = options.effectiveResolution ?? resolution;
   const adjustment = options.adjustment ?? "unadjusted";
@@ -45,7 +47,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
   return {
     schema_version: 1,
     provider: "synthetic",
-    feed: "synthetic",
+    feed,
     entitlement_status: "unknown",
     requested_resolution: resolution,
     effective_resolution: effectiveResolution,
@@ -62,7 +64,7 @@ function makeCoreEnvelope(options: FixtureOptions = {}) {
     source_provenance: [{
       provenance_id: provenanceId,
       provider: "synthetic",
-      feed: "synthetic",
+      feed,
       source: "synthetic-e2e-fixture",
       entitlement_status: "unknown",
       numeric_encoding: "decimal_token",
@@ -124,10 +126,12 @@ test("default-off history preserves the legacy route and rejects an unapplied pr
   expect(observed.mdpMarketBars).toEqual([]);
 });
 
-test("enabled history validates and projects the Core envelope with short independent delegations", async ({ page, request }) => {
+test("enabled history accepts unknown feed evidence and projects the Core envelope", async ({ page, request }) => {
   test.skip(!featureEnabled || gatewaySignerDisabled, "requires enabled MDP bars and the optional Gateway signer");
   await loginWithOidc(page, request, ["eqoboard-market-reader"]);
-  await configureMocks(request, { marketBars: { enabled: true, response: makeCoreEnvelope({ assetClass: "etf" }) } });
+  await configureMocks(request, {
+    marketBars: { enabled: true, response: makeCoreEnvelope({ assetClass: "etf", feed: "unknown" }) },
+  });
 
   const query = new URLSearchParams({
     range: "5D",
@@ -146,7 +150,7 @@ test("enabled history validates and projects the Core envelope with short indepe
   expect(body).toMatchObject({
     schema_version: 1,
     provider: "synthetic",
-    feed: "synthetic",
+    feed: "unknown",
     entitlement_status: "unknown",
     coverage_status: "partial",
     verified_at: null,

@@ -1,3 +1,8 @@
+import { fromJson, toJson, type JsonValue } from "@bufbuild/protobuf";
+import {
+  BarsResponseV1Schema,
+  type BarsResponseV1,
+} from "@lqepoch/trading-core-contracts";
 import { compareDecimals } from "@/lib/mdp-market-data";
 
 export const MARKET_BAR_RESOLUTIONS = ["1m", "5m", "15m", "1h", "1d"] as const;
@@ -116,7 +121,7 @@ const GAP_REASONS = new Set([
   "source_gap", "provider_unavailable", "entitlement_limited", "unsupported_resolution",
   "session_excluded", "validation_conflict", "unknown",
 ]);
-const SUMMARY_MARKERS = new Set(["mixed", "unknown"]);
+const SUMMARY_PROVIDER_MARKERS = new Set(["mixed", "unknown"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -163,8 +168,8 @@ function validPositiveDecimal(value: unknown, maximum: number): value is string 
 
 function validProvenance(value: unknown): value is Record<string, unknown> {
   return isRecord(value) && safeLabel(value.provenance_id, 128) &&
-    safeLabel(value.provider, 128) && !SUMMARY_MARKERS.has(value.provider) &&
-    safeLabel(value.feed, 128) && !SUMMARY_MARKERS.has(value.feed) && safeLabel(value.source, 128) &&
+    safeLabel(value.provider, 128) && !SUMMARY_PROVIDER_MARKERS.has(value.provider) &&
+    safeLabel(value.feed, 128) && value.feed !== "mixed" && safeLabel(value.source, 128) &&
     MARKET_BAR_ENTITLEMENTS.includes(value.entitlement_status as (typeof MARKET_BAR_ENTITLEMENTS)[number]) &&
     value.entitlement_status !== "mixed" &&
     MARKET_BAR_NUMERIC_ENCODINGS.includes(value.numeric_encoding as (typeof MARKET_BAR_NUMERIC_ENCODINGS)[number]);
@@ -285,7 +290,17 @@ function entitlementSummary(values: readonly Record<string, unknown>[]): string 
 export function validateMdpMarketBarsResponse(
   value: unknown,
   identity: MarketBarRequestIdentity,
-): MarketBarsV1 | null {
+): BarsResponseV1 | null {
+  let coreResponse: BarsResponseV1;
+  try {
+    coreResponse = fromJson(BarsResponseV1Schema, value as JsonValue);
+  } catch {
+    return null;
+  }
+  if (coreResponse.schemaVersion !== 1 ||
+      coreResponse.requestedResolution !== identity.requestedResolution ||
+      coreResponse.adjustment !== identity.adjustment) return null;
+
   if (!isRecord(value) || value.schema_version !== 1 ||
       value.requested_resolution !== identity.requestedResolution ||
       !MARKET_BAR_RESOLUTIONS.includes(value.effective_resolution as MarketBarResolution) ||
@@ -330,7 +345,7 @@ export function validateMdpMarketBarsResponse(
       (value.coverage_status === "complete" && !segments.every((segment) => segment.coverage_status === "complete")) ||
       gaps.some((gap) => segments.some((segment) => segment.coverage_status === "complete" && intervalsIntersect(gap, segment)))) return null;
   if (!(value.rows as unknown[]).every((row) => validRow(row, identity, effectiveResolution, provenanceIds, segments, gaps))) return null;
-  return value as unknown as MarketBarsV1;
+  return coreResponse;
 }
 
 function numericProjection(value: string, maximum: number): number {
@@ -350,12 +365,18 @@ function sourceName(response: MarketBarsV1): string {
 }
 
 export function projectMdpMarketBarsResponse(
-  response: MarketBarsV1,
+  response: BarsResponseV1,
   request: MarketBarRequestIdentity & { providerMode: string; cursor: string | null },
 ): MarketBarProjection | null {
   try {
-    const provenanceById = new Map(response.source_provenance.map((item) => [String(item.provenance_id), item]));
-    const bars = response.rows.map((row) => {
+    const json = toJson(BarsResponseV1Schema, response, {
+      useProtoFieldName: true,
+      alwaysEmitImplicit: true,
+    });
+    if (!isRecord(json)) return null;
+    const envelope = json as unknown as MarketBarsV1;
+    const provenanceById = new Map(envelope.source_provenance.map((item) => [String(item.provenance_id), item]));
+    const bars = envelope.rows.map((row) => {
       const exact = { open: row.open, high: row.high, low: row.low, close: row.close, volume: row.volume };
       const provenance = provenanceById.get(row.provenance_id);
       if (!provenance) throw new Error("missing_provenance");
@@ -377,19 +398,19 @@ export function projectMdpMarketBarsResponse(
         exact,
       };
     }).sort((left, right) => left.time - right.time);
-    const downgradeReason = response.requested_resolution === response.effective_resolution ? null : "unknown";
-    const source = sourceName(response);
-    const continuationCursor = response.continuation_cursor ?? null;
-    const hasMore = response.truncated && continuationCursor !== null;
+    const downgradeReason = envelope.requested_resolution === envelope.effective_resolution ? null : "unknown";
+    const source = sourceName(envelope);
+    const continuationCursor = envelope.continuation_cursor ?? null;
+    const hasMore = envelope.truncated && continuationCursor !== null;
     return {
-      ...response,
+      ...envelope,
       bars,
       source,
-      source_mode: response.provider,
+      source_mode: envelope.provider,
       source_label: source,
       resolution: {
-        requested: response.requested_resolution,
-        effective: response.effective_resolution,
+        requested: envelope.requested_resolution,
+        effective: envelope.effective_resolution,
         downgrade_reason: downgradeReason,
       },
       downgrade_reason: downgradeReason,
@@ -400,9 +421,9 @@ export function projectMdpMarketBarsResponse(
       request_start: request.start,
       request_end: request.end,
       cursor: request.cursor,
-      as_of: response.as_of ?? null,
-      verified_at: response.verified_at ?? null,
-      market_calendar_version: response.market_calendar_version ?? null,
+      as_of: envelope.as_of ?? null,
+      verified_at: envelope.verified_at ?? null,
+      market_calendar_version: envelope.market_calendar_version ?? null,
       continuation_cursor: continuationCursor,
       next_cursor: continuationCursor,
       has_more: hasMore,
