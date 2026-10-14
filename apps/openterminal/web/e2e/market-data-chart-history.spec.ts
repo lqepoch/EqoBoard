@@ -157,19 +157,19 @@ function marketBarsResponse({
   };
 }
 
-function cross2016DailyResponse() {
+function cross2016DailyResponse(assetClass: AssetClass) {
   const yahooProvenanceId = "fixture-yfinance-pre-2016";
   const alpacaProvenanceId = "fixture-alpaca-post-2016";
   const yahooSessionId = "fixture-yahoo-session-2015-12-31";
   const alpacaSessionId = "fixture-alpaca-session-2016-01-04";
   const yahooRow = {
-    ...bar("2015-12-31T00:00:00.000Z", "1d", "501.123456", "etf"),
+    ...bar("2015-12-31T00:00:00.000Z", "1d", "501.123456", assetClass),
     provenance_id: yahooProvenanceId,
     session_instance_id: yahooSessionId,
     validation_state: "provisional" as const,
   };
   const alpacaRow = {
-    ...bar("2016-01-04T00:00:00.000Z", "1d", "502.234567", "etf"),
+    ...bar("2016-01-04T00:00:00.000Z", "1d", "502.234567", assetClass),
     provenance_id: alpacaProvenanceId,
     session_instance_id: alpacaSessionId,
     validation_state: "provisional" as const,
@@ -402,7 +402,7 @@ test("MAX preserves mixed Yahoo and Alpaca daily provenance across the 2016 boun
   const historyRequests = captureHistoryRequests(page);
   const initialDaily = marketBarsResponse({
     requestedResolution: "1d",
-    assetClass: "etf",
+    assetClass: "stock",
     startsMinutesAgo: [{ minutes: 6_000, close: "500.00" }],
   });
   await configureMocks(request, { marketBars: { enabled: true, response: initialDaily } });
@@ -410,7 +410,12 @@ test("MAX preserves mixed Yahoo and Alpaca daily provenance across the 2016 boun
 
   const widget = page.getByTestId("chart-widget");
   await expect(widget.getByTestId("chart-widget-history-status")).toContainText("Provider fixture-provider");
-  const crossBoundary = cross2016DailyResponse();
+  await expect.poll(async () => (await metrics(request)).mdpMarketBars.some((call: {
+    path: string;
+    query: { symbol?: string; asset_class?: string; resolution?: string };
+  }) => call.path === "/v1/market/bars" && call.query.symbol === SYMBOL &&
+    call.query.asset_class === "stock" && call.query.resolution === "1d")).toBe(true);
+  const crossBoundary = cross2016DailyResponse("stock");
   await configureMocks(request, { marketBars: { enabled: true, response: crossBoundary } });
   const maxResponsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url());
