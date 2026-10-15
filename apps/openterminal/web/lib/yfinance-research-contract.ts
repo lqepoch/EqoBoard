@@ -319,7 +319,8 @@ function validPayload(
     }
   }
 
-  let priorRowKey = "";
+  let priorSymbol: string | null = null;
+  let priorEventTime: bigint | null = null;
   for (const row of value.bars) {
     if (!isRecord(row) || !hasExactFields(row, BAR_FIELDS) || typeof row.symbol !== "string" ||
         !request.symbols.includes(row.symbol) || row.asset_class !== request.assetClass ||
@@ -328,9 +329,10 @@ function validPayload(
         .every(isDecimalOrNull) || !isIntegerOrNull(row.volume)) return false;
     const eventTime = parseUtcTimestamp(row.event_ts_utc);
     if (eventTime === null || eventTime < pageStart || eventTime >= pageEnd) return false;
-    const key = `${row.symbol}\u0000${eventTime}`;
-    if (priorRowKey && key <= priorRowKey) return false;
-    priorRowKey = key;
+    if (priorSymbol !== null && (row.symbol < priorSymbol ||
+        (row.symbol === priorSymbol && (priorEventTime === null || eventTime <= priorEventTime)))) return false;
+    priorSymbol = row.symbol;
+    priorEventTime = eventTime;
   }
 
   const actualSymbols = [...new Set(value.bars.map((bar) => (bar as Record<string, unknown>).symbol as string))].sort();

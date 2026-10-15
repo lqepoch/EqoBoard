@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 const WEB_ORIGIN = process.env.E2E_WEB_ORIGIN ?? `http://127.0.0.1:${process.env.E2E_RESEARCH_WEB_PORT ?? "3320"}`;
@@ -500,6 +501,73 @@ test("Yahoo research daily BFF keeps a full 2010-2026 query stable across opaque
     expect(call.query).not.toHaveProperty("resolution");
   }
   expect(JSON.stringify(calls)).not.toContain("q".repeat(64));
+});
+
+test("Yahoo research contract orders nanosecond timestamps numerically and rejects duplicate or reversed bars", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+
+  const query = new URLSearchParams({
+    symbols: "AAPL",
+    asset_class: "stock",
+    start_utc: "1996-01-01T00:00:00Z",
+    end_utc: "2006-01-01T00:00:00Z",
+    adjustment: "unadjusted",
+  });
+  const url = `${WEB_ORIGIN}/api/research/yfinance/daily?${query}`;
+  const initial = await page.context().request.get(url);
+  expect(initial.status()).toBe(200);
+  type SyntheticEnvelope = {
+    observation: {
+      source_observation_sha256: string;
+      payload: {
+        bars: Array<Record<string, unknown>>;
+        coverage: { bar_count: number; per_symbol: Array<Record<string, unknown>> };
+        provenance: { row_count: number };
+      };
+    };
+  };
+  const chronological = await initial.json() as SyntheticEnvelope;
+  const template = chronological.observation.payload.bars[0]!;
+  const beforeNanosecondBoundary = { ...template, event_ts_utc: "1999-01-04T00:00:00Z" };
+  const afterNanosecondBoundary = { ...template, event_ts_utc: "2002-01-03T00:00:00Z" };
+  chronological.observation.payload.bars = [beforeNanosecondBoundary, afterNanosecondBoundary];
+  chronological.observation.payload.coverage.bar_count = 2;
+  chronological.observation.payload.coverage.per_symbol[0]!.bar_count = 2;
+  chronological.observation.payload.coverage.per_symbol[0]!.first_bar_at = beforeNanosecondBoundary.event_ts_utc;
+  chronological.observation.payload.coverage.per_symbol[0]!.last_bar_at = afterNanosecondBoundary.event_ts_utc;
+  chronological.observation.payload.provenance.row_count = 2;
+  const updateObservationHash = (candidate: SyntheticEnvelope) => {
+    const serializedPayload = JSON.stringify(candidate.observation.payload);
+    candidate.observation.source_observation_sha256 = createHash("sha256")
+      .update(serializedPayload ?? "")
+      .digest("hex");
+  };
+  updateObservationHash(chronological);
+  await configureGateway(request, { yfinanceResearch: { enabled: true, response: chronological } });
+  const accepted = await page.context().request.get(url);
+  expect(accepted.status()).toBe(200);
+  expect((await accepted.json()).observation.payload.bars.map((bar: Record<string, unknown>) => bar.event_ts_utc))
+    .toEqual(["1999-01-04T00:00:00Z", "2002-01-03T00:00:00Z"]);
+
+  const reversed = JSON.parse(JSON.stringify(chronological)) as SyntheticEnvelope;
+  reversed.observation.payload.bars.reverse();
+  updateObservationHash(reversed);
+  await configureGateway(request, { yfinanceResearch: { enabled: true, response: reversed } });
+  expect((await page.context().request.get(url)).status()).toBe(502);
+
+  const duplicated = JSON.parse(JSON.stringify(chronological)) as SyntheticEnvelope;
+  duplicated.observation.payload.bars = [
+    duplicated.observation.payload.bars[0]!,
+    duplicated.observation.payload.bars[0]!,
+    duplicated.observation.payload.bars[1]!,
+  ];
+  duplicated.observation.payload.coverage.bar_count = 3;
+  duplicated.observation.payload.coverage.per_symbol[0]!.bar_count = 3;
+  duplicated.observation.payload.provenance.row_count = 3;
+  updateObservationHash(duplicated);
+  await configureGateway(request, { yfinanceResearch: { enabled: true, response: duplicated } });
+  expect((await page.context().request.get(url)).status()).toBe(502);
 });
 
 test("Yahoo research BFF rejects payload metadata that violates the native MDP observation contract", async ({ page, request }) => {
