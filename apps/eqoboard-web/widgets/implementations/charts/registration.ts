@@ -4,7 +4,12 @@ import type { MarketHostSnapshot } from "../../../stores/market/market-store";
 import type { WidgetManifestV1 } from "../../../widgets/sdk/contracts";
 import type { BuiltinProvenance, WidgetRegistration } from "../../../widgets/registry/types";
 import { ChartWidget } from "./ChartWidget";
-import { CHART_CONFIG_SCHEMA_ID, createDefaultChartConfig, parseNativeChartConfig, type NativeChartConfigV1 } from "./config";
+import {
+  CHART_CONFIG_SCHEMA_ID,
+  createDefaultChartConfig,
+  parseNativeChartConfig,
+  type NativeChartConfigV1,
+} from "./config";
 
 export const chartWidgetManifest = Object.freeze({
   manifestVersion: 1,
@@ -12,7 +17,8 @@ export const chartWidgetManifest = Object.freeze({
   id: "eqoboard.chart",
   version: "1.0.0",
   title: "Chart",
-  description: "Core Bars V1 history or a separately labeled MDP diagnostic archive; no live bar corrections.",
+  description:
+    "Core Bars V1 history or a separately labeled MDP diagnostic archive; no live bar corrections.",
   category: "market",
   rendererId: "eqoboard.chart.v1",
   configSchemaId: CHART_CONFIG_SCHEMA_ID,

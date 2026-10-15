@@ -21,13 +21,17 @@ describe("native market widget registrations", () => {
   });
 
   it("leaves unsupported depth inert and scopes the preview to its single disabled action", () => {
-    const orderbook = marketWidgetRegistrations.find((entry) => entry.manifest.id === "market.orderbook");
+    const orderbook = marketWidgetRegistrations.find(
+      (entry) => entry.manifest.id === "market.orderbook",
+    );
     expect(orderbook?.allowedReadOperations).toEqual([]);
     expect(orderbook?.allowedActions).toEqual([]);
     expect(orderbook?.manifest.requiredPermissions).toEqual([]);
     expect(orderbook?.manifest.provenancePolicy).toBe("no-market-data");
 
-    const preview = marketWidgetRegistrations.find((entry) => entry.manifest.id === "market.vertical-preview");
+    const preview = marketWidgetRegistrations.find(
+      (entry) => entry.manifest.id === "market.vertical-preview",
+    );
     expect(preview?.allowedReadOperations).toEqual([]);
     expect(preview?.allowedActions).toEqual(["orders.preview.vertical"]);
     expect(preview?.manifest.requiredPermissions).toEqual(["orders:preview"]);

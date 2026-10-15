@@ -62,30 +62,51 @@ describe("manual portfolio ledger storage", () => {
     if (created.kind !== "ok") return;
     const id = created.value.id;
     const bought = createPortfolioTransaction(db, id, ownerA, {
-      symbol: "SPY", side: "BUY", quantity: 1, price: 10,
+      symbol: "SPY",
+      side: "BUY",
+      quantity: 1,
+      price: 10,
       executed_at: "2026-10-01T00:00:00.000Z",
     });
     expect(bought.kind).toBe("ok");
     createPortfolioTransaction(db, id, ownerA, {
-      symbol: "SPY", side: "BUY", quantity: 3, price: 20,
+      symbol: "SPY",
+      side: "BUY",
+      quantity: 3,
+      price: 20,
       executed_at: "2026-10-02T00:00:00.000Z",
     });
     const sold = createPortfolioTransaction(db, id, ownerA, {
-      symbol: "SPY", side: "SELL", quantity: 1, price: 30,
+      symbol: "SPY",
+      side: "SELL",
+      quantity: 1,
+      price: 30,
       executed_at: "2026-10-03T00:00:00.000Z",
     });
     expect(sold.kind).toBe("ok");
-    expect(createPortfolioTransaction(db, id, ownerA, {
-      symbol: "SPY", side: "SELL", quantity: 4, price: 40,
-      executed_at: "2026-10-04T00:00:00.000Z",
-    })).toEqual({ kind: "conflict" });
+    expect(
+      createPortfolioTransaction(db, id, ownerA, {
+        symbol: "SPY",
+        side: "SELL",
+        quantity: 4,
+        price: 40,
+        executed_at: "2026-10-04T00:00:00.000Z",
+      }),
+    ).toEqual({ kind: "conflict" });
     expect(calculatePortfolioPositions(db, id, ownerA)).toEqual({
       kind: "ok",
       value: [{ symbol: "SPY", quantity: 3, avgCost: 17.5, realizedPnl: 12.5 }],
     });
     if (bought.kind !== "ok") return;
-    expect(deletePortfolioTransaction(db, id, bought.value.id, ownerB)).toEqual({ kind: "not-found" });
-    expect(deletePortfolioTransaction(db, id, Number.MAX_SAFE_INTEGER, ownerA)).toEqual({ kind: "not-found" });
-    expect(deletePortfolioTransaction(db, id, bought.value.id, ownerA)).toEqual({ kind: "ok", value: undefined });
+    expect(deletePortfolioTransaction(db, id, bought.value.id, ownerB)).toEqual({
+      kind: "not-found",
+    });
+    expect(deletePortfolioTransaction(db, id, Number.MAX_SAFE_INTEGER, ownerA)).toEqual({
+      kind: "not-found",
+    });
+    expect(deletePortfolioTransaction(db, id, bought.value.id, ownerA)).toEqual({
+      kind: "ok",
+      value: undefined,
+    });
   });
 });

@@ -17,7 +17,9 @@ const SECRET_SENTINEL_PREFIX = "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_";
 function candidateSha(): string {
   const sha = process.env.E2E_CANDIDATE_SHA;
   if (!sha || !/^[0-9a-f]{40}$/iu.test(sha)) {
-    throw new Error("E2E_CANDIDATE_SHA must be the frozen native source-head SHA supplied by the Compose helper.");
+    throw new Error(
+      "E2E_CANDIDATE_SHA must be the frozen native source-head SHA supplied by the Compose helper.",
+    );
   }
   return sha.toLowerCase();
 }
@@ -30,7 +32,9 @@ async function attachResearchChartCandidateSample(
   fixtureResponseSha256: string,
 ) {
   const navigationMetrics = await page.evaluate(() => {
-    const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const entry = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
     return {
       responseStartMs: entry?.responseStart ?? null,
       domContentLoadedMs: entry?.domContentLoadedEventEnd ?? null,
@@ -40,17 +44,21 @@ async function attachResearchChartCandidateSample(
     };
   });
   await testInfo.attach("yahoo-research-candidate-sample", {
-    body: JSON.stringify({
-      evidenceStatus: "candidate-sample-only; paired-legacy-baseline-not-run",
-      candidateSha: candidateSha(),
-      origin: new URL(page.url()).origin,
-      browserVersion: page.context().browser()?.version() ?? null,
-      chartReadyMs,
-      firstValidatedApiResponseBytes: apiBodyBytes,
-      fixtureResponseSha256,
-      fixtureLabel: "native-e2e synthetic fixture; not provider data",
-      ...navigationMetrics,
-    }, null, 2),
+    body: JSON.stringify(
+      {
+        evidenceStatus: "candidate-sample-only; paired-legacy-baseline-not-run",
+        candidateSha: candidateSha(),
+        origin: new URL(page.url()).origin,
+        browserVersion: page.context().browser()?.version() ?? null,
+        chartReadyMs,
+        firstValidatedApiResponseBytes: apiBodyBytes,
+        fixtureResponseSha256,
+        fixtureLabel: "native-e2e synthetic fixture; not provider data",
+        ...navigationMetrics,
+      },
+      null,
+      2,
+    ),
     contentType: "application/json",
   });
 }
@@ -82,11 +90,12 @@ type YfinanceObservation = Readonly<{
   }>;
 }>;
 
-type PagedYfinanceObservation = YfinanceObservation & Readonly<{
-  requested_range: Readonly<{ start_utc: string; end_utc: string; semantics: string }>;
-  page_range: Readonly<{ start_utc: string; end_utc: string; semantics: string }>;
-  next_cursor: string | null;
-}>;
+type PagedYfinanceObservation = YfinanceObservation &
+  Readonly<{
+    requested_range: Readonly<{ start_utc: string; end_utc: string; semantics: string }>;
+    page_range: Readonly<{ start_utc: string; end_utc: string; semantics: string }>;
+    next_cursor: string | null;
+  }>;
 
 test("@api Yahoo history is isolated to the signed research mode and fails before MDP on authz errors", async ({
   browser,
@@ -128,10 +137,15 @@ test("@api Yahoo history is isolated to the signed research mode and fails befor
       "/api/workspaces",
     ];
     for (const path of terminalOnlyPaths) {
-      const response = await researchReaderPage.request.fetch(new URL(path, researchOrigin).toString(), {
-        method: path.endsWith("/preview") ? "POST" : "GET",
-        ...(path.endsWith("/preview") ? { headers: { "Content-Type": "application/json", Origin: researchOrigin }, data: {} } : {}),
-      });
+      const response = await researchReaderPage.request.fetch(
+        new URL(path, researchOrigin).toString(),
+        {
+          method: path.endsWith("/preview") ? "POST" : "GET",
+          ...(path.endsWith("/preview")
+            ? { headers: { "Content-Type": "application/json", Origin: researchOrigin }, data: {} }
+            : {}),
+        },
+      );
       expect(response.status(), path).toBe(404);
       expect(await response.json(), path).toEqual({ error: "not_found" });
     }
@@ -142,7 +156,10 @@ test("@api Yahoo history is isolated to the signed research mode and fails befor
       "/api/v1/stream/sse",
       "/api/v1/orders/preview",
     ]) {
-      expect(dispatches.calls[path] ?? 0, `Research runtime must not dispatch terminal route ${path}`).toBe(0);
+      expect(
+        dispatches.calls[path] ?? 0,
+        `Research runtime must not dispatch terminal route ${path}`,
+      ).toBe(0);
     }
     expect((await readMdpFixtureCounters(request)).calls[MDP_RESEARCH_ROUTE] ?? 0).toBe(0);
   } finally {
@@ -155,9 +172,12 @@ test("@api Yahoo history is isolated to the signed research mode and fails befor
     // The route-level assertion deliberately signs in at the shared shell so
     // it remains independent of the separately accepted Research chart page.
     await signInAt(workspaceOnlyPage, researchOrigin, "workspace-only", "/");
-    const forbidden = await workspaceOnlyPage.request.get(new URL(yahooPath, researchOrigin).toString(), {
-      headers: { Accept: "application/json" },
-    });
+    const forbidden = await workspaceOnlyPage.request.get(
+      new URL(yahooPath, researchOrigin).toString(),
+      {
+        headers: { Accept: "application/json" },
+      },
+    );
     expect(forbidden.status()).toBe(403);
     expect(forbidden.headers()["cache-control"]).toMatch(/no-store/u);
     expect(await forbidden.json()).toEqual({ error: "forbidden" });
@@ -189,7 +209,7 @@ test("@api a research reader receives only the validated Yahoo observation and a
     expect(response.status()).toBe(200);
     expect(response.headers()["cache-control"]).toMatch(/no-store/u);
     expect(response.headers()["content-type"]).toMatch(/application\/json/iu);
-    const observation = await response.json() as YfinanceObservation;
+    const observation = (await response.json()) as YfinanceObservation;
     expect(observation).toMatchObject({
       schema_version: "mdp-yfinance-research-observations-v1",
       provider: "yfinance",
@@ -238,7 +258,9 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
   await resetMdpFixtureCounters(request);
   await page.goto(new URL(researchPath, researchOrigin).toString(), { waitUntil: "networkidle" });
   await expect(page.getByTestId("yahoo-research-page")).toBeVisible();
-  await expect(page.getByText("Sign in with research:read to load Yahoo daily observations.")).toBeVisible();
+  await expect(
+    page.getByText("Sign in with research:read to load Yahoo daily observations."),
+  ).toBeVisible();
   await expect(page.getByTestId("yahoo-research-chart")).toHaveCount(0);
   expect((await readMdpFixtureCounters(request)).calls[MDP_RESEARCH_ROUTE] ?? 0).toBe(0);
 
@@ -251,10 +273,12 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     researchPage.on("request", (browserRequest) => browserRequests.push(browserRequest.url()));
 
     const chartStartedAt = Date.now();
-    const initialRead = researchPage.waitForResponse((response) =>
-      new URL(response.url()).pathname === "/api/research/yfinance/daily",
+    const initialRead = researchPage.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/research/yfinance/daily",
     );
-    await researchPage.goto(new URL(researchPath, researchOrigin).toString(), { waitUntil: "domcontentloaded" });
+    await researchPage.goto(new URL(researchPath, researchOrigin).toString(), {
+      waitUntil: "domcontentloaded",
+    });
     const initialResponse = await initialRead;
     expect(initialResponse.status()).toBe(200);
     const firstApiBody = await initialResponse.body();
@@ -273,12 +297,19 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     await expect(evidence).toContainText("MDP coverage not asserted");
     await expect(evidence).toContainText("Display only · non-canonical · non-PIT · non-executable");
     await expect(evidence).toContainText("Synthetic acceptance fixture · bounded-synthetic-e2e");
-    await expect(chart.getByTestId("native-chart-surface")).toHaveAttribute("data-chart-live", "false");
+    await expect(chart.getByTestId("native-chart-surface")).toHaveAttribute(
+      "data-chart-live",
+      "false",
+    );
     await expect(chart).toContainText("provider adjustment semantics are unconfirmed");
-    await expect(researchPage.getByTestId("native-chart-tradingview-attribution")).toContainText("TradingView Lightweight Charts");
+    await expect(researchPage.getByTestId("native-chart-tradingview-attribution")).toContainText(
+      "TradingView Lightweight Charts",
+    );
     await expect(chart.getByTestId("native-chart-crosshair")).toContainText("25 loaded bars");
     const chartReadyMs = Date.now() - chartStartedAt;
-    await expect(researchPage.locator("body")).not.toContainText(/PAPER_READY|FILLED|simulator-fallback/iu);
+    await expect(researchPage.locator("body")).not.toContainText(
+      /PAPER_READY|FILLED|simulator-fallback/iu,
+    );
     expect((await readMdpFixtureCounters(request)).calls[MDP_RESEARCH_ROUTE]).toBe(1);
     await attachResearchChartCandidateSample(
       researchPage,
@@ -293,7 +324,9 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     await researchPage.getByTestId("yahoo-indicator-sma20").check();
     const maxRangeReadPromise = researchPage.waitForResponse((response) => {
       const url = new URL(response.url());
-      return url.pathname === "/api/research/yfinance/daily" && url.searchParams.get("cursor") === null;
+      return (
+        url.pathname === "/api/research/yfinance/daily" && url.searchParams.get("cursor") === null
+      );
     });
     await researchPage.getByLabel("Daily window").selectOption("MAX");
     const maxRangeRead = await maxRangeReadPromise;
@@ -305,7 +338,10 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
       const cursor = `older:${pageNumber - 1}`;
       const olderRead = researchPage.waitForResponse((response) => {
         const url = new URL(response.url());
-        return url.pathname === "/api/research/yfinance/daily" && url.searchParams.get("cursor") === cursor;
+        return (
+          url.pathname === "/api/research/yfinance/daily" &&
+          url.searchParams.get("cursor") === cursor
+        );
       });
       await olderPageButton.click();
       expect((await olderRead).status(), `Research page ${pageNumber}`).toBe(200);
@@ -321,22 +357,32 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     expect(counters.fixture).toBe("native-e2e synthetic fixture; not provider data");
 
     const externalProviderRequests = browserRequests.filter((rawUrl) =>
-      /(?:^|\.)yahoo(?:apis)?\.|finance\.yahoo|futu|alpaca|interactivebrokers|schwab/iu.test(new URL(rawUrl).hostname),
+      /(?:^|\.)yahoo(?:apis)?\.|finance\.yahoo|futu|alpaca|interactivebrokers|schwab/iu.test(
+        new URL(rawUrl).hostname,
+      ),
     );
     expect(externalProviderRequests).toEqual([]);
-    expect(browserRequests.filter((rawUrl) => new URL(rawUrl).origin !== researchOrigin)).toEqual([]);
+    expect(browserRequests.filter((rawUrl) => new URL(rawUrl).origin !== researchOrigin)).toEqual(
+      [],
+    );
     const terminalMarketRequests = browserRequests.filter((rawUrl) =>
-      ["/api/eqo/live", "/api/eqo/stocks/subscribe", "/api/eqo/options/subscribe"].includes(new URL(rawUrl).pathname),
+      ["/api/eqo/live", "/api/eqo/stocks/subscribe", "/api/eqo/options/subscribe"].includes(
+        new URL(rawUrl).pathname,
+      ),
     );
     expect(terminalMarketRequests).toEqual([]);
-    const serializedClientState = await researchPage.evaluate(() => JSON.stringify({
-      markup: document.documentElement.outerHTML,
-      localStorage: Object.entries(localStorage),
-      sessionStorage: Object.entries(sessionStorage),
-      cookies: document.cookie,
-    }));
+    const serializedClientState = await researchPage.evaluate(() =>
+      JSON.stringify({
+        markup: document.documentElement.outerHTML,
+        localStorage: Object.entries(localStorage),
+        sessionStorage: Object.entries(sessionStorage),
+        cookies: document.cookie,
+      }),
+    );
     expect(serializedClientState).not.toContain(SECRET_SENTINEL_PREFIX);
-    expect(serializedClientState).not.toMatch(/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u);
+    expect(serializedClientState).not.toMatch(
+      /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u,
+    );
   } finally {
     await context.close();
   }
@@ -354,7 +400,10 @@ test("@api Yahoo pagination preserves adjacent page bounds, explicit cursors, an
     end_utc: "2026-01-01T00:00:00.000Z",
     adjustment: "adjusted",
   });
-  const firstPageUrl = new URL(`/api/research/yfinance/daily?${query.toString()}`, researchOrigin).toString();
+  const firstPageUrl = new URL(
+    `/api/research/yfinance/daily?${query.toString()}`,
+    researchOrigin,
+  ).toString();
   await resetMdpFixtureCounters(request);
 
   const context = await browser.newContext();
@@ -362,29 +411,37 @@ test("@api Yahoo pagination preserves adjacent page bounds, explicit cursors, an
   try {
     await signInAt(page, researchOrigin, "reader", "/");
     await resetMdpFixtureCounters(request);
-    const firstResponse = await page.request.get(firstPageUrl, { headers: { Accept: "application/json" } });
+    const firstResponse = await page.request.get(firstPageUrl, {
+      headers: { Accept: "application/json" },
+    });
     expect(firstResponse.status()).toBe(200);
-    const first = await firstResponse.json() as PagedYfinanceObservation;
+    const first = (await firstResponse.json()) as PagedYfinanceObservation;
     expect(first.next_cursor).toBe("older:1");
-    if (first.next_cursor === null) throw new Error("The first page must expose an explicit older cursor for this range.");
+    if (first.next_cursor === null)
+      throw new Error("The first page must expose an explicit older cursor for this range.");
     expect(first.page_range.semantics).toBe("start_inclusive_end_exclusive");
     expect(first.page_range.end_utc).toBe(first.requested_range.end_utc);
 
     const secondUrl = new URL(firstPageUrl);
     secondUrl.searchParams.set("cursor", first.next_cursor);
-    const secondResponse = await page.request.get(secondUrl.toString(), { headers: { Accept: "application/json" } });
+    const secondResponse = await page.request.get(secondUrl.toString(), {
+      headers: { Accept: "application/json" },
+    });
     expect(secondResponse.status()).toBe(200);
-    const second = await secondResponse.json() as PagedYfinanceObservation;
+    const second = (await secondResponse.json()) as PagedYfinanceObservation;
     expect(second.requested_range).toEqual(first.requested_range);
     expect(second.page_range.end_utc).toBe(first.page_range.start_utc);
     expect(second.next_cursor).toBe("older:2");
-    if (second.next_cursor === null) throw new Error("The second page must expose an explicit older cursor for this range.");
+    if (second.next_cursor === null)
+      throw new Error("The second page must expose an explicit older cursor for this range.");
 
     const thirdUrl = new URL(firstPageUrl);
     thirdUrl.searchParams.set("cursor", second.next_cursor);
-    const thirdResponse = await page.request.get(thirdUrl.toString(), { headers: { Accept: "application/json" } });
+    const thirdResponse = await page.request.get(thirdUrl.toString(), {
+      headers: { Accept: "application/json" },
+    });
     expect(thirdResponse.status()).toBe(200);
-    const third = await thirdResponse.json() as PagedYfinanceObservation;
+    const third = (await thirdResponse.json()) as PagedYfinanceObservation;
     expect(third.requested_range).toEqual(first.requested_range);
     expect(third.page_range.end_utc).toBe(second.page_range.start_utc);
     expect(third.page_range.start_utc).toBe(first.requested_range.start_utc);
@@ -400,10 +457,16 @@ test("@api Yahoo pagination preserves adjacent page bounds, explicit cursors, an
         mdp_coverage_asserted: false,
       });
       expect(observation.observation.payload.coverage.calendar_gaps_assessed).toBe(false);
-      expect(observation.observation.payload.provenance.adapter_version).toContain("bounded-synthetic-e2e");
+      expect(observation.observation.payload.provenance.adapter_version).toContain(
+        "bounded-synthetic-e2e",
+      );
       for (const bar of observation.observation.payload.bars) {
-        expect(Date.parse(bar.event_ts_utc)).toBeGreaterThanOrEqual(Date.parse(observation.page_range.start_utc));
-        expect(Date.parse(bar.event_ts_utc)).toBeLessThan(Date.parse(observation.page_range.end_utc));
+        expect(Date.parse(bar.event_ts_utc)).toBeGreaterThanOrEqual(
+          Date.parse(observation.page_range.start_utc),
+        );
+        expect(Date.parse(bar.event_ts_utc)).toBeLessThan(
+          Date.parse(observation.page_range.end_utc),
+        );
       }
     }
 
@@ -416,10 +479,15 @@ test("@api Yahoo pagination preserves adjacent page bounds, explicit cursors, an
   }
 });
 
-test("@api terminal and research OIDC sessions stay isolated across the two approved hostnames", async ({ browser }) => {
+test("@api terminal and research OIDC sessions stay isolated across the two approved hostnames", async ({
+  browser,
+}) => {
   const terminalOrigin = terminalWebOrigin();
   const researchOrigin = researchWebOrigin();
-  const yahooUrl = new URL(`/api/research/yfinance/daily?${YFINANCE_DAILY_QUERY}`, researchOrigin).toString();
+  const yahooUrl = new URL(
+    `/api/research/yfinance/daily?${YFINANCE_DAILY_QUERY}`,
+    researchOrigin,
+  ).toString();
   const context = await browser.newContext();
   const page = await context.newPage();
   try {
@@ -447,15 +515,22 @@ test("@api terminal and research OIDC sessions stay isolated across the two appr
     }));
     const serializedResearchClientState = JSON.stringify(researchClientState);
     expect(serializedResearchClientState).not.toContain(SECRET_SENTINEL_PREFIX);
-    expect(serializedResearchClientState).not.toMatch(/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u);
-    expect(serializedResearchClientState).not.toMatch(/access[_-]?token|refresh[_-]?token|client[_-]?secret|broker[_-]?key/iu);
+    expect(serializedResearchClientState).not.toMatch(
+      /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u,
+    );
+    expect(serializedResearchClientState).not.toMatch(
+      /access[_-]?token|refresh[_-]?token|client[_-]?secret|broker[_-]?key/iu,
+    );
     expect(serializedResearchClientState).not.toContain("native-e2e-reader");
     expect(serializedResearchClientState).not.toContain("eqoboard-market-reader");
 
-    const researchScripts = await page.locator("script[src]").evaluateAll((scripts) =>
-      scripts.map((script) => (script as HTMLScriptElement).src)
-        .filter((url) => new URL(url).origin === location.origin),
-    );
+    const researchScripts = await page
+      .locator("script[src]")
+      .evaluateAll((scripts) =>
+        scripts
+          .map((script) => (script as HTMLScriptElement).src)
+          .filter((url) => new URL(url).origin === location.origin),
+      );
     for (const scriptUrl of researchScripts) {
       const script = await page.request.get(scriptUrl);
       expect(script.ok()).toBe(true);
@@ -463,14 +538,28 @@ test("@api terminal and research OIDC sessions stay isolated across the two appr
     }
 
     const browserCookies = await context.cookies([terminalOrigin, researchOrigin]);
-    expect(browserCookies.some((cookie) => cookie.value.includes(SECRET_SENTINEL_PREFIX))).toBe(false);
+    expect(browserCookies.some((cookie) => cookie.value.includes(SECRET_SENTINEL_PREFIX))).toBe(
+      false,
+    );
     const safeSessionCookieMetadata = browserCookies
       .filter((cookie) => cookie.name.endsWith(".session-token"))
-      .map(({ name, domain, httpOnly, secure }) => ({ name, domain: domain.replace(/^\./u, ""), httpOnly, secure }));
-    expect(safeSessionCookieMetadata).toEqual(expect.arrayContaining([
-      { name: "eqoboard.session-token", domain: "127.0.0.1", httpOnly: true, secure: false },
-      { name: "eqoboard-research.session-token", domain: "localhost", httpOnly: true, secure: false },
-    ]));
+      .map(({ name, domain, httpOnly, secure }) => ({
+        name,
+        domain: domain.replace(/^\./u, ""),
+        httpOnly,
+        secure,
+      }));
+    expect(safeSessionCookieMetadata).toEqual(
+      expect.arrayContaining([
+        { name: "eqoboard.session-token", domain: "127.0.0.1", httpOnly: true, secure: false },
+        {
+          name: "eqoboard-research.session-token",
+          domain: "localhost",
+          httpOnly: true,
+          secure: false,
+        },
+      ]),
+    );
 
     await page.getByTestId("account-menu").locator("summary").click();
     await page.getByTestId("account-menu").getByRole("button", { name: "Sign out" }).click();
@@ -481,9 +570,12 @@ test("@api terminal and research OIDC sessions stay isolated across the two appr
     });
     expect(researchAfterSignOut.status()).toBe(401);
 
-    const terminalStillSignedIn = await page.request.get(new URL("/api/quotes?symbols=SPY", terminalOrigin).toString(), {
-      headers: { Accept: "application/json" },
-    });
+    const terminalStillSignedIn = await page.request.get(
+      new URL("/api/quotes?symbols=SPY", terminalOrigin).toString(),
+      {
+        headers: { Accept: "application/json" },
+      },
+    );
     expect(terminalStillSignedIn.status()).toBe(200);
     expect(JSON.stringify(safeSessionCookieMetadata)).not.toContain(SECRET_SENTINEL_PREFIX);
   } finally {

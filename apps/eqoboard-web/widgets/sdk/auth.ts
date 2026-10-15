@@ -6,9 +6,7 @@ import type { WidgetAuthorizationView } from "./contracts";
  * This is a visibility hint, never authorization for a data request.
  */
 export function projectWidgetAuthorization(snapshot: AuthUiSnapshot): WidgetAuthorizationView {
-  const permissions = snapshot.authenticated
-    ? snapshot.permissions.filter(isPermission)
-    : [];
+  const permissions = snapshot.authenticated ? snapshot.permissions.filter(isPermission) : [];
   return Object.freeze({
     authenticated: snapshot.authenticated,
     permissions: Object.freeze(permissions),

@@ -11,19 +11,30 @@ function plainRecord(value: unknown): Record<string, unknown> | null {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (Reflect.ownKeys(value).some((key) => typeof key !== "string" || !descriptors[key] ||
-        !descriptors[key]!.enumerable || !("value" in descriptors[key]!))) return null;
+    if (
+      Reflect.ownKeys(value).some(
+        (key) =>
+          typeof key !== "string" ||
+          !descriptors[key] ||
+          !descriptors[key]!.enumerable ||
+          !("value" in descriptors[key]!),
+      )
+    )
+      return null;
     return value as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
-export function parseEmptyMarketConfig(value: unknown):
+export function parseEmptyMarketConfig(
+  value: unknown,
+):
   | Readonly<{ ok: true; value: EmptyMarketConfigV1 }>
   | Readonly<{ ok: false; code: "config-invalid" }> {
   const row = plainRecord(value);
-  if (!row || Reflect.ownKeys(row).length !== 1 || row.schemaVersion !== 1) return { ok: false, code: "config-invalid" };
+  if (!row || Reflect.ownKeys(row).length !== 1 || row.schemaVersion !== 1)
+    return { ok: false, code: "config-invalid" };
   return { ok: true, value: EMPTY_MARKET_CONFIG };
 }
 
@@ -33,13 +44,23 @@ function validDate(value: string): boolean {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-export function parseOptionExpiryConfig(value: unknown):
+export function parseOptionExpiryConfig(
+  value: unknown,
+):
   | Readonly<{ ok: true; value: OptionExpiryConfigV1 }>
   | Readonly<{ ok: false; code: "config-invalid"; field?: string }> {
   const row = plainRecord(value);
-  if (!row || Reflect.ownKeys(row).length !== 2 || row.schemaVersion !== 1 ||
-      typeof row.expiry !== "string" || row.expiry.length > 10 || row.expiry.trim() !== row.expiry || CONTROL.test(row.expiry) ||
-      (row.expiry !== "" && !validDate(row.expiry))) return { ok: false, code: "config-invalid", field: "expiry" };
+  if (
+    !row ||
+    Reflect.ownKeys(row).length !== 2 ||
+    row.schemaVersion !== 1 ||
+    typeof row.expiry !== "string" ||
+    row.expiry.length > 10 ||
+    row.expiry.trim() !== row.expiry ||
+    CONTROL.test(row.expiry) ||
+    (row.expiry !== "" && !validDate(row.expiry))
+  )
+    return { ok: false, code: "config-invalid", field: "expiry" };
   return { ok: true, value: Object.freeze({ schemaVersion: 1, expiry: row.expiry }) };
 }
 

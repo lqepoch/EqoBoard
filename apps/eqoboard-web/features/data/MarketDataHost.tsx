@@ -1,20 +1,39 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ReactNode } from "react";
 
 import type { AuthUiSnapshot } from "../../lib/contracts/auth";
-import { MarketStore, type MarketFeedName, type MarketHostSnapshot } from "../../stores/market/market-store";
+import {
+  MarketStore,
+  type MarketFeedName,
+  type MarketHostSnapshot,
+} from "../../stores/market/market-store";
 import type { WidgetLifecycle, WidgetRefreshPolicyV1 } from "../../widgets/sdk/contracts";
 import type { WidgetActionClient } from "../../widgets/sdk/actions";
-import type { WidgetDataClient, WidgetMarketReader, WidgetRefreshScheduler } from "../../widgets/sdk/data";
+import type {
+  WidgetDataClient,
+  WidgetMarketReader,
+  WidgetRefreshScheduler,
+} from "../../widgets/sdk/data";
 import { createWidgetPollBudget } from "../../widgets/sdk/pollBudget";
 import type { WidgetPollBudget } from "../../widgets/sdk/pollBudget";
 import { createNativeActionClient } from "./action-client";
 import { attachMarketEventStream } from "./market-stream";
 import { createNativeRefreshScheduler, type RefreshScope } from "./refresh-scheduler";
 import { createNativeDataReadClient, readNativeJsonResponse } from "./read-client";
-import { MarketLeaseCoordinator, type OptionsLeaseInput, type StockLeaseInput } from "./lease-coordinator";
+import {
+  MarketLeaseCoordinator,
+  type OptionsLeaseInput,
+  type StockLeaseInput,
+} from "./lease-coordinator";
 import type { NativeActionMap, NativeDataOperationMap } from "./operations";
 import { startMarketHostBackgroundServices } from "./market-runtime";
 import { isTerminalMarketRuntime } from "./runtime-policy";
@@ -74,9 +93,14 @@ class MarketDataRuntime {
     const getAuth = () => this.#auth;
     this.data = createNativeDataReadClient(getAuth);
     this.actions = createNativeActionClient(getAuth);
-    this.market = Object.freeze({ getSnapshot: this.store.getSnapshot, subscribe: this.store.subscribe });
-    this.leaseCoordinator = new MarketLeaseCoordinator(this.store, (feed, input, signal, keepalive) =>
-      this.#sendLease(feed, input, signal, keepalive));
+    this.market = Object.freeze({
+      getSnapshot: this.store.getSnapshot,
+      subscribe: this.store.subscribe,
+    });
+    this.leaseCoordinator = new MarketLeaseCoordinator(
+      this.store,
+      (feed, input, signal, keepalive) => this.#sendLease(feed, input, signal, keepalive),
+    );
   }
 
   getServices(): MarketDataHostServices {
@@ -88,7 +112,8 @@ class MarketDataRuntime {
       store: this.store,
       pollBudget: this.pollBudget,
       leaseCoordinator: this.leaseCoordinator,
-      canSubscribe: isTerminalMarketRuntime(this.#auth) && hasPermission(this.#auth, "market:subscribe"),
+      canSubscribe:
+        isTerminalMarketRuntime(this.#auth) && hasPermission(this.#auth, "market:subscribe"),
     });
   }
 
@@ -120,7 +145,8 @@ class MarketDataRuntime {
       startLeases: () => this.leaseCoordinator.start(),
       stopLeases: () => this.leaseCoordinator.stop(),
     });
-    if (isTerminalMarketRuntime(this.#auth)) this.#freshnessTimer = setInterval(() => this.store.tick(), 1_000);
+    if (isTerminalMarketRuntime(this.#auth))
+      this.#freshnessTimer = setInterval(() => this.store.tick(), 1_000);
     return () => this.stop();
   }
 
@@ -139,7 +165,8 @@ class MarketDataRuntime {
     signal: AbortSignal,
     keepalive = false,
   ): Promise<unknown> {
-    if (!isTerminalMarketRuntime(this.#auth) || !hasPermission(this.#auth, "market:subscribe")) throw new Error("unavailable");
+    if (!isTerminalMarketRuntime(this.#auth) || !hasPermission(this.#auth, "market:subscribe"))
+      throw new Error("unavailable");
     const path = feed === "stocks" ? "/api/eqo/stocks/subscribe" : "/api/eqo/options/subscribe";
     const body = JSON.stringify(input);
     if (new TextEncoder().encode(body).byteLength > 64 * 1024) throw new Error("unavailable");
@@ -207,14 +234,26 @@ export function useWidgetRefreshScheduler(
 ): WidgetRefreshScheduler<NativeDataOperationMap> {
   const services = useMarketDataHost();
   const scopeKey = services.auth.storagePartition ?? "anonymous";
-  return useMemo(() => createNativeRefreshScheduler(
-    services.data,
-    policy,
-    lifecycle,
-    scope,
-    services.pollBudget,
-    scopeKey,
-  ), [services.data, services.pollBudget, policy, lifecycle, scope.instanceId, scope.hidden, scopeKey]);
+  return useMemo(
+    () =>
+      createNativeRefreshScheduler(
+        services.data,
+        policy,
+        lifecycle,
+        scope,
+        services.pollBudget,
+        scopeKey,
+      ),
+    [
+      services.data,
+      services.pollBudget,
+      policy,
+      lifecycle,
+      scope.instanceId,
+      scope.hidden,
+      scopeKey,
+    ],
+  );
 }
 
 /** Widgets publish desired symbols; the host unions them into one Gateway lease per feed. */
@@ -240,5 +279,13 @@ export function useMarketLease(
       unsubscribe();
       leaseCoordinator.removeConsumer(instanceId, feed);
     };
-  }, [leaseCoordinator, canSubscribe, auth.storagePartition, instanceId, feed, symbolsKey, lifecycle]);
+  }, [
+    leaseCoordinator,
+    canSubscribe,
+    auth.storagePartition,
+    instanceId,
+    feed,
+    symbolsKey,
+    lifecycle,
+  ]);
 }

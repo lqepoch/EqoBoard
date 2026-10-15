@@ -6,13 +6,19 @@ import type { ServerPrincipal } from "./auth";
 
 export function portfolioLimitResponse(principal: ServerPrincipal) {
   const service = consumeServiceRateLimit("portfolio", 1_200, 60_000);
-  if (!service.allowed) return noStoreJson({ error: "rate_limit_exceeded" }, 429, {
-    "Retry-After": String(service.retryAfterSeconds),
+  if (!service.allowed)
+    return noStoreJson({ error: "rate_limit_exceeded" }, 429, {
+      "Retry-After": String(service.retryAfterSeconds),
+    });
+  const owner = consumePrincipalRateLimit(principal, {
+    bucket: "portfolio",
+    maxRequests: 120,
+    windowMs: 60_000,
   });
-  const owner = consumePrincipalRateLimit(principal, { bucket: "portfolio", maxRequests: 120, windowMs: 60_000 });
-  if (!owner.allowed) return noStoreJson({ error: "rate_limit_exceeded" }, 429, {
-    "Retry-After": String(owner.retryAfterSeconds),
-  });
+  if (!owner.allowed)
+    return noStoreJson({ error: "rate_limit_exceeded" }, 429, {
+      "Retry-After": String(owner.retryAfterSeconds),
+    });
   return null;
 }
 
@@ -23,8 +29,12 @@ export function isEmptyReadRequest(request: Request): boolean {
     void request.body.cancel().catch(() => undefined);
     return false;
   }
-  return url.search === "" && (contentLength === null || contentLength === "0") &&
-    !request.headers.has("content-encoding") && !request.headers.has("transfer-encoding");
+  return (
+    url.search === "" &&
+    (contentLength === null || contentLength === "0") &&
+    !request.headers.has("content-encoding") &&
+    !request.headers.has("transfer-encoding")
+  );
 }
 
 export function numericPathId(value: string): number | null {

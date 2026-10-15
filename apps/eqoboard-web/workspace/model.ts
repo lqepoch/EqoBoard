@@ -111,13 +111,15 @@ export function createEmptyWorkspaceDocument(): WorkspaceDocumentV1 {
   return {
     schemaVersion: WORKSPACE_SCHEMA_VERSION,
     activeWorkspaceId: workspaceId,
-    workspaces: [{
-      id: workspaceId,
-      name: "Workspace 1",
-      activeTabId: tabId,
-      marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ", "AAPL"] },
-      tabs: [tab],
-    }],
+    workspaces: [
+      {
+        id: workspaceId,
+        name: "Workspace 1",
+        activeTabId: tabId,
+        marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ", "AAPL"] },
+        tabs: [tab],
+      },
+    ],
     userTemplates: [],
   };
 }

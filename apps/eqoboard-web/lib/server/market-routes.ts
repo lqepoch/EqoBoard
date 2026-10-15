@@ -7,7 +7,8 @@ import { fetchGateway, relayGatewayJson, type GatewayPath } from "./gateway";
 
 export const TICKER_PATTERN = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 export const OCC_PATTERN = /^[A-Z0-9]{1,6}\d{6}[CP]\d{8}$/u;
-export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+export const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -16,7 +17,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+  return (
+    Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+  );
 }
 
 function routeError(status: number, error: string): NextResponse {
@@ -48,7 +51,9 @@ export async function postGatewayJson(
   request: Request,
   permission: Permission,
   path: GatewayPath,
-  parseBody: (value: unknown) => Readonly<{ ok: true; body: unknown }> | Readonly<{ ok: false; error: string }>,
+  parseBody: (
+    value: unknown,
+  ) => Readonly<{ ok: true; body: unknown }> | Readonly<{ ok: false; error: string }>,
 ): Promise<NextResponse> {
   const authorization = await authorizeGatewayRequest(request, permission);
   if (!authorization.ok) return authorization.response;

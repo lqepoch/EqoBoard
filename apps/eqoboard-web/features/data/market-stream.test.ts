@@ -8,7 +8,9 @@ describe("shared market stream frame parser", () => {
     expect(parseGatewayEventBatch(JSON.stringify([event]))).toEqual([event]);
     expect(parseGatewayEventBatch("not-json")).toBeNull();
     expect(parseGatewayEventBatch(JSON.stringify({ kind: "stock_quote" }))).toBeNull();
-    expect(parseGatewayEventBatch(JSON.stringify(Array.from({ length: 257 }, () => event)))).toBeNull();
+    expect(
+      parseGatewayEventBatch(JSON.stringify(Array.from({ length: 257 }, () => event))),
+    ).toBeNull();
     expect(parseGatewayEventBatch("x".repeat(1024 * 1024 + 1))).toBeNull();
   });
 });

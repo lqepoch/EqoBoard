@@ -3,7 +3,9 @@ import { researchWidgetRegistrations } from "./registrations";
 
 describe("native Yahoo research registration", () => {
   it("keeps the terminal entry as a portal card and scopes observations to the Yahoo read", () => {
-    const registration = researchWidgetRegistrations.find((item) => item.manifest.id === "eqoboard.research.daily-history");
+    const registration = researchWidgetRegistrations.find(
+      (item) => item.manifest.id === "eqoboard.research.daily-history",
+    );
     expect(registration).toBeDefined();
     expect(registration?.manifest.requiredPermissions).toEqual([]);
     expect(registration?.allowedReadOperations).toEqual(["research.yahoo.daily"]);

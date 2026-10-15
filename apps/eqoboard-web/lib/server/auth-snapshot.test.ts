@@ -19,7 +19,10 @@ function setOidcEnvironment(mode: "terminal" | "research"): void {
   vi.stubEnv("EQO_OIDC_CLIENT_ID", "native-client");
   vi.stubEnv("EQO_OIDC_CLIENT_SECRET", "oidc-client-secret-is-not-a-signer");
   vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
-  vi.stubEnv("EQO_PUBLIC_ORIGIN", mode === "terminal" ? "https://terminal.example.test" : "https://research.example.test");
+  vi.stubEnv(
+    "EQO_PUBLIC_ORIGIN",
+    mode === "terminal" ? "https://terminal.example.test" : "https://research.example.test",
+  );
   if (mode === "terminal") {
     vi.stubEnv("EQO_GATEWAY_JWT_SECRET", "g".repeat(64));
     vi.stubEnv("MDP_TERMINAL_JWT_SECRET", "m".repeat(64));
@@ -59,7 +62,9 @@ describe("server auth UI snapshot", () => {
     expect(research.runtimeMode).toBe("research");
     expect(research.researchOrigin).toBeNull();
     expect(research.permissions).toEqual(["market:read", "research:private-read", "research:read"]);
-    expect(research.storagePartition).toBe(`native-research-v1-${terminal.storagePartition?.slice("native-terminal-v1-".length)}`);
+    expect(research.storagePartition).toBe(
+      `native-research-v1-${terminal.storagePartition?.slice("native-terminal-v1-".length)}`,
+    );
   });
 
   it("keeps valid OIDC sessions available when optional market signers are missing", async () => {
@@ -74,10 +79,16 @@ describe("server auth UI snapshot", () => {
 
     setOidcEnvironment("terminal");
     for (const name of [
-      "EQO_GATEWAY_JWT_SECRET", "MDP_TERMINAL_JWT_SECRET", "QUANT_TERMINAL_JWT_SECRET",
-      "ENGINE_TERMINAL_JWT_SECRET", "EQO_RESEARCH_JWT_SECRET", "MDP_RESEARCH_JWT_SECRET",
-      "QUANT_RESEARCH_JWT_SECRET", "ENGINE_RESEARCH_JWT_SECRET",
-    ]) vi.stubEnv(name, "");
+      "EQO_GATEWAY_JWT_SECRET",
+      "MDP_TERMINAL_JWT_SECRET",
+      "QUANT_TERMINAL_JWT_SECRET",
+      "ENGINE_TERMINAL_JWT_SECRET",
+      "EQO_RESEARCH_JWT_SECRET",
+      "MDP_RESEARCH_JWT_SECRET",
+      "QUANT_RESEARCH_JWT_SECRET",
+      "ENGINE_RESEARCH_JWT_SECRET",
+    ])
+      vi.stubEnv(name, "");
     const terminal = await getAuthUiSnapshot();
     expect(terminal.authenticated).toBe(true);
     expect(terminal.runtimeMode).toBe("terminal");

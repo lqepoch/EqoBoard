@@ -90,7 +90,15 @@ async function scanRegion(
   limit: number,
 ): Promise<ResearchMarketRow[]> {
   const rows = await fetchTradingViewRows(`https://scanner.tradingview.com/${region}/scan`, {
-    columns: ["description", "close", "change", "market_cap_basic", "sector", "volume", "fundamental_currency_code"],
+    columns: [
+      "description",
+      "close",
+      "change",
+      "market_cap_basic",
+      "sector",
+      "volume",
+      "fundamental_currency_code",
+    ],
     filter: [
       { left: "type", operation: "equal", right: "stock" },
       { left: "typespecs", operation: "has", right: ["common"] },
@@ -110,32 +118,43 @@ async function scanRegion(
     const sector = stringOrNull(valuesAt(row.values, 4)) ?? "Other";
     const volume = finiteNumber(valuesAt(row.values, 5));
     const currency = stringOrNull(valuesAt(row.values, 6), 8)?.toUpperCase() ?? null;
-    return [Object.freeze({
-      symbol,
-      name,
-      price: scannerClose,
-      changePercent: change,
-      volume,
-      marketCap: localCap,
-      marketCapCurrency: currency,
-      marketCapEur: null,
-      marketCapEurAsOf: null,
-      sector,
-      exchange,
-      country,
-      priceSource: "TradingView scanner",
-      priceAsOf: null,
-      marketCapSource: "TradingView scanner",
-      marketCapAsOf: null,
-      sourceMode: null,
-      sourceLabel: null,
-    })];
+    return [
+      Object.freeze({
+        symbol,
+        name,
+        price: scannerClose,
+        changePercent: change,
+        volume,
+        marketCap: localCap,
+        marketCapCurrency: currency,
+        marketCapEur: null,
+        marketCapEurAsOf: null,
+        sector,
+        exchange,
+        country,
+        priceSource: "TradingView scanner",
+        priceAsOf: null,
+        marketCapSource: "TradingView scanner",
+        marketCapAsOf: null,
+        sourceMode: null,
+        sourceLabel: null,
+      }),
+    ];
   });
 }
 
 async function scanUs(limit: number): Promise<ResearchMarketRow[]> {
   const rows = await fetchTradingViewRows("https://scanner.tradingview.com/america/scan", {
-    columns: ["description", "close", "change", "market_cap_basic", "sector", "volume", "exchange", "fundamental_currency_code"],
+    columns: [
+      "description",
+      "close",
+      "change",
+      "market_cap_basic",
+      "sector",
+      "volume",
+      "exchange",
+      "fundamental_currency_code",
+    ],
     filter: [
       { left: "type", operation: "equal", right: "stock" },
       { left: "typespecs", operation: "has", right: ["common"] },
@@ -148,52 +167,71 @@ async function scanUs(limit: number): Promise<ResearchMarketRow[]> {
     if (!symbol) return [];
     const exchange = stringOrNull(valuesAt(row.values, 6), 24) ?? "";
     if (!exchange || exchange === "OTC") return [];
-    return [Object.freeze({
-      symbol,
-      name: stringOrNull(valuesAt(row.values, 0), 160) ?? symbol,
-      // The scanner close is deliberately not treated as a U.S. price. It is replaced only by a Gateway SIP snapshot.
-      price: null,
-      changePercent: null,
-      volume: null,
-      marketCap: finiteNumber(valuesAt(row.values, 3)),
-      marketCapCurrency: stringOrNull(valuesAt(row.values, 7), 8)?.toUpperCase() ?? null,
-      marketCapEur: null,
-      marketCapEurAsOf: null,
-      sector: stringOrNull(valuesAt(row.values, 4)) ?? "Other",
-      exchange,
-      country: "United States",
-      priceSource: "awaiting Gateway SIP snapshot",
-      priceAsOf: null,
-      marketCapSource: "TradingView scanner",
-      marketCapAsOf: null,
-      sourceMode: null,
-      sourceLabel: null,
-    })];
+    return [
+      Object.freeze({
+        symbol,
+        name: stringOrNull(valuesAt(row.values, 0), 160) ?? symbol,
+        // The scanner close is deliberately not treated as a U.S. price. It is replaced only by a Gateway SIP snapshot.
+        price: null,
+        changePercent: null,
+        volume: null,
+        marketCap: finiteNumber(valuesAt(row.values, 3)),
+        marketCapCurrency: stringOrNull(valuesAt(row.values, 7), 8)?.toUpperCase() ?? null,
+        marketCapEur: null,
+        marketCapEurAsOf: null,
+        sector: stringOrNull(valuesAt(row.values, 4)) ?? "Other",
+        exchange,
+        country: "United States",
+        priceSource: "awaiting Gateway SIP snapshot",
+        priceAsOf: null,
+        marketCapSource: "TradingView scanner",
+        marketCapAsOf: null,
+        sourceMode: null,
+        sourceLabel: null,
+      }),
+    ];
   });
 }
 
-async function loadEurFxRates(): Promise<Readonly<Record<string, Readonly<{ rate: number; asOf: string }>>>> {
+async function loadEurFxRates(): Promise<
+  Readonly<Record<string, Readonly<{ rate: number; asOf: string }>>>
+> {
   const rates: Record<string, { rate: number; asOf: string }> = { EUR: { rate: 1, asOf: "" } };
-  await Promise.all(Object.entries(EU_FX).map(async ([currency, spec]) => {
-    const point = await readEcbLatest(spec.flow, spec.key);
-    if (point) rates[currency] = { rate: point.value, asOf: point.date };
-  }));
+  await Promise.all(
+    Object.entries(EU_FX).map(async ([currency, spec]) => {
+      const point = await readEcbLatest(spec.flow, spec.key);
+      if (point) rates[currency] = { rate: point.value, asOf: point.date };
+    }),
+  );
   return rates;
 }
 
-function applyEurRates(rows: readonly ResearchMarketRow[], rates: Readonly<Record<string, Readonly<{ rate: number; asOf: string }>>>): ResearchMarketRow[] {
+function applyEurRates(
+  rows: readonly ResearchMarketRow[],
+  rates: Readonly<Record<string, Readonly<{ rate: number; asOf: string }>>>,
+): ResearchMarketRow[] {
   return rows.map((row) => {
     const fx = row.marketCapCurrency ? rates[row.marketCapCurrency] : undefined;
     return Object.freeze({
       ...row,
-      marketCapEur: row.marketCap !== null && fx && fx.rate > 0 ? row.marketCap / fx.rate : row.marketCapCurrency === "EUR" ? row.marketCap : null,
+      marketCapEur:
+        row.marketCap !== null && fx && fx.rate > 0
+          ? row.marketCap / fx.rate
+          : row.marketCapCurrency === "EUR"
+            ? row.marketCap
+            : null,
       marketCapEurAsOf: fx?.asOf || null,
-      marketCapSource: row.marketCapCurrency === "EUR" || fx ? "TradingView scanner + ECB FX" : row.marketCapSource,
+      marketCapSource:
+        row.marketCapCurrency === "EUR" || fx
+          ? "TradingView scanner + ECB FX"
+          : row.marketCapSource,
     });
   });
 }
 
-export async function loadMarketMetadata(market: "us" | "eu"): Promise<ProviderResult<ResearchMarketData>> {
+export async function loadMarketMetadata(
+  market: "us" | "eu",
+): Promise<ProviderResult<ResearchMarketData>> {
   let rows: ResearchMarketRow[] = [];
   let failedItems = 0;
   let truncated = false;
@@ -201,7 +239,9 @@ export async function loadMarketMetadata(market: "us" | "eu"): Promise<ProviderR
     rows = await scanUs(1500);
     truncated = rows.length >= 1500;
   } else {
-    const settled = await Promise.allSettled(EU_MARKETS.map((entry) => scanRegion(entry.region, entry.exchange, entry.country, 300)));
+    const settled = await Promise.allSettled(
+      EU_MARKETS.map((entry) => scanRegion(entry.region, entry.exchange, entry.country, 300)),
+    );
     for (const result of settled) {
       if (result.status === "fulfilled") {
         rows.push(...result.value);
@@ -233,20 +273,30 @@ export async function loadMarketMetadata(market: "us" | "eu"): Promise<ProviderR
     source: SOURCE,
     data: { market, rows, coverage: initialCoverage, truncated },
     asOf: null,
-    complete: market === "eu" && failedItems === 0 && rows.every((row) => row.price !== null && row.priceAsOf !== null),
+    complete:
+      market === "eu" &&
+      failedItems === 0 &&
+      rows.every((row) => row.price !== null && row.priceAsOf !== null),
     failedItems,
     truncated,
-    warning: market === "us"
-      ? "U.S. prices are replaced only by the authorized Rust Gateway SIP snapshot response; scanner prices are not exposed as U.S. market prices."
-      : "European scanner values have no source timestamp; market-cap FX conversion carries a separate ECB observation date.",
+    warning:
+      market === "us"
+        ? "U.S. prices are replaced only by the authorized Rust Gateway SIP snapshot response; scanner prices are not exposed as U.S. market prices."
+        : "European scanner values have no source timestamp; market-cap FX conversion carries a separate ECB observation date.",
   };
 }
 
 function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
-function snapshotText(snapshot: Record<string, unknown>, key: string, fallback?: unknown): string | null {
+function snapshotText(
+  snapshot: Record<string, unknown>,
+  key: string,
+  fallback?: unknown,
+): string | null {
   const value = Object.hasOwn(snapshot, key) ? snapshot[key] : fallback;
   return stringOrNull(value, 96);
 }
@@ -258,7 +308,10 @@ function snapshotTime(snapshot: Record<string, unknown>): string | null {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
 }
 
-export function attachSipSnapshots(data: ResearchMarketData, batch: GatewaySnapshotBatch): ResearchMarketData {
+export function attachSipSnapshots(
+  data: ResearchMarketData,
+  batch: GatewaySnapshotBatch,
+): ResearchMarketData {
   if (data.market !== "us" || batch.feed !== "sip") return data;
   const snapshots = new Map<string, Record<string, unknown>>();
   for (const raw of batch.snapshots) {
@@ -279,14 +332,18 @@ export function attachSipSnapshots(data: ResearchMarketData, batch: GatewaySnaps
       price,
       changePercent: snapshot ? finiteNumber(snapshot.change_percent) : null,
       volume: snapshot ? finiteNumber(snapshot.volume) : null,
-      priceSource: snapshotText(snapshot ?? {}, "source_label", batch.sourceLabel) ?? "source unknown (Gateway SIP endpoint)",
+      priceSource:
+        snapshotText(snapshot ?? {}, "source_label", batch.sourceLabel) ??
+        "source unknown (Gateway SIP endpoint)",
       priceAsOf: asOf,
       sourceMode: snapshotText(snapshot ?? {}, "source_mode", batch.sourceMode),
       sourceLabel: snapshotText(snapshot ?? {}, "source_label", batch.sourceLabel),
     });
   });
   const requested = data.rows.length;
-  const snapshotsCount = [...snapshots.keys()].filter((symbol) => data.rows.some((row) => row.symbol === symbol)).length;
+  const snapshotsCount = [...snapshots.keys()].filter((symbol) =>
+    data.rows.some((row) => row.symbol === symbol),
+  ).length;
   const coverage = {
     requested,
     snapshots: snapshotsCount,
@@ -295,7 +352,8 @@ export function attachSipSnapshots(data: ResearchMarketData, batch: GatewaySnaps
     snapshotComplete: requested > 0 && snapshotsCount === requested,
     priceComplete: requested > 0 && priced === requested,
     timeComplete: requested > 0 && timed === requested,
-    complete: requested > 0 && snapshotsCount === requested && priced === requested && timed === requested,
+    complete:
+      requested > 0 && snapshotsCount === requested && priced === requested && timed === requested,
   };
   return Object.freeze({ ...data, rows, coverage });
 }
@@ -311,14 +369,31 @@ export type ScreenerInput = Readonly<{
   limit?: number;
 }>;
 
-export function filterMarketData(data: ResearchMarketData, input: ScreenerInput): ResearchMarketData {
-  const marketCapValue = (row: ResearchMarketRow) => data.market === "eu" ? row.marketCapEur : row.marketCap;
+export function filterMarketData(
+  data: ResearchMarketData,
+  input: ScreenerInput,
+): ResearchMarketData {
+  const marketCapValue = (row: ResearchMarketRow) =>
+    data.market === "eu" ? row.marketCapEur : row.marketCap;
   let rows = data.rows.filter((row) => {
     if (input.sector && row.sector !== input.sector) return false;
-    if (input.marketCapMin !== undefined && (marketCapValue(row) === null || marketCapValue(row)! < input.marketCapMin)) return false;
-    if (input.changeMin !== undefined && (row.changePercent === null || row.changePercent < input.changeMin)) return false;
-    if (input.changeMax !== undefined && (row.changePercent === null || row.changePercent > input.changeMax)) return false;
-    if (input.volumeMin !== undefined && (row.volume === null || row.volume < input.volumeMin)) return false;
+    if (
+      input.marketCapMin !== undefined &&
+      (marketCapValue(row) === null || marketCapValue(row)! < input.marketCapMin)
+    )
+      return false;
+    if (
+      input.changeMin !== undefined &&
+      (row.changePercent === null || row.changePercent < input.changeMin)
+    )
+      return false;
+    if (
+      input.changeMax !== undefined &&
+      (row.changePercent === null || row.changePercent > input.changeMax)
+    )
+      return false;
+    if (input.volumeMin !== undefined && (row.volume === null || row.volume < input.volumeMin))
+      return false;
     return true;
   });
   const sort = input.sort ?? "marketCap";

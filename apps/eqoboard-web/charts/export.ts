@@ -31,7 +31,18 @@ export function buildChartCsv<TRow>(
   const loadedStart = selected[0] ? isoTime(Number(selected[0].time)) : "unavailable";
   const loadedEnd = selected.at(-1) ? isoTime(Number(selected.at(-1)!.time)) : "unavailable";
   const lines: string[] = [];
-  const header = ["record_type", "field", "value", "timestamp_utc", "open", "high", "low", "close", "volume", "precision"];
+  const header = [
+    "record_type",
+    "field",
+    "value",
+    "timestamp_utc",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "precision",
+  ];
   lines.push(header.map((cell) => csvField(cell)).join(","));
 
   const metadata: ReadonlyArray<readonly [string, string]> = [
@@ -50,11 +61,16 @@ export function buildChartCsv<TRow>(
     ["loaded_start_utc", loadedStart],
     ["loaded_end_utc", loadedEnd],
     ["export_truncated", truncated ? "true; newest rows retained" : "false"],
-    ...evidence.evidence.slice(0, 32).map(({ label, value }) => [`evidence:${label}`, value] as const),
+    ...evidence.evidence
+      .slice(0, 32)
+      .map(({ label, value }) => [`evidence:${label}`, value] as const),
   ];
   for (const [field, value] of metadata) {
-    lines.push(["metadata", field, value, "", "", "", "", "", "", ""].map((cell, index) =>
-      csvField(cell, index === 1 || index === 2)).join(","));
+    lines.push(
+      ["metadata", field, value, "", "", "", "", "", "", ""]
+        .map((cell, index) => csvField(cell, index === 1 || index === 2))
+        .join(","),
+    );
   }
 
   for (const bar of selected) {
@@ -62,30 +78,59 @@ export function buildChartCsv<TRow>(
     const values = exact
       ? [exact.open, exact.high, exact.low, exact.close, exact.volume]
       : [bar.open, bar.high, bar.low, bar.close, bar.volume].map(String);
-    lines.push([
-      "bar", "loaded_observation", "", isoTime(Number(bar.time)), ...values,
-      exact ? "exact decimal tokens from validated source row" : "finite chart projection; source decimals unavailable",
-    ].map((cell) => csvField(String(cell))).join(","));
+    lines.push(
+      [
+        "bar",
+        "loaded_observation",
+        "",
+        isoTime(Number(bar.time)),
+        ...values,
+        exact
+          ? "exact decimal tokens from validated source row"
+          : "finite chart projection; source decimals unavailable",
+      ]
+        .map((cell) => csvField(String(cell)))
+        .join(","),
+    );
   }
-  return { csv: `${lines.join("\r\n")}\r\n`, exportedRows: selected.length, loadedRows: bars.length, truncated };
+  return {
+    csv: `${lines.join("\r\n")}\r\n`,
+    exportedRows: selected.length,
+    loadedRows: bars.length,
+    truncated,
+  };
 }
 
 function safeFilenamePart(value: string): string {
-  const normalized = value.toUpperCase().replace(/[^A-Z0-9._-]+/gu, "-").replace(/^[.-]+|[.-]+$/gu, "");
+  const normalized = value
+    .toUpperCase()
+    .replace(/[^A-Z0-9._-]+/gu, "-")
+    .replace(/^[.-]+|[.-]+$/gu, "");
   return normalized.slice(0, 24) || "CHART";
 }
 
-export function chartExportFilename(symbol: string, extension: "csv" | "png", now = new Date()): string {
+export function chartExportFilename(
+  symbol: string,
+  extension: "csv" | "png",
+  now = new Date(),
+): string {
   const timestamp = now.toISOString().replace(/[:.]/gu, "-");
   return `${safeFilenamePart(symbol)}-loaded-chart-${timestamp}.${extension}`;
 }
 
 function boundedCaption(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f]/gu, " ").replace(/\s+/gu, " ").trim().slice(0, 220);
+  return value
+    .replace(/[\u0000-\u001f\u007f]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 220);
 }
 
 /** The PNG image carries the same source/window caveats as the accompanying CSV. */
-export function chartPngCaptionLines(symbol: string, evidence: ChartDisplayEvidence): readonly string[] {
+export function chartPngCaptionLines(
+  symbol: string,
+  evidence: ChartDisplayEvidence,
+): readonly string[] {
   return [
     `${boundedCaption(symbol)} · explicitly loaded chart rows only · not full history`,
     `Source ${boundedCaption(evidence.source)} · Provider ${boundedCaption(evidence.provider)} · Feed ${boundedCaption(evidence.feed)} · As of ${boundedCaption(evidence.asOf)}`,
@@ -112,7 +157,9 @@ export function composeChartPngCanvas(
   context.drawImage(chartCanvas, 0, captionHeight);
   context.fillStyle = "#d9e2ef";
   context.font = "12px system-ui, sans-serif";
-  captions.forEach((line, index) => context.fillText(line, 12, 17 + index * 17, Math.max(0, output.width - 24)));
+  captions.forEach((line, index) =>
+    context.fillText(line, 12, 17 + index * 17, Math.max(0, output.width - 24)),
+  );
   return output;
 }
 

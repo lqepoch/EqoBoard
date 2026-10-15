@@ -1,5 +1,8 @@
 export class ProviderHttpError extends Error {
-  constructor(readonly status: number | null, message = "provider-unavailable") {
+  constructor(
+    readonly status: number | null,
+    message = "provider-unavailable",
+  ) {
     super(message);
     this.name = "ProviderHttpError";
   }
@@ -20,15 +23,25 @@ const DEFAULT_MAX_BYTES = 512 * 1024;
 export async function readProviderText(url: URL, options: ProviderRequest = {}): Promise<string> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 250 || timeoutMs > 15_000 ||
-      !Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 4 * 1024 * 1024) {
+  if (
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs < 250 ||
+    timeoutMs > 15_000 ||
+    !Number.isInteger(maxBytes) ||
+    maxBytes < 1 ||
+    maxBytes > 4 * 1024 * 1024
+  ) {
     throw new TypeError("invalid-provider-request-bounds");
   }
   let response: Response;
   try {
     response = await fetch(url, {
       method: options.method ?? "GET",
-      headers: { Accept: "application/json,text/csv,application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.1", ...options.headers },
+      headers: {
+        Accept:
+          "application/json,text/csv,application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.1",
+        ...options.headers,
+      },
       ...(options.body === undefined ? {} : { body: options.body }),
       redirect: "error",
       cache: "no-store",
@@ -39,7 +52,8 @@ export async function readProviderText(url: URL, options: ProviderRequest = {}):
   }
   if (!response.ok) throw new ProviderHttpError(response.status);
   const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new ProviderHttpError(502, "provider-response-too-large");
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes)
+    throw new ProviderHttpError(502, "provider-response-too-large");
   if (!response.body) return "";
 
   const reader = response.body.getReader();
@@ -73,7 +87,10 @@ export async function readProviderText(url: URL, options: ProviderRequest = {}):
   }
 }
 
-export async function readProviderJson<T = unknown>(url: URL, options: ProviderRequest = {}): Promise<T> {
+export async function readProviderJson<T = unknown>(
+  url: URL,
+  options: ProviderRequest = {},
+): Promise<T> {
   const text = await readProviderText(url, options);
   try {
     return JSON.parse(text) as T;

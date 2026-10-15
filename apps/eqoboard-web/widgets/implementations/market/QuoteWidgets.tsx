@@ -60,14 +60,54 @@ const DEFAULT_COL_DEF: ColDef<StockGridRow> = Object.freeze({
 
 const COLUMN_DEFS: readonly ColDef<StockGridRow>[] = Object.freeze([
   { field: "symbol", headerName: "Symbol", pinned: "left", minWidth: 95 },
-  { field: "last", headerName: "Snapshot last", valueFormatter: ({ value }) => formatNumber(value), minWidth: 125 },
-  { field: "bid", headerName: "Snapshot bid", valueFormatter: ({ value }) => formatNumber(value), minWidth: 125 },
-  { field: "ask", headerName: "Snapshot ask", valueFormatter: ({ value }) => formatNumber(value), minWidth: 125 },
-  { field: "liveBid", headerName: "Stream bid", valueFormatter: ({ value }) => formatNumber(value), minWidth: 110 },
-  { field: "liveAsk", headerName: "Stream ask", valueFormatter: ({ value }) => formatNumber(value), minWidth: 110 },
-  { field: "liveTradePrice", headerName: "Latest trade", valueFormatter: ({ value }) => formatNumber(value), minWidth: 120 },
-  { field: "changePercent", headerName: "Change %", valueFormatter: ({ value }) => formatNumber(value), minWidth: 110 },
-  { field: "volume", headerName: "Volume", valueFormatter: ({ value }) => formatNumber(value, 0), minWidth: 100 },
+  {
+    field: "last",
+    headerName: "Snapshot last",
+    valueFormatter: ({ value }) => formatNumber(value),
+    minWidth: 125,
+  },
+  {
+    field: "bid",
+    headerName: "Snapshot bid",
+    valueFormatter: ({ value }) => formatNumber(value),
+    minWidth: 125,
+  },
+  {
+    field: "ask",
+    headerName: "Snapshot ask",
+    valueFormatter: ({ value }) => formatNumber(value),
+    minWidth: 125,
+  },
+  {
+    field: "liveBid",
+    headerName: "Stream bid",
+    valueFormatter: ({ value }) => formatNumber(value),
+    minWidth: 110,
+  },
+  {
+    field: "liveAsk",
+    headerName: "Stream ask",
+    valueFormatter: ({ value }) => formatNumber(value),
+    minWidth: 110,
+  },
+  {
+    field: "liveTradePrice",
+    headerName: "Latest trade",
+    valueFormatter: ({ value }) => formatNumber(value),
+    minWidth: 120,
+  },
+  {
+    field: "changePercent",
+    headerName: "Change %",
+    valueFormatter: ({ value }) => formatNumber(value),
+    minWidth: 110,
+  },
+  {
+    field: "volume",
+    headerName: "Volume",
+    valueFormatter: ({ value }) => formatNumber(value, 0),
+    minWidth: 100,
+  },
   { field: "snapshotEvidence", headerName: "Snapshot source / feed", minWidth: 190 },
   { field: "liveQuoteEvidence", headerName: "Quote stream source / entitlement", minWidth: 220 },
   { field: "liveTradeEvidence", headerName: "Trade stream source / entitlement", minWidth: 220 },
@@ -103,7 +143,11 @@ function emptyRow(symbol: string): StockGridRow {
   });
 }
 
-function rowFromSnapshot(symbol: string, snapshot: StockSnapshotRow | undefined, evidence: string): StockGridRow {
+function rowFromSnapshot(
+  symbol: string,
+  snapshot: StockSnapshotRow | undefined,
+  evidence: string,
+): StockGridRow {
   if (!snapshot) return emptyRow(symbol);
   return Object.freeze({
     symbol,
@@ -123,19 +167,26 @@ function rowFromSnapshot(symbol: string, snapshot: StockSnapshotRow | undefined,
   });
 }
 
-function nullableNumber(record: Readonly<Record<string, unknown>>, key: string): number | null | undefined {
+function nullableNumber(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): number | null | undefined {
   if (!Object.hasOwn(record, key)) return undefined;
   const value = record[key];
-  return value === null || (typeof value === "number" && Number.isFinite(value)) ? value : undefined;
+  return value === null || (typeof value === "number" && Number.isFinite(value))
+    ? value
+    : undefined;
 }
 
 function eventEvidence(record: Readonly<Record<string, unknown>>): string {
-  const source = typeof record.source_label === "string" && record.source_label.length <= 128
-    ? record.source_label
-    : "source unknown";
-  const entitlement = typeof record.source_entitlement === "string" && record.source_entitlement.length <= 64
-    ? record.source_entitlement
-    : "unknown";
+  const source =
+    typeof record.source_label === "string" && record.source_label.length <= 128
+      ? record.source_label
+      : "source unknown";
+  const entitlement =
+    typeof record.source_entitlement === "string" && record.source_entitlement.length <= 64
+      ? record.source_entitlement
+      : "unknown";
   return `${source} · entitlement ${entitlement}`;
 }
 
@@ -158,8 +209,13 @@ function applyGatewayUpdates(
   const targets = new Set(symbols);
 
   for (const [symbol, event] of Object.entries(snapshot.stockQuotes)) {
-    if (!targets.has(symbol) || event.kind !== "stock_quote" ||
-        typeof event.local_sequence !== "number" || event.local_sequence <= (quoteSequences.get(symbol) ?? 0)) continue;
+    if (
+      !targets.has(symbol) ||
+      event.kind !== "stock_quote" ||
+      typeof event.local_sequence !== "number" ||
+      event.local_sequence <= (quoteSequences.get(symbol) ?? 0)
+    )
+      continue;
     const bid = nullableNumber(event, "bid");
     const ask = nullableNumber(event, "ask");
     if (bid === undefined || ask === undefined) continue;
@@ -177,9 +233,16 @@ function applyGatewayUpdates(
   }
 
   for (const event of snapshot.stockTrades) {
-    if (event.kind !== "stock_trade" || typeof event.symbol !== "string" || !targets.has(event.symbol) ||
-        typeof event.local_sequence !== "number" || event.local_sequence <= (tradeSequences.get(event.symbol) ?? 0) ||
-        typeof event.price !== "number" || !Number.isFinite(event.price)) continue;
+    if (
+      event.kind !== "stock_trade" ||
+      typeof event.symbol !== "string" ||
+      !targets.has(event.symbol) ||
+      typeof event.local_sequence !== "number" ||
+      event.local_sequence <= (tradeSequences.get(event.symbol) ?? 0) ||
+      typeof event.price !== "number" ||
+      !Number.isFinite(event.price)
+    )
+      continue;
     const previous = rowMap.get(event.symbol) ?? emptyRow(event.symbol);
     const next = Object.freeze({
       ...previous,
@@ -230,23 +293,15 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
   useEffect(() => {
     if (response.status !== "ready") return;
     const source = sourceFeed(response.value.evidence.source, response.value.evidence.feed);
-    const evidence = response.value.evidence.asOf ? `${source} · as_of ${response.value.evidence.asOf}` : `${source} · as_of unknown`;
+    const evidence = response.value.evidence.asOf
+      ? `${source} · as_of ${response.value.evidence.asOf}`
+      : `${source} · as_of unknown`;
     const bySymbol = new Map(response.value.snapshots.map((row) => [row.symbol, row]));
     const next = requested.map((symbol) => rowFromSnapshot(symbol, bySymbol.get(symbol), evidence));
     rowsRef.current = new Map(next.map((row) => [row.symbol, row]));
     setRows(next);
     if (apiRef.current) apiRef.current.setGridOption("rowData", next);
-    applyGatewayUpdates(apiRef.current, rowsRef.current, host.market.getSnapshot(), requested, quoteSequences.current, tradeSequences.current, gatewayInstance);
-  }, [host.market, requested, response]);
-
-  const onGridReady = useCallback((event: GridReadyEvent<StockGridRow>) => {
-    apiRef.current = event.api;
-    event.api.setGridOption("rowData", rowsRef.current.size ? [...rowsRef.current.values()] : rows);
-    applyGatewayUpdates(apiRef.current, rowsRef.current, host.market.getSnapshot(), requested, quoteSequences.current, tradeSequences.current, gatewayInstance);
-  }, [host.market, requested, rows]);
-
-  useEffect(() => {
-    const update = () => applyGatewayUpdates(
+    applyGatewayUpdates(
       apiRef.current,
       rowsRef.current,
       host.market.getSnapshot(),
@@ -255,25 +310,69 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
       tradeSequences.current,
       gatewayInstance,
     );
+  }, [host.market, requested, response]);
+
+  const onGridReady = useCallback(
+    (event: GridReadyEvent<StockGridRow>) => {
+      apiRef.current = event.api;
+      event.api.setGridOption(
+        "rowData",
+        rowsRef.current.size ? [...rowsRef.current.values()] : rows,
+      );
+      applyGatewayUpdates(
+        apiRef.current,
+        rowsRef.current,
+        host.market.getSnapshot(),
+        requested,
+        quoteSequences.current,
+        tradeSequences.current,
+        gatewayInstance,
+      );
+    },
+    [host.market, requested, rows],
+  );
+
+  useEffect(() => {
+    const update = () =>
+      applyGatewayUpdates(
+        apiRef.current,
+        rowsRef.current,
+        host.market.getSnapshot(),
+        requested,
+        quoteSequences.current,
+        tradeSequences.current,
+        gatewayInstance,
+      );
     return host.market.subscribe(update);
   }, [host.market, requested]);
 
-  const dataState = response.status === "ready" ? "ready"
-    : response.status === "unsupported" ? "unsupported"
-      : response.status === "error" ? "error"
-        : response.status === "loading" ? "loading" : "unavailable";
-  const dataDetail = response.status === "error" || response.status === "unsupported"
-    ? response.detail
-    : response.status === "ready"
-      ? `${requested.length} symbol(s) · ${sourceFeed(response.value.evidence.source, response.value.evidence.feed)} · as_of ${response.value.evidence.asOf ?? "unknown"}; snapshot and stream values remain separate.`
-      : "Waiting for the bounded same-origin snapshot read.";
+  const dataState =
+    response.status === "ready"
+      ? "ready"
+      : response.status === "unsupported"
+        ? "unsupported"
+        : response.status === "error"
+          ? "error"
+          : response.status === "loading"
+            ? "loading"
+            : "unavailable";
+  const dataDetail =
+    response.status === "error" || response.status === "unsupported"
+      ? response.detail
+      : response.status === "ready"
+        ? `${requested.length} symbol(s) · ${sourceFeed(response.value.evidence.source, response.value.evidence.feed)} · as_of ${response.value.evidence.asOf ?? "unknown"}; snapshot and stream values remain separate.`
+        : "Waiting for the bounded same-origin snapshot read.";
 
   return (
     <section className={styles.marketWidget} data-testid={testId} aria-label={title}>
       <h2>{title}</h2>
       <ResourceState state={dataState} title="Snapshot data" detail={dataDetail} />
       <StockFeedState host={host} />
-      {symbols.length > 50 ? <p className={styles.notice}>Snapshot request is capped at 50 symbols; stream targets remain shared by the host.</p> : null}
+      {symbols.length > 50 ? (
+        <p className={styles.notice}>
+          Snapshot request is capped at 50 symbols; stream targets remain shared by the host.
+        </p>
+      ) : null}
       <div className={styles.marketGrid} role="region" aria-label={`${title} data grid`}>
         <AgGridReact<StockGridRow>
           columnDefs={columns}
@@ -284,68 +383,130 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
           theme={themeQuartz}
         />
       </div>
-      <p className={styles.marketFootnote}>Snapshot `as_of` and per-event source/entitlement fields are preserved. A stream print is not inferred to be a buy or sell.</p>
+      <p className={styles.marketFootnote}>
+        Snapshot `as_of` and per-event source/entitlement fields are preserved. A stream print is
+        not inferred to be a buy or sell.
+      </p>
     </section>
   );
 }
 
 export function QuoteWidget({ host, instance, inputs }: QuoteWidgetProps) {
   const symbol = inputs.symbol ?? "";
-  return <QuoteTable title="Quote" symbols={symbol ? [symbol] : []} host={host} instanceId={instance.instanceId} testId="market-quote-widget" />;
+  return (
+    <QuoteTable
+      title="Quote"
+      symbols={symbol ? [symbol] : []}
+      host={host}
+      instanceId={instance.instanceId}
+      testId="market-quote-widget"
+    />
+  );
 }
 
 export function WatchlistWidget({ host, instance, inputs }: QuoteWidgetProps) {
   const symbols = inputs.watchlist ?? [];
-  return <QuoteTable title="Watchlist" symbols={symbols} host={host} instanceId={instance.instanceId} testId="market-watchlist-widget" />;
+  return (
+    <QuoteTable
+      title="Watchlist"
+      symbols={symbols}
+      host={host}
+      instanceId={instance.instanceId}
+      testId="market-watchlist-widget"
+    />
+  );
 }
 
 function StockFeedState({ host }: Readonly<{ host: QuoteWidgetHost }>) {
   const [feed, setFeed] = useState(() => {
     const snapshot = host.market.getSnapshot();
-    return { freshness: snapshot.feeds.stocks.freshness, transportState: snapshot.transportState,
-      connectionEpoch: snapshot.feeds.stocks.connectionEpoch, lastSequence: snapshot.feeds.stocks.lastSequence,
-      coverage: snapshot.leases.stocks.coverage, selectedCount: snapshot.leases.stocks.selectedCount,
-      leasedCount: snapshot.leases.stocks.leasedCount, omittedCount: snapshot.leases.stocks.omittedCount };
+    return {
+      freshness: snapshot.feeds.stocks.freshness,
+      transportState: snapshot.transportState,
+      connectionEpoch: snapshot.feeds.stocks.connectionEpoch,
+      lastSequence: snapshot.feeds.stocks.lastSequence,
+      coverage: snapshot.leases.stocks.coverage,
+      selectedCount: snapshot.leases.stocks.selectedCount,
+      leasedCount: snapshot.leases.stocks.leasedCount,
+      omittedCount: snapshot.leases.stocks.omittedCount,
+    };
   });
-  useEffect(() => host.market.subscribe(() => {
-    const snapshot = host.market.getSnapshot();
-    const next = { freshness: snapshot.feeds.stocks.freshness, transportState: snapshot.transportState,
-      connectionEpoch: snapshot.feeds.stocks.connectionEpoch, lastSequence: snapshot.feeds.stocks.lastSequence,
-      coverage: snapshot.leases.stocks.coverage, selectedCount: snapshot.leases.stocks.selectedCount,
-      leasedCount: snapshot.leases.stocks.leasedCount, omittedCount: snapshot.leases.stocks.omittedCount };
-    setFeed((current) => Object.keys(next).every((key) => current[key as keyof typeof current] === next[key as keyof typeof next]) ? current : next);
-  }), [host.market]);
-  const leaseState = feed.coverage === "pending" ? "loading"
-    : feed.coverage === "complete" ? "ready"
-      : feed.coverage === "partial" ? "partial"
-        : feed.coverage === "error" ? "error" : "unknown";
-  return <ResourceState
-    state={feed.freshness}
-    title="Gateway stock stream freshness"
-    detail={`transport ${feed.transportState}; connection epoch ${feed.connectionEpoch ?? "unknown"}; last local sequence ${feed.lastSequence ?? "unknown"}; Gateway lease acknowledgement exposes counts only, exact active symbols are unverified.`}
-    metadata={<span data-state={leaseState}>lease {leaseState}; selected {feed.selectedCount}; acknowledged {feed.leasedCount}; omitted {feed.omittedCount}; exact membership unverified</span>}
-  />;
+  useEffect(
+    () =>
+      host.market.subscribe(() => {
+        const snapshot = host.market.getSnapshot();
+        const next = {
+          freshness: snapshot.feeds.stocks.freshness,
+          transportState: snapshot.transportState,
+          connectionEpoch: snapshot.feeds.stocks.connectionEpoch,
+          lastSequence: snapshot.feeds.stocks.lastSequence,
+          coverage: snapshot.leases.stocks.coverage,
+          selectedCount: snapshot.leases.stocks.selectedCount,
+          leasedCount: snapshot.leases.stocks.leasedCount,
+          omittedCount: snapshot.leases.stocks.omittedCount,
+        };
+        setFeed((current) =>
+          Object.keys(next).every(
+            (key) => current[key as keyof typeof current] === next[key as keyof typeof next],
+          )
+            ? current
+            : next,
+        );
+      }),
+    [host.market],
+  );
+  const leaseState =
+    feed.coverage === "pending"
+      ? "loading"
+      : feed.coverage === "complete"
+        ? "ready"
+        : feed.coverage === "partial"
+          ? "partial"
+          : feed.coverage === "error"
+            ? "error"
+            : "unknown";
+  return (
+    <ResourceState
+      state={feed.freshness}
+      title="Gateway stock stream freshness"
+      detail={`transport ${feed.transportState}; connection epoch ${feed.connectionEpoch ?? "unknown"}; last local sequence ${feed.lastSequence ?? "unknown"}; Gateway lease acknowledgement exposes counts only, exact active symbols are unverified.`}
+      metadata={
+        <span data-state={leaseState}>
+          lease {leaseState}; selected {feed.selectedCount}; acknowledged {feed.leasedCount};
+          omitted {feed.omittedCount}; exact membership unverified
+        </span>
+      }
+    />
+  );
 }
 
 function field(record: Readonly<Record<string, unknown>> | null, key: string, max = 128): string {
   const value = record?.[key];
-  return typeof value === "string" && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/u.test(value)
+  return typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= max &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
     ? value
     : "unknown";
 }
 
-function FeedRow({ snapshot, feedName }: Readonly<{ snapshot: MarketHostSnapshot; feedName: "stocks" | "options" }>) {
+function FeedRow({
+  snapshot,
+  feedName,
+}: Readonly<{ snapshot: MarketHostSnapshot; feedName: "stocks" | "options" }>) {
   const feed = snapshot.feeds[feedName];
   const lease = snapshot.leases[feedName];
   const raw = feed.rawStatus;
   const error = raw?.last_error;
-  const errorRecord = error && typeof error === "object" && !Array.isArray(error)
-    ? error as Readonly<Record<string, unknown>>
-    : null;
+  const errorRecord =
+    error && typeof error === "object" && !Array.isArray(error)
+      ? (error as Readonly<Record<string, unknown>>)
+      : null;
   const coverage = raw?.coverage;
-  const coverageRecord = coverage && typeof coverage === "object" && !Array.isArray(coverage)
-    ? coverage as Readonly<Record<string, unknown>>
-    : null;
+  const coverageRecord =
+    coverage && typeof coverage === "object" && !Array.isArray(coverage)
+      ? (coverage as Readonly<Record<string, unknown>>)
+      : null;
   return (
     <article className={styles.feedCard}>
       <h3>{feedName === "stocks" ? "Stocks" : "Options"}</h3>
@@ -356,13 +517,29 @@ function FeedRow({ snapshot, feedName }: Readonly<{ snapshot: MarketHostSnapshot
         metadata={`source mode ${field(raw, "source_mode")}; source ${field(raw, "source_label")}; entitlement ${field(raw, "source_entitlement")}; epoch ${feed.connectionEpoch ?? "unknown"}; sequence ${feed.lastSequence ?? "unknown"}`}
       />
       <ResourceState
-        state={lease.coverage === "pending" ? "loading" : lease.coverage === "complete" ? "ready" : lease.coverage === "partial" ? "partial" : lease.coverage === "error" ? "error" : "unknown"}
+        state={
+          lease.coverage === "pending"
+            ? "loading"
+            : lease.coverage === "complete"
+              ? "ready"
+              : lease.coverage === "partial"
+                ? "partial"
+                : lease.coverage === "error"
+                  ? "error"
+                  : "unknown"
+        }
         title={`${feedName} lease coverage`}
         detail={`requested ${lease.requestedCount}; selected ${lease.selectedCount}; acknowledged ${lease.leasedCount}; omitted ${lease.omittedCount}; max ${typeof coverageRecord?.max === "number" ? coverageRecord.max : "unknown"}; exact active symbols are unverified.`}
         metadata={`coverage complete ${typeof raw?.coverage_complete === "boolean" ? String(raw.coverage_complete) : "unknown"}; resync required ${typeof raw?.resync_required === "boolean" ? String(raw.resync_required) : "unknown"}`}
       />
-      {errorRecord ? <p className={styles.notice}>Gateway error: {field(errorRecord, "class")} · {field(errorRecord, "code")}</p> : null}
-      {raw && typeof raw.decode_error_count === "number" ? <p>Decode errors reported: {raw.decode_error_count}</p> : null}
+      {errorRecord ? (
+        <p className={styles.notice}>
+          Gateway error: {field(errorRecord, "class")} · {field(errorRecord, "code")}
+        </p>
+      ) : null}
+      {raw && typeof raw.decode_error_count === "number" ? (
+        <p>Decode errors reported: {raw.decode_error_count}</p>
+      ) : null}
     </article>
   );
 }
@@ -370,12 +547,19 @@ function FeedRow({ snapshot, feedName }: Readonly<{ snapshot: MarketHostSnapshot
 export function FeedStatusWidget({ host }: MarketHostOnlyWidgetProps) {
   const snapshot = useMarketSnapshot(host);
   return (
-    <section className={styles.marketWidget} data-testid="market-feed-status-widget" aria-label="Market feed status">
+    <section
+      className={styles.marketWidget}
+      data-testid="market-feed-status-widget"
+      aria-label="Market feed status"
+    >
       <h2>Feed status</h2>
       <ResourceState
         state={snapshot.transportState}
         title="Shared Gateway event stream"
-        detail={snapshot.transportError ?? "One host-owned same-origin event stream is shared by market widgets."}
+        detail={
+          snapshot.transportError ??
+          "One host-owned same-origin event stream is shared by market widgets."
+        }
         metadata={`Gateway instance ${snapshot.gatewayInstanceId ?? "unknown"}; sequence watermark ${snapshot.lastSequence ?? "unknown"}`}
       />
       <div className={styles.feedGrid}>
@@ -388,7 +572,11 @@ export function FeedStatusWidget({ host }: MarketHostOnlyWidgetProps) {
 
 export function OrderbookWidget() {
   return (
-    <section className={styles.marketWidget} data-testid="market-orderbook-widget" aria-label="Order book">
+    <section
+      className={styles.marketWidget}
+      data-testid="market-orderbook-widget"
+      aria-label="Order book"
+    >
       <h2>Order book</h2>
       <ResourceState
         state="unsupported"

@@ -16,10 +16,15 @@ const YAHOO_INPUT = {
   adjustment: "adjusted",
 } as const;
 
-const EXPECTED_READ_OPERATIONS: Readonly<Record<NativeDataOperationId, Readonly<{
-  permission: Permission;
-  path: string;
-}>>> = Object.freeze({
+const EXPECTED_READ_OPERATIONS: Readonly<
+  Record<
+    NativeDataOperationId,
+    Readonly<{
+      permission: Permission;
+      path: string;
+    }>
+  >
+> = Object.freeze({
   "market.quotes": { permission: "market:read", path: "/api/quotes?symbols=SPY%2CQQQ" },
   "market.options.chain": { permission: "market:read", path: "/api/options/SPY?expiry=2026-10-16" },
   "market.status": { permission: "market:read", path: "/api/status" },
@@ -40,20 +45,38 @@ const EXPECTED_READ_OPERATIONS: Readonly<Record<NativeDataOperationId, Readonly<
   "engine.preview": { permission: "engine:offline-read", path: "/api/eqo/engine/preview" },
   "research.news": { permission: "research:read", path: "/api/research/data/news?symbol=SPY" },
   "research.macro": { permission: "research:read", path: "/api/research/data/macro?region=us" },
-  "research.economicCalendar": { permission: "research:read", path: "/api/research/data/economic-calendar" },
+  "research.economicCalendar": {
+    permission: "research:read",
+    path: "/api/research/data/economic-calendar",
+  },
   "research.earningsCalendar": {
     permission: "research:read",
     path: "/api/research/data/earnings-calendar?symbols=SPY%2CQQQ",
   },
-  "research.earningsHistory": { permission: "research:read", path: "/api/research/data/earnings-history?symbol=SPY" },
-  "research.insider": { permission: "research:read", path: "/api/research/data/insider?symbol=SPY" },
-  "research.screener": { permission: "research:read", path: "/api/research/data/screener?market=us&limit=25" },
+  "research.earningsHistory": {
+    permission: "research:read",
+    path: "/api/research/data/earnings-history?symbol=SPY",
+  },
+  "research.insider": {
+    permission: "research:read",
+    path: "/api/research/data/insider?symbol=SPY",
+  },
+  "research.screener": {
+    permission: "research:read",
+    path: "/api/research/data/screener?market=us&limit=25",
+  },
   "research.heatmap": { permission: "research:read", path: "/api/research/data/heatmap?market=us" },
   "research.crypto": { permission: "research:read", path: "/api/research/data/crypto" },
-  "research.cryptoGlobal": { permission: "research:read", path: "/api/research/data/crypto-global" },
+  "research.cryptoGlobal": {
+    permission: "research:read",
+    path: "/api/research/data/crypto-global",
+  },
   "portfolio.list": { permission: "workspace:read", path: "/api/portfolios" },
   "portfolio.positions": { permission: "workspace:read", path: "/api/portfolios/1/positions" },
-  "portfolio.transactions": { permission: "workspace:read", path: "/api/portfolios/1/transactions" },
+  "portfolio.transactions": {
+    permission: "workspace:read",
+    path: "/api/portfolios/1/transactions",
+  },
 });
 
 const INPUTS: Record<NativeDataOperationId, unknown> = {
@@ -97,7 +120,9 @@ const VALID_VERTICAL_PREVIEW = Object.freeze({
 
 describe("native browser operation and action boundaries", () => {
   it("pins every native read ID, exact same-origin path, and required permission", () => {
-    expect(Object.keys(NATIVE_OPERATION_PERMISSION).sort()).toEqual(Object.keys(EXPECTED_READ_OPERATIONS).sort());
+    expect(Object.keys(NATIVE_OPERATION_PERMISSION).sort()).toEqual(
+      Object.keys(EXPECTED_READ_OPERATIONS).sort(),
+    );
 
     for (const [rawId, expected] of Object.entries(EXPECTED_READ_OPERATIONS)) {
       const operationId = rawId as NativeDataOperationId;
@@ -109,62 +134,99 @@ describe("native browser operation and action boundaries", () => {
         path: expected.path,
         permission: expected.permission,
       });
-      expect(new URL(request!.path, "https://terminal.invalid").origin).toBe("https://terminal.invalid");
+      expect(new URL(request!.path, "https://terminal.invalid").origin).toBe(
+        "https://terminal.invalid",
+      );
     }
   });
 
   it("does not expose submit, broker, or arbitrary path read operation IDs", () => {
-    for (const value of ["orders.submit", "broker.submit", "market.orders.submit", "../../api/admin"]) {
+    for (const value of [
+      "orders.submit",
+      "broker.submit",
+      "market.orders.submit",
+      "../../api/admin",
+    ]) {
       expect(isNativeDataOperationId(value)).toBe(false);
     }
   });
 
   it("rejects caller-supplied URLs, methods, headers, duplicate symbols, and invalid dates", () => {
-    expect(buildNativeReadRequest("market.quotes", {
-      symbols: ["SPY"],
-      url: "https://broker.invalid/orders",
-      method: "POST",
-      headers: { Authorization: "sentinel" },
-    } as never)).toBeNull();
-    expect(buildNativeReadRequest("market.history.core-bars", {
-      symbol: "SPY",
-      path: "/api/v1/orders/submit",
-    } as never)).toBeNull();
+    expect(
+      buildNativeReadRequest("market.quotes", {
+        symbols: ["SPY"],
+        url: "https://broker.invalid/orders",
+        method: "POST",
+        headers: { Authorization: "sentinel" },
+      } as never),
+    ).toBeNull();
+    expect(
+      buildNativeReadRequest("market.history.core-bars", {
+        symbol: "SPY",
+        path: "/api/v1/orders/submit",
+      } as never),
+    ).toBeNull();
     expect(buildNativeReadRequest("market.quotes", { symbols: ["SPY", "SPY"] })).toBeNull();
-    expect(buildNativeReadRequest("market.options.chain", { symbol: "SPY", expiry: "2026-02-30" })).toBeNull();
-    expect(buildNativeReadRequest("research.yahoo.daily", { ...YAHOO_INPUT, cursor: "\u0000" })).toBeNull();
+    expect(
+      buildNativeReadRequest("market.options.chain", { symbol: "SPY", expiry: "2026-02-30" }),
+    ).toBeNull();
+    expect(
+      buildNativeReadRequest("research.yahoo.daily", { ...YAHOO_INPUT, cursor: "\u0000" }),
+    ).toBeNull();
   });
 
   it("compiles only the explicit AI, manual-ledger, and vertical-preview actions", () => {
-    expect(buildNativeActionRequest("research.ai", {
-      messages: [{ role: "user", content: "Summarize this supplied note." }],
-    })).toEqual({
+    expect(
+      buildNativeActionRequest("research.ai", {
+        messages: [{ role: "user", content: "Summarize this supplied note." }],
+      }),
+    ).toEqual({
       method: "POST",
       path: "/api/research/ai",
       permission: "research:ai",
       body: { messages: [{ role: "user", content: "Summarize this supplied note." }] },
     });
     expect(buildNativeActionRequest("portfolio.create", { name: "Long term" })).toEqual({
-      method: "POST", path: "/api/portfolios", permission: "workspace:write", body: { name: "Long term" },
+      method: "POST",
+      path: "/api/portfolios",
+      permission: "workspace:write",
+      body: { name: "Long term" },
     });
     expect(buildNativeActionRequest("portfolio.delete", { portfolioId: 2 })).toEqual({
-      method: "DELETE", path: "/api/portfolios/2", permission: "workspace:write",
+      method: "DELETE",
+      path: "/api/portfolios/2",
+      permission: "workspace:write",
     });
-    expect(buildNativeActionRequest("portfolio.transaction.create", {
-      portfolioId: 2,
-      symbol: "SPY",
-      side: "BUY",
-      quantity: 1,
-      price: 500,
-      executed_at: "2026-10-15T12:00:00.000Z",
-    })).toEqual({
+    expect(
+      buildNativeActionRequest("portfolio.transaction.create", {
+        portfolioId: 2,
+        symbol: "SPY",
+        side: "BUY",
+        quantity: 1,
+        price: 500,
+        executed_at: "2026-10-15T12:00:00.000Z",
+      }),
+    ).toEqual({
       method: "POST",
       path: "/api/portfolios/2/transactions",
       permission: "workspace:write",
-      body: { symbol: "SPY", side: "BUY", quantity: 1, price: 500, executed_at: "2026-10-15T12:00:00.000Z" },
+      body: {
+        symbol: "SPY",
+        side: "BUY",
+        quantity: 1,
+        price: 500,
+        executed_at: "2026-10-15T12:00:00.000Z",
+      },
     });
-    expect(buildNativeActionRequest("portfolio.transaction.delete", { portfolioId: 2, transactionId: 9 })).toEqual({
-      method: "DELETE", path: "/api/portfolios/2/transactions/9", permission: "workspace:write",
+    expect(
+      buildNativeActionRequest("portfolio.transaction.delete", {
+        portfolioId: 2,
+        transactionId: 9,
+      }),
+    ).toEqual({
+      method: "DELETE",
+      path: "/api/portfolios/2/transactions/9",
+      permission: "workspace:write",
     });
     expect(buildNativeActionRequest("orders.preview.vertical", VALID_VERTICAL_PREVIEW)).toEqual({
       method: "POST",
@@ -175,10 +237,20 @@ describe("native browser operation and action boundaries", () => {
   });
 
   it("rejects unknown and submit-like runtime action IDs even with a valid preview-shaped payload", () => {
-    for (const value of ["orders.submit", "broker.submit", "paper.submit", "market.orders.submit"]) {
+    for (const value of [
+      "orders.submit",
+      "broker.submit",
+      "paper.submit",
+      "market.orders.submit",
+    ]) {
       expect(buildNativeActionRequest(value as never, VALID_VERTICAL_PREVIEW)).toBeNull();
     }
-    expect(buildNativeActionRequest("orders.preview.vertical", { ...VALID_VERTICAL_PREVIEW, url: "https://broker.invalid" })).toBeNull();
+    expect(
+      buildNativeActionRequest("orders.preview.vertical", {
+        ...VALID_VERTICAL_PREVIEW,
+        url: "https://broker.invalid",
+      }),
+    ).toBeNull();
     expect(buildNativeActionRequest("research.ai", { prompt: "test" })).toBeNull();
   });
 });

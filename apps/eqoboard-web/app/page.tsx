@@ -45,10 +45,12 @@ export default function HomePage() {
 
     content = <AccessState {...accessCopy} />;
   } else if (!canReadWorkspace(auth.permissions)) {
-    content = <AccessState
-      detail="Your account does not have permission to open this workspace. Ask an administrator to update access."
-      title="Workspace access is not assigned"
-    />;
+    content = (
+      <AccessState
+        detail="Your account does not have permission to open this workspace. Ask an administrator to update access."
+        title="Workspace access is not assigned"
+      />
+    );
   } else {
     content = <WorkspaceRoot auth={auth} registry={builtinWidgetRegistry} />;
   }

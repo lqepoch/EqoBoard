@@ -69,7 +69,9 @@ describe("native chart widget surface", () => {
     expect(markup).toContain('data-testid="native-chart-diagnostic-form"');
     expect(markup).toContain('data-testid="native-chart-diagnostic-dataset"');
     expect(markup).toContain('data-testid="native-chart-diagnostic-load"');
-    expect(markup).toContain("MDP diagnostic archive · NOT LIVE · noncanonical · promotion unavailable");
+    expect(markup).toContain(
+      "MDP diagnostic archive · NOT LIVE · noncanonical · promotion unavailable",
+    );
     expect(markup).not.toContain('data-testid="native-chart-range-1D"');
     expect(markup).not.toContain('data-testid="native-chart-resolution"');
   });

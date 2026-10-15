@@ -26,7 +26,9 @@ export function PrimaryNav({ onNavigate, placement = "desktop" }: PrimaryNavProp
         href="/"
         onClick={onNavigate}
       >
-        <span aria-hidden="true" className="eq-nav-icon"><ShellIcon name="workspace" size={17} /></span>
+        <span aria-hidden="true" className="eq-nav-icon">
+          <ShellIcon name="workspace" size={17} />
+        </span>
         <span className="eq-primary-nav__link-text">Workspace</span>
       </Link>
     </nav>

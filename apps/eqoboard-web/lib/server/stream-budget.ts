@@ -17,8 +17,12 @@ export function acquireLiveStreamSlot(principal: ServerPrincipal): (() => void) 
     .update(principal.subject)
     .digest("hex");
   const current = activeByPrincipal.get(key) ?? 0;
-  if (activeTotal >= MAX_TOTAL_STREAMS || current >= MAX_STREAMS_PER_PRINCIPAL ||
-      (!activeByPrincipal.has(key) && activeByPrincipal.size >= MAX_PRINCIPALS)) return null;
+  if (
+    activeTotal >= MAX_TOTAL_STREAMS ||
+    current >= MAX_STREAMS_PER_PRINCIPAL ||
+    (!activeByPrincipal.has(key) && activeByPrincipal.size >= MAX_PRINCIPALS)
+  )
+    return null;
   activeTotal += 1;
   activeByPrincipal.set(key, current + 1);
   let released = false;

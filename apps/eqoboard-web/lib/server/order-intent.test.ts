@@ -25,7 +25,12 @@ describe("vertical preview boundary", () => {
   it("rejects unknown fields, live environment, malformed legs, contradictory effects and sub-cent prices", () => {
     expect(parseVerticalPreviewIntent({ ...intent, account_id: "forbidden" }).ok).toBe(false);
     expect(parseVerticalPreviewIntent({ ...intent, environment: "live" }).ok).toBe(false);
-    expect(parseVerticalPreviewIntent({ ...intent, legs: [{ symbol: "SPY261016C00500000", side: "buy" }] }).ok).toBe(false);
+    expect(
+      parseVerticalPreviewIntent({
+        ...intent,
+        legs: [{ symbol: "SPY261016C00500000", side: "buy" }],
+      }).ok,
+    ).toBe(false);
     expect(parseVerticalPreviewIntent({ ...intent, net_effect: "credit" }).ok).toBe(false);
     expect(parseVerticalPreviewIntent({ ...intent, limit_price: 1.255 }).ok).toBe(false);
   });

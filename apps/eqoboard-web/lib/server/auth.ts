@@ -6,7 +6,12 @@ import { getToken } from "next-auth/jwt";
 import { isPermission, type AuthUiSnapshot, type Permission } from "../contracts/auth";
 import { authCookieName, currentOidcIssuer, isOidcConfigured, publicAppOrigin } from "../../auth";
 import { allowlistedRoles, permissionsForRoles } from "./permissions";
-import { getNativeRuntimeMode, nativeResearchPublicOrigin, nativeRuntimeReadiness, type NativeRuntimeMode } from "./runtime-mode";
+import {
+  getNativeRuntimeMode,
+  nativeResearchPublicOrigin,
+  nativeRuntimeReadiness,
+  type NativeRuntimeMode,
+} from "./runtime-mode";
 
 export type ServerPrincipal = Readonly<{
   identityIssuer: string;
@@ -24,19 +29,39 @@ export type PrincipalClaims = Readonly<{
   exp: unknown;
 }>;
 
-const RESEARCH_UI_PERMISSIONS: readonly Permission[] = ["market:read", "research:read", "research:private-read"];
+const RESEARCH_UI_PERMISSIONS: readonly Permission[] = [
+  "market:read",
+  "research:read",
+  "research:private-read",
+];
 
-export function principalFromClaims(claims: PrincipalClaims | null, now = Date.now()): ServerPrincipal | null {
+export function principalFromClaims(
+  claims: PrincipalClaims | null,
+  now = Date.now(),
+): ServerPrincipal | null {
   const issuer = currentOidcIssuer();
-  if (!claims || !issuer || claims.nativeIssuer !== issuer || typeof claims.nativeSubject !== "string" ||
-      claims.nativeSubject.length === 0 || claims.nativeSubject.length > 255 ||
-      /[\u0000-\u001f\u007f]/u.test(claims.nativeSubject) ||
-      typeof claims.nativeExpiresAt !== "number" || !Number.isSafeInteger(claims.nativeExpiresAt) ||
-      typeof claims.exp !== "number" || !Number.isSafeInteger(claims.exp)) return null;
+  if (
+    !claims ||
+    !issuer ||
+    claims.nativeIssuer !== issuer ||
+    typeof claims.nativeSubject !== "string" ||
+    claims.nativeSubject.length === 0 ||
+    claims.nativeSubject.length > 255 ||
+    /[\u0000-\u001f\u007f]/u.test(claims.nativeSubject) ||
+    typeof claims.nativeExpiresAt !== "number" ||
+    !Number.isSafeInteger(claims.nativeExpiresAt) ||
+    typeof claims.exp !== "number" ||
+    !Number.isSafeInteger(claims.exp)
+  )
+    return null;
 
   const providerExpiresAt = claims.nativeProviderExpiresAt;
-  if (providerExpiresAt !== undefined && providerExpiresAt !== null &&
-      (typeof providerExpiresAt !== "number" || !Number.isSafeInteger(providerExpiresAt))) return null;
+  if (
+    providerExpiresAt !== undefined &&
+    providerExpiresAt !== null &&
+    (typeof providerExpiresAt !== "number" || !Number.isSafeInteger(providerExpiresAt))
+  )
+    return null;
   const sessionExpiresAt = Math.min(
     claims.nativeExpiresAt,
     claims.exp * 1000,
@@ -78,7 +103,9 @@ export async function getServerPrincipal(request?: Request): Promise<ServerPrinc
   return principalFromClaims(await getSessionClaims(request));
 }
 
-export function ownerKeyForPrincipal(principal: Pick<ServerPrincipal, "identityIssuer" | "subject">): string {
+export function ownerKeyForPrincipal(
+  principal: Pick<ServerPrincipal, "identityIssuer" | "subject">,
+): string {
   return createHash("sha256")
     .update(principal.identityIssuer)
     .update("\0")
@@ -89,14 +116,19 @@ export function ownerKeyForPrincipal(principal: Pick<ServerPrincipal, "identityI
 function cleanDisplayName(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const name = value.trim();
-  return name.length > 0 && name.length <= 120 && !/[\u0000-\u001f\u007f]/u.test(name) ? name : null;
+  return name.length > 0 && name.length <= 120 && !/[\u0000-\u001f\u007f]/u.test(name)
+    ? name
+    : null;
 }
 
 function storagePartition(principal: ServerPrincipal, mode: NativeRuntimeMode): string {
   return `native-${mode}-v1-${ownerKeyForPrincipal(principal)}`;
 }
 
-function anonymousSnapshot(status: AuthUiSnapshot["status"], mode: NativeRuntimeMode | null): AuthUiSnapshot {
+function anonymousSnapshot(
+  status: AuthUiSnapshot["status"],
+  mode: NativeRuntimeMode | null,
+): AuthUiSnapshot {
   return {
     status,
     authenticated: false,
@@ -118,14 +150,18 @@ export async function getAuthUiSnapshot(): Promise<AuthUiSnapshot> {
   if (!claims) return anonymousSnapshot("sign-in-required", mode);
   const principal = principalFromClaims(claims);
   if (!principal) return anonymousSnapshot("policy-rejected", mode);
-  const permissions = principal.permissions.filter((permission): permission is Permission =>
-    isPermission(permission) && (mode === "terminal" || RESEARCH_UI_PERMISSIONS.includes(permission)),
+  const permissions = principal.permissions.filter(
+    (permission): permission is Permission =>
+      isPermission(permission) &&
+      (mode === "terminal" || RESEARCH_UI_PERMISSIONS.includes(permission)),
   );
   if (permissions.length === 0) return anonymousSnapshot("policy-rejected", mode);
   return {
     status: "authenticated",
     authenticated: true,
-    displayName: cleanDisplayName((claims as PrincipalClaims & { nativeDisplayName?: unknown }).nativeDisplayName),
+    displayName: cleanDisplayName(
+      (claims as PrincipalClaims & { nativeDisplayName?: unknown }).nativeDisplayName,
+    ),
     permissions,
     storagePartition: storagePartition(principal, mode),
     runtimeMode: mode,

@@ -32,7 +32,10 @@ function consumeKeyedRateLimit(
     buckets.set(key, entry);
   }
   if (entry.count >= options.maxRequests) {
-    return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((entry.resetAt - now) / 1_000)) };
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((entry.resetAt - now) / 1_000)),
+    };
   }
   entry.count += 1;
   return { allowed: true, retryAfterSeconds: 0 };
@@ -44,9 +47,15 @@ export function consumePrincipalRateLimit(
   options: PrincipalRateLimit,
   now = Date.now(),
 ): PrincipalRateLimitResult {
-  if (!/^[a-z0-9][a-z0-9._:-]{0,63}$/iu.test(options.bucket) ||
-      !Number.isSafeInteger(options.maxRequests) || options.maxRequests < 1 || options.maxRequests > 100_000 ||
-      !Number.isSafeInteger(options.windowMs) || options.windowMs < 1_000 || options.windowMs > 24 * 60 * 60 * 1_000) {
+  if (
+    !/^[a-z0-9][a-z0-9._:-]{0,63}$/iu.test(options.bucket) ||
+    !Number.isSafeInteger(options.maxRequests) ||
+    options.maxRequests < 1 ||
+    options.maxRequests > 100_000 ||
+    !Number.isSafeInteger(options.windowMs) ||
+    options.windowMs < 1_000 ||
+    options.windowMs > 24 * 60 * 60 * 1_000
+  ) {
     return { allowed: false, retryAfterSeconds: 60 };
   }
   const principalKey = createHash("sha256")
@@ -66,9 +75,15 @@ export function consumeServiceRateLimit(
   windowMs: number,
   now = Date.now(),
 ): PrincipalRateLimitResult {
-  if (!/^[a-z0-9][a-z0-9._:-]{0,63}$/iu.test(bucket) ||
-      !Number.isSafeInteger(maxRequests) || maxRequests < 1 || maxRequests > 1_000_000 ||
-      !Number.isSafeInteger(windowMs) || windowMs < 1_000 || windowMs > 24 * 60 * 60 * 1_000) {
+  if (
+    !/^[a-z0-9][a-z0-9._:-]{0,63}$/iu.test(bucket) ||
+    !Number.isSafeInteger(maxRequests) ||
+    maxRequests < 1 ||
+    maxRequests > 1_000_000 ||
+    !Number.isSafeInteger(windowMs) ||
+    windowMs < 1_000 ||
+    windowMs > 24 * 60 * 60 * 1_000
+  ) {
     return { allowed: false, retryAfterSeconds: 60 };
   }
   return consumeKeyedRateLimit(`service:${bucket}`, { maxRequests, windowMs }, now);

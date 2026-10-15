@@ -33,9 +33,12 @@ function registration(id = "eqoboard.test-widget"): WidgetRegistration<TestConfi
     allowedReadOperations: [],
     allowedActions: [],
     parseConfig(value) {
-      if (value !== null && typeof value === "object" &&
-          typeof (value as Record<string, unknown>).label === "string" &&
-          Object.keys(value).length === 1) {
+      if (
+        value !== null &&
+        typeof value === "object" &&
+        typeof (value as Record<string, unknown>).label === "string" &&
+        Object.keys(value).length === 1
+      ) {
         return { ok: true, value: { label: (value as { label: string }).label } };
       }
       return { ok: false, code: "config-invalid" };
@@ -74,12 +77,14 @@ describe("static widget registry", () => {
       expect(resolved.config).toEqual({ label: "active" });
       expect(resolved.registration.manifest.id).toBe("eqoboard.test-widget");
     }
-    expect(registry.parseConfig("eqoboard.test-widget.config.v1", { label: "stored" }))
-      .toEqual({ ok: true, value: { label: "stored" } });
-    expect(registry.list()[0]?.provenance.provenanceId)
-      .toBe(registry.list()[0]?.manifest.provenanceId);
-    expect(registry.list()[0]?.provenance.provenanceId)
-      .not.toBe(registry.list()[0]?.manifest.id);
+    expect(registry.parseConfig("eqoboard.test-widget.config.v1", { label: "stored" })).toEqual({
+      ok: true,
+      value: { label: "stored" },
+    });
+    expect(registry.list()[0]?.provenance.provenanceId).toBe(
+      registry.list()[0]?.manifest.provenanceId,
+    );
+    expect(registry.list()[0]?.provenance.provenanceId).not.toBe(registry.list()[0]?.manifest.id);
     expect(Object.isFrozen(registry.list()[0]?.allowedReadOperations)).toBe(true);
     expect(Object.isFrozen(registry.list()[0]?.allowedActions)).toBe(true);
     expect(registry.list()).toHaveLength(1);
@@ -87,14 +92,19 @@ describe("static widget registry", () => {
 
   it("returns inert statuses for unknown manifests, versions, schemas and invalid configs", () => {
     const registry = createWidgetRegistry([registration()]);
-    expect(registry.resolveInstance(instance({ manifestId: "vendor.unknown" })).status)
-      .toBe("unsupported-manifest");
-    expect(registry.resolveInstance(instance({ manifestVersion: "2.0.0" })).status)
-      .toBe("unsupported-manifest-version");
-    expect(registry.resolveInstance(instance({ configSchemaId: "eqoboard.test-widget.config.v2" })).status)
-      .toBe("unsupported-config-schema");
-    expect(registry.resolveInstance(instance({ config: { label: 42 } })).status)
-      .toBe("config-invalid");
+    expect(registry.resolveInstance(instance({ manifestId: "vendor.unknown" })).status).toBe(
+      "unsupported-manifest",
+    );
+    expect(registry.resolveInstance(instance({ manifestVersion: "2.0.0" })).status).toBe(
+      "unsupported-manifest-version",
+    );
+    expect(
+      registry.resolveInstance(instance({ configSchemaId: "eqoboard.test-widget.config.v2" }))
+        .status,
+    ).toBe("unsupported-config-schema");
+    expect(registry.resolveInstance(instance({ config: { label: 42 } })).status).toBe(
+      "config-invalid",
+    );
     expect(registry.parseConfig("vendor.unknown.config.v1", {}).ok).toBe(false);
   });
 
@@ -130,16 +140,21 @@ describe("static widget registry", () => {
     const invalidOutput = {
       ...registration(),
       parseConfig(value: unknown) {
-        if (value && typeof value === "object" &&
-            (value as Record<string, unknown>).label === "default") {
+        if (
+          value &&
+          typeof value === "object" &&
+          (value as Record<string, unknown>).label === "default"
+        ) {
           return { ok: true as const, value: { label: "default" } };
         }
         return { ok: true as const, value: { label: (() => "executable") as unknown as string } };
       },
     };
     const registry = createWidgetRegistry([invalidOutput]);
-    expect(registry.parseConfig("eqoboard.test-widget.config.v1", { label: "saved" }))
-      .toEqual({ ok: false, code: "config-invalid" });
+    expect(registry.parseConfig("eqoboard.test-widget.config.v1", { label: "saved" })).toEqual({
+      ok: false,
+      code: "config-invalid",
+    });
   });
 
   it("rejects duplicate IDs and a provenance join key that does not match", () => {
@@ -155,12 +170,14 @@ describe("static widget registry", () => {
   });
 
   it("rejects a default config that does not satisfy the registration parser", () => {
-    expect(() => createWidgetRegistry([{
-      ...registration(),
-      createDefaultConfig: () => ({ label: 42 }),
-    }])).toThrowError(
-      expect.objectContaining({ code: "invalid-default-config" }),
-    );
+    expect(() =>
+      createWidgetRegistry([
+        {
+          ...registration(),
+          createDefaultConfig: () => ({ label: 42 }),
+        },
+      ]),
+    ).toThrowError(expect.objectContaining({ code: "invalid-default-config" }));
   });
 
   it("rejects malformed capability lists instead of widening a registration", () => {
@@ -214,7 +231,10 @@ describe("static widget registry", () => {
     );
 
     const shortcutFirst = { ...first, manifest: { ...first.manifest, shortcut: "Alt+1" as const } };
-    const shortcutSecond = { ...second, manifest: { ...second.manifest, shortcut: "Alt+1" as const } };
+    const shortcutSecond = {
+      ...second,
+      manifest: { ...second.manifest, shortcut: "Alt+1" as const },
+    };
     expect(() => createWidgetRegistry([shortcutFirst, shortcutSecond])).toThrowError(
       expect.objectContaining({ code: "duplicate-shortcut" }),
     );

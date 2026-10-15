@@ -20,7 +20,14 @@ const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 const UPSTREAM_DEADLINE_MS = 35_000;
 const SYMBOL = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 const TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/u;
-const QUERY_KEYS = new Set(["symbols", "asset_class", "start_utc", "end_utc", "adjustment", "cursor"]);
+const QUERY_KEYS = new Set([
+  "symbols",
+  "asset_class",
+  "start_utc",
+  "end_utc",
+  "adjustment",
+  "cursor",
+]);
 
 export type YfinanceDailyInputResult =
   | Readonly<{ ok: true; input: YfinanceResearchInput }>
@@ -31,14 +38,18 @@ function parseTimestamp(value: string): bigint | null {
   if (!match) return null;
   const [, year, month, day, hour, minute, second, fraction = ""] = match;
   const epoch = Date.parse(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
-  if (!Number.isFinite(epoch) ||
-      new Date(epoch).toISOString().slice(0, 19) !== `${year}-${month}-${day}T${hour}:${minute}:${second}`) return null;
+  if (
+    !Number.isFinite(epoch) ||
+    new Date(epoch).toISOString().slice(0, 19) !==
+      `${year}-${month}-${day}T${hour}:${minute}:${second}`
+  )
+    return null;
   return BigInt(epoch) * 1_000_000n + BigInt(fraction.padEnd(9, "0"));
 }
 
 function one(params: URLSearchParams, key: string): string | null | undefined {
   const values = params.getAll(key);
-  return values.length <= 1 ? values[0] ?? null : undefined;
+  return values.length <= 1 ? (values[0] ?? null) : undefined;
 }
 
 /** Accept only the fixed one-symbol daily-observation request compiled by the host map. */
@@ -48,8 +59,10 @@ export function parseYfinanceDailyInput(request: Request): YfinanceDailyInputRes
     return { ok: false, status: 414, error: "query_too_large" };
   }
   const params = url.searchParams;
-  if ([...params.keys()].some((key) => !QUERY_KEYS.has(key)) ||
-      [...QUERY_KEYS].some((key) => params.getAll(key).length > 1)) {
+  if (
+    [...params.keys()].some((key) => !QUERY_KEYS.has(key)) ||
+    [...QUERY_KEYS].some((key) => params.getAll(key).length > 1)
+  ) {
     return { ok: false, status: 400, error: "invalid_query" };
   }
   const symbol = one(params, "symbols");
@@ -61,9 +74,12 @@ export function parseYfinanceDailyInput(request: Request): YfinanceDailyInputRes
   if (!symbol || !assetClass || !startUtc || !endUtc || !adjustment || cursor === undefined) {
     return { ok: false, status: 400, error: "invalid_query" };
   }
-  if (!SYMBOL.test(symbol) || symbol.includes(",") ||
-      (assetClass !== "stock" && assetClass !== "etf") ||
-      (adjustment !== "unadjusted" && adjustment !== "adjusted")) {
+  if (
+    !SYMBOL.test(symbol) ||
+    symbol.includes(",") ||
+    (assetClass !== "stock" && assetClass !== "etf") ||
+    (adjustment !== "unadjusted" && adjustment !== "adjusted")
+  ) {
     return { ok: false, status: 422, error: "unsupported_research_query" };
   }
 
@@ -71,12 +87,17 @@ export function parseYfinanceDailyInput(request: Request): YfinanceDailyInputRes
   const end = parseTimestamp(endUtc);
   const now = BigInt(Date.now()) * 1_000_000n;
   const maxRange = BigInt(YFINANCE_RESEARCH_MAX_RANGE_DAYS) * 86_400_000_000_000n;
-  if (start === null || end === null || end <= start) return { ok: false, status: 400, error: "invalid_query" };
+  if (start === null || end === null || end <= start)
+    return { ok: false, status: 400, error: "invalid_query" };
   if (start < 0n || end > now + 86_400_000_000_000n || end - start > maxRange) {
     return { ok: false, status: 413, error: "requested_range_exceeded" };
   }
-  if (cursor !== null && (new TextEncoder().encode(cursor).byteLength > YFINANCE_RESEARCH_MAX_CURSOR_BYTES ||
-      cursor.length === 0 || /[\u0000-\u001f\u007f]/u.test(cursor))) {
+  if (
+    cursor !== null &&
+    (new TextEncoder().encode(cursor).byteLength > YFINANCE_RESEARCH_MAX_CURSOR_BYTES ||
+      cursor.length === 0 ||
+      /[\u0000-\u001f\u007f]/u.test(cursor))
+  ) {
     return { ok: false, status: 400, error: "invalid_query" };
   }
   return {
@@ -94,17 +115,20 @@ export function parseYfinanceDailyInput(request: Request): YfinanceDailyInputRes
 
 function limit(principal: ServerPrincipal): NextResponse | null {
   const service = consumeServiceRateLimit("yfinance-daily", 1_200, 60_000);
-  if (!service.allowed) return noStoreJson({ error: "rate_limit_exceeded" }, 429, {
-    "Retry-After": String(service.retryAfterSeconds),
-  });
+  if (!service.allowed)
+    return noStoreJson({ error: "rate_limit_exceeded" }, 429, {
+      "Retry-After": String(service.retryAfterSeconds),
+    });
   const owner = consumePrincipalRateLimit(principal, {
     bucket: "yfinance-daily",
     maxRequests: 60,
     windowMs: 60_000,
   });
-  return owner.allowed ? null : noStoreJson({ error: "rate_limit_exceeded" }, 429, {
-    "Retry-After": String(owner.retryAfterSeconds),
-  });
+  return owner.allowed
+    ? null
+    : noStoreJson({ error: "rate_limit_exceeded" }, 429, {
+        "Retry-After": String(owner.retryAfterSeconds),
+      });
 }
 
 function upstreamError(status: number): NextResponse {
@@ -114,14 +138,19 @@ function upstreamError(status: number): NextResponse {
   if (status === 401) return noStoreJson({ error: "market_data_authentication_required" }, 401);
   if (status === 403) return noStoreJson({ error: "research_market_data_access_denied" }, 403);
   if (status === 429) return noStoreJson({ error: "research_provider_rate_limited" }, 429);
-  if (status >= 300 && status < 400) return noStoreJson({ error: "market_data_redirect_rejected" }, 502);
+  if (status >= 300 && status < 400)
+    return noStoreJson({ error: "market_data_redirect_rejected" }, 502);
   if (status === 504) return noStoreJson({ error: "research_query_timeout" }, 504);
   if (status === 502) return noStoreJson({ error: "invalid_research_observation_response" }, 502);
   return noStoreJson({ error: "market_data_service_unavailable" }, 503);
 }
 
 function invalidEmptyGet(request: Request): boolean {
-  if (request.body === null) return request.headers.get("content-length") === null || request.headers.get("content-length") === "0";
+  if (request.body === null)
+    return (
+      request.headers.get("content-length") === null ||
+      request.headers.get("content-length") === "0"
+    );
   void request.body.cancel().catch(() => undefined);
   return false;
 }
@@ -131,7 +160,11 @@ export async function getYfinanceDaily(request: Request): Promise<NextResponse> 
   if (runtimeError) return runtimeError;
   const authorization = await authorizeRequest(request, "research:read");
   if (!authorization.ok) return authorization.response;
-  if (!invalidEmptyGet(request) || request.headers.has("content-encoding") || request.headers.has("transfer-encoding")) {
+  if (
+    !invalidEmptyGet(request) ||
+    request.headers.has("content-encoding") ||
+    request.headers.has("transfer-encoding")
+  ) {
     return noStoreJson({ error: "invalid_request" }, 400);
   }
   const parsed = parseYfinanceDailyInput(request);
@@ -151,10 +184,13 @@ export async function getYfinanceDaily(request: Request): Promise<NextResponse> 
   upstreamUrl.searchParams.set("start_utc", parsed.input.startUtc);
   upstreamUrl.searchParams.set("end_utc", parsed.input.endUtc);
   upstreamUrl.searchParams.set("adjustment", parsed.input.adjustment);
-  if (parsed.input.cursor !== undefined) upstreamUrl.searchParams.set("cursor", parsed.input.cursor);
+  if (parsed.input.cursor !== undefined)
+    upstreamUrl.searchParams.set("cursor", parsed.input.cursor);
 
-  const deadline = createUpstreamDeadline(request,
-    Math.max(1, Math.min(UPSTREAM_DEADLINE_MS, delegation.expiresAt - Date.now())));
+  const deadline = createUpstreamDeadline(
+    request,
+    Math.max(1, Math.min(UPSTREAM_DEADLINE_MS, delegation.expiresAt - Date.now())),
+  );
   try {
     const upstream = await fetch(upstreamUrl, {
       method: "GET",
@@ -172,7 +208,8 @@ export async function getYfinanceDaily(request: Request): Promise<NextResponse> 
       const error = upstreamError(upstream.status);
       if (upstream.status === 429) {
         const retryAfter = upstream.headers.get("retry-after");
-        if (retryAfter && /^[0-9]{1,6}$/u.test(retryAfter)) error.headers.set("Retry-After", retryAfter);
+        if (retryAfter && /^[0-9]{1,6}$/u.test(retryAfter))
+          error.headers.set("Retry-After", retryAfter);
       }
       return deadline.timedOut() ? noStoreJson({ error: "research_query_timeout" }, 504) : error;
     }
@@ -191,8 +228,10 @@ export async function getYfinanceDaily(request: Request): Promise<NextResponse> 
       },
     });
   } catch {
-    return noStoreJson({ error: deadline.timedOut() ? "research_query_timeout" : "market_data_service_unavailable" },
-      deadline.timedOut() ? 504 : 503);
+    return noStoreJson(
+      { error: deadline.timedOut() ? "research_query_timeout" : "market_data_service_unavailable" },
+      deadline.timedOut() ? 504 : 503,
+    );
   } finally {
     deadline.close();
   }

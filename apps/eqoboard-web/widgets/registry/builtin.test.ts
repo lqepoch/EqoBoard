@@ -15,7 +15,9 @@ describe("compiled builtin widget registry", () => {
       expect(registration.provenance.provenanceId).toBe(registration.manifest.provenanceId);
 
       const config = registration.createDefaultConfig();
-      expect(builtinWidgetRegistry.parseConfig(registration.manifest.configSchemaId, config).ok).toBe(true);
+      expect(
+        builtinWidgetRegistry.parseConfig(registration.manifest.configSchemaId, config).ok,
+      ).toBe(true);
       const instance: WidgetInstanceV1 = {
         instanceId: `80e310b0-4a9e-4b0b-b500-${String(index + 1).padStart(12, "0")}`,
         manifestId: registration.manifest.id,

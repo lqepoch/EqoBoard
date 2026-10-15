@@ -39,7 +39,15 @@ function projectOne<TRow>(candidate: ChartProjectionCandidate<TRow>): ChartPlotB
   const low = parseNumber(candidate.exact?.low ?? candidate.low, MAX_CHART_PRICE);
   const close = parseNumber(candidate.exact?.close ?? candidate.close, MAX_CHART_PRICE);
   const volume = parseNumber(candidate.exact?.volume ?? candidate.volume, MAX_CHART_VOLUME);
-  if (open === null || high === null || low === null || close === null || volume === null || volume < 0) return null;
+  if (
+    open === null ||
+    high === null ||
+    low === null ||
+    close === null ||
+    volume === null ||
+    volume < 0
+  )
+    return null;
   if (high < Math.max(open, close, low) || low > Math.min(open, close, high)) return null;
 
   return {

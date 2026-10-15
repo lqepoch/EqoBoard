@@ -43,7 +43,11 @@ function safeLink(value: unknown): string | null {
   if (!text) return null;
   try {
     const link = new URL(text);
-    return link.protocol === "https:" && link.hostname.length > 0 && link.username === "" && link.password === "" && link.port === ""
+    return link.protocol === "https:" &&
+      link.hostname.length > 0 &&
+      link.username === "" &&
+      link.password === "" &&
+      link.port === ""
       ? link.toString()
       : null;
   } catch {
@@ -51,7 +55,11 @@ function safeLink(value: unknown): string | null {
   }
 }
 
-function parseFeed(text: string, provider: ResearchNewsItem["provider"], symbol: string | null): ResearchNewsItem[] {
+function parseFeed(
+  text: string,
+  provider: ResearchNewsItem["provider"],
+  symbol: string | null,
+): ResearchNewsItem[] {
   let document: unknown;
   try {
     document = xml.parse(text);
@@ -73,22 +81,30 @@ function parseFeed(text: string, provider: ResearchNewsItem["provider"], symbol:
     const pubDate = validIsoDate(Reflect.get(entry, "pubDate"));
     const publisherRaw = Reflect.get(entry, "source");
     const publisher = boundedText(
-      publisherRaw && typeof publisherRaw === "object" ? Reflect.get(publisherRaw, "#text") : publisherRaw,
+      publisherRaw && typeof publisherRaw === "object"
+        ? Reflect.get(publisherRaw, "#text")
+        : publisherRaw,
       96,
     );
-    items.push(Object.freeze({
-      title,
-      link,
-      publisher: publisher ?? provider,
-      provider,
-      publishedAt: pubDate,
-      symbol,
-    }));
+    items.push(
+      Object.freeze({
+        title,
+        link,
+        publisher: publisher ?? provider,
+        provider,
+        publishedAt: pubDate,
+        symbol,
+      }),
+    );
   }
   return items;
 }
 
-async function fetchFeed(url: URL, provider: ResearchNewsItem["provider"], symbol: string | null): Promise<ResearchNewsItem[]> {
+async function fetchFeed(
+  url: URL,
+  provider: ResearchNewsItem["provider"],
+  symbol: string | null,
+): Promise<ResearchNewsItem[]> {
   const body = await readProviderText(url, {
     timeoutMs: 7_000,
     maxBytes: 384 * 1024,
@@ -101,7 +117,11 @@ function uniqueNewest(items: readonly ResearchNewsItem[]): ResearchNewsItem[] {
   const seen = new Set<string>();
   return [...items]
     .filter((item) => {
-      const key = item.title.toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/gu, " ").trim().slice(0, 120);
+      const key = item.title
+        .toLocaleLowerCase("en-US")
+        .replace(/[^a-z0-9]+/gu, " ")
+        .trim()
+        .slice(0, 120);
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -122,7 +142,9 @@ function googleUrl(query: string): URL {
   return url;
 }
 
-export async function loadNews(symbol: string | null): Promise<ProviderResult<readonly ResearchNewsItem[]>> {
+export async function loadNews(
+  symbol: string | null,
+): Promise<ProviderResult<readonly ResearchNewsItem[]>> {
   const requests = symbol
     ? [
         fetchFeed(yahooUrl(symbol), "Yahoo Finance RSS", symbol),
@@ -133,7 +155,9 @@ export async function loadNews(symbol: string | null): Promise<ProviderResult<re
         fetchFeed(googleUrl("federal reserve economy"), "Google News RSS", null),
       ];
   const settled = await Promise.allSettled(requests);
-  const fulfilled = settled.filter((result): result is PromiseFulfilledResult<ResearchNewsItem[]> => result.status === "fulfilled");
+  const fulfilled = settled.filter(
+    (result): result is PromiseFulfilledResult<ResearchNewsItem[]> => result.status === "fulfilled",
+  );
   if (fulfilled.length === 0) throw new Error("news-provider-unavailable");
   const failed = settled.length - fulfilled.length;
   const items = uniqueNewest(fulfilled.flatMap((result) => result.value));
@@ -144,6 +168,7 @@ export async function loadNews(symbol: string | null): Promise<ProviderResult<re
     complete: failed === 0,
     failedItems: failed,
     truncated: items.length === 40,
-    warning: "Publisher terms for storage and redistribution have not been verified; headlines and publisher links only.",
+    warning:
+      "Publisher terms for storage and redistribution have not been verified; headlines and publisher links only.",
   };
 }

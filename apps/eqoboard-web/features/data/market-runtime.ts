@@ -8,7 +8,10 @@ type BackgroundServices = Readonly<{
   stopLeases: () => void;
 }>;
 
-function hasPermission(auth: AuthUiSnapshot, permission: "market:stream" | "market:subscribe"): boolean {
+function hasPermission(
+  auth: AuthUiSnapshot,
+  permission: "market:stream" | "market:subscribe",
+): boolean {
   return auth.authenticated && auth.permissions.includes(permission);
 }
 

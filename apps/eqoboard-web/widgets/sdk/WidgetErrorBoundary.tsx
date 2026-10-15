@@ -39,7 +39,9 @@ export class WidgetErrorBoundary extends React.Component<WidgetErrorBoundaryProp
       return (
         <section role="alert" aria-label={`${this.props.title} unavailable`}>
           <p>{widgetErrorMessage({ code: "render-failed", retryable: false })}</p>
-          <button type="button" onClick={this.retry}>Retry</button>
+          <button type="button" onClick={this.retry}>
+            Retry
+          </button>
         </section>
       );
     }

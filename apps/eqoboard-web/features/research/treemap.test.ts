@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { ResearchMarketData, ResearchMarketRow } from "@/lib/server/research/screener";
 import { layoutMarketCapTreemap } from "./treemap";
 
-function marketRow(symbol: string, marketCap: number | null, marketCapEur: number | null = null): ResearchMarketRow {
+function marketRow(
+  symbol: string,
+  marketCap: number | null,
+  marketCapEur: number | null = null,
+): ResearchMarketRow {
   return {
     symbol,
     name: symbol,
@@ -46,12 +50,14 @@ function marketData(market: "us" | "eu", rows: readonly ResearchMarketRow[]): Re
 
 describe("market-cap treemap layout", () => {
   it("allocates tile area by positive market capitalization and excludes unknown sizes", () => {
-    const layout = layoutMarketCapTreemap(marketData("us", [
-      marketRow("AAA", 300),
-      marketRow("BBB", 100),
-      marketRow("CCC", null),
-      marketRow("DDD", 0),
-    ]));
+    const layout = layoutMarketCapTreemap(
+      marketData("us", [
+        marketRow("AAA", 300),
+        marketRow("BBB", 100),
+        marketRow("CCC", null),
+        marketRow("DDD", 0),
+      ]),
+    );
     const areas = new Map(layout.cells.map((cell) => [cell.symbol, cell.areaFraction]));
 
     expect(layout.excludedRows).toBe(2);
@@ -59,16 +65,18 @@ describe("market-cap treemap layout", () => {
     expect(areas.get("AAA")).toBeCloseTo(0.75);
     expect(areas.get("BBB")).toBeCloseTo(0.25);
     expect([...areas.values()].reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
-    expect(layout.cells[0]!.width * layout.cells[0]!.height / 10_000).toBeCloseTo(0.75);
-    expect(layout.cells[1]!.width * layout.cells[1]!.height / 10_000).toBeCloseTo(0.25);
+    expect((layout.cells[0]!.width * layout.cells[0]!.height) / 10_000).toBeCloseTo(0.75);
+    expect((layout.cells[1]!.width * layout.cells[1]!.height) / 10_000).toBeCloseTo(0.25);
   });
 
   it("uses the EUR-converted cap for European market areas and preserves its source date", () => {
-    const layout = layoutMarketCapTreemap(marketData("eu", [
-      marketRow("AAA", 900, 200),
-      marketRow("BBB", 500, 100),
-      marketRow("CCC", 400, null),
-    ]));
+    const layout = layoutMarketCapTreemap(
+      marketData("eu", [
+        marketRow("AAA", 900, 200),
+        marketRow("BBB", 500, 100),
+        marketRow("CCC", 400, null),
+      ]),
+    );
 
     expect(layout.excludedRows).toBe(1);
     expect(layout.cells.map((cell) => cell.marketCap)).toEqual([200, 100]);
@@ -78,7 +86,11 @@ describe("market-cap treemap layout", () => {
   });
 
   it("fails closed for invalid layout dimensions", () => {
-    const layout = layoutMarketCapTreemap(marketData("us", [marketRow("AAA", 100)]), Number.NaN, 560);
+    const layout = layoutMarketCapTreemap(
+      marketData("us", [marketRow("AAA", 100)]),
+      Number.NaN,
+      560,
+    );
     expect(layout).toEqual({ cells: [], excludedRows: 1 });
   });
 });

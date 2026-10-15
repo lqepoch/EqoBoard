@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AuthUiSnapshot } from "../../lib/contracts/auth";
-import { createWorkspaceClientRepository, type WorkspaceBackupStore } from "../../stores/workspace/repository";
+import {
+  createWorkspaceClientRepository,
+  type WorkspaceBackupStore,
+} from "../../stores/workspace/repository";
 import type { WorkspaceDocumentV1, WorkspaceV1 } from "../../workspace/model";
 
 const workspaceId = "11111111-1111-4111-8111-111111111111";
@@ -10,13 +13,17 @@ function document(): WorkspaceDocumentV1 {
   return {
     schemaVersion: 1,
     activeWorkspaceId: workspaceId,
-    workspaces: [{
-      id: workspaceId,
-      name: "Review",
-      activeTabId: tabId,
-      marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
-      tabs: [{ id: tabId, name: "Overview", widgets: [], placements: [], maximizedInstanceId: null }],
-    }],
+    workspaces: [
+      {
+        id: workspaceId,
+        name: "Review",
+        activeTabId: tabId,
+        marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
+        tabs: [
+          { id: tabId, name: "Overview", widgets: [], placements: [], maximizedInstanceId: null },
+        ],
+      },
+    ],
     userTemplates: [],
   };
 }
@@ -32,7 +39,11 @@ function auth(overrides: Partial<AuthUiSnapshot> = {}): AuthUiSnapshot {
   };
 }
 
-function snapshotResponse(revision: string, etag: string, currentDocument: WorkspaceDocumentV1 | null) {
+function snapshotResponse(
+  revision: string,
+  etag: string,
+  currentDocument: WorkspaceDocumentV1 | null,
+) {
   return new Response(JSON.stringify({ schemaVersion: 1, revision, document: currentDocument }), {
     status: 200,
     headers: { "Content-Type": "application/json", ETag: etag },
@@ -51,25 +62,40 @@ describe("owner workspace repository boundary", () => {
   it("does not call the server for anonymous or unauthorized reads and writes", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const backups = noOpBackups();
-    const anonymous = createWorkspaceClientRepository(auth({
-      status: "sign-in-required",
-      authenticated: false,
-      displayName: null,
-      permissions: [],
-      storagePartition: null,
-    }), { fetcher, backups });
+    const anonymous = createWorkspaceClientRepository(
+      auth({
+        status: "sign-in-required",
+        authenticated: false,
+        displayName: null,
+        permissions: [],
+        storagePartition: null,
+      }),
+      { fetcher, backups },
+    );
 
     expect(await anonymous.load()).toMatchObject({ ok: false, code: "sign-in-required" });
-    expect(await anonymous.save(document(), '"0"')).toMatchObject({ ok: false, code: "sign-in-required" });
+    expect(await anonymous.save(document(), '"0"')).toMatchObject({
+      ok: false,
+      code: "sign-in-required",
+    });
     expect(anonymous.partition).toBeNull();
     expect(await anonymous.recoveryPoints(workspaceId)).toEqual([]);
 
-    const noWorkspacePermission = createWorkspaceClientRepository(auth({ permissions: ["market:read"] }), {
-      fetcher,
-      backups,
+    const noWorkspacePermission = createWorkspaceClientRepository(
+      auth({ permissions: ["market:read"] }),
+      {
+        fetcher,
+        backups,
+      },
+    );
+    expect(await noWorkspacePermission.load()).toMatchObject({
+      ok: false,
+      code: "permission-denied",
     });
-    expect(await noWorkspacePermission.load()).toMatchObject({ ok: false, code: "permission-denied" });
-    expect(await noWorkspacePermission.save(document(), '"0"')).toMatchObject({ ok: false, code: "permission-denied" });
+    expect(await noWorkspacePermission.save(document(), '"0"')).toMatchObject({
+      ok: false,
+      code: "permission-denied",
+    });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -91,7 +117,11 @@ describe("owner workspace repository boundary", () => {
     const saved = await repository.save(document(), loaded.value.etag);
     expect(saved).toMatchObject({ ok: true, snapshot: { revision: "1", etag: '"1"' } });
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toMatchObject({ method: "GET", credentials: "same-origin", cache: "no-store" });
+    expect(calls[0]).toMatchObject({
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
     expect(calls[1]).toMatchObject({
       method: "PUT",
       credentials: "same-origin",
@@ -114,32 +144,49 @@ describe("owner workspace repository boundary", () => {
     const repository = createWorkspaceClientRepository(auth(), { fetcher, backups: noOpBackups() });
 
     const result = await repository.save(document(), '"stale-revision"');
-    expect(result).toMatchObject({ ok: false, code: "conflict", current: {
-      schemaVersion: 1,
-      revision: "1",
-      document: null,
-      etag: '"1"',
-    } });
+    expect(result).toMatchObject({
+      ok: false,
+      code: "conflict",
+      current: {
+        schemaVersion: 1,
+        revision: "1",
+        document: null,
+        etag: '"1"',
+      },
+    });
     expect(calls.map((call) => call.method)).toEqual(["PUT", "GET"]);
   });
 
   it("rejects unbounded or malformed response state instead of trusting it", async () => {
-    const fetcher: typeof fetch = async () => new Response(JSON.stringify({
-      schemaVersion: 1,
-      revision: "0",
-      document: null,
-      owner: "forged",
-    }), { headers: { ETag: '"0"' } });
+    const fetcher: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          schemaVersion: 1,
+          revision: "0",
+          document: null,
+          owner: "forged",
+        }),
+        { headers: { ETag: '"0"' } },
+      );
     const repository = createWorkspaceClientRepository(auth(), { fetcher, backups: noOpBackups() });
     expect(await repository.load()).toMatchObject({ ok: false, code: "invalid-response" });
 
     const missingEtag: typeof fetch = async () => snapshotResponse("0", "", null);
-    const invalidRepository = createWorkspaceClientRepository(auth(), { fetcher: missingEtag, backups: noOpBackups() });
+    const invalidRepository = createWorkspaceClientRepository(auth(), {
+      fetcher: missingEtag,
+      backups: noOpBackups(),
+    });
     expect(await invalidRepository.load()).toMatchObject({ ok: false, code: "invalid-response" });
 
     const mismatchedEtag: typeof fetch = async () => snapshotResponse("1", '"0"', null);
-    const mismatchedRepository = createWorkspaceClientRepository(auth(), { fetcher: mismatchedEtag, backups: noOpBackups() });
-    expect(await mismatchedRepository.load()).toMatchObject({ ok: false, code: "invalid-response" });
+    const mismatchedRepository = createWorkspaceClientRepository(auth(), {
+      fetcher: mismatchedEtag,
+      backups: noOpBackups(),
+    });
+    expect(await mismatchedRepository.load()).toMatchObject({
+      ok: false,
+      code: "invalid-response",
+    });
   });
 
   it("partitions recovery reads and writes by the opaque auth snapshot namespace", async () => {
@@ -153,14 +200,22 @@ describe("owner workspace repository boundary", () => {
       workspace: document().workspaces[0] as WorkspaceV1,
     };
     const backups: WorkspaceBackupStore = {
-      save: vi.fn(async (partition: string) => { calls.push(`save:${partition}`); }),
-      list: vi.fn(async (partition: string) => { calls.push(`list:${partition}`); return [point]; }),
+      save: vi.fn(async (partition: string) => {
+        calls.push(`save:${partition}`);
+      }),
+      list: vi.fn(async (partition: string) => {
+        calls.push(`list:${partition}`);
+        return [point];
+      }),
       get: vi.fn(async (partition: string) => {
         calls.push(`get:${partition}`);
         return partition === point.partition ? point : null;
       }),
     };
-    const repository = createWorkspaceClientRepository(auth(), { fetcher: vi.fn<typeof fetch>(), backups });
+    const repository = createWorkspaceClientRepository(auth(), {
+      fetcher: vi.fn<typeof fetch>(),
+      backups,
+    });
 
     await repository.backup(point.workspace, "save");
     expect(await repository.recoveryPoints(workspaceId)).toEqual([point]);
@@ -171,10 +226,13 @@ describe("owner workspace repository boundary", () => {
       "get:opaque-test-partition-a",
     ]);
 
-    const otherIdentity = createWorkspaceClientRepository(auth({ storagePartition: "opaque-test-partition-b" }), {
-      fetcher: vi.fn<typeof fetch>(),
-      backups,
-    });
+    const otherIdentity = createWorkspaceClientRepository(
+      auth({ storagePartition: "opaque-test-partition-b" }),
+      {
+        fetcher: vi.fn<typeof fetch>(),
+        backups,
+      },
+    );
     expect(await otherIdentity.recoveryPoint(point.id)).toBeNull();
   });
 });

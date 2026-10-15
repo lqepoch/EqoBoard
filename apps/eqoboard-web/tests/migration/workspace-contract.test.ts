@@ -17,26 +17,32 @@ function validDocument(): WorkspaceDocumentV1 {
   return {
     schemaVersion: 1,
     activeWorkspaceId: ids.workspace,
-    workspaces: [{
-      id: ids.workspace,
-      name: "Review",
-      activeTabId: ids.tab,
-      marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
-      tabs: [{
-        id: ids.tab,
-        name: "Overview",
-        widgets: [{
-          instanceId: ids.widget,
-          manifestId: "native.quote",
-          manifestVersion: "1.0.0",
-          configSchemaId: "native.quote.v1",
-          config: {},
-          symbolBinding: { mode: "active" },
-        }],
-        placements: [{ i: ids.widget, x: 0, y: 0, w: 4, h: 4 }],
-        maximizedInstanceId: null,
-      }],
-    }],
+    workspaces: [
+      {
+        id: ids.workspace,
+        name: "Review",
+        activeTabId: ids.tab,
+        marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
+        tabs: [
+          {
+            id: ids.tab,
+            name: "Overview",
+            widgets: [
+              {
+                instanceId: ids.widget,
+                manifestId: "native.quote",
+                manifestVersion: "1.0.0",
+                configSchemaId: "native.quote.v1",
+                config: {},
+                symbolBinding: { mode: "active" },
+              },
+            ],
+            placements: [{ i: ids.widget, x: 0, y: 0, w: 4, h: 4 }],
+            maximizedInstanceId: null,
+          },
+        ],
+      },
+    ],
     userTemplates: [],
   };
 }
@@ -58,7 +64,8 @@ describe("workspace migration v1 contract", () => {
       const candidate = { ...validDocument(), [field]: { sentinel: "must-not-be-exported" } };
       const parsed = parseWorkspaceDocument(candidate);
       expect(parsed.ok, `unexpectedly accepted root field ${field}`).toBe(false);
-      if (!parsed.ok) expect(parsed.errors.some((error) => error.code === "unknown-field")).toBe(true);
+      if (!parsed.ok)
+        expect(parsed.errors.some((error) => error.code === "unknown-field")).toBe(true);
     }
 
     const exportWithIdentity = {
@@ -76,19 +83,23 @@ describe("workspace migration v1 contract", () => {
         ...workspace,
         tabs: workspace.tabs.map((tab) => ({
           ...tab,
-          placements: [...tab.placements, {
-            i: "44444444-4444-4444-8444-444444444444",
-            x: 5,
-            y: 0,
-            w: 2,
-            h: 2,
-          }],
+          placements: [
+            ...tab.placements,
+            {
+              i: "44444444-4444-4444-8444-444444444444",
+              x: 5,
+              y: 0,
+              w: 2,
+              h: 2,
+            },
+          ],
         })),
       })),
     };
     const orphanResult = parseWorkspaceDocument(withOrphanPlacement);
     expect(orphanResult.ok).toBe(false);
-    if (!orphanResult.ok) expect(orphanResult.errors.some((error) => error.code === "missing-reference")).toBe(true);
+    if (!orphanResult.ok)
+      expect(orphanResult.errors.some((error) => error.code === "missing-reference")).toBe(true);
 
     const outOfBounds: unknown = {
       ...base,
@@ -102,7 +113,8 @@ describe("workspace migration v1 contract", () => {
     };
     const boundsResult = parseWorkspaceDocument(outOfBounds);
     expect(boundsResult.ok).toBe(false);
-    if (!boundsResult.ok) expect(boundsResult.errors.some((error) => error.code === "grid-out-of-bounds")).toBe(true);
+    if (!boundsResult.ok)
+      expect(boundsResult.errors.some((error) => error.code === "grid-out-of-bounds")).toBe(true);
   });
 
   it("rejects overlapping placements, unknown fields, and malformed JSON instead of repairing silently", () => {
@@ -113,26 +125,33 @@ describe("workspace migration v1 contract", () => {
         ...workspace,
         tabs: workspace.tabs.map((tab) => ({
           ...tab,
-          widgets: [...tab.widgets, {
-            instanceId: "44444444-4444-4444-8444-444444444444",
-            manifestId: "native.chart",
-            manifestVersion: "1.0.0",
-            configSchemaId: "native.chart.v1",
-            config: {},
-          }],
-          placements: [...tab.placements, {
-            i: "44444444-4444-4444-8444-444444444444",
-            x: 2,
-            y: 1,
-            w: 4,
-            h: 4,
-          }],
+          widgets: [
+            ...tab.widgets,
+            {
+              instanceId: "44444444-4444-4444-8444-444444444444",
+              manifestId: "native.chart",
+              manifestVersion: "1.0.0",
+              configSchemaId: "native.chart.v1",
+              config: {},
+            },
+          ],
+          placements: [
+            ...tab.placements,
+            {
+              i: "44444444-4444-4444-8444-444444444444",
+              x: 2,
+              y: 1,
+              w: 4,
+              h: 4,
+            },
+          ],
         })),
       })),
     };
     const overlapResult = parseWorkspaceDocument(overlapping);
     expect(overlapResult.ok).toBe(false);
-    if (!overlapResult.ok) expect(overlapResult.errors.some((error) => error.code === "grid-overlap")).toBe(true);
+    if (!overlapResult.ok)
+      expect(overlapResult.errors.some((error) => error.code === "grid-overlap")).toBe(true);
 
     expect(parseWorkspaceDocument({ ...validDocument(), revision: "stale" }).ok).toBe(false);
     const malformed = parseWorkspaceJson("{ definitely not json");
@@ -154,7 +173,8 @@ describe("workspace migration v1 contract", () => {
     };
     const symbolResult = parseWorkspaceDocument(tooManySymbols);
     expect(symbolResult.ok).toBe(false);
-    if (!symbolResult.ok) expect(symbolResult.errors.some((error) => error.code === "too-many-items")).toBe(true);
+    if (!symbolResult.ok)
+      expect(symbolResult.errors.some((error) => error.code === "too-many-items")).toBe(true);
 
     const oversized = JSON.stringify({ ...validDocument(), padding: "x".repeat(64 * 1024) });
     const oversizedResult = parseWorkspaceJson(oversized);

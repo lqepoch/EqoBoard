@@ -18,7 +18,10 @@ export type AuthActions = Readonly<{
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_CHANNEL = "eqoboard-auth-v1";
 
-export function AuthProvider({ snapshot, children }: Readonly<{
+export function AuthProvider({
+  snapshot,
+  children,
+}: Readonly<{
   snapshot: AuthUiSnapshot;
   children: ReactNode;
 }>) {
@@ -55,8 +58,11 @@ export function AuthCacheBoundary({ children }: Readonly<{ children: ReactNode }
     if (typeof BroadcastChannel === "undefined") return;
     const channel = new BroadcastChannel(AUTH_CHANNEL);
     channel.onmessage = (event: MessageEvent<unknown>) => {
-      if (event.data && typeof event.data === "object" &&
-          (event.data as { type?: unknown }).type === "signed-out") {
+      if (
+        event.data &&
+        typeof event.data === "object" &&
+        (event.data as { type?: unknown }).type === "signed-out"
+      ) {
         queryClient.clear();
         window.location.replace("/");
       }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { parseRecapEnvelope, parseResearchEnvelope, parseSymbolSearchEnvelope, projectResearchTable } from "./data";
+import {
+  parseRecapEnvelope,
+  parseResearchEnvelope,
+  parseSymbolSearchEnvelope,
+  projectResearchTable,
+} from "./data";
 
 const newsEnvelope = {
   schemaVersion: 1,
@@ -16,14 +21,16 @@ const newsEnvelope = {
   retrievedAt: "2026-10-15T02:00:00.000Z",
   completeness: { complete: false, failedItems: 1, truncated: false },
   cache: "miss",
-  data: [{
-    title: "Headline",
-    link: "https://news.example/story",
-    publisher: "Publisher",
-    provider: "Google News RSS",
-    publishedAt: "2026-10-15T01:55:00.000Z",
-    symbol: null,
-  }],
+  data: [
+    {
+      title: "Headline",
+      link: "https://news.example/story",
+      publisher: "Publisher",
+      provider: "Google News RSS",
+      publishedAt: "2026-10-15T01:55:00.000Z",
+      symbol: null,
+    },
+  ],
   warning: "Provider terms are not verified.",
 } as const;
 
@@ -42,17 +49,21 @@ describe("native research envelope adapter", () => {
 
   it("rejects operation/source mismatches and incomplete payloads advertised as complete", () => {
     expect(parseResearchEnvelope("research.crypto", newsEnvelope)).toBeNull();
-    expect(parseResearchEnvelope("research.news", {
-      ...newsEnvelope,
-      status: "available",
-      source: { ...newsEnvelope.source, providerUrl: "javascript:alert(1)" },
-    })).toBeNull();
-    expect(parseResearchEnvelope("research.news", {
-      ...newsEnvelope,
-      status: "available",
-      completeness: { ...newsEnvelope.completeness, complete: true },
-      data: [{ ...newsEnvelope.data[0]!, link: "javascript:alert(1)" }],
-    })).toBeNull();
+    expect(
+      parseResearchEnvelope("research.news", {
+        ...newsEnvelope,
+        status: "available",
+        source: { ...newsEnvelope.source, providerUrl: "javascript:alert(1)" },
+      }),
+    ).toBeNull();
+    expect(
+      parseResearchEnvelope("research.news", {
+        ...newsEnvelope,
+        status: "available",
+        completeness: { ...newsEnvelope.completeness, complete: true },
+        data: [{ ...newsEnvelope.data[0]!, link: "javascript:alert(1)" }],
+      }),
+    ).toBeNull();
   });
 
   it("requires the fixed TradingView metadata-only source for symbol search", () => {
@@ -70,27 +81,33 @@ describe("native research envelope adapter", () => {
       retrievedAt: "2026-10-15T02:00:00.000Z",
       completeness: { complete: false, failedItems: null, truncated: true },
       cache: "miss",
-      data: [{
-        symbol: "AAPL",
-        providerSymbol: "AAPL",
-        name: "Apple Inc.",
-        exchange: "NASDAQ",
-        type: "stock",
-        provider: "TradingView symbol search",
-        asOf: null,
-      }],
+      data: [
+        {
+          symbol: "AAPL",
+          providerSymbol: "AAPL",
+          name: "Apple Inc.",
+          exchange: "NASDAQ",
+          type: "stock",
+          provider: "TradingView symbol search",
+          asOf: null,
+        },
+      ],
       warning: "TradingView symbol search returns listing metadata only.",
     } as const;
 
     expect(parseSymbolSearchEnvelope(envelope)?.data[0]?.symbol).toBe("AAPL");
-    expect(parseSymbolSearchEnvelope({
-      ...envelope,
-      source: { ...envelope.source, providerUrl: "https://scanner.tradingview.com/" },
-    })).toBeNull();
-    expect(parseSymbolSearchEnvelope({
-      ...envelope,
-      data: [{ ...envelope.data[0], price: 100 }],
-    })).toBeNull();
+    expect(
+      parseSymbolSearchEnvelope({
+        ...envelope,
+        source: { ...envelope.source, providerUrl: "https://scanner.tradingview.com/" },
+      }),
+    ).toBeNull();
+    expect(
+      parseSymbolSearchEnvelope({
+        ...envelope,
+        data: [{ ...envelope.data[0], price: 100 }],
+      }),
+    ).toBeNull();
   });
 
   it("decodes a bounded partial recap and rejects generated narrative fields", () => {
@@ -109,15 +126,40 @@ describe("native research envelope adapter", () => {
       completeness: { complete: false, failedItems: 1, truncated: false },
       cache: "miss",
       data: {
-        indexes: [{ symbol: "SPY", label: "S&P 500 (SPY)", price: { value: null, source: null, asOf: null }, changePercent: { value: null, source: null, asOf: null } }],
+        indexes: [
+          {
+            symbol: "SPY",
+            label: "S&P 500 (SPY)",
+            price: { value: null, source: null, asOf: null },
+            changePercent: { value: null, source: null, asOf: null },
+          },
+        ],
         volatility: { vix: { value: null, source: null, asOf: null } },
         gainers: [],
         losers: [],
         sectors: [],
         headlines: [],
         coverage: {
-          marketMetadata: { status: "available", returned: 1, sampled: 1, sampleLimit: 150, truncated: false, source: "TradingView scanner", asOf: null },
-          sipSnapshots: { status: "unavailable", requested: 151, snapshots: 0, marketRequested: 150, priced: 0, timed: 0, complete: false, source: null, asOf: null },
+          marketMetadata: {
+            status: "available",
+            returned: 1,
+            sampled: 1,
+            sampleLimit: 150,
+            truncated: false,
+            source: "TradingView scanner",
+            asOf: null,
+          },
+          sipSnapshots: {
+            status: "unavailable",
+            requested: 151,
+            snapshots: 0,
+            marketRequested: 150,
+            priced: 0,
+            timed: 0,
+            complete: false,
+            source: null,
+            asOf: null,
+          },
           macro: { status: "partial", source: "FRED", asOf: null },
           headlines: { status: "unavailable", returned: 0, source: null, asOf: null },
         },
@@ -126,6 +168,11 @@ describe("native research envelope adapter", () => {
     } as const;
 
     expect(parseRecapEnvelope(envelope)?.data.indexes[0]?.price.value).toBeNull();
-    expect(parseRecapEnvelope({ ...envelope, data: { ...envelope.data, narrative: "Markets rallied today." } })).toBeNull();
+    expect(
+      parseRecapEnvelope({
+        ...envelope,
+        data: { ...envelope.data, narrative: "Markets rallied today." },
+      }),
+    ).toBeNull();
   });
 });

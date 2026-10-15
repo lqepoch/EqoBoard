@@ -25,7 +25,10 @@ export function ThemeToggle({ preference, onCycle }: ThemeToggleProps) {
       type="button"
     >
       <span className="eq-theme-icon">
-        <ShellIcon name={preference === "light" ? "sun" : preference === "dark" ? "moon" : "system"} size={17} />
+        <ShellIcon
+          name={preference === "light" ? "sun" : preference === "dark" ? "moon" : "system"}
+          size={17}
+        />
       </span>
     </button>
   );

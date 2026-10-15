@@ -1,4 +1,10 @@
-import { projectChartRows, type ChartDisplayEvidence, type ChartPlotBar, type ChartStyle, type IndicatorId } from "@/charts";
+import {
+  projectChartRows,
+  type ChartDisplayEvidence,
+  type ChartPlotBar,
+  type ChartStyle,
+  type IndicatorId,
+} from "@/charts";
 import {
   expectedYfinanceResearchRequest,
   isYfinanceResearchSymbol,
@@ -35,18 +41,39 @@ export const DEFAULT_YFINANCE_RESEARCH_CONFIG: YfinanceResearchConfigV1 = Object
 });
 
 const SYMBOL = /^[A-Z][A-Z0-9.-]{0,11}$/u;
-const INDICATORS = new Set<IndicatorId>(["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "RSI", "MACD", "BOLL"]);
+const INDICATORS = new Set<IndicatorId>([
+  "SMA20",
+  "SMA50",
+  "SMA200",
+  "EMA20",
+  "VWAP",
+  "RSI",
+  "MACD",
+  "BOLL",
+]);
 const STYLES = new Set<ChartStyle>(["candles", "bars", "line", "area"]);
 
 /** Use only the server-authored distinct-host origin for the Research portal link. */
-export function buildYahooResearchPageHref(origin: string | null | undefined, symbol: string, currentHostname: string): string | null {
+export function buildYahooResearchPageHref(
+  origin: string | null | undefined,
+  symbol: string,
+  currentHostname: string,
+): string | null {
   if (!isYfinanceResearchSymbol(symbol) || !origin) return null;
   try {
     const url = new URL(origin);
     const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-    if (url.origin !== origin || url.username || url.password || url.pathname !== "/" || url.search || url.hash ||
-        (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) ||
-        url.hostname.toLowerCase() === currentHostname.toLowerCase()) return null;
+    if (
+      url.origin !== origin ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) ||
+      url.hostname.toLowerCase() === currentHostname.toLowerCase()
+    )
+      return null;
     return new URL(`/research/yfinance/${encodeURIComponent(symbol)}`, url.origin).toString();
   } catch {
     return null;
@@ -60,33 +87,73 @@ function plainRecord(value: unknown): Record<string, unknown> | null {
     if (prototype !== Object.prototype && prototype !== null) return null;
     const keys = Reflect.ownKeys(value);
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (keys.some((key) => typeof key !== "string" || !descriptors[key]?.enumerable || !("value" in descriptors[key]!))) return null;
+    if (
+      keys.some(
+        (key) =>
+          typeof key !== "string" ||
+          !descriptors[key]?.enumerable ||
+          !("value" in descriptors[key]!),
+      )
+    )
+      return null;
     return value as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
-export function parseYfinanceResearchConfig(value: unknown):
+export function parseYfinanceResearchConfig(
+  value: unknown,
+):
   | Readonly<{ ok: true; value: YfinanceResearchConfigV1 }>
   | Readonly<{ ok: false; code: "config-invalid"; field?: string }> {
   const config = plainRecord(value);
-  const fields = ["schemaVersion", "symbol", "assetClass", "range", "adjustment", "style", "showVolume", "indicators"];
-  if (!config || Reflect.ownKeys(config).length !== fields.length || fields.some((field) => !Object.hasOwn(config, field)) ||
-      Reflect.ownKeys(config).some((field) => typeof field !== "string" || !fields.includes(field))) {
+  const fields = [
+    "schemaVersion",
+    "symbol",
+    "assetClass",
+    "range",
+    "adjustment",
+    "style",
+    "showVolume",
+    "indicators",
+  ];
+  if (
+    !config ||
+    Reflect.ownKeys(config).length !== fields.length ||
+    fields.some((field) => !Object.hasOwn(config, field)) ||
+    Reflect.ownKeys(config).some((field) => typeof field !== "string" || !fields.includes(field))
+  ) {
     return { ok: false, code: "config-invalid" };
   }
-  if (config.schemaVersion !== 1) return { ok: false, code: "config-invalid", field: "schemaVersion" };
-  if (typeof config.symbol !== "string" || config.symbol !== config.symbol.trim() || config.symbol.length > 12 ||
-      (config.symbol !== "" && !SYMBOL.test(config.symbol))) return { ok: false, code: "config-invalid", field: "symbol" };
-  if (config.assetClass !== "stock" && config.assetClass !== "etf") return { ok: false, code: "config-invalid", field: "assetClass" };
-  if (!YFINANCE_RESEARCH_RANGES.includes(config.range as YfinanceResearchRange)) return { ok: false, code: "config-invalid", field: "range" };
-  if (config.adjustment !== "unadjusted" && config.adjustment !== "adjusted") return { ok: false, code: "config-invalid", field: "adjustment" };
-  if (typeof config.style !== "string" || !STYLES.has(config.style as ChartStyle)) return { ok: false, code: "config-invalid", field: "style" };
-  if (typeof config.showVolume !== "boolean") return { ok: false, code: "config-invalid", field: "showVolume" };
-  if (!Array.isArray(config.indicators) || config.indicators.length > 8 ||
-      config.indicators.some((item) => typeof item !== "string" || !INDICATORS.has(item as IndicatorId)) ||
-      new Set(config.indicators).size !== config.indicators.length) return { ok: false, code: "config-invalid", field: "indicators" };
+  if (config.schemaVersion !== 1)
+    return { ok: false, code: "config-invalid", field: "schemaVersion" };
+  if (
+    typeof config.symbol !== "string" ||
+    config.symbol !== config.symbol.trim() ||
+    config.symbol.length > 12 ||
+    (config.symbol !== "" && !SYMBOL.test(config.symbol))
+  )
+    return { ok: false, code: "config-invalid", field: "symbol" };
+  if (config.assetClass !== "stock" && config.assetClass !== "etf")
+    return { ok: false, code: "config-invalid", field: "assetClass" };
+  if (!YFINANCE_RESEARCH_RANGES.includes(config.range as YfinanceResearchRange))
+    return { ok: false, code: "config-invalid", field: "range" };
+  if (config.adjustment !== "unadjusted" && config.adjustment !== "adjusted")
+    return { ok: false, code: "config-invalid", field: "adjustment" };
+  if (typeof config.style !== "string" || !STYLES.has(config.style as ChartStyle))
+    return { ok: false, code: "config-invalid", field: "style" };
+  if (typeof config.showVolume !== "boolean")
+    return { ok: false, code: "config-invalid", field: "showVolume" };
+  if (
+    !Array.isArray(config.indicators) ||
+    config.indicators.length > 8 ||
+    config.indicators.some(
+      (item) => typeof item !== "string" || !INDICATORS.has(item as IndicatorId),
+    ) ||
+    new Set(config.indicators).size !== config.indicators.length
+  )
+    return { ok: false, code: "config-invalid", field: "indicators" };
   const parsed = Object.freeze({
     schemaVersion: 1 as const,
     symbol: config.symbol,
@@ -97,20 +164,29 @@ export function parseYfinanceResearchConfig(value: unknown):
     showVolume: config.showVolume,
     indicators: Object.freeze([...config.indicators]) as readonly IndicatorId[],
   });
-  if (new TextEncoder().encode(JSON.stringify(parsed)).byteLength > 8 * 1024) return { ok: false, code: "config-invalid" };
+  if (new TextEncoder().encode(JSON.stringify(parsed)).byteLength > 8 * 1024)
+    return { ok: false, code: "config-invalid" };
   return { ok: true, value: parsed as YfinanceResearchConfigV1 };
 }
 
 function rangeDays(range: YfinanceResearchRange): number {
   switch (range) {
-    case "1D": return 7;
-    case "5D": return 14;
-    case "1M": return 45;
-    case "6M": return 200;
-    case "1Y": return 370;
-    case "5Y": return 1_850;
-    case "MAX": return 36_500;
-    case "YTD": return 1;
+    case "1D":
+      return 7;
+    case "5D":
+      return 14;
+    case "1M":
+      return 45;
+    case "6M":
+      return 200;
+    case "1Y":
+      return 370;
+    case "5Y":
+      return 1_850;
+    case "MAX":
+      return 36_500;
+    case "YTD":
+      return 1;
   }
 }
 
@@ -126,9 +202,10 @@ export function buildYfinanceResearchInput(
   const now = new Date(nowMs);
   if (!Number.isFinite(now.getTime())) return null;
   const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const start = config.range === "YTD"
-    ? Date.UTC(now.getUTCFullYear(), 0, 1)
-    : end - rangeDays(config.range) * 86_400_000;
+  const start =
+    config.range === "YTD"
+      ? Date.UTC(now.getUTCFullYear(), 0, 1)
+      : end - rangeDays(config.range) * 86_400_000;
   if (start >= end) return null;
   return Object.freeze({
     symbol,
@@ -148,7 +225,10 @@ export function parseYfinanceResearchResponse(
   return validateYfinanceResearchResponse(value, expected) ? value : null;
 }
 
-export type YfinanceResearchPage = Readonly<{ request: YfinanceResearchInput; response: YfinanceResearchResponse }>;
+export type YfinanceResearchPage = Readonly<{
+  request: YfinanceResearchInput;
+  response: YfinanceResearchResponse;
+}>;
 
 export type YfinanceResearchProjection = Readonly<{
   bars: readonly ChartPlotBar<YfinanceResearchResponse["observation"]["payload"]["bars"][number]>[];
@@ -156,16 +236,20 @@ export type YfinanceResearchProjection = Readonly<{
 }>;
 
 /** Provider decimals are deliberately projected to display floats with no exact-decimal claim. */
-export function projectYfinanceResearchPages(pages: readonly YfinanceResearchPage[]): YfinanceResearchProjection {
-  const candidates = pages.flatMap(({ response }) => response.observation.payload.bars.map((row) => ({
-    sourceRow: row,
-    timeSeconds: Math.floor(Date.parse(row.event_ts_utc) / 1_000),
-    open: row.open,
-    high: row.high,
-    low: row.low,
-    close: row.close,
-    volume: row.volume,
-  })));
+export function projectYfinanceResearchPages(
+  pages: readonly YfinanceResearchPage[],
+): YfinanceResearchProjection {
+  const candidates = pages.flatMap(({ response }) =>
+    response.observation.payload.bars.map((row) => ({
+      sourceRow: row,
+      timeSeconds: Math.floor(Date.parse(row.event_ts_utc) / 1_000),
+      open: row.open,
+      high: row.high,
+      low: row.low,
+      close: row.close,
+      volume: row.volume,
+    })),
+  );
   const projection = projectChartRows(candidates);
   return { bars: projection.bars, rejectedRows: projection.rejectedRows };
 }
@@ -179,28 +263,54 @@ export function yfinanceResearchEvidence(
   const head = pages[0];
   if (!head) return null;
   const responses = pages.map((page) => page.response);
-  const providerTimes = [...new Set(responses.map((response) => response.observation.payload.source_observed_at))];
+  const providerTimes = [
+    ...new Set(responses.map((response) => response.observation.payload.source_observed_at)),
+  ];
   const rejected = projection.rejectedRows;
   const pendingCursor = responses.at(-1)?.next_cursor ?? null;
-  const partial = responses.some((response) => response.observation.payload.status === "partial" ||
-    response.observation.payload.missing_symbols.length > 0) || rejected > 0 || pendingCursor !== null || paginationBlocked;
+  const partial =
+    responses.some(
+      (response) =>
+        response.observation.payload.status === "partial" ||
+        response.observation.payload.missing_symbols.length > 0,
+    ) ||
+    rejected > 0 ||
+    pendingCursor !== null ||
+    paginationBlocked;
   const start = head.response.requested_range.start_utc;
   const end = head.response.requested_range.end_utc;
-  const returned = [...new Set(responses.flatMap((response) => response.observation.payload.returned_symbols))];
-  const missing = [...new Set(responses.flatMap((response) => response.observation.payload.missing_symbols))];
-  const adapterVersions = [...new Set(responses
-    .map((response) => response.observation.payload.provenance.adapter_version)
-    .filter((version): version is string => typeof version === "string" && version.length > 0))];
-  const hasSyntheticFixtureMarker = adapterVersions.some((version) => version.startsWith("bounded-synthetic-e2e"));
+  const returned = [
+    ...new Set(responses.flatMap((response) => response.observation.payload.returned_symbols)),
+  ];
+  const missing = [
+    ...new Set(responses.flatMap((response) => response.observation.payload.missing_symbols)),
+  ];
+  const adapterVersions = [
+    ...new Set(
+      responses
+        .map((response) => response.observation.payload.provenance.adapter_version)
+        .filter((version): version is string => typeof version === "string" && version.length > 0),
+    ),
+  ];
+  const hasSyntheticFixtureMarker = adapterVersions.some((version) =>
+    version.startsWith("bounded-synthetic-e2e"),
+  );
   const safeAdapterVersions = adapterVersions.map((version) =>
-    /^[A-Za-z0-9][A-Za-z0-9._:+/-]{0,119}$/u.test(version) ? version : "unrecognized adapter identifier (omitted)",
+    /^[A-Za-z0-9][A-Za-z0-9._:+/-]{0,119}$/u.test(version)
+      ? version
+      : "unrecognized adapter identifier (omitted)",
   );
   return Object.freeze({
     mode: "yahoo-daily",
     source: "Yahoo Finance",
     provider: "yfinance",
     feed: "daily observations",
-    asOf: providerTimes.length === 1 ? providerTimes[0]! : providerTimes.length > 1 ? "mixed source observation times" : "unknown",
+    asOf:
+      providerTimes.length === 1
+        ? providerTimes[0]!
+        : providerTimes.length > 1
+          ? "mixed source observation times"
+          : "unknown",
     requestedWindow: `${config.range} · ${start} → ${end}`,
     effectiveResolution: "1d",
     coverage: `MDP coverage not asserted; ${projection.bars.length} plotted rows across ${pages.length} page(s); returned ${returned.join(", ") || "none"}; missing ${missing.join(", ") || "none"}${rejected ? `; ${rejected} rows omitted for invalid/missing OHLCV` : ""}${pendingCursor ? "; older cursor available by explicit request" : ""}${paginationBlocked ? "; pagination stopped after a repeated/invalid cursor" : ""}`,
@@ -208,23 +318,50 @@ export function yfinanceResearchEvidence(
     precision: "provider-float",
     evidence: Object.freeze([
       { label: "Adjustment", value: `${config.adjustment}; provider semantics unconfirmed` },
-      { label: "Source observed at", value: providerTimes.length === 1 ? providerTimes[0]! : "mixed / unknown" },
-      { label: "Provider fetch", value: responses.map((response) => response.observation.fetched_at_utc).join(", ") },
+      {
+        label: "Source observed at",
+        value: providerTimes.length === 1 ? providerTimes[0]! : "mixed / unknown",
+      },
+      {
+        label: "Provider fetch",
+        value: responses.map((response) => response.observation.fetched_at_utc).join(", "),
+      },
       { label: "Adapter provenance", value: safeAdapterVersions.join(", ") || "unknown" },
       ...(hasSyntheticFixtureMarker
-        ? [{ label: "Fixture provenance", value: "Synthetic acceptance fixture · bounded-synthetic-e2e marker" }]
+        ? [
+            {
+              label: "Fixture provenance",
+              value: "Synthetic acceptance fixture · bounded-synthetic-e2e marker",
+            },
+          ]
         : []),
-      { label: "Coverage assertion", value: "MDP does not assert coverage; calendar gaps are not assessed" },
+      {
+        label: "Coverage assertion",
+        value: "MDP does not assert coverage; calendar gaps are not assessed",
+      },
       { label: "Authority", value: "Display only · non-canonical · non-PIT · non-executable" },
     ]),
   });
 }
 
-export function canLoadOlderPages(pages: readonly YfinanceResearchPage[], blocked: boolean): boolean {
-  return pages.length > 0 && pages.length < YFINANCE_RESEARCH_MAX_PAGES && !blocked && pages.at(-1)?.response.next_cursor !== null;
+export function canLoadOlderPages(
+  pages: readonly YfinanceResearchPage[],
+  blocked: boolean,
+): boolean {
+  return (
+    pages.length > 0 &&
+    pages.length < YFINANCE_RESEARCH_MAX_PAGES &&
+    !blocked &&
+    pages.at(-1)?.response.next_cursor !== null
+  );
 }
 
-export function isYfinanceCursorLoop(pages: readonly YfinanceResearchPage[], nextCursor: string): boolean {
-  return pages.some((page) => page.request.cursor === nextCursor) ||
-    pages.some((page) => page.response.next_cursor === nextCursor);
+export function isYfinanceCursorLoop(
+  pages: readonly YfinanceResearchPage[],
+  nextCursor: string,
+): boolean {
+  return (
+    pages.some((page) => page.request.cursor === nextCursor) ||
+    pages.some((page) => page.response.next_cursor === nextCursor)
+  );
 }

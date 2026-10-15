@@ -17,7 +17,11 @@ export function Providers({ auth, children }: ProvidersProps) {
   const permissionBoundary = auth.permissions.slice().sort().join(",");
   const cacheBoundary = `${auth.status}:${auth.storagePartition ?? "anonymous"}:${permissionBoundary}`;
 
-  return <AuthScopedProviders auth={auth} key={cacheBoundary}>{children}</AuthScopedProviders>;
+  return (
+    <AuthScopedProviders auth={auth} key={cacheBoundary}>
+      {children}
+    </AuthScopedProviders>
+  );
 }
 
 type AuthScopedProvidersProps = Readonly<{

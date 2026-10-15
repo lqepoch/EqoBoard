@@ -18,7 +18,14 @@ function requiredOrigin(name: string): string {
   const raw = process.env[name];
   if (!raw) throw new Error(`${name} must be supplied by the production Compose E2E helper.`);
   const parsed = new URL(raw);
-  if (parsed.protocol !== "http:" || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") {
+  if (
+    parsed.protocol !== "http:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.pathname !== "/"
+  ) {
     throw new Error(`${name} must be a plain HTTP fixture origin.`);
   }
   return parsed.origin;
@@ -35,7 +42,9 @@ export function terminalWebOrigin(): string {
 export function researchWebOrigin(): string {
   const origin = requiredOrigin("E2E_RESEARCH_WEB_ORIGIN");
   if (new URL(origin).hostname !== "localhost" || new URL(origin).port !== "3441") {
-    throw new Error("E2E_RESEARCH_WEB_ORIGIN must use the approved localhost research hostname and port.");
+    throw new Error(
+      "E2E_RESEARCH_WEB_ORIGIN must use the approved localhost research hostname and port.",
+    );
   }
   return origin;
 }
@@ -49,27 +58,37 @@ function gatewayControlOrigin(): string {
 }
 
 export async function resetGatewayFixtureCounters(request: APIRequestContext): Promise<void> {
-  const response = await request.post(new URL("/__test/counters/reset", gatewayControlOrigin()).toString());
+  const response = await request.post(
+    new URL("/__test/counters/reset", gatewayControlOrigin()).toString(),
+  );
   expect(response.status()).toBe(200);
 }
 
-export async function readGatewayFixtureCounters(request: APIRequestContext): Promise<GatewayFixtureCounters> {
-  const response = await request.get(new URL("/__test/counters", gatewayControlOrigin()).toString());
+export async function readGatewayFixtureCounters(
+  request: APIRequestContext,
+): Promise<GatewayFixtureCounters> {
+  const response = await request.get(
+    new URL("/__test/counters", gatewayControlOrigin()).toString(),
+  );
   expect(response.status()).toBe(200);
-  const value = await response.json() as unknown;
+  const value = (await response.json()) as unknown;
   expect(value).toMatchObject({ calls: expect.any(Object) });
   return value as GatewayFixtureCounters;
 }
 
 export async function resetMdpFixtureCounters(request: APIRequestContext): Promise<void> {
-  const response = await request.post(new URL("/__test/counters/reset", mdpControlOrigin()).toString());
+  const response = await request.post(
+    new URL("/__test/counters/reset", mdpControlOrigin()).toString(),
+  );
   expect(response.status()).toBe(200);
 }
 
-export async function readMdpFixtureCounters(request: APIRequestContext): Promise<MdpFixtureCounters> {
+export async function readMdpFixtureCounters(
+  request: APIRequestContext,
+): Promise<MdpFixtureCounters> {
   const response = await request.get(new URL("/__test/counters", mdpControlOrigin()).toString());
   expect(response.status()).toBe(200);
-  const value = await response.json() as unknown;
+  const value = (await response.json()) as unknown;
   expect(value).toMatchObject({
     calls: expect.any(Object),
     acceptedDelegations: expect.any(Number),
@@ -79,10 +98,16 @@ export async function readMdpFixtureCounters(request: APIRequestContext): Promis
   return value as MdpFixtureCounters;
 }
 
-export async function signInAt(page: Page, origin: string, identity: MockIdentity, path: string): Promise<void> {
+export async function signInAt(
+  page: Page,
+  origin: string,
+  identity: MockIdentity,
+  path: string,
+): Promise<void> {
   await page.goto(new URL(path, origin).toString(), { waitUntil: "domcontentloaded" });
   await page.getByTestId("sign-in-button").click();
-  const selector = identity === "workspace-only" ? "mock-login-workspace-only" : `mock-login-${identity}`;
+  const selector =
+    identity === "workspace-only" ? "mock-login-workspace-only" : `mock-login-${identity}`;
   await page.getByTestId(selector).click();
   await expect(page.getByTestId("account-menu")).toBeVisible();
 }

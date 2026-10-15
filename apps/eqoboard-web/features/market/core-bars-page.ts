@@ -28,8 +28,17 @@ const ADJUSTMENTS = ["unadjusted", "split", "dividend", "all"] as const;
 const SESSIONS = ["all", "regular", "extended", "overnight"] as const;
 const PROVIDERS = ["auto", "alpaca_only", "futu_only"] as const;
 const REQUEST_KEYS = [
-  "symbol", "range", "resolution", "asset_class", "session_scope", "adjustment", "provider_mode",
-  "allow_daily_downgrade", "request_start", "request_end", "cursor",
+  "symbol",
+  "range",
+  "resolution",
+  "asset_class",
+  "session_scope",
+  "adjustment",
+  "provider_mode",
+  "allow_daily_downgrade",
+  "request_start",
+  "request_end",
+  "cursor",
 ] as const;
 
 function plainRecord(value: unknown): value is Record<string, unknown> {
@@ -38,8 +47,13 @@ function plainRecord(value: unknown): value is Record<string, unknown> {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return false;
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    return Reflect.ownKeys(value).every((key) => typeof key === "string" &&
-      !!descriptors[key] && descriptors[key]!.enumerable && "value" in descriptors[key]!);
+    return Reflect.ownKeys(value).every(
+      (key) =>
+        typeof key === "string" &&
+        !!descriptors[key] &&
+        descriptors[key]!.enumerable &&
+        "value" in descriptors[key]!,
+    );
   } catch {
     return false;
   }
@@ -51,22 +65,40 @@ function hasKeys(value: Record<string, unknown>, expected: readonly string[]): b
 }
 
 function rfc3339(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value) && Number.isFinite(Date.parse(value));
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value) &&
+    Number.isFinite(Date.parse(value))
+  );
 }
 
 function parseRequest(value: unknown): CoreBarsPageRequest | null {
   if (!plainRecord(value) || !hasKeys(value, REQUEST_KEYS)) return null;
-  if (typeof value.symbol !== "string" || !SYMBOL.test(value.symbol) ||
-      typeof value.range !== "string" || !(RANGES as readonly string[]).includes(value.range) ||
-      typeof value.resolution !== "string" || !(RESOLUTIONS as readonly string[]).includes(value.resolution) ||
-      (value.asset_class !== "stock" && value.asset_class !== "etf") ||
-      typeof value.session_scope !== "string" || !(SESSIONS as readonly string[]).includes(value.session_scope) ||
-      typeof value.adjustment !== "string" || !(ADJUSTMENTS as readonly string[]).includes(value.adjustment) ||
-      typeof value.provider_mode !== "string" || !(PROVIDERS as readonly string[]).includes(value.provider_mode) ||
-      typeof value.allow_daily_downgrade !== "boolean" || !rfc3339(value.request_start) || !rfc3339(value.request_end) ||
-      value.request_start >= value.request_end ||
-      (value.cursor !== null && (typeof value.cursor !== "string" || value.cursor.length === 0 ||
-        new TextEncoder().encode(value.cursor).byteLength > 2_048 || CONTROL.test(value.cursor)))) return null;
+  if (
+    typeof value.symbol !== "string" ||
+    !SYMBOL.test(value.symbol) ||
+    typeof value.range !== "string" ||
+    !(RANGES as readonly string[]).includes(value.range) ||
+    typeof value.resolution !== "string" ||
+    !(RESOLUTIONS as readonly string[]).includes(value.resolution) ||
+    (value.asset_class !== "stock" && value.asset_class !== "etf") ||
+    typeof value.session_scope !== "string" ||
+    !(SESSIONS as readonly string[]).includes(value.session_scope) ||
+    typeof value.adjustment !== "string" ||
+    !(ADJUSTMENTS as readonly string[]).includes(value.adjustment) ||
+    typeof value.provider_mode !== "string" ||
+    !(PROVIDERS as readonly string[]).includes(value.provider_mode) ||
+    typeof value.allow_daily_downgrade !== "boolean" ||
+    !rfc3339(value.request_start) ||
+    !rfc3339(value.request_end) ||
+    value.request_start >= value.request_end ||
+    (value.cursor !== null &&
+      (typeof value.cursor !== "string" ||
+        value.cursor.length === 0 ||
+        new TextEncoder().encode(value.cursor).byteLength > 2_048 ||
+        CONTROL.test(value.cursor)))
+  )
+    return null;
   return Object.freeze({
     symbol: value.symbol,
     range: value.range as CoreBarsPageRequest["range"],
@@ -84,7 +116,12 @@ function parseRequest(value: unknown): CoreBarsPageRequest | null {
 
 /** Validates only the non-financial paging envelope; Core validates the response body. */
 export function decodeCoreBarsPageEnvelope(value: unknown): CoreBarsPageEnvelope | null {
-  if (!plainRecord(value) || !hasKeys(value, ["kind", "request", "response"]) || value.kind !== "eqoboard.core-bars-page.v1") return null;
+  if (
+    !plainRecord(value) ||
+    !hasKeys(value, ["kind", "request", "response"]) ||
+    value.kind !== "eqoboard.core-bars-page.v1"
+  )
+    return null;
   const request = parseRequest(value.request);
   if (!request || !plainRecord(value.response)) return null;
   return Object.freeze({ kind: "eqoboard.core-bars-page.v1", request, response: value.response });

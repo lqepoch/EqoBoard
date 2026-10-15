@@ -7,7 +7,10 @@ import type { ChartIndicatorValues, ChartPlotBar, IndicatorId, IndicatorPoint } 
 
 const validPeriod = (period: number): boolean => Number.isSafeInteger(period) && period > 0;
 
-function simpleMovingAverage<TRow>(bars: readonly ChartPlotBar<TRow>[], period: number): IndicatorPoint[] {
+function simpleMovingAverage<TRow>(
+  bars: readonly ChartPlotBar<TRow>[],
+  period: number,
+): IndicatorPoint[] {
   if (!validPeriod(period) || bars.length < period) return [];
   const result: IndicatorPoint[] = [];
   let sum = 0;
@@ -19,7 +22,10 @@ function simpleMovingAverage<TRow>(bars: readonly ChartPlotBar<TRow>[], period: 
   return result;
 }
 
-function exponentialMovingAverage<TRow>(bars: readonly ChartPlotBar<TRow>[], period: number): IndicatorPoint[] {
+function exponentialMovingAverage<TRow>(
+  bars: readonly ChartPlotBar<TRow>[],
+  period: number,
+): IndicatorPoint[] {
   if (!validPeriod(period) || bars.length < period) return [];
   const multiplier = 2 / (period + 1);
   let previous = bars[0]!.close;
@@ -88,7 +94,12 @@ function movingAverageValues<TRow>(bars: readonly ChartPlotBar<TRow>[], period: 
   return result;
 }
 
-function macdValues<TRow>(bars: readonly ChartPlotBar<TRow>[], fast = 12, slow = 26, signal = 9): MacdValues {
+function macdValues<TRow>(
+  bars: readonly ChartPlotBar<TRow>[],
+  fast = 12,
+  slow = 26,
+  signal = 9,
+): MacdValues {
   if (bars.length < slow) return { macd: [], signal: [], histogram: [] };
   const fastValues = movingAverageValues(bars, fast);
   const slowValues = movingAverageValues(bars, slow);

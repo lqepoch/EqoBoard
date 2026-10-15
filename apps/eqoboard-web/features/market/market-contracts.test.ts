@@ -11,19 +11,21 @@ const quoteResponse = {
   source: "alpaca",
   feed: "sip",
   as_of: "2026-10-15T02:00:00Z",
-  snapshots: [{
-    symbol: "SPY",
-    last: 600,
-    bid: 599.99,
-    ask: 600.01,
-    open: null,
-    high: null,
-    low: null,
-    previous_close: null,
-    change_percent: null,
-    volume: null,
-    quote_at: "2026-10-15T01:59:59Z",
-  }],
+  snapshots: [
+    {
+      symbol: "SPY",
+      last: 600,
+      bid: 599.99,
+      ask: 600.01,
+      open: null,
+      high: null,
+      low: null,
+      previous_close: null,
+      change_percent: null,
+      volume: null,
+      quote_at: "2026-10-15T01:59:59Z",
+    },
+  ],
 };
 
 const optionResponse = {
@@ -33,27 +35,29 @@ const optionResponse = {
   source: "alpaca",
   as_of: "2026-10-15T02:00:00Z",
   truncated: false,
-  contracts: [{
-    symbol: "SPY261218C00600000",
-    underlying: "SPY",
-    expiration: "2026-12-18",
-    right: "call",
-    strike: 600,
-    bid: 4.1,
-    ask: 4.2,
-    last: null,
-    bid_size: 1,
-    ask_size: 2,
-    iv: 0.2,
-    delta: 0.5,
-    gamma: 0.01,
-    theta: -0.1,
-    vega: 0.2,
-    quote_at: "2026-10-15T01:59:59Z",
-    trade_at: null,
-    model_as_of: null,
-    feed: "opra",
-  }],
+  contracts: [
+    {
+      symbol: "SPY261218C00600000",
+      underlying: "SPY",
+      expiration: "2026-12-18",
+      right: "call",
+      strike: 600,
+      bid: 4.1,
+      ask: 4.2,
+      last: null,
+      bid_size: 1,
+      ask_size: 2,
+      iv: 0.2,
+      delta: 0.5,
+      gamma: 0.01,
+      theta: -0.1,
+      vega: 0.2,
+      quote_at: "2026-10-15T01:59:59Z",
+      trade_at: null,
+      model_as_of: null,
+      feed: "opra",
+    },
+  ],
 };
 
 const previewIntent: VerticalPreviewIntent = {
@@ -86,8 +90,17 @@ describe("native market response adapters", () => {
     const decoded = decodeQuoteResponse(quoteResponse);
     expect(decoded?.status).toBe("available");
     if (decoded?.status !== "available") return;
-    expect(decoded.evidence).toMatchObject({ source: "alpaca", feed: "sip", asOf: quoteResponse.as_of });
-    expect(decoded.snapshots[0]).toMatchObject({ symbol: "SPY", last: 600, bid: 599.99, ask: 600.01 });
+    expect(decoded.evidence).toMatchObject({
+      source: "alpaca",
+      feed: "sip",
+      asOf: quoteResponse.as_of,
+    });
+    expect(decoded.snapshots[0]).toMatchObject({
+      symbol: "SPY",
+      last: 600,
+      bid: 599.99,
+      ask: 600.01,
+    });
     expect(decoded.wire).toEqual(quoteResponse);
   });
 
@@ -104,8 +117,15 @@ describe("native market response adapters", () => {
   });
 
   it("rejects malformed known-source snapshot envelopes", () => {
-    expect(decodeQuoteResponse({ ...quoteResponse, snapshots: [{ symbol: "SPY", last: "600" }] })).toBeNull();
-    expect(decodeQuoteResponse({ ...quoteResponse, snapshots: [quoteResponse.snapshots[0], quoteResponse.snapshots[0]] })).toBeNull();
+    expect(
+      decodeQuoteResponse({ ...quoteResponse, snapshots: [{ symbol: "SPY", last: "600" }] }),
+    ).toBeNull();
+    expect(
+      decodeQuoteResponse({
+        ...quoteResponse,
+        snapshots: [quoteResponse.snapshots[0], quoteResponse.snapshots[0]],
+      }),
+    ).toBeNull();
   });
 
   it("accepts only provider-returned option rows that match the requested OCC identity", () => {
@@ -118,7 +138,9 @@ describe("native market response adapters", () => {
       feed: "opra",
       modelAsOf: null,
     });
-    expect(decodeOptionChainResponse({ ...optionResponse, source: "futu" }, "SPY", "2026-12-18")).toBeNull();
+    expect(
+      decodeOptionChainResponse({ ...optionResponse, source: "futu" }, "SPY", "2026-12-18"),
+    ).toBeNull();
     expect(decodeOptionChainResponse(optionResponse, "SPY", "2026-12-19")).toBeNull();
   });
 
@@ -126,13 +148,23 @@ describe("native market response adapters", () => {
     const decoded = decodeVerticalPreviewReceipt(previewResponse, previewIntent);
     expect(decoded?.executionEnabled).toBe(false);
     expect(decoded?.preview.intent).toEqual(previewIntent);
-    expect(decodeVerticalPreviewReceipt({
-      ...previewResponse,
-      preview: { ...previewResponse.preview, intent: { ...previewIntent, quantity: 2 } },
-    }, previewIntent)).toBeNull();
-    expect(decodeVerticalPreviewReceipt({
-      ...previewResponse,
-      execution_enabled: true,
-    }, previewIntent)).toBeNull();
+    expect(
+      decodeVerticalPreviewReceipt(
+        {
+          ...previewResponse,
+          preview: { ...previewResponse.preview, intent: { ...previewIntent, quantity: 2 } },
+        },
+        previewIntent,
+      ),
+    ).toBeNull();
+    expect(
+      decodeVerticalPreviewReceipt(
+        {
+          ...previewResponse,
+          execution_enabled: true,
+        },
+        previewIntent,
+      ),
+    ).toBeNull();
   });
 });

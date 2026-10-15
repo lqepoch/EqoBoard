@@ -1,9 +1,15 @@
 import type { ChartDisplayEvidence } from "./types";
 
-export function ChartEvidencePanel({ evidence }: Readonly<{ evidence: ChartDisplayEvidence | null }>) {
+export function ChartEvidencePanel({
+  evidence,
+}: Readonly<{ evidence: ChartDisplayEvidence | null }>) {
   if (!evidence) {
     return (
-      <div className="native-chart-evidence" data-testid="native-chart-provenance" aria-live="polite">
+      <div
+        className="native-chart-evidence"
+        data-testid="native-chart-provenance"
+        aria-live="polite"
+      >
         <span>Source evidence unavailable.</span>
       </div>
     );

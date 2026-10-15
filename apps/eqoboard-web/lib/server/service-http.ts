@@ -16,18 +16,29 @@ export type JsonResponseRead =
 const LOOPBACK_HTTP_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 function validDnsHost(hostname: string): boolean {
-  if (hostname.length < 1 || hostname.length > 253 || hostname.endsWith(".") || isIP(hostname) !== 0) return false;
-  return hostname.split(".").every((label) => label.length <= 63 &&
-    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/iu.test(label));
+  if (
+    hostname.length < 1 ||
+    hostname.length > 253 ||
+    hostname.endsWith(".") ||
+    isIP(hostname) !== 0
+  )
+    return false;
+  return hostname
+    .split(".")
+    .every((label) => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/iu.test(label));
 }
 
 /** Parse only a configured origin. Callers select their exact HTTP service allowlist. */
-export function parseFixedServiceBaseUrl(raw: string | undefined, allowedHttpHosts: ReadonlySet<string>): URL | null {
+export function parseFixedServiceBaseUrl(
+  raw: string | undefined,
+  allowedHttpHosts: ReadonlySet<string>,
+): URL | null {
   if (!raw || raw.length > 2_048 || raw.trim() !== raw) return null;
   try {
     const url = new URL(raw);
     if (url.username || url.password || url.search || url.hash || url.pathname !== "/") return null;
-    if (url.port && (!/^\d+$/u.test(url.port) || Number(url.port) < 1 || Number(url.port) > 65_535)) return null;
+    if (url.port && (!/^\d+$/u.test(url.port) || Number(url.port) < 1 || Number(url.port) > 65_535))
+      return null;
     const hostname = url.hostname.toLowerCase();
     if (url.protocol === "https:") {
       if (!validDnsHost(hostname)) return null;
@@ -57,9 +68,18 @@ export function engineBaseUrl(): URL | null {
   if (!raw || raw.length > 2_048 || raw.trim() !== raw) return null;
   try {
     const url = new URL(raw);
-    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port ||
-        url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
-        (raw !== url.origin && raw !== `${url.origin}/`)) return null;
+    if (
+      url.protocol !== "http:" ||
+      url.hostname !== "127.0.0.1" ||
+      !url.port ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/" ||
+      (raw !== url.origin && raw !== `${url.origin}/`)
+    )
+      return null;
     const port = Number(url.port);
     return Number.isInteger(port) && port >= 1 && port <= 65_535 ? new URL(url.origin) : null;
   } catch {
@@ -87,7 +107,10 @@ export function createUpstreamDeadline(request: Request, timeoutMs: number): Ups
   };
 }
 
-export async function readJsonResponseBounded(response: Response, maxBytes: number): Promise<JsonResponseRead> {
+export async function readJsonResponseBounded(
+  response: Response,
+  maxBytes: number,
+): Promise<JsonResponseRead> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
     await response.body?.cancel().catch(() => undefined);
@@ -96,7 +119,9 @@ export async function readJsonResponseBounded(response: Response, maxBytes: numb
   const result = await readBoundedResponse(response, maxBytes);
   if (!result.ok) return { ok: false, tooLarge: result.reason === "too_large" };
   try {
-    const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.bytes)) as unknown;
+    const value = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(result.bytes),
+    ) as unknown;
     return { ok: true, bytes: result.bytes, value };
   } catch {
     return { ok: false, tooLarge: false };

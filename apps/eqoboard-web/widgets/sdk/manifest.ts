@@ -29,7 +29,8 @@ export const WIDGET_SCHEMA_LIMITS = Object.freeze({
 
 const INVALID = Symbol("invalid-widget-data");
 const MANIFEST_ID = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/u;
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
+const VERSION =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 const CONFIG_SCHEMA_ID = /^[a-z][a-z0-9.-]*\.v[1-9]\d*$/u;
 const RENDERER_ID = /^[a-z][a-z0-9.-]{1,95}$/u;
 const PROVENANCE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/u;
@@ -62,7 +63,11 @@ function readRecord(value: unknown): Record<string, unknown> | null {
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return null;
   const ownKeys = Reflect.ownKeys(value);
-  if (ownKeys.length > WIDGET_SCHEMA_LIMITS.maxObjectFields || ownKeys.some((key) => typeof key !== "string")) return null;
+  if (
+    ownKeys.length > WIDGET_SCHEMA_LIMITS.maxObjectFields ||
+    ownKeys.some((key) => typeof key !== "string")
+  )
+    return null;
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   for (const key of ownKeys as string[]) {
@@ -82,7 +87,8 @@ function readArray(value: unknown): unknown[] | null {
   const descriptors = Object.getOwnPropertyDescriptors(value);
   for (const key of ownKeys) {
     if (key === "length") continue;
-    if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length) return null;
+    if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length)
+      return null;
     const descriptor = descriptors[key];
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return null;
   }
@@ -125,8 +131,13 @@ function exactKeys(
 }
 
 function text(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= maxLength &&
-    value === value.trim() && !hasControlCharacters(value);
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    value === value.trim() &&
+    !hasControlCharacters(value)
+  );
 }
 
 function finiteInteger(value: unknown, min: number, max: number): value is number {
@@ -145,7 +156,10 @@ function parseJsonValue(
   collector: IssueCollector,
 ): WidgetJsonValueV1 | typeof INVALID {
   budget.nodes += 1;
-  if (budget.nodes > WIDGET_SCHEMA_LIMITS.maxConfigNodes || depth > WIDGET_SCHEMA_LIMITS.maxConfigDepth) {
+  if (
+    budget.nodes > WIDGET_SCHEMA_LIMITS.maxConfigNodes ||
+    depth > WIDGET_SCHEMA_LIMITS.maxConfigDepth
+  ) {
     issue(collector, "too-large", path, "Configuration is too deep or contains too many values.");
     return INVALID;
   }
@@ -156,7 +170,8 @@ function parseJsonValue(
     return INVALID;
   }
   if (typeof value === "string") {
-    if (value.length <= WIDGET_SCHEMA_LIMITS.maxTextLength && !hasControlCharacters(value)) return value;
+    if (value.length <= WIDGET_SCHEMA_LIMITS.maxTextLength && !hasControlCharacters(value))
+      return value;
     issue(collector, "too-large", path, "Text value is too long or contains control characters.");
     return INVALID;
   }
@@ -185,11 +200,19 @@ function parseJsonValue(
     issue(collector, "too-large", path, "Object exceeds its field limit.");
     return INVALID;
   }
-  const parsed: Record<string, WidgetJsonValueV1> = Object.create(null) as Record<string, WidgetJsonValueV1>;
+  const parsed: Record<string, WidgetJsonValueV1> = Object.create(null) as Record<
+    string,
+    WidgetJsonValueV1
+  >;
   let valid = true;
   for (const key of keys) {
     if (FORBIDDEN_KEYS.has(key) || key.length > 128 || hasControlCharacters(key)) {
-      issue(collector, "invalid-shape", `${path}.*`, "Configuration contains an invalid field name.");
+      issue(
+        collector,
+        "invalid-shape",
+        `${path}.*`,
+        "Configuration contains an invalid field name.",
+      );
       valid = false;
       continue;
     }
@@ -207,13 +230,22 @@ function configData(
 ): WidgetJsonValueV1 | typeof INVALID {
   const parsed = parseJsonValue(value, path, 0, { nodes: 0 }, collector);
   if (parsed !== INVALID && bytes(parsed) > WIDGET_SCHEMA_LIMITS.maxConfigBytes) {
-    issue(collector, "too-large", path, `Configuration exceeds ${WIDGET_SCHEMA_LIMITS.maxConfigBytes} bytes.`);
+    issue(
+      collector,
+      "too-large",
+      path,
+      `Configuration exceeds ${WIDGET_SCHEMA_LIMITS.maxConfigBytes} bytes.`,
+    );
     return INVALID;
   }
   return parsed;
 }
 
-function parseInput(value: unknown, path: string, collector: IssueCollector): WidgetInputV1 | typeof INVALID {
+function parseInput(
+  value: unknown,
+  path: string,
+  collector: IssueCollector,
+): WidgetInputV1 | typeof INVALID {
   const record = readRecord(value);
   if (!record) {
     issue(collector, "invalid-shape", path, "Expected a widget input declaration.");
@@ -221,25 +253,45 @@ function parseInput(value: unknown, path: string, collector: IssueCollector): Wi
   }
   if (record.name === "symbol") {
     const valid = exactKeys(record, ["name", "kind", "source", "required"], path, collector);
-    if (record.kind !== "symbol" || record.source !== "symbol-binding" || record.required !== true) {
+    if (
+      record.kind !== "symbol" ||
+      record.source !== "symbol-binding" ||
+      record.required !== true
+    ) {
       issue(collector, "invalid-value", path, "Symbol input declaration is invalid.");
       return INVALID;
     }
-    return valid ? Object.freeze({ name: "symbol", kind: "symbol", source: "symbol-binding", required: true }) : INVALID;
+    return valid
+      ? Object.freeze({ name: "symbol", kind: "symbol", source: "symbol-binding", required: true })
+      : INVALID;
   }
   if (record.name === "watchlist") {
     const valid = exactKeys(record, ["name", "kind", "source", "required"], path, collector);
-    if (record.kind !== "symbol-list" || record.source !== "workspace.watchlist" || record.required !== true) {
+    if (
+      record.kind !== "symbol-list" ||
+      record.source !== "workspace.watchlist" ||
+      record.required !== true
+    ) {
       issue(collector, "invalid-value", path, "Watchlist input declaration is invalid.");
       return INVALID;
     }
-    return valid ? Object.freeze({ name: "watchlist", kind: "symbol-list", source: "workspace.watchlist", required: true }) : INVALID;
+    return valid
+      ? Object.freeze({
+          name: "watchlist",
+          kind: "symbol-list",
+          source: "workspace.watchlist",
+          required: true,
+        })
+      : INVALID;
   }
   issue(collector, "invalid-value", `${path}.name`, "Input name is unsupported.");
   return INVALID;
 }
 
-function parseSize(value: unknown, collector: IssueCollector): WidgetManifestV1["defaultSize"] | typeof INVALID {
+function parseSize(
+  value: unknown,
+  collector: IssueCollector,
+): WidgetManifestV1["defaultSize"] | typeof INVALID {
   const path = "$.defaultSize";
   const record = readRecord(value);
   if (!record) {
@@ -254,13 +306,21 @@ function parseSize(value: unknown, collector: IssueCollector): WidgetManifestV1[
   }
   const [w, h, minW, minH, maxW, maxH] = fields as number[];
   if (maxW > WIDGET_SCHEMA_LIMITS.gridColumns || minW > w || w > maxW || minH > h || h > maxH) {
-    issue(collector, "invalid-value", path, "Default dimensions must satisfy their bounds and the 12-column grid.");
+    issue(
+      collector,
+      "invalid-value",
+      path,
+      "Default dimensions must satisfy their bounds and the 12-column grid.",
+    );
     return INVALID;
   }
   return validKeys ? { w, h, minW, minH, maxW, maxH } : INVALID;
 }
 
-function parseRefresh(value: unknown, collector: IssueCollector): WidgetRefreshPolicyV1 | typeof INVALID {
+function parseRefresh(
+  value: unknown,
+  collector: IssueCollector,
+): WidgetRefreshPolicyV1 | typeof INVALID {
   const path = "$.refresh";
   const record = readRecord(value);
   if (!record || typeof record.mode !== "string") {
@@ -275,33 +335,46 @@ function parseRefresh(value: unknown, collector: IssueCollector): WidgetRefreshP
     issue(collector, "invalid-value", `${path}.mode`, "Refresh mode is unsupported.");
     return INVALID;
   }
-  const validKeys = exactKeys(record, [
-    "mode", "minIntervalMs", "maxRequestsPerMinute", "maxConcurrentRequests", "whenHidden",
-  ], path, collector);
-  if (!finiteInteger(record.minIntervalMs, 250, 3_600_000) ||
-      !finiteInteger(record.maxRequestsPerMinute, 1, 120) ||
-      record.maxConcurrentRequests !== 1 ||
-      (record.whenHidden !== "pause" && record.whenHidden !== "continue")) {
+  const validKeys = exactKeys(
+    record,
+    ["mode", "minIntervalMs", "maxRequestsPerMinute", "maxConcurrentRequests", "whenHidden"],
+    path,
+    collector,
+  );
+  if (
+    !finiteInteger(record.minIntervalMs, 250, 3_600_000) ||
+    !finiteInteger(record.maxRequestsPerMinute, 1, 120) ||
+    record.maxConcurrentRequests !== 1 ||
+    (record.whenHidden !== "pause" && record.whenHidden !== "continue")
+  ) {
     issue(collector, "invalid-value", path, "Polling values exceed the bounded V1 policy.");
     return INVALID;
   }
-  return validKeys ? {
-    mode: "poll",
-    minIntervalMs: record.minIntervalMs as number,
-    maxRequestsPerMinute: record.maxRequestsPerMinute as number,
-    maxConcurrentRequests: 1,
-    whenHidden: record.whenHidden,
-  } : INVALID;
+  return validKeys
+    ? {
+        mode: "poll",
+        minIntervalMs: record.minIntervalMs as number,
+        maxRequestsPerMinute: record.maxRequestsPerMinute as number,
+        maxConcurrentRequests: 1,
+        whenHidden: record.whenHidden,
+      }
+    : INVALID;
 }
 
-function parseSymbolBinding(value: unknown, path: string, collector: IssueCollector): WidgetSymbolBinding | typeof INVALID {
+function parseSymbolBinding(
+  value: unknown,
+  path: string,
+  collector: IssueCollector,
+): WidgetSymbolBinding | typeof INVALID {
   const record = readRecord(value);
   if (!record || typeof record.mode !== "string") {
     issue(collector, "invalid-shape", path, "Expected a symbol binding.");
     return INVALID;
   }
   if (record.mode === "active") {
-    return exactKeys(record, ["mode"], path, collector) ? Object.freeze({ mode: "active" }) : INVALID;
+    return exactKeys(record, ["mode"], path, collector)
+      ? Object.freeze({ mode: "active" })
+      : INVALID;
   }
   if (record.mode === "fixed") {
     const validKeys = exactKeys(record, ["mode", "symbol"], path, collector);
@@ -315,7 +388,10 @@ function parseSymbolBinding(value: unknown, path: string, collector: IssueCollec
   return INVALID;
 }
 
-function parseManifest(input: unknown, collector: IssueCollector): WidgetManifestV1 | typeof INVALID {
+function parseManifest(
+  input: unknown,
+  collector: IssueCollector,
+): WidgetManifestV1 | typeof INVALID {
   const value = readRecord(input);
   if (!value) {
     issue(collector, "invalid-shape", "$", "Expected a plain widget manifest object.");
@@ -327,11 +403,30 @@ function parseManifest(input: unknown, collector: IssueCollector): WidgetManifes
   }
   const optionalKeys = ["shortcut"] as const;
   const requiredKeys = [
-    "manifestVersion", "sdkVersion", "id", "version", "title", "description", "category",
-    "rendererId", "configSchemaId", "defaultSize", "inputs", "requiredPermissions", "refresh",
-    "symbolBinding", "provenanceId", "provenancePolicy",
+    "manifestVersion",
+    "sdkVersion",
+    "id",
+    "version",
+    "title",
+    "description",
+    "category",
+    "rendererId",
+    "configSchemaId",
+    "defaultSize",
+    "inputs",
+    "requiredPermissions",
+    "refresh",
+    "symbolBinding",
+    "provenanceId",
+    "provenancePolicy",
   ];
-  const validKeys = exactKeys(value, [...requiredKeys, ...optionalKeys], "$", collector, optionalKeys);
+  const validKeys = exactKeys(
+    value,
+    [...requiredKeys, ...optionalKeys],
+    "$",
+    collector,
+    optionalKeys,
+  );
   let valid = validKeys;
 
   if (typeof value.id !== "string" || !MANIFEST_ID.test(value.id)) {
@@ -346,8 +441,17 @@ function parseManifest(input: unknown, collector: IssueCollector): WidgetManifes
     issue(collector, "invalid-value", "$.title", "Expected a non-empty bounded title.");
     valid = false;
   }
-  if (typeof value.description !== "string" || value.description.length > 280 || hasControlCharacters(value.description)) {
-    issue(collector, "invalid-value", "$.description", "Description exceeds its bounded text limit.");
+  if (
+    typeof value.description !== "string" ||
+    value.description.length > 280 ||
+    hasControlCharacters(value.description)
+  ) {
+    issue(
+      collector,
+      "invalid-value",
+      "$.description",
+      "Description exceeds its bounded text limit.",
+    );
     valid = false;
   }
   if (typeof value.category !== "string" || !CATEGORIES.has(value.category as WidgetCategory)) {
@@ -355,23 +459,51 @@ function parseManifest(input: unknown, collector: IssueCollector): WidgetManifes
     valid = false;
   }
   if (typeof value.rendererId !== "string" || !RENDERER_ID.test(value.rendererId)) {
-    issue(collector, "invalid-value", "$.rendererId", "Expected a static renderer identifier, not a module path.");
+    issue(
+      collector,
+      "invalid-value",
+      "$.rendererId",
+      "Expected a static renderer identifier, not a module path.",
+    );
     valid = false;
   }
   if (typeof value.configSchemaId !== "string" || !CONFIG_SCHEMA_ID.test(value.configSchemaId)) {
-    issue(collector, "invalid-value", "$.configSchemaId", "Expected a versioned static config schema identifier.");
+    issue(
+      collector,
+      "invalid-value",
+      "$.configSchemaId",
+      "Expected a versioned static config schema identifier.",
+    );
     valid = false;
   }
   if (typeof value.provenanceId !== "string" || !PROVENANCE_ID.test(value.provenanceId)) {
-    issue(collector, "invalid-value", "$.provenanceId", "Expected a bounded provenance record identifier.");
+    issue(
+      collector,
+      "invalid-value",
+      "$.provenanceId",
+      "Expected a bounded provenance record identifier.",
+    );
     valid = false;
   }
   if (value.symbolBinding !== "unsupported" && value.symbolBinding !== "active-or-fixed") {
-    issue(collector, "invalid-value", "$.symbolBinding", "Symbol binding declaration is unsupported.");
+    issue(
+      collector,
+      "invalid-value",
+      "$.symbolBinding",
+      "Symbol binding declaration is unsupported.",
+    );
     valid = false;
   }
-  if (value.provenancePolicy !== "surface-response-evidence" && value.provenancePolicy !== "no-market-data") {
-    issue(collector, "invalid-value", "$.provenancePolicy", "Provenance display policy is unsupported.");
+  if (
+    value.provenancePolicy !== "surface-response-evidence" &&
+    value.provenancePolicy !== "no-market-data"
+  ) {
+    issue(
+      collector,
+      "invalid-value",
+      "$.provenancePolicy",
+      "Provenance display policy is unsupported.",
+    );
     valid = false;
   }
 
@@ -394,8 +526,16 @@ function parseManifest(input: unknown, collector: IssueCollector): WidgetManifes
       valid = false;
     }
   }
-  if (inputs.some((entry) => entry.name === "symbol") && value.symbolBinding !== "active-or-fixed") {
-    issue(collector, "invalid-value", "$.symbolBinding", "A symbol input requires declared symbol binding support.");
+  if (
+    inputs.some((entry) => entry.name === "symbol") &&
+    value.symbolBinding !== "active-or-fixed"
+  ) {
+    issue(
+      collector,
+      "invalid-value",
+      "$.symbolBinding",
+      "A symbol input requires declared symbol binding support.",
+    );
     valid = false;
   }
 
@@ -407,7 +547,12 @@ function parseManifest(input: unknown, collector: IssueCollector): WidgetManifes
   } else {
     rawPermissions.forEach((permission, index) => {
       if (!isPermission(permission)) {
-        issue(collector, "unknown-permission", `$.requiredPermissions[${index}]`, "Permission is not in the closed auth contract.");
+        issue(
+          collector,
+          "unknown-permission",
+          `$.requiredPermissions[${index}]`,
+          "Permission is not in the closed auth contract.",
+        );
         valid = false;
       } else {
         permissions.push(permission);
@@ -421,9 +566,16 @@ function parseManifest(input: unknown, collector: IssueCollector): WidgetManifes
 
   const refresh = parseRefresh(value.refresh, collector);
   if (refresh === INVALID) valid = false;
-  if (value.provenancePolicy === "no-market-data" &&
-      (refresh !== INVALID && refresh.mode !== "none" || inputs.length !== 0)) {
-    issue(collector, "invalid-value", "$.provenancePolicy", "Widgets without market data cannot declare data inputs or refresh work.");
+  if (
+    value.provenancePolicy === "no-market-data" &&
+    ((refresh !== INVALID && refresh.mode !== "none") || inputs.length !== 0)
+  ) {
+    issue(
+      collector,
+      "invalid-value",
+      "$.provenancePolicy",
+      "Widgets without market data cannot declare data inputs or refresh work.",
+    );
     valid = false;
   }
 
@@ -473,7 +625,9 @@ function freezeManifest(manifest: WidgetManifestV1): WidgetManifestV1 {
   return Object.freeze(manifest);
 }
 
-function runParser<T>(parse: (collector: IssueCollector) => T | typeof INVALID): WidgetParseResult<T> {
+function runParser<T>(
+  parse: (collector: IssueCollector) => T | typeof INVALID,
+): WidgetParseResult<T> {
   const collector: IssueCollector = { issues: [] };
   try {
     const value = parse(collector);
@@ -483,7 +637,9 @@ function runParser<T>(parse: (collector: IssueCollector) => T | typeof INVALID):
   } catch {
     return {
       ok: false,
-      errors: [{ code: "invalid-shape", path: "$", message: "Input could not be safely inspected." }],
+      errors: [
+        { code: "invalid-shape", path: "$", message: "Input could not be safely inspected." },
+      ],
     };
   }
 }
@@ -514,22 +670,39 @@ export function parseWidgetInstanceV1(input: unknown): WidgetParseResult<WidgetI
       valid = false;
     }
     if (typeof value.manifestId !== "string" || !MANIFEST_ID.test(value.manifestId)) {
-      issue(collector, "invalid-value", "$.manifestId", "Expected a static namespaced manifest identifier.");
+      issue(
+        collector,
+        "invalid-value",
+        "$.manifestId",
+        "Expected a static namespaced manifest identifier.",
+      );
       valid = false;
     }
     if (typeof value.manifestVersion !== "string" || !VERSION.test(value.manifestVersion)) {
-      issue(collector, "invalid-value", "$.manifestVersion", "Expected a semantic manifest version.");
+      issue(
+        collector,
+        "invalid-value",
+        "$.manifestVersion",
+        "Expected a semantic manifest version.",
+      );
       valid = false;
     }
     if (typeof value.configSchemaId !== "string" || !CONFIG_SCHEMA_ID.test(value.configSchemaId)) {
-      issue(collector, "invalid-value", "$.configSchemaId", "Expected a versioned static config schema identifier.");
+      issue(
+        collector,
+        "invalid-value",
+        "$.configSchemaId",
+        "Expected a versioned static config schema identifier.",
+      );
       valid = false;
     }
     const config = configData(value.config, "$.config", collector);
     if (config === INVALID) valid = false;
     let symbolBinding: WidgetSymbolBinding | undefined;
     if (Object.hasOwn(value, "symbolBinding")) {
-      symbolBinding = parseSymbolBinding(value.symbolBinding, "$.symbolBinding", collector) as WidgetSymbolBinding | undefined;
+      symbolBinding = parseSymbolBinding(value.symbolBinding, "$.symbolBinding", collector) as
+        | WidgetSymbolBinding
+        | undefined;
       if (!symbolBinding) valid = false;
     }
     if (!valid || config === INVALID) return INVALID;

@@ -1,5 +1,10 @@
 export type MarketFeedName = "stocks" | "options";
-export type MarketTransportState = "idle" | "connecting" | "connected" | "reconnecting" | "unavailable";
+export type MarketTransportState =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "unavailable";
 export type MarketFreshness = "unknown" | "fresh" | "stale";
 
 /** Original Gateway JSON retained as received; this is not a second wire DTO. */
@@ -47,7 +52,13 @@ const STOCK_SYMBOL = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 const OPTION_SYMBOL = /^[A-Z0-9.]{1,10}\d{6}[CP]\d{8}$/u;
 
 function emptyFeed(): MarketFeedSnapshot {
-  return Object.freeze({ connectionEpoch: null, lastSequence: null, lastMessageAt: null, freshness: "unknown", rawStatus: null });
+  return Object.freeze({
+    connectionEpoch: null,
+    lastSequence: null,
+    lastMessageAt: null,
+    freshness: "unknown",
+    rawStatus: null,
+  });
 }
 
 function emptyLease(): MarketLeaseSnapshot {
@@ -87,7 +98,15 @@ function record(value: unknown): GatewayMarketRecord | null {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (Reflect.ownKeys(value).some((key) => typeof key !== "string" || !descriptors[key as string] || !("value" in descriptors[key as string]!))) return null;
+    if (
+      Reflect.ownKeys(value).some(
+        (key) =>
+          typeof key !== "string" ||
+          !descriptors[key as string] ||
+          !("value" in descriptors[key as string]!),
+      )
+    )
+      return null;
     return value as GatewayMarketRecord;
   } catch {
     return null;
@@ -101,21 +120,32 @@ function safePositiveInteger(value: unknown): value is number {
 function eventFeed(event: GatewayMarketRecord): MarketFeedName | null {
   switch (event.kind) {
     case "stock_quote":
-    case "stock_trade": return "stocks";
+    case "stock_trade":
+      return "stocks";
     case "option_quote":
-    case "option_trade": return "options";
-    case "feed_status": return event.feed === "stocks" || event.feed === "options" ? event.feed : null;
-    default: return null;
+    case "option_trade":
+      return "options";
+    case "feed_status":
+      return event.feed === "stocks" || event.feed === "options" ? event.feed : null;
+    default:
+      return null;
   }
 }
 
-function eventCollection(kind: unknown): "stockQuotes" | "stockTrades" | "optionQuotes" | "optionTrades" | null {
+function eventCollection(
+  kind: unknown,
+): "stockQuotes" | "stockTrades" | "optionQuotes" | "optionTrades" | null {
   switch (kind) {
-    case "stock_quote": return "stockQuotes";
-    case "stock_trade": return "stockTrades";
-    case "option_quote": return "optionQuotes";
-    case "option_trade": return "optionTrades";
-    default: return null;
+    case "stock_quote":
+      return "stockQuotes";
+    case "stock_trade":
+      return "stockTrades";
+    case "option_quote":
+      return "optionQuotes";
+    case "option_trade":
+      return "optionTrades";
+    default:
+      return null;
   }
 }
 
@@ -125,11 +155,16 @@ function validDisplayEvent(event: GatewayMarketRecord, feed: MarketFeedName): bo
   return feed === "stocks" ? STOCK_SYMBOL.test(event.symbol) : OPTION_SYMBOL.test(event.symbol);
 }
 
-function frozenRecordMap(input: Record<string, GatewayMarketRecord>): Readonly<Record<string, GatewayMarketRecord>> {
+function frozenRecordMap(
+  input: Record<string, GatewayMarketRecord>,
+): Readonly<Record<string, GatewayMarketRecord>> {
   return Object.freeze(input);
 }
 
-function clearedFeedEvents(snapshot: MarketHostSnapshot, feed: MarketFeedName): Pick<MarketHostSnapshot, "stockQuotes" | "stockTrades" | "optionQuotes" | "optionTrades"> {
+function clearedFeedEvents(
+  snapshot: MarketHostSnapshot,
+  feed: MarketFeedName,
+): Pick<MarketHostSnapshot, "stockQuotes" | "stockTrades" | "optionQuotes" | "optionTrades"> {
   return feed === "stocks"
     ? { ...snapshot, stockQuotes: Object.freeze({}), stockTrades: Object.freeze([]) }
     : { ...snapshot, optionQuotes: Object.freeze({}), optionTrades: Object.freeze([]) };
@@ -153,7 +188,10 @@ export class MarketStore {
     return () => this.#listeners.delete(listener);
   };
 
-  setTransport(state: MarketTransportState, error: MarketHostSnapshot["transportError"] = null): void {
+  setTransport(
+    state: MarketTransportState,
+    error: MarketHostSnapshot["transportError"] = null,
+  ): void {
     this.#commit({ ...this.#snapshot, transportState: state, transportError: error });
   }
 
@@ -163,58 +201,99 @@ export class MarketStore {
     this.#commit({ ...reset, revision: this.#snapshot.revision });
   }
 
-  setLeaseTargets(feed: MarketFeedName, requestedCount: number, selectedCount: number, targetKey: string): void {
+  setLeaseTargets(
+    feed: MarketFeedName,
+    requestedCount: number,
+    selectedCount: number,
+    targetKey: string,
+  ): void {
     const current = this.#snapshot.leases[feed];
     const targetChanged = this.#leaseTargetKeys[feed] !== targetKey;
     this.#leaseTargetKeys[feed] = targetKey;
     const next: MarketLeaseSnapshot = Object.freeze({
       ...current,
-      ...(targetChanged ? {
-        acknowledgedAt: null,
-        rawAck: null,
-        coverage: requestedCount === 0 ? "unknown" as const : "pending" as const,
-        leasedCount: 0,
-      } : {}),
+      ...(targetChanged
+        ? {
+            acknowledgedAt: null,
+            rawAck: null,
+            coverage: requestedCount === 0 ? ("unknown" as const) : ("pending" as const),
+            leasedCount: 0,
+          }
+        : {}),
       requestedCount,
       selectedCount,
       omittedCount: Math.max(0, requestedCount - selectedCount),
     });
-    const acknowledgedCoverage = next.acknowledgedAt === null
-      ? next.coverage
-      : next.leasedCount >= selectedCount && next.omittedCount === 0 ? "complete" : "partial";
-    this.#setLease(feed, Object.freeze({
-      ...next,
-      coverage: acknowledgedCoverage,
-    }));
+    const acknowledgedCoverage =
+      next.acknowledgedAt === null
+        ? next.coverage
+        : next.leasedCount >= selectedCount && next.omittedCount === 0
+          ? "complete"
+          : "partial";
+    this.#setLease(
+      feed,
+      Object.freeze({
+        ...next,
+        coverage: acknowledgedCoverage,
+      }),
+    );
   }
 
-  setLeaseAck(feed: MarketFeedName, generation: number, activeCount: number, rawAck: unknown, targetKey: string): void {
+  setLeaseAck(
+    feed: MarketFeedName,
+    generation: number,
+    activeCount: number,
+    rawAck: unknown,
+    targetKey: string,
+  ): void {
     const current = this.#snapshot.leases[feed];
     if (generation < current.generation || this.#leaseTargetKeys[feed] !== targetKey) return;
-    const coverage = activeCount >= current.selectedCount && current.omittedCount === 0 ? "complete" : "partial";
-    this.#setLease(feed, Object.freeze({
-      ...current,
-      generation,
-      acknowledgedAt: this.#now(),
-      rawAck,
-      leasedCount: activeCount,
-      coverage,
-    }));
+    const coverage =
+      activeCount >= current.selectedCount && current.omittedCount === 0 ? "complete" : "partial";
+    this.#setLease(
+      feed,
+      Object.freeze({
+        ...current,
+        generation,
+        acknowledgedAt: this.#now(),
+        rawAck,
+        leasedCount: activeCount,
+        coverage,
+      }),
+    );
   }
 
   setLeaseError(feed: MarketFeedName, generation: number, targetKey: string): void {
     const current = this.#snapshot.leases[feed];
     if (generation < current.generation || this.#leaseTargetKeys[feed] !== targetKey) return;
-    this.#setLease(feed, Object.freeze({ ...current, generation, acknowledgedAt: null, rawAck: null, leasedCount: 0, coverage: "error" }));
+    this.#setLease(
+      feed,
+      Object.freeze({
+        ...current,
+        generation,
+        acknowledgedAt: null,
+        rawAck: null,
+        leasedCount: 0,
+        coverage: "error",
+      }),
+    );
   }
 
   /** Validates the Gateway-wide ordering metadata and stores accepted event objects unchanged. */
   acceptBatch(batch: readonly unknown[], receivedAt = this.#now()): void {
     if (!Number.isFinite(receivedAt)) return;
-    const parsed = batch.map(record).filter((event): event is GatewayMarketRecord => event !== null)
-      .filter((event) => safePositiveInteger(event.local_sequence) && safePositiveInteger(event.connection_epoch) &&
-        typeof event.gateway_instance_id === "string" && event.gateway_instance_id.length > 0 && event.gateway_instance_id.length <= 160 &&
-        !/[\u0000-\u001f\u007f]/u.test(event.gateway_instance_id))
+    const parsed = batch
+      .map(record)
+      .filter((event): event is GatewayMarketRecord => event !== null)
+      .filter(
+        (event) =>
+          safePositiveInteger(event.local_sequence) &&
+          safePositiveInteger(event.connection_epoch) &&
+          typeof event.gateway_instance_id === "string" &&
+          event.gateway_instance_id.length > 0 &&
+          event.gateway_instance_id.length <= 160 &&
+          !/[\u0000-\u001f\u007f]/u.test(event.gateway_instance_id),
+      )
       .sort((left, right) => (left.local_sequence as number) - (right.local_sequence as number));
     if (parsed.length === 0) return;
 
@@ -227,7 +306,12 @@ export class MarketStore {
         const transportError = next.transportError;
         next = { ...emptySnapshot(), revision: next.revision, transportState, transportError };
       }
-      if (next.gatewayInstanceId === instanceId && next.lastSequence !== null && sequence <= next.lastSequence) continue;
+      if (
+        next.gatewayInstanceId === instanceId &&
+        next.lastSequence !== null &&
+        sequence <= next.lastSequence
+      )
+        continue;
 
       // Gateway local_sequence is instance-wide across feed kinds and epochs.
       // Advance it even for an unknown or malformed event so a later older
@@ -244,7 +328,8 @@ export class MarketStore {
 
       const previousFeed = next.feeds[feed];
       const epoch = event.connection_epoch as number;
-      const epochChanged = previousFeed.connectionEpoch !== null && previousFeed.connectionEpoch !== epoch;
+      const epochChanged =
+        previousFeed.connectionEpoch !== null && previousFeed.connectionEpoch !== epoch;
       if (epochChanged) next = { ...next, ...clearedFeedEvents(next, feed) };
 
       const isStatus = event.kind === "feed_status";
@@ -286,9 +371,12 @@ export class MarketStore {
     const feeds = { ...this.#snapshot.feeds };
     for (const feed of ["stocks", "options"] as const) {
       const state = feeds[feed];
-      const freshness: MarketFreshness = state.lastMessageAt === null
-        ? "unknown"
-        : now - state.lastMessageAt <= FRESHNESS_MS ? "fresh" : "stale";
+      const freshness: MarketFreshness =
+        state.lastMessageAt === null
+          ? "unknown"
+          : now - state.lastMessageAt <= FRESHNESS_MS
+            ? "fresh"
+            : "stale";
       if (freshness !== state.freshness) {
         feeds[feed] = Object.freeze({ ...state, freshness });
         changed = true;
@@ -298,7 +386,10 @@ export class MarketStore {
   }
 
   #setLease(feed: MarketFeedName, lease: MarketLeaseSnapshot): void {
-    this.#commit({ ...this.#snapshot, leases: Object.freeze({ ...this.#snapshot.leases, [feed]: lease }) });
+    this.#commit({
+      ...this.#snapshot,
+      leases: Object.freeze({ ...this.#snapshot.leases, [feed]: lease }),
+    });
   }
 
   #commit(next: MarketHostSnapshot): void {

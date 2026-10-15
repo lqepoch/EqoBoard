@@ -1,7 +1,4 @@
-import type {
-  WidgetLifecycle,
-  WidgetRefreshPolicyV1,
-} from "../../widgets/sdk/contracts";
+import type { WidgetLifecycle, WidgetRefreshPolicyV1 } from "../../widgets/sdk/contracts";
 import {
   WidgetDataReadError,
   type WidgetDataClient,
@@ -30,7 +27,10 @@ export function createNativeRefreshScheduler<
   let readQueue: Promise<void> = Promise.resolve();
   const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
     const result = readQueue.then(operation, operation);
-    readQueue = result.then(() => undefined, () => undefined);
+    readQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   };
 
@@ -41,19 +41,24 @@ export function createNativeRefreshScheduler<
       options: Readonly<{ refreshIntervalMs: number }>,
       listener: (state: WidgetScheduledReadState<TOperations[K]["output"]>) => void,
     ): () => void {
-      if (policy.mode !== "poll" || (scope.hidden && policy.whenHidden === "pause")) return () => undefined;
+      if (policy.mode !== "poll" || (scope.hidden && policy.whenHidden === "pause"))
+        return () => undefined;
       const maxPerMinuteInterval = Math.ceil(60_000 / Math.max(1, policy.maxRequestsPerMinute));
-      const refreshIntervalMs = Number.isSafeInteger(options.refreshIntervalMs) && options.refreshIntervalMs > 0
-        ? options.refreshIntervalMs
-        : policy.minIntervalMs;
+      const refreshIntervalMs =
+        Number.isSafeInteger(options.refreshIntervalMs) && options.refreshIntervalMs > 0
+          ? options.refreshIntervalMs
+          : policy.minIntervalMs;
       // Browser timers overflow near 2^31ms and can fire immediately. The host
       // clamps every widget request to a finite, reviewable ceiling.
-      const interval = Math.min(MAX_INTERVAL_MS, Math.max(
-        GLOBAL_MIN_INTERVAL_MS,
-        policy.minIntervalMs,
-        maxPerMinuteInterval,
-        refreshIntervalMs,
-      ));
+      const interval = Math.min(
+        MAX_INTERVAL_MS,
+        Math.max(
+          GLOBAL_MIN_INTERVAL_MS,
+          policy.minIntervalMs,
+          maxPerMinuteInterval,
+          refreshIntervalMs,
+        ),
+      );
       let active = true;
       let inFlight = false;
       let timer: ReturnType<typeof setInterval> | null = null;
@@ -87,28 +92,44 @@ export function createNativeRefreshScheduler<
         try {
           const value = await enqueue(() => {
             if (!active) throw new WidgetDataReadError("cancelled");
-            return budget.run({
-              scopeKey,
-              instanceId: scope.instanceId,
-              operationId,
-              input,
-              policy,
-              lifecycle,
-              hidden: scope.hidden,
-            }, (signal) => data.read(operationId, input, { signal }));
+            return budget.run(
+              {
+                scopeKey,
+                instanceId: scope.instanceId,
+                operationId,
+                input,
+                policy,
+                lifecycle,
+                hidden: scope.hidden,
+              },
+              (signal) => data.read(operationId, input, { signal }),
+            );
           });
           const current = lifecycle.getSnapshot();
-          if (!active || current.phase !== "active" || current.generation !== snapshot.generation || snapshot.signal.aborted) return;
+          if (
+            !active ||
+            current.phase !== "active" ||
+            current.generation !== snapshot.generation ||
+            snapshot.signal.aborted
+          )
+            return;
           publish({ status: "ready", value });
         } catch (error) {
           const current = lifecycle.getSnapshot();
-          if (!active || current.phase !== "active" || current.generation !== snapshot.generation) return;
-          if (error instanceof WidgetDataReadError && ["cancelled", "suspended", "disposed", "hidden"].includes(error.code)) return;
+          if (!active || current.phase !== "active" || current.generation !== snapshot.generation)
+            return;
+          if (
+            error instanceof WidgetDataReadError &&
+            ["cancelled", "suspended", "disposed", "hidden"].includes(error.code)
+          )
+            return;
           const rateLimited = error instanceof WidgetDataReadError && error.code === "rate-limited";
           publish({
             status: "error",
             code: rateLimited ? "rate-limited" : "request-failed",
-            ...(rateLimited && error.retryAfterMs ? { retryAfterMs: Math.min(error.retryAfterMs, interval) } : {}),
+            ...(rateLimited && error.retryAfterMs
+              ? { retryAfterMs: Math.min(error.retryAfterMs, interval) }
+              : {}),
           });
         } finally {
           inFlight = false;

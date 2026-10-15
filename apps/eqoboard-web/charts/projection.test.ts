@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { projectChartRows, type ChartProjectionCandidate } from "./projection";
 
-function candidate(timeSeconds: number, close = "10.25"): ChartProjectionCandidate<Readonly<{ id: string }>> {
+function candidate(
+  timeSeconds: number,
+  close = "10.25",
+): ChartProjectionCandidate<Readonly<{ id: string }>> {
   const sourceRow = Object.freeze({ id: `row-${timeSeconds}-${close}` });
   return {
     sourceRow,
@@ -39,7 +42,12 @@ describe("chart coordinate projection", () => {
       volume: "-1",
       exact: { ...invalidVolumeRow.exact!, volume: "-1" },
     };
-    const result = projectChartRows([candidate(1_720_000_000, "10.00"), invalidOhlc, invalidVolume, candidate(1_720_000_000, "11.00")]);
+    const result = projectChartRows([
+      candidate(1_720_000_000, "10.00"),
+      invalidOhlc,
+      invalidVolume,
+      candidate(1_720_000_000, "11.00"),
+    ]);
 
     expect(result.rejectedRows).toBe(2);
     expect(result.bars).toHaveLength(1);

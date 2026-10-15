@@ -5,7 +5,13 @@ import type {
   WidgetResolvedInputs,
   WidgetRuntimeError,
 } from "./contracts";
-import { isWidgetActionId, type WidgetActionClient, type WidgetActionId, type WidgetActionMap, type WidgetNoActionMap } from "./actions";
+import {
+  isWidgetActionId,
+  type WidgetActionClient,
+  type WidgetActionId,
+  type WidgetActionMap,
+  type WidgetNoActionMap,
+} from "./actions";
 import { toWidgetRuntimeError } from "./errors";
 import {
   WidgetDataReadError,
@@ -18,13 +24,17 @@ import {
 import { isWidgetSymbol } from "./symbols";
 
 export type WidgetHostServices<
-  TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition } = WidgetOperationMap,
+  TOperations extends {
+    readonly [K in keyof TOperations]: WidgetOperationDefinition;
+  } = WidgetOperationMap,
   TActions extends WidgetActionMap = WidgetNoActionMap,
   TMarketSnapshot = unknown,
 > = Omit<WidgetHostContext<TOperations, TActions, TMarketSnapshot>, "lifecycle">;
 
 export type WidgetHostCapabilities<
-  TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition } = WidgetOperationMap,
+  TOperations extends {
+    readonly [K in keyof TOperations]: WidgetOperationDefinition;
+  } = WidgetOperationMap,
   TActions extends WidgetActionMap = WidgetNoActionMap,
   TAllowedOperations extends keyof TOperations & string = keyof TOperations & string,
   TAllowedActions extends keyof TActions & WidgetActionId = keyof TActions & WidgetActionId,
@@ -44,23 +54,38 @@ type CapabilityLists = Readonly<{
   actions: ReadonlySet<string>;
 }>;
 
-function readCapabilityList(value: unknown, isValidId: (value: string) => boolean): ReadonlySet<string> {
+function readCapabilityList(
+  value: unknown,
+  isValidId: (value: string) => boolean,
+): ReadonlySet<string> {
   try {
     if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return new Set();
     const ownKeys = Reflect.ownKeys(value);
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const lengthDescriptor = descriptors.length;
-    if (!lengthDescriptor || !("value" in lengthDescriptor) ||
-        !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value > 96 ||
-        ownKeys.length !== lengthDescriptor.value + 1) return new Set();
+    if (
+      !lengthDescriptor ||
+      !("value" in lengthDescriptor) ||
+      !Number.isSafeInteger(lengthDescriptor.value) ||
+      lengthDescriptor.value > 96 ||
+      ownKeys.length !== lengthDescriptor.value + 1
+    )
+      return new Set();
     const length = lengthDescriptor.value as number;
     const ids: string[] = [];
     for (const key of ownKeys) {
       if (key === "length") continue;
-      if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length) return new Set();
+      if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length)
+        return new Set();
       const descriptor = descriptors[key];
-      if (!descriptor || !descriptor.enumerable || !("value" in descriptor) ||
-          typeof descriptor.value !== "string" || !isValidId(descriptor.value)) return new Set();
+      if (
+        !descriptor ||
+        !descriptor.enumerable ||
+        !("value" in descriptor) ||
+        typeof descriptor.value !== "string" ||
+        !isValidId(descriptor.value)
+      )
+        return new Set();
       ids.push(descriptor.value);
     }
     if (ids.length !== length || new Set(ids).size !== ids.length) return new Set();
@@ -86,7 +111,9 @@ function readCapabilities(value: unknown): CapabilityLists {
       return { readOperations: new Set(), actions: new Set() };
     }
     return {
-      readOperations: readCapabilityList(reads.value, (id) => /^[A-Za-z][A-Za-z0-9.-]{0,95}$/u.test(id)),
+      readOperations: readCapabilityList(reads.value, (id) =>
+        /^[A-Za-z][A-Za-z0-9.-]{0,95}$/u.test(id),
+      ),
       actions: readCapabilityList(actions.value, isWidgetActionId),
     };
   } catch {
@@ -202,11 +229,12 @@ export function resolveWidgetInputs(
   watchlist: readonly string[],
 ): WidgetResolvedInputs {
   const inputs: { symbol?: string; watchlist?: readonly string[] } = {};
-  if (manifest.inputs.some((input) => input.name === "symbol") &&
-      manifest.symbolBinding === "active-or-fixed") {
-    const selected = instance.symbolBinding?.mode === "fixed"
-      ? instance.symbolBinding.symbol
-      : activeSymbol;
+  if (
+    manifest.inputs.some((input) => input.name === "symbol") &&
+    manifest.symbolBinding === "active-or-fixed"
+  ) {
+    const selected =
+      instance.symbolBinding?.mode === "fixed" ? instance.symbolBinding.symbol : activeSymbol;
     if (isWidgetSymbol(selected)) inputs.symbol = selected;
   }
   if (manifest.inputs.some((input) => input.name === "watchlist")) {

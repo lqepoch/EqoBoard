@@ -34,10 +34,12 @@ const origin = "https://native.invalid";
 function nextRequest(path: string, method = "GET", body?: string): NextRequest {
   return new NextRequest(new URL(path, origin), {
     method,
-    ...(body === undefined ? {} : {
-      headers: { "content-type": "application/json", origin },
-      body,
-    }),
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "content-type": "application/json", origin },
+          body,
+        }),
   });
 }
 
@@ -63,7 +65,8 @@ function researchRuntime(): void {
     "NEXTAUTH_SECRET",
     "EQO_OIDC_CLIENT_SECRET",
     "EQO_OPENBB_OIDC_CLIENT_SECRET",
-  ]) vi.stubEnv(name, "");
+  ])
+    vi.stubEnv(name, "");
   vi.stubEnv("EQO_BFF_MODE", "research");
   vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));
 }
@@ -80,7 +83,9 @@ describe("protected native route dispatch boundary", () => {
     vi.clearAllMocks();
     vi.stubGlobal("fetch", downstreamFetch);
     downstreamFetch.mockImplementation(async () => {
-      throw new Error("protected route attempted downstream network access after missing permission");
+      throw new Error(
+        "protected route attempted downstream network access after missing permission",
+      );
     });
     const forbidden = () => ({
       ok: false as const,
@@ -101,17 +106,72 @@ describe("protected native route dispatch boundary", () => {
   });
 
   it("returns the missing-scope response before Gateway, MDP, Quant, Engine, or AI provider dispatch", async () => {
-    const cases: ReadonlyArray<Readonly<{ name: string; invoke: () => Promise<Response>; usesGatewayAuthorization?: boolean }>> = [
-      { name: "quote snapshots", invoke: () => quotesGet(nextRequest("/api/quotes?symbols=SPY")), usesGatewayAuthorization: true },
-      { name: "option chain", invoke: () => optionsGet(nextRequest("/api/options/SPY?expiry=2026-10-16"), { params: Promise.resolve({ symbol: "SPY" }) }), usesGatewayAuthorization: true },
-      { name: "Core Bars/MDP", invoke: () => historyGet(nextRequest("/api/history/SPY?range=1D"), { params: Promise.resolve({ symbol: "SPY" }) }) },
-      { name: "research data", invoke: () => researchDataGet(nextRequest("/api/research/data/news?symbol=SPY"), { params: Promise.resolve({ operation: "news" }) }) },
-      { name: "research AI", invoke: () => researchAiPost(nextRequest("/api/research/ai", "POST", JSON.stringify({ messages: [{ role: "user", content: "must remain local" }] }))) },
-      { name: "order preview", invoke: () => orderPreviewPost(nextRequest("/api/eqo/orders/preview", "POST", "{}")), usesGatewayAuthorization: true },
+    const cases: ReadonlyArray<
+      Readonly<{
+        name: string;
+        invoke: () => Promise<Response>;
+        usesGatewayAuthorization?: boolean;
+      }>
+    > = [
+      {
+        name: "quote snapshots",
+        invoke: () => quotesGet(nextRequest("/api/quotes?symbols=SPY")),
+        usesGatewayAuthorization: true,
+      },
+      {
+        name: "option chain",
+        invoke: () =>
+          optionsGet(nextRequest("/api/options/SPY?expiry=2026-10-16"), {
+            params: Promise.resolve({ symbol: "SPY" }),
+          }),
+        usesGatewayAuthorization: true,
+      },
+      {
+        name: "Core Bars/MDP",
+        invoke: () =>
+          historyGet(nextRequest("/api/history/SPY?range=1D"), {
+            params: Promise.resolve({ symbol: "SPY" }),
+          }),
+      },
+      {
+        name: "research data",
+        invoke: () =>
+          researchDataGet(nextRequest("/api/research/data/news?symbol=SPY"), {
+            params: Promise.resolve({ operation: "news" }),
+          }),
+      },
+      {
+        name: "research AI",
+        invoke: () =>
+          researchAiPost(
+            nextRequest(
+              "/api/research/ai",
+              "POST",
+              JSON.stringify({ messages: [{ role: "user", content: "must remain local" }] }),
+            ),
+          ),
+      },
+      {
+        name: "order preview",
+        invoke: () => orderPreviewPost(nextRequest("/api/eqo/orders/preview", "POST", "{}")),
+        usesGatewayAuthorization: true,
+      },
       { name: "market stream", invoke: () => liveGet(nextRequest("/api/eqo/live")) },
-      { name: "Engine status", invoke: () => engineStatusGet(nextRequest("/api/eqo/engine/status")) },
-      { name: "Engine preview", invoke: () => enginePreviewGet(nextRequest("/api/eqo/engine/preview")) },
-      { name: "private prediction", invoke: () => predictionGet(nextRequest("/api/eqo/research/predictions/run-acceptance"), { params: Promise.resolve({ runId: "run-acceptance" }) }) },
+      {
+        name: "Engine status",
+        invoke: () => engineStatusGet(nextRequest("/api/eqo/engine/status")),
+      },
+      {
+        name: "Engine preview",
+        invoke: () => enginePreviewGet(nextRequest("/api/eqo/engine/preview")),
+      },
+      {
+        name: "private prediction",
+        invoke: () =>
+          predictionGet(nextRequest("/api/eqo/research/predictions/run-acceptance"), {
+            params: Promise.resolve({ runId: "run-acceptance" }),
+          }),
+      },
     ];
 
     for (const route of cases) {
@@ -140,9 +200,13 @@ describe("protected native route dispatch boundary", () => {
       response: NextResponse.json({ error: "forbidden" }, { status: 403 }),
     }));
 
-    await expectDenied(await getYfinanceDaily(nextRequest(
-      "/api/research/yfinance/daily?symbols=SPY&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00.000Z&end_utc=2026-01-02T00%3A00%3A00.000Z&adjustment=adjusted",
-    )));
+    await expectDenied(
+      await getYfinanceDaily(
+        nextRequest(
+          "/api/research/yfinance/daily?symbols=SPY&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00.000Z&end_utc=2026-01-02T00%3A00%3A00.000Z&adjustment=adjusted",
+        ),
+      ),
+    );
     expect(authMocks.authorizeRequest).toHaveBeenCalledWith(expect.anything(), "research:read");
     expect(authMocks.signMdpResearchReadDelegation).not.toHaveBeenCalled();
     expect(downstreamFetch).not.toHaveBeenCalled();
@@ -165,9 +229,11 @@ describe("protected native route dispatch boundary", () => {
       response: NextResponse.json({ error: "identity_unavailable" }, { status: 503 }),
     }));
 
-    const response = await getYfinanceDaily(nextRequest(
-      "/api/research/yfinance/daily?symbols=SPY&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00.000Z&end_utc=2026-01-02T00%3A00%3A00.000Z&adjustment=adjusted",
-    ));
+    const response = await getYfinanceDaily(
+      nextRequest(
+        "/api/research/yfinance/daily?symbols=SPY&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00.000Z&end_utc=2026-01-02T00%3A00%3A00.000Z&adjustment=adjusted",
+      ),
+    );
 
     expect(response.status).toBe(503);
     expect(authMocks.signMdpResearchReadDelegation).toHaveBeenCalledTimes(1);

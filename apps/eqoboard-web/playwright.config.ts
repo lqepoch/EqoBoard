@@ -13,7 +13,11 @@ export default defineConfig({
   retries: 0,
   timeout: 45_000,
   expect: { timeout: 10_000 },
-  reporter: [["line"], ["html", { open: "never" }], ["json", { outputFile: "test-results/results.json" }]],
+  reporter: [
+    ["line"],
+    ["html", { open: "never" }],
+    ["json", { outputFile: "test-results/results.json" }],
+  ],
   outputDir: "test-results/browser",
   use: {
     baseURL: origin,

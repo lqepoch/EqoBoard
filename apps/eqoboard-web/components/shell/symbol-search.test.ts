@@ -36,27 +36,36 @@ describe("symbol search scope and bounds", () => {
 
   it("fails closed unless terminal research access is present", () => {
     expect(getSymbolSearchAvailability(authenticatedTerminal)).toBe("ready");
-    expect(getSymbolSearchAvailability({ ...authenticatedTerminal, runtimeMode: "research" }))
-      .toBe("terminal-runtime-required");
-    expect(getSymbolSearchAvailability({ ...authenticatedTerminal, runtimeMode: undefined }))
-      .toBe("terminal-runtime-required");
-    expect(getSymbolSearchAvailability({ ...authenticatedTerminal, permissions: [] }))
-      .toBe("research-permission-required");
-    expect(getSymbolSearchAvailability({
-      ...authenticatedTerminal,
-      authenticated: false,
-      status: "sign-in-required",
-    })).toBe("sign-in-required");
-    expect(getSymbolSearchAvailability({
-      ...authenticatedTerminal,
-      authenticated: false,
-      status: "identity-unavailable",
-    })).toBe("identity-unavailable");
-    expect(getSymbolSearchAvailability({
-      ...authenticatedTerminal,
-      authenticated: false,
-      status: "policy-rejected",
-    })).toBe("policy-rejected");
+    expect(getSymbolSearchAvailability({ ...authenticatedTerminal, runtimeMode: "research" })).toBe(
+      "terminal-runtime-required",
+    );
+    expect(getSymbolSearchAvailability({ ...authenticatedTerminal, runtimeMode: undefined })).toBe(
+      "terminal-runtime-required",
+    );
+    expect(getSymbolSearchAvailability({ ...authenticatedTerminal, permissions: [] })).toBe(
+      "research-permission-required",
+    );
+    expect(
+      getSymbolSearchAvailability({
+        ...authenticatedTerminal,
+        authenticated: false,
+        status: "sign-in-required",
+      }),
+    ).toBe("sign-in-required");
+    expect(
+      getSymbolSearchAvailability({
+        ...authenticatedTerminal,
+        authenticated: false,
+        status: "identity-unavailable",
+      }),
+    ).toBe("identity-unavailable");
+    expect(
+      getSymbolSearchAvailability({
+        ...authenticatedTerminal,
+        authenticated: false,
+        status: "policy-rejected",
+      }),
+    ).toBe("policy-rejected");
   });
 });
 
@@ -84,9 +93,12 @@ describe("symbol search lifecycle and keyboard selection", () => {
   it("does not start a superseded query and ignores completion after cancellation", async () => {
     vi.useFakeTimers();
     let resolveRead: ((value: string) => void) | undefined;
-    const read = vi.fn((_query: string, _signal: AbortSignal) => new Promise<string>((resolve) => {
-      resolveRead = resolve;
-    }));
+    const read = vi.fn(
+      (_query: string, _signal: AbortSignal) =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
     const callbacks = { onStart: vi.fn(), onResult: vi.fn(), onError: vi.fn() };
     const cancel = scheduleSymbolSearch("OLD", read, callbacks);
     const cancelBeforeStart = scheduleSymbolSearch("SUPERSEDED", read, callbacks);
@@ -109,14 +121,18 @@ describe("symbol search lifecycle and keyboard selection", () => {
   });
 
   it("maps bounded client errors to explicit messages without exposing internals", () => {
-    expect(symbolSearchErrorMessage(new WidgetDataReadError("rate-limited")))
-      .toContain("rate limited");
-    expect(symbolSearchErrorMessage(new WidgetDataReadError("concurrency-limited")))
-      .toContain("busy");
-    expect(symbolSearchErrorMessage(new WidgetDataReadError("request-failed")))
-      .toContain("unavailable");
+    expect(symbolSearchErrorMessage(new WidgetDataReadError("rate-limited"))).toContain(
+      "rate limited",
+    );
+    expect(symbolSearchErrorMessage(new WidgetDataReadError("concurrency-limited"))).toContain(
+      "busy",
+    );
+    expect(symbolSearchErrorMessage(new WidgetDataReadError("request-failed"))).toContain(
+      "unavailable",
+    );
     expect(symbolSearchErrorMessage(new WidgetDataReadError("cancelled"))).toBeNull();
-    expect(symbolSearchErrorMessage(new Error("provider response included details")))
-      .toContain("unavailable");
+    expect(symbolSearchErrorMessage(new Error("provider response included details"))).toContain(
+      "unavailable",
+    );
   });
 });

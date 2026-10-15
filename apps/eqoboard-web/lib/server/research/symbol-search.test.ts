@@ -15,12 +15,14 @@ beforeEach(() => {
 
 describe("fixed TradingView symbol-search adapter", () => {
   it("uses a bounded fixed host and returns listing metadata without quote fields", async () => {
-    mocks.readProviderJson.mockResolvedValue({ symbols: [
-      { symbol: "NASDAQ:AAPL", description: "Apple Inc.", exchange: "NASDAQ", type: "stock" },
-      { symbol: "MIL:ENI", description: "Eni S.p.A.", exchange: "MIL", type: "stock" },
-      { symbol: "NASDAQ:IGNORED", description: "Ignored", exchange: "NASDAQ", type: "unknown" },
-      { symbol: "NASDAQ:A:B", description: "Ambiguous", exchange: "NASDAQ", type: "stock" },
-    ] });
+    mocks.readProviderJson.mockResolvedValue({
+      symbols: [
+        { symbol: "NASDAQ:AAPL", description: "Apple Inc.", exchange: "NASDAQ", type: "stock" },
+        { symbol: "MIL:ENI", description: "Eni S.p.A.", exchange: "MIL", type: "stock" },
+        { symbol: "NASDAQ:IGNORED", description: "Ignored", exchange: "NASDAQ", type: "unknown" },
+        { symbol: "NASDAQ:A:B", description: "Ambiguous", exchange: "NASDAQ", type: "stock" },
+      ],
+    });
 
     const result = await loadTradingViewSymbolSearch("AAPL");
     const [requestUrl, options] = mocks.readProviderJson.mock.calls[0]!;
@@ -44,11 +46,23 @@ describe("fixed TradingView symbol-search adapter", () => {
     expect(result.source).toMatchObject({ provider: "TradingView symbol search", license: null });
     expect(result.asOf).toBeNull();
     expect(result.data).toEqual([
-      expect.objectContaining({ symbol: "AAPL", providerSymbol: "AAPL", provider: "TradingView symbol search", asOf: null }),
-      expect.objectContaining({ symbol: "ENI.MI", providerSymbol: "ENI", provider: "TradingView symbol search", asOf: null }),
+      expect.objectContaining({
+        symbol: "AAPL",
+        providerSymbol: "AAPL",
+        provider: "TradingView symbol search",
+        asOf: null,
+      }),
+      expect.objectContaining({
+        symbol: "ENI.MI",
+        providerSymbol: "ENI",
+        provider: "TradingView symbol search",
+        asOf: null,
+      }),
     ]);
     expect(result.data[0]).not.toHaveProperty("price");
-    expect(result.warning).toContain("no observation timestamp, quote, market feed, or SIP authority");
+    expect(result.warning).toContain(
+      "no observation timestamp, quote, market feed, or SIP authority",
+    );
   });
 
   it("caps and deduplicates response rows while marking truncation", async () => {
@@ -68,8 +82,12 @@ describe("fixed TradingView symbol-search adapter", () => {
   });
 
   it("rejects malformed queries before provider dispatch", async () => {
-    await expect(loadTradingViewSymbolSearch(" AAPL")).rejects.toThrow("invalid-symbol-search-query");
-    await expect(loadTradingViewSymbolSearch("A".repeat(65))).rejects.toThrow("invalid-symbol-search-query");
+    await expect(loadTradingViewSymbolSearch(" AAPL")).rejects.toThrow(
+      "invalid-symbol-search-query",
+    );
+    await expect(loadTradingViewSymbolSearch("A".repeat(65))).rejects.toThrow(
+      "invalid-symbol-search-query",
+    );
     expect(mocks.readProviderJson).not.toHaveBeenCalled();
   });
 });

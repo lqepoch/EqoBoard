@@ -1,8 +1,16 @@
 import type { AuthUiSnapshot, Permission } from "../../lib/contracts/auth";
 import { WidgetDataReadError } from "../../widgets/sdk/data";
 import type { WidgetDataClient } from "../../widgets/sdk/data";
-import { buildNativeReadRequest, type NativeDataOperationId, type NativeDataOperationMap } from "./operations";
-import { decodePortfolioList, decodePortfolioPositions, decodePortfolioTransactions } from "./portfolio-decoder";
+import {
+  buildNativeReadRequest,
+  type NativeDataOperationId,
+  type NativeDataOperationMap,
+} from "./operations";
+import {
+  decodePortfolioList,
+  decodePortfolioPositions,
+  decodePortfolioTransactions,
+} from "./portfolio-decoder";
 import { isNativeReadAllowedInRuntime } from "./runtime-policy";
 
 const RATE_WINDOW_MS = 60_000;
@@ -47,12 +55,20 @@ type SharedRead = {
   settled: boolean;
 };
 
-function permissionGranted(auth: AuthUiSnapshot, permission: Permission | readonly Permission[]): boolean {
-  const required: readonly Permission[] = typeof permission === "string" ? [permission] : permission;
+function permissionGranted(
+  auth: AuthUiSnapshot,
+  permission: Permission | readonly Permission[],
+): boolean {
+  const required: readonly Permission[] =
+    typeof permission === "string" ? [permission] : permission;
   return auth.authenticated && required.every((item) => auth.permissions.includes(item));
 }
 
-export async function readNativeJsonResponse(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {
+export async function readNativeJsonResponse(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<unknown> {
   if (!response.ok) throw new WidgetDataReadError("request-failed");
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json" && !contentType?.endsWith("+json")) {
@@ -125,10 +141,7 @@ function decodeNativeReadOutput<Id extends NativeDataOperationId>(
   return value as NativeDataOperationMap[Id]["output"];
 }
 
-function callerPromise<T>(
-  shared: SharedRead,
-  callerSignal: AbortSignal,
-): Promise<T> {
+function callerPromise<T>(shared: SharedRead, callerSignal: AbortSignal): Promise<T> {
   const token = Symbol("market-read-consumer");
   shared.consumers.add(token);
   if (callerSignal.aborted) {
@@ -195,19 +208,27 @@ export function createNativeDataReadClient(
     requestTimes.push(now());
 
     shared.promise = Promise.resolve()
-      .then(() => fetcher(path, {
-        method: "GET",
-        credentials: "same-origin",
-        mode: "same-origin",
-        cache: "no-store",
-        redirect: "error",
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      }))
-      .then(async (response) => decodeNativeReadOutput(
-        operationId,
-        await readNativeJsonResponse(response, MAX_BYTES_BY_OPERATION[operationId], controller.signal),
-      ))
+      .then(() =>
+        fetcher(path, {
+          method: "GET",
+          credentials: "same-origin",
+          mode: "same-origin",
+          cache: "no-store",
+          redirect: "error",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        }),
+      )
+      .then(async (response) =>
+        decodeNativeReadOutput(
+          operationId,
+          await readNativeJsonResponse(
+            response,
+            MAX_BYTES_BY_OPERATION[operationId],
+            controller.signal,
+          ),
+        ),
+      )
       .catch((error: unknown) => {
         if (controller.signal.aborted) throw new WidgetDataReadError("cancelled");
         if (error instanceof WidgetDataReadError) throw error;
@@ -237,26 +258,41 @@ export function createNativeDataReadClient(
       const request = buildNativeReadRequest(operationId, input);
       if (!request) throw new WidgetDataReadError("request-failed");
       const auth = getAuth();
-      if (!isNativeReadAllowedInRuntime(operationId, auth.runtimeMode) ||
-          !permissionGranted(auth, request.permission)) throw new WidgetDataReadError("request-failed");
+      if (
+        !isNativeReadAllowedInRuntime(operationId, auth.runtimeMode) ||
+        !permissionGranted(auth, request.permission)
+      )
+        throw new WidgetDataReadError("request-failed");
 
       // An identical URL requested after an account switch must not join the
       // prior identity's promise, even while its fetch is still draining.
       const requestKey = `${auth.storagePartition ?? "anonymous"}\u001f${request.path}`;
 
       const current = inflight.get(requestKey);
-      if (current) return callerPromise(current, options.signal) as Promise<NativeDataOperationMap[Id]["output"]>;
+      if (current)
+        return callerPromise(current, options.signal) as Promise<
+          NativeDataOperationMap[Id]["output"]
+        >;
 
       const time = now();
-      while (requestTimes.length > 0 && time - requestTimes[0]! >= RATE_WINDOW_MS) requestTimes.shift();
+      while (requestTimes.length > 0 && time - requestTimes[0]! >= RATE_WINDOW_MS)
+        requestTimes.shift();
       if (requestTimes.length >= MAX_REQUESTS_PER_WINDOW) {
-        throw new WidgetDataReadError("rate-limited", Math.max(1, requestTimes[0]! + RATE_WINDOW_MS - time));
+        throw new WidgetDataReadError(
+          "rate-limited",
+          Math.max(1, requestTimes[0]! + RATE_WINDOW_MS - time),
+        );
       }
-      if (concurrentCount >= MAX_CONCURRENT || (operationCounts.get(operationId) ?? 0) >= MAX_CONCURRENT_PER_OPERATION) {
+      if (
+        concurrentCount >= MAX_CONCURRENT ||
+        (operationCounts.get(operationId) ?? 0) >= MAX_CONCURRENT_PER_OPERATION
+      ) {
         throw new WidgetDataReadError("concurrency-limited");
       }
 
-      return callerPromise(start(operationId, requestKey, request.path), options.signal) as Promise<NativeDataOperationMap[Id]["output"]>;
+      return callerPromise(start(operationId, requestKey, request.path), options.signal) as Promise<
+        NativeDataOperationMap[Id]["output"]
+      >;
     },
   });
 }

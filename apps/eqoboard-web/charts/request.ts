@@ -6,7 +6,9 @@ import type { DecodedCoreBarsPage } from "./core-bars";
 export const MAX_HISTORY_PAGES = 20;
 const CONTROL = /[\u0000-\u001f\u007f]/u;
 
-const AUTO_RESOLUTION: Readonly<Record<NativeChartConfigV1["range"], NonNullable<CoreBarsReadInput["resolution"]>>> = {
+const AUTO_RESOLUTION: Readonly<
+  Record<NativeChartConfigV1["range"], NonNullable<CoreBarsReadInput["resolution"]>>
+> = {
   "1D": "1m",
   "5D": "5m",
   "1M": "1h",
@@ -17,7 +19,9 @@ const AUTO_RESOLUTION: Readonly<Record<NativeChartConfigV1["range"], NonNullable
   MAX: "1d",
 };
 
-export function resolveChartResolution(config: NativeChartConfigV1): NonNullable<CoreBarsReadInput["resolution"]> {
+export function resolveChartResolution(
+  config: NativeChartConfigV1,
+): NonNullable<CoreBarsReadInput["resolution"]> {
   return config.resolution === "auto" ? AUTO_RESOLUTION[config.range] : config.resolution;
 }
 
@@ -26,7 +30,10 @@ export function chartRefreshIntervalMs(range: NativeChartConfigV1["range"]): num
 }
 
 /** Fully specifies the bounded same-origin history operation; never provides a URL/provider name. */
-export function buildCoreBarsReadInput(symbol: string, config: NativeChartConfigV1): CoreBarsReadInput {
+export function buildCoreBarsReadInput(
+  symbol: string,
+  config: NativeChartConfigV1,
+): CoreBarsReadInput {
   return {
     symbol,
     range: config.range,
@@ -53,13 +60,22 @@ export function chartSelectionKey(input: CoreBarsReadInput): string {
 }
 
 /** Checks that the server echoed the full request selection and exact continuation tuple. */
-export function coreBarsPageMatchesInput(page: DecodedCoreBarsPage, input: CoreBarsReadInput): boolean {
+export function coreBarsPageMatchesInput(
+  page: DecodedCoreBarsPage,
+  input: CoreBarsReadInput,
+): boolean {
   const request: CoreBarsPageRequest = page.envelope.request;
-  const hasContinuationTuple = input.request_start !== undefined || input.request_end !== undefined || input.cursor !== undefined;
+  const hasContinuationTuple =
+    input.request_start !== undefined ||
+    input.request_end !== undefined ||
+    input.cursor !== undefined;
   const matchesWindow = hasContinuationTuple
-    ? request.request_start === input.request_start && request.request_end === input.request_end && request.cursor === input.cursor
+    ? request.request_start === input.request_start &&
+      request.request_end === input.request_end &&
+      request.cursor === input.cursor
     : request.cursor === null;
-  return request.symbol === input.symbol &&
+  return (
+    request.symbol === input.symbol &&
     request.range === input.range &&
     request.resolution === input.resolution &&
     request.asset_class === input.asset_class &&
@@ -67,13 +83,19 @@ export function coreBarsPageMatchesInput(page: DecodedCoreBarsPage, input: CoreB
     request.adjustment === input.adjustment &&
     request.provider_mode === input.provider_mode &&
     request.allow_daily_downgrade === input.allow_daily_downgrade &&
-    matchesWindow;
+    matchesWindow
+  );
 }
 
 /** Response cursors are opaque but still bounded before storage or another request. */
 export function usableContinuationCursor(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 2_048 &&
-    new TextEncoder().encode(value).byteLength <= 2_048 && !CONTROL.test(value);
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 2_048 &&
+    new TextEncoder().encode(value).byteLength <= 2_048 &&
+    !CONTROL.test(value)
+  );
 }
 
 export function coreBarsWindowKey(request: CoreBarsPageRequest): string {
@@ -93,10 +115,7 @@ function pageSelectionKey(request: CoreBarsPageRequest): string {
   ]);
 }
 
-export function withinCoreBarsWindow(
-  seconds: number,
-  request: CoreBarsPageRequest,
-): boolean {
+export function withinCoreBarsWindow(seconds: number, request: CoreBarsPageRequest): boolean {
   const start = Date.parse(request.request_start) / 1_000;
   const end = Date.parse(request.request_end) / 1_000;
   return Number.isFinite(start) && Number.isFinite(end) && seconds >= start && seconds < end;

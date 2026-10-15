@@ -34,13 +34,21 @@ export function AccountControl() {
         >
           {pending ? "Opening sign-in…" : "Sign in"}
         </button>
-        {failure ? <span className="eq-account-control__error" role="alert">{failure}</span> : null}
+        {failure ? (
+          <span className="eq-account-control__error" role="alert">
+            {failure}
+          </span>
+        ) : null}
       </div>
     );
   }
 
   if (!auth.authenticated) {
-    return <span className="eq-header-access-state" data-testid="account-access-state">Access unavailable</span>;
+    return (
+      <span className="eq-header-access-state" data-testid="account-access-state">
+        Access unavailable
+      </span>
+    );
   }
 
   const displayName = auth.displayName?.trim() || "Signed in";
@@ -51,7 +59,9 @@ export function AccountControl() {
         <summary aria-label={`Account menu for ${displayName}`} className="eq-account-button">
           <span aria-hidden="true" className="eq-account-indicator" />
           <span className="eq-account-button__label">{displayName}</span>
-          <span aria-hidden="true" className="eq-account-chevron"><ShellIcon name="chevron-down" size={14} /></span>
+          <span aria-hidden="true" className="eq-account-chevron">
+            <ShellIcon name="chevron-down" size={14} />
+          </span>
         </summary>
         <div className="eq-account-menu__panel">
           <div className="eq-account-menu__identity">{displayName}</div>
@@ -64,7 +74,11 @@ export function AccountControl() {
           >
             {pending ? "Signing out…" : "Sign out"}
           </button>
-          {failure ? <div className="eq-account-menu__error" role="alert">{failure}</div> : null}
+          {failure ? (
+            <div className="eq-account-menu__error" role="alert">
+              {failure}
+            </div>
+          ) : null}
         </div>
       </details>
     </div>

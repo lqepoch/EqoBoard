@@ -3,20 +3,30 @@ import type { AuthUiSnapshot } from "../../lib/contracts/auth";
 import { createWidgetRegistry } from "../../widgets/registry/create";
 import type { WorkspaceDocumentV1 } from "../../workspace/model";
 import { createWorkspaceStore } from "../../stores/workspace/store";
-import type { WorkspaceClientRepository, WorkspaceClientSnapshot } from "../../stores/workspace/repository";
+import type {
+  WorkspaceClientRepository,
+  WorkspaceClientSnapshot,
+} from "../../stores/workspace/repository";
 
-function document(name: string, workspaceId = "11111111-1111-4111-8111-111111111111"): WorkspaceDocumentV1 {
+function document(
+  name: string,
+  workspaceId = "11111111-1111-4111-8111-111111111111",
+): WorkspaceDocumentV1 {
   const tabId = "22222222-2222-4222-8222-222222222222";
   return {
     schemaVersion: 1,
     activeWorkspaceId: workspaceId,
-    workspaces: [{
-      id: workspaceId,
-      name,
-      activeTabId: tabId,
-      marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
-      tabs: [{ id: tabId, name: "Overview", widgets: [], placements: [], maximizedInstanceId: null }],
-    }],
+    workspaces: [
+      {
+        id: workspaceId,
+        name,
+        activeTabId: tabId,
+        marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
+        tabs: [
+          { id: tabId, name: "Overview", widgets: [], placements: [], maximizedInstanceId: null },
+        ],
+      },
+    ],
     userTemplates: [],
   };
 }
@@ -88,7 +98,9 @@ describe("workspace migration store acceptance", () => {
 
   it("does not auto-import anonymous legacy storage when a signed-in owner has no document", async () => {
     const repository = fakeRepository(null, false);
-    const store = createWorkspaceStore(auth(["workspace:read"]), createWidgetRegistry([]), { repository });
+    const store = createWorkspaceStore(auth(["workspace:read"]), createWidgetRegistry([]), {
+      repository,
+    });
 
     await store.getState().hydrate();
     expect(store.getState().loadStatus).toBe("ready");
@@ -111,13 +123,15 @@ describe("workspace migration store acceptance", () => {
         ...workspace,
         tabs: workspace.tabs.map((tab) => ({
           ...tab,
-          widgets: [{
-            instanceId: "44444444-4444-4444-8444-444444444444",
-            manifestId: "vendor.unavailable-widget",
-            manifestVersion: "9.0.0",
-            configSchemaId: "vendor.unavailable-widget.v1",
-            config: { preserved: true },
-          }],
+          widgets: [
+            {
+              instanceId: "44444444-4444-4444-8444-444444444444",
+              manifestId: "vendor.unavailable-widget",
+              manifestVersion: "9.0.0",
+              configSchemaId: "vendor.unavailable-widget.v1",
+              config: { preserved: true },
+            },
+          ],
           placements: [{ i: "44444444-4444-4444-8444-444444444444", x: 0, y: 0, w: 2, h: 2 }],
         })),
       })),
@@ -135,11 +149,15 @@ describe("workspace migration store acceptance", () => {
     expect(afterImport?.workspaces).toHaveLength(2);
     expect(afterImport?.activeWorkspaceId).not.toBe(importedWithWidget.activeWorkspaceId);
     expect(afterImport?.workspaces[1].id).not.toBe(importedWithWidget.workspaces[0].id);
-    expect(afterImport?.workspaces[1].tabs[0].id).not.toBe(importedWithWidget.workspaces[0].tabs[0].id);
-    expect(afterImport?.workspaces[1].tabs[0].widgets[0].instanceId)
-      .not.toBe(importedWithWidget.workspaces[0].tabs[0].widgets[0].instanceId);
-    expect(afterImport?.workspaces[1].tabs[0].placements[0].i)
-      .toBe(afterImport?.workspaces[1].tabs[0].widgets[0].instanceId);
+    expect(afterImport?.workspaces[1].tabs[0].id).not.toBe(
+      importedWithWidget.workspaces[0].tabs[0].id,
+    );
+    expect(afterImport?.workspaces[1].tabs[0].widgets[0].instanceId).not.toBe(
+      importedWithWidget.workspaces[0].tabs[0].widgets[0].instanceId,
+    );
+    expect(afterImport?.workspaces[1].tabs[0].placements[0].i).toBe(
+      afterImport?.workspaces[1].tabs[0].widgets[0].instanceId,
+    );
     expect(repository.save).not.toHaveBeenCalled();
 
     await store.getState().saveNow();
@@ -149,7 +167,9 @@ describe("workspace migration store acceptance", () => {
 
   it("leaves the current document unchanged when replacement backup fails", async () => {
     const current = document("Current");
-    const backup = vi.fn(async () => { throw new Error("simulated local backup failure"); });
+    const backup = vi.fn(async () => {
+      throw new Error("simulated local backup failure");
+    });
     const repository = fakeRepository(current, true, backup);
     const store = createWorkspaceStore(
       auth(["workspace:read", "workspace:write"]),
@@ -158,8 +178,11 @@ describe("workspace migration store acceptance", () => {
     );
     await store.getState().hydrate();
 
-    expect(await store.getState().importDocument(document("Replacement", "55555555-5555-4555-8555-555555555555"), "replace"))
-      .toBe(false);
+    expect(
+      await store
+        .getState()
+        .importDocument(document("Replacement", "55555555-5555-4555-8555-555555555555"), "replace"),
+    ).toBe(false);
     expect(store.getState().document).toEqual(current);
     expect(repository.save).not.toHaveBeenCalled();
     expect(backup).toHaveBeenCalledWith(current.workspaces[0], "import");

@@ -8,7 +8,11 @@ const TICKER = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export type StockLeaseInput = Readonly<{ consumer_id: string; symbols: readonly string[] }>;
-export type OptionsLeaseInput = Readonly<{ consumer_id: string; generation: number; symbols: readonly string[] }>;
+export type OptionsLeaseInput = Readonly<{
+  consumer_id: string;
+  generation: number;
+  symbols: readonly string[];
+}>;
 export type LeaseKind = "stocks" | "options";
 
 export type MarketLeaseSender = (
@@ -19,18 +23,33 @@ export type MarketLeaseSender = (
 ) => Promise<unknown>;
 
 type ConsumerTargets = Readonly<{ stocks: readonly string[]; options: readonly string[] }>;
-type LeaseState = { generation: number; consumerId: string | null; inFlight: boolean; sentKey: string | null; failedKey: string | null; controller: AbortController | null };
+type LeaseState = {
+  generation: number;
+  consumerId: string | null;
+  inFlight: boolean;
+  sentKey: string | null;
+  failedKey: string | null;
+  controller: AbortController | null;
+};
 
 function validSymbols(value: readonly string[], feed: LeaseKind): readonly string[] {
   const seen = new Set<string>();
   for (const symbol of value) {
-    if (typeof symbol !== "string" || symbol !== symbol.trim() || !((feed === "stocks" ? TICKER : OCC_CONTRACT).test(symbol))) continue;
+    if (
+      typeof symbol !== "string" ||
+      symbol !== symbol.trim() ||
+      !(feed === "stocks" ? TICKER : OCC_CONTRACT).test(symbol)
+    )
+      continue;
     seen.add(symbol);
   }
   return Object.freeze([...seen]);
 }
 
-function aggregate(consumers: ReadonlyMap<string, ConsumerTargets>, feed: LeaseKind): readonly string[] {
+function aggregate(
+  consumers: ReadonlyMap<string, ConsumerTargets>,
+  feed: LeaseKind,
+): readonly string[] {
   const seen = new Set<string>();
   const symbols: string[] = [];
   for (const targets of consumers.values()) {
@@ -62,22 +81,43 @@ function isAckRecord(value: unknown): value is Record<string, unknown> {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return false;
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    return Reflect.ownKeys(value).every((key) => typeof key === "string" &&
-      !!descriptors[key] && descriptors[key]!.enumerable && "value" in descriptors[key]!);
+    return Reflect.ownKeys(value).every(
+      (key) =>
+        typeof key === "string" &&
+        !!descriptors[key] &&
+        descriptors[key]!.enumerable &&
+        "value" in descriptors[key]!,
+    );
   } catch {
     return false;
   }
 }
 
-function acknowledgedActiveCount(feed: LeaseKind, generation: number, value: unknown): number | null {
-  if (!isAckRecord(value) ||
-      !Number.isSafeInteger(value.active) || (value.active as number) < 0 ||
-      !Number.isSafeInteger(value.max) || (value.max as number) < 0 ||
-      (value.active as number) > (value.max as number) ||
-      !Number.isSafeInteger(value.expires_in_seconds) || (value.expires_in_seconds as number) < 1 ||
-      (value.expires_in_seconds as number) > 90) return null;
-  if (feed === "stocks") return (value.active as number) <= MARKET_STOCK_LEASE_LIMIT ? value.active as number : null;
-  if ((value.active as number) > MARKET_OPTION_LEASE_LIMIT || value.generation !== generation || value.state !== "lease_active") return null;
+function acknowledgedActiveCount(
+  feed: LeaseKind,
+  generation: number,
+  value: unknown,
+): number | null {
+  if (
+    !isAckRecord(value) ||
+    !Number.isSafeInteger(value.active) ||
+    (value.active as number) < 0 ||
+    !Number.isSafeInteger(value.max) ||
+    (value.max as number) < 0 ||
+    (value.active as number) > (value.max as number) ||
+    !Number.isSafeInteger(value.expires_in_seconds) ||
+    (value.expires_in_seconds as number) < 1 ||
+    (value.expires_in_seconds as number) > 90
+  )
+    return null;
+  if (feed === "stocks")
+    return (value.active as number) <= MARKET_STOCK_LEASE_LIMIT ? (value.active as number) : null;
+  if (
+    (value.active as number) > MARKET_OPTION_LEASE_LIMIT ||
+    value.generation !== generation ||
+    value.state !== "lease_active"
+  )
+    return null;
   return value.active as number;
 }
 
@@ -91,8 +131,22 @@ export class MarketLeaseCoordinator {
   #send: MarketLeaseSender;
   #consumers = new Map<string, ConsumerTargets>();
   #states: Record<LeaseKind, LeaseState> = {
-    stocks: { generation: 0, consumerId: null, inFlight: false, sentKey: null, failedKey: null, controller: null },
-    options: { generation: 0, consumerId: null, inFlight: false, sentKey: null, failedKey: null, controller: null },
+    stocks: {
+      generation: 0,
+      consumerId: null,
+      inFlight: false,
+      sentKey: null,
+      failedKey: null,
+      controller: null,
+    },
+    options: {
+      generation: 0,
+      consumerId: null,
+      inFlight: false,
+      sentKey: null,
+      failedKey: null,
+      controller: null,
+    },
   };
   #timer: ReturnType<typeof setInterval> | null = null;
   #debounce: ReturnType<typeof setTimeout> | null = null;
@@ -199,9 +253,14 @@ export class MarketLeaseCoordinator {
     state.controller = new AbortController();
     const generation = feed === "options" ? ++state.generation : state.generation;
     try {
-      const input: StockLeaseInput | OptionsLeaseInput = feed === "stocks"
-        ? { consumer_id: state.consumerId, symbols: selected }
-        : { consumer_id: state.consumerId, generation: Math.max(1, generation), symbols: selected };
+      const input: StockLeaseInput | OptionsLeaseInput =
+        feed === "stocks"
+          ? { consumer_id: state.consumerId, symbols: selected }
+          : {
+              consumer_id: state.consumerId,
+              generation: Math.max(1, generation),
+              symbols: selected,
+            };
       const ack = await this.#send(feed, input, state.controller.signal);
       if (this.#disposed) return;
       const activeCount = acknowledgedActiveCount(feed, generation, ack);
@@ -217,7 +276,8 @@ export class MarketLeaseCoordinator {
     } finally {
       state.inFlight = false;
       state.controller = null;
-      if (!this.#disposed && key(aggregate(this.#consumers, feed).slice(0, limit)) !== desiredKey) this.#schedule();
+      if (!this.#disposed && key(aggregate(this.#consumers, feed).slice(0, limit)) !== desiredKey)
+        this.#schedule();
     }
   }
 
@@ -226,9 +286,14 @@ export class MarketLeaseCoordinator {
     if (!state.consumerId) return;
     const controller = new AbortController();
     const generation = feed === "options" ? ++state.generation : state.generation;
-    const input: StockLeaseInput | OptionsLeaseInput = feed === "stocks"
-      ? { consumer_id: state.consumerId, symbols: Object.freeze([]) }
-      : { consumer_id: state.consumerId, generation: Math.max(1, generation), symbols: Object.freeze([]) };
+    const input: StockLeaseInput | OptionsLeaseInput =
+      feed === "stocks"
+        ? { consumer_id: state.consumerId, symbols: Object.freeze([]) }
+        : {
+            consumer_id: state.consumerId,
+            generation: Math.max(1, generation),
+            symbols: Object.freeze([]),
+          };
     try {
       const ack = await this.#send(feed, input, controller.signal, true);
       const activeCount = acknowledgedActiveCount(feed, generation, ack);

@@ -25,7 +25,10 @@ export function isNativeReadAllowedInRuntime(
 ): boolean {
   const mode = runtimeMode ?? "terminal";
   if (mode === "research") {
-    return !TERMINAL_ONLY_RESEARCH_READS.has(operationId) && RESEARCH_MODE_READ_ALLOWLIST.has(operationId);
+    return (
+      !TERMINAL_ONLY_RESEARCH_READS.has(operationId) &&
+      RESEARCH_MODE_READ_ALLOWLIST.has(operationId)
+    );
   }
   return operationId !== "research.yahoo.daily";
 }

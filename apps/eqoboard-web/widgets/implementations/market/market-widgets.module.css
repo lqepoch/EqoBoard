@@ -19,8 +19,12 @@
   margin: 0;
 }
 
-.marketWidget h2 { font-size: 1rem; }
-.marketWidget h3 { font-size: 0.8rem; }
+.marketWidget h2 {
+  font-size: 1rem;
+}
+.marketWidget h3 {
+  font-size: 0.8rem;
+}
 
 .marketGrid {
   width: 100%;
@@ -55,9 +59,17 @@
   line-height: 1.45;
 }
 
-.notice { color: var(--eq-warning, #efc36f); }
-.marketFootnote { border-top: 1px solid var(--market-line); padding-top: 0.45rem; }
-.emptyState { padding: 0.8rem; text-align: center; }
+.notice {
+  color: var(--eq-warning, #efc36f);
+}
+.marketFootnote {
+  border-top: 1px solid var(--market-line);
+  padding-top: 0.45rem;
+}
+.emptyState {
+  padding: 0.8rem;
+  text-align: center;
+}
 
 .controlLabel {
   display: grid;
@@ -103,7 +115,10 @@
   font-weight: 650;
 }
 
-.previewButton:disabled { opacity: 0.55; cursor: not-allowed; }
+.previewButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 .previewReceipt {
   display: grid;
@@ -120,16 +135,49 @@
   gap: 0.5rem;
 }
 
-.previewReceipt dt { color: var(--market-muted); }
-.previewReceipt dd { margin: 0; overflow-wrap: anywhere; }
-.tapeList { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
-.tapeList li { display: grid; grid-template-columns: minmax(10rem, 1.3fr) repeat(3, minmax(4rem, 0.5fr)); gap: 0.45rem; padding: 0.55rem; border: 1px solid var(--market-line); border-radius: 0.35rem; }
-.tapeList li > span:nth-last-child(2), .tapeList li > strong { grid-column: 1 / -1; }
-.tapeList time, .tapeList strong { color: var(--market-muted); font-size: 0.68rem; }
-.tapeList code { overflow-wrap: anywhere; }
+.previewReceipt dt {
+  color: var(--market-muted);
+}
+.previewReceipt dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.tapeList {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tapeList li {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.3fr) repeat(3, minmax(4rem, 0.5fr));
+  gap: 0.45rem;
+  padding: 0.55rem;
+  border: 1px solid var(--market-line);
+  border-radius: 0.35rem;
+}
+.tapeList li > span:nth-last-child(2),
+.tapeList li > strong {
+  grid-column: 1 / -1;
+}
+.tapeList time,
+.tapeList strong {
+  color: var(--market-muted);
+  font-size: 0.68rem;
+}
+.tapeList code {
+  overflow-wrap: anywhere;
+}
 
 @media (max-width: 600px) {
-  .marketWidget { padding: 0.6rem; }
-  .marketGrid { height: 360px; }
-  .tapeList li { grid-template-columns: minmax(0, 1fr) minmax(4rem, 0.5fr); }
+  .marketWidget {
+    padding: 0.6rem;
+  }
+  .marketGrid {
+    height: 360px;
+  }
+  .tapeList li {
+    grid-template-columns: minmax(0, 1fr) minmax(4rem, 0.5fr);
+  }
 }

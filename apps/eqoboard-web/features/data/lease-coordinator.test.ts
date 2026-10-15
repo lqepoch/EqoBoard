@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MarketLeaseCoordinator, type LeaseKind, type MarketLeaseSender, type OptionsLeaseInput, type StockLeaseInput } from "./lease-coordinator";
+import {
+  MarketLeaseCoordinator,
+  type LeaseKind,
+  type MarketLeaseSender,
+  type OptionsLeaseInput,
+  type StockLeaseInput,
+} from "./lease-coordinator";
 import { MarketStore } from "../../stores/market/market-store";
 
 describe("shared market lease coordinator", () => {
@@ -26,7 +32,10 @@ describe("shared market lease coordinator", () => {
     };
     const coordinator = new MarketLeaseCoordinator(store, send);
     const instanceId = "00000000-0000-4000-8000-000000000001";
-    const symbols = Array.from({ length: 17 }, (_, index) => `SPY261218C${String(600_000 + index * 1_000).padStart(8, "0")}`);
+    const symbols = Array.from(
+      { length: 17 },
+      (_, index) => `SPY261218C${String(600_000 + index * 1_000).padStart(8, "0")}`,
+    );
 
     coordinator.start();
     coordinator.setConsumer(instanceId, "options", symbols);
@@ -51,7 +60,12 @@ describe("shared market lease coordinator", () => {
     const cleanup = sent.at(-1)?.input as OptionsLeaseInput;
     expect(cleanup.generation).toBe(2);
     expect(cleanup.symbols).toEqual([]);
-    expect(store.getSnapshot().leases.options).toMatchObject({ generation: 2, requestedCount: 0, selectedCount: 0, leasedCount: 0 });
+    expect(store.getSnapshot().leases.options).toMatchObject({
+      generation: 2,
+      requestedCount: 0,
+      selectedCount: 0,
+      leasedCount: 0,
+    });
 
     coordinator.stop();
     coordinator.dispose();

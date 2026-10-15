@@ -16,7 +16,10 @@ afterEach(() => {
 describe("adapted read-only provider operations", () => {
   it("parses bounded RSS headlines and retains publisher URLs without changing their source identity", async () => {
     const feed = `<?xml version="1.0"?><rss><channel><item><title>Market headline</title><link>https://publisher.example/story</link><source>Publisher</source><pubDate>Wed, 14 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>`;
-    const fetchMock = vi.fn(async () => new Response(feed, { status: 200, headers: { "Content-Type": "application/rss+xml" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(feed, { status: 200, headers: { "Content-Type": "application/rss+xml" } }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await loadNews(null);
@@ -36,17 +39,35 @@ describe("adapted read-only provider operations", () => {
 
   it("parses FRED CSV observation dates and ignores missing or nonnumeric values", async () => {
     const csv = "observation_date,DGS10\n2026-10-12,4.01\n2026-10-13,.\n2026-10-14,4.12\n";
-    const fetchMock = vi.fn(async () => new Response(csv, { status: 200, headers: { "Content-Type": "text/csv" } }));
+    const fetchMock = vi.fn(
+      async () => new Response(csv, { status: 200, headers: { "Content-Type": "text/csv" } }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const points = await readFredHistory("DGS10", 10);
 
-    expect(points).toEqual([{ date: "2026-10-12", value: 4.01 }, { date: "2026-10-14", value: 4.12 }]);
+    expect(points).toEqual([
+      { date: "2026-10-12", value: 4.01 },
+      { date: "2026-10-14", value: 4.12 },
+    ]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("uses Binance only after CoinGecko failure and leaves absent market-cap fields null", async () => {
-    const pairs = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "DOT", "LINK", "LTC", "MATIC"];
+    const pairs = [
+      "BTC",
+      "ETH",
+      "SOL",
+      "BNB",
+      "XRP",
+      "ADA",
+      "DOGE",
+      "AVAX",
+      "DOT",
+      "LINK",
+      "LTC",
+      "MATIC",
+    ];
     const binance = pairs.map((symbol) => ({
       symbol: `${symbol}USDT`,
       lastPrice: "100.25",
@@ -54,16 +75,27 @@ describe("adapted read-only provider operations", () => {
       quoteVolume: "250000",
       closeTime: Date.parse("2026-10-15T01:00:00.000Z"),
     }));
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce(new Response("provider unavailable", { status: 503 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(binance), { status: 200, headers: { "Content-Type": "application/json" } }));
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(binance), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await loadCryptoMarkets();
 
     expect(result.source.provider).toBe("Binance public market data");
     expect(result.data).toHaveLength(12);
-    expect(result.data[0]).toMatchObject({ marketCap: null, rank: null, sparkline: [], asOf: "2026-10-15T01:00:00.000Z" });
+    expect(result.data[0]).toMatchObject({
+      marketCap: null,
+      rank: null,
+      sparkline: [],
+      asOf: "2026-10-15T01:00:00.000Z",
+    });
     expect(result.warning).toContain("CoinGecko failed");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -89,10 +121,13 @@ describe("adapted read-only provider operations", () => {
       priceMoveAsOf: null,
     };
 
-    const result = attachSipEarningsMoves([row], [
-      { time: "2025-01-02T15:00:00.000Z", close: "100" },
-      { time: "2025-01-03T15:00:00.000Z", close: "105" },
-    ]);
+    const result = attachSipEarningsMoves(
+      [row],
+      [
+        { time: "2025-01-02T15:00:00.000Z", close: "100" },
+        { time: "2025-01-03T15:00:00.000Z", close: "105" },
+      ],
+    );
 
     expect(result[0]).toMatchObject({
       dayAfterChangePercent: 5,
@@ -104,18 +139,52 @@ describe("adapted read-only provider operations", () => {
   it("keeps U.S. price values tied to a SIP response and exposes unknown source labels", () => {
     const base: ResearchMarketData = {
       market: "us",
-      rows: [{
-        symbol: "SPY", name: "SPDR", price: null, changePercent: null, volume: null, marketCap: 100,
-        marketCapCurrency: "USD", marketCapEur: null, marketCapEurAsOf: null, sector: "ETF", exchange: "NYSEARCA",
-        country: "United States", priceSource: "awaiting Gateway SIP snapshot", priceAsOf: null,
-        marketCapSource: "TradingView scanner", marketCapAsOf: null, sourceMode: null, sourceLabel: null,
-      }],
-      coverage: { requested: 1, snapshots: 0, priced: 0, timed: 0, snapshotComplete: false, priceComplete: false, timeComplete: false, complete: false },
+      rows: [
+        {
+          symbol: "SPY",
+          name: "SPDR",
+          price: null,
+          changePercent: null,
+          volume: null,
+          marketCap: 100,
+          marketCapCurrency: "USD",
+          marketCapEur: null,
+          marketCapEurAsOf: null,
+          sector: "ETF",
+          exchange: "NYSEARCA",
+          country: "United States",
+          priceSource: "awaiting Gateway SIP snapshot",
+          priceAsOf: null,
+          marketCapSource: "TradingView scanner",
+          marketCapAsOf: null,
+          sourceMode: null,
+          sourceLabel: null,
+        },
+      ],
+      coverage: {
+        requested: 1,
+        snapshots: 0,
+        priced: 0,
+        timed: 0,
+        snapshotComplete: false,
+        priceComplete: false,
+        timeComplete: false,
+        complete: false,
+      },
       truncated: false,
     };
     const attached = attachSipSnapshots(base, {
       feed: "sip",
-      snapshots: [{ feed: "sip", symbol: "SPY", last: "500.25", last_as_of: "2026-10-15T01:00:00Z", change_percent: "0.5", volume: "1000" }],
+      snapshots: [
+        {
+          feed: "sip",
+          symbol: "SPY",
+          last: "500.25",
+          last_as_of: "2026-10-15T01:00:00Z",
+          change_percent: "0.5",
+          volume: "1000",
+        },
+      ],
       sourceLabel: null,
       sourceMode: null,
       receivedAt: "2026-10-15T01:00:01Z",
@@ -123,7 +192,11 @@ describe("adapted read-only provider operations", () => {
     });
     const filtered = filterMarketData(attached, { changeMin: 0, limit: 10 });
 
-    expect(filtered.rows[0]).toMatchObject({ price: 500.25, priceSource: "source unknown (Gateway SIP endpoint)", priceAsOf: "2026-10-15T01:00:00.000Z" });
+    expect(filtered.rows[0]).toMatchObject({
+      price: 500.25,
+      priceSource: "source unknown (Gateway SIP endpoint)",
+      priceAsOf: "2026-10-15T01:00:00.000Z",
+    });
     expect(filtered.coverage.complete).toBe(true);
   });
 });

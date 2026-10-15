@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { mergeHeadRefresh, mergeOlderPage, remapViewportAfterPrepend, retainViewportOnRefresh, saveViewport } from "./history";
+import {
+  mergeHeadRefresh,
+  mergeOlderPage,
+  remapViewportAfterPrepend,
+  retainViewportOnRefresh,
+  saveViewport,
+} from "./history";
 import type { ChartPlotBar } from "./types";
 
 function bars(times: readonly number[]): ChartPlotBar<string>[] {
   return times.map((time) => ({
-    time: time as ChartPlotBar["time"], open: 10, high: 11, low: 9, close: 10, volume: 100, sourceRow: String(time),
+    time: time as ChartPlotBar["time"],
+    open: 10,
+    high: 11,
+    low: 9,
+    close: 10,
+    volume: 100,
+    sourceRow: String(time),
   }));
 }
 

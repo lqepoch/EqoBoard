@@ -15,8 +15,18 @@ function exactRecord(value: unknown, fields: readonly string[]): Record<string, 
     if (prototype !== Object.prototype && prototype !== null) return null;
     const keys = Reflect.ownKeys(value);
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (keys.length !== fields.length || keys.some((key) => typeof key !== "string" || !fields.includes(key) ||
-        !descriptors[key] || !descriptors[key]!.enumerable || !("value" in descriptors[key]!))) return null;
+    if (
+      keys.length !== fields.length ||
+      keys.some(
+        (key) =>
+          typeof key !== "string" ||
+          !fields.includes(key) ||
+          !descriptors[key] ||
+          !descriptors[key]!.enumerable ||
+          !("value" in descriptors[key]!),
+      )
+    )
+      return null;
     return value as Record<string, unknown>;
   } catch {
     return null;
@@ -25,29 +35,62 @@ function exactRecord(value: unknown, fields: readonly string[]): Record<string, 
 
 function validTimestamp(value: unknown, strictMilliseconds = false): value is string {
   if (typeof value !== "string" || CONTROL.test(value)) return false;
-  if (strictMilliseconds && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)) return false;
-  if (!strictMilliseconds && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value)) return false;
+  if (strictMilliseconds && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value))
+    return false;
+  if (!strictMilliseconds && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value))
+    return false;
   const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime()) && (!strictMilliseconds || parsed.toISOString() === value);
+  return (
+    Number.isFinite(parsed.getTime()) && (!strictMilliseconds || parsed.toISOString() === value)
+  );
 }
 
 function parsePortfolio(value: unknown): ManualPortfolioV1 | null {
   const row = exactRecord(value, ["id", "name", "created_at"]);
-  if (!row || !Number.isSafeInteger(row.id) || (row.id as number) <= 0 ||
-      typeof row.name !== "string" || row.name.length < 1 || row.name.length > 64 || CONTROL.test(row.name) ||
-      !validTimestamp(row.created_at)) return null;
+  if (
+    !row ||
+    !Number.isSafeInteger(row.id) ||
+    (row.id as number) <= 0 ||
+    typeof row.name !== "string" ||
+    row.name.length < 1 ||
+    row.name.length > 64 ||
+    CONTROL.test(row.name) ||
+    !validTimestamp(row.created_at)
+  )
+    return null;
   return Object.freeze({ id: row.id as number, name: row.name, created_at: row.created_at });
 }
 
 function parseTransaction(value: unknown): ManualPortfolioTransactionV1 | null {
-  const row = exactRecord(value, ["id", "portfolio_id", "symbol", "side", "quantity", "price", "executed_at"]);
-  if (!row || !Number.isSafeInteger(row.id) || (row.id as number) <= 0 ||
-      !Number.isSafeInteger(row.portfolio_id) || (row.portfolio_id as number) <= 0 ||
-      typeof row.symbol !== "string" || !TICKER.test(row.symbol) ||
-      (row.side !== "BUY" && row.side !== "SELL") ||
-      typeof row.quantity !== "number" || !Number.isFinite(row.quantity) || row.quantity <= 0 || row.quantity > 1_000_000_000 ||
-      typeof row.price !== "number" || !Number.isFinite(row.price) || row.price < 0 || row.price > 1_000_000_000 ||
-      !validTimestamp(row.executed_at, true)) return null;
+  const row = exactRecord(value, [
+    "id",
+    "portfolio_id",
+    "symbol",
+    "side",
+    "quantity",
+    "price",
+    "executed_at",
+  ]);
+  if (
+    !row ||
+    !Number.isSafeInteger(row.id) ||
+    (row.id as number) <= 0 ||
+    !Number.isSafeInteger(row.portfolio_id) ||
+    (row.portfolio_id as number) <= 0 ||
+    typeof row.symbol !== "string" ||
+    !TICKER.test(row.symbol) ||
+    (row.side !== "BUY" && row.side !== "SELL") ||
+    typeof row.quantity !== "number" ||
+    !Number.isFinite(row.quantity) ||
+    row.quantity <= 0 ||
+    row.quantity > 1_000_000_000 ||
+    typeof row.price !== "number" ||
+    !Number.isFinite(row.price) ||
+    row.price < 0 ||
+    row.price > 1_000_000_000 ||
+    !validTimestamp(row.executed_at, true)
+  )
+    return null;
   return Object.freeze({
     id: row.id as number,
     portfolio_id: row.portfolio_id as number,
@@ -61,10 +104,18 @@ function parseTransaction(value: unknown): ManualPortfolioTransactionV1 | null {
 
 function parsePosition(value: unknown): ManualPortfolioPositionV1 | null {
   const row = exactRecord(value, ["symbol", "quantity", "avgCost", "realizedPnl"]);
-  if (!row || typeof row.symbol !== "string" || !TICKER.test(row.symbol) ||
-      typeof row.quantity !== "number" || !Number.isFinite(row.quantity) ||
-      typeof row.avgCost !== "number" || !Number.isFinite(row.avgCost) ||
-      typeof row.realizedPnl !== "number" || !Number.isFinite(row.realizedPnl)) return null;
+  if (
+    !row ||
+    typeof row.symbol !== "string" ||
+    !TICKER.test(row.symbol) ||
+    typeof row.quantity !== "number" ||
+    !Number.isFinite(row.quantity) ||
+    typeof row.avgCost !== "number" ||
+    !Number.isFinite(row.avgCost) ||
+    typeof row.realizedPnl !== "number" ||
+    !Number.isFinite(row.realizedPnl)
+  )
+    return null;
   return Object.freeze({
     symbol: row.symbol,
     quantity: row.quantity,
@@ -89,11 +140,15 @@ export function decodePortfolioList(value: unknown): readonly ManualPortfolioV1[
   return decodeRows(value, parsePortfolio);
 }
 
-export function decodePortfolioPositions(value: unknown): readonly ManualPortfolioPositionV1[] | null {
+export function decodePortfolioPositions(
+  value: unknown,
+): readonly ManualPortfolioPositionV1[] | null {
   return decodeRows(value, parsePosition);
 }
 
-export function decodePortfolioTransactions(value: unknown): readonly ManualPortfolioTransactionV1[] | null {
+export function decodePortfolioTransactions(
+  value: unknown,
+): readonly ManualPortfolioTransactionV1[] | null {
   return decodeRows(value, parseTransaction);
 }
 

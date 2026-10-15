@@ -9,25 +9,31 @@ function workspaceDocument(): WorkspaceDocumentV1 {
   return {
     schemaVersion: 1,
     activeWorkspaceId: workspaceId,
-    workspaces: [{
-      id: workspaceId,
-      name: "Review",
-      activeTabId: tabId,
-      marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
-      tabs: [{
-        id: tabId,
-        name: "Overview",
-        widgets: [{
-          instanceId: widgetId,
-          manifestId: "native.quote",
-          manifestVersion: "1.0.0",
-          configSchemaId: "native.quote.v1",
-          config: { display: "compact" },
-        }],
-        placements: [{ i: widgetId, x: 0, y: 0, w: 4, h: 3 }],
-        maximizedInstanceId: widgetId,
-      }],
-    }],
+    workspaces: [
+      {
+        id: workspaceId,
+        name: "Review",
+        activeTabId: tabId,
+        marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
+        tabs: [
+          {
+            id: tabId,
+            name: "Overview",
+            widgets: [
+              {
+                instanceId: widgetId,
+                manifestId: "native.quote",
+                manifestVersion: "1.0.0",
+                configSchemaId: "native.quote.v1",
+                config: { display: "compact" },
+              },
+            ],
+            placements: [{ i: widgetId, x: 0, y: 0, w: 4, h: 3 }],
+            maximizedInstanceId: widgetId,
+          },
+        ],
+      },
+    ],
     userTemplates: [],
   };
 }

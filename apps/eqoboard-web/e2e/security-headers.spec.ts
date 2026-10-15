@@ -1,29 +1,44 @@
 import { expect, test, type Page } from "@playwright/test";
-import { researchWebOrigin, terminalWebOrigin, YFINANCE_DAILY_QUERY } from "./helpers/research-test-support";
+import {
+  researchWebOrigin,
+  terminalWebOrigin,
+  YFINANCE_DAILY_QUERY,
+} from "./helpers/research-test-support";
 
 function cspNonce(csp: string | undefined): string {
   expect(csp).toBeTruthy();
-  const directive = csp?.split(";").map((item) => item.trim()).find((item) => item.startsWith("script-src "));
+  const directive = csp
+    ?.split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith("script-src "));
   const match = directive?.match(/'nonce-([A-Za-z0-9+/]{43}=)'/u);
   expect(match, "the script-src directive must contain a fresh base64 nonce").toBeTruthy();
   return match?.[1] ?? "";
 }
 
 async function expectNonceMatchesRenderedScripts(page: Page, expectedNonce: string): Promise<void> {
-  const scriptNonces = await page.locator("script[nonce]").evaluateAll((scripts) =>
-    scripts.map((script) => (script as HTMLScriptElement).nonce),
-  );
-  expect(scriptNonces.length, "the document must render nonce-bearing Next scripts").toBeGreaterThan(0);
+  const scriptNonces = await page
+    .locator("script[nonce]")
+    .evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).nonce));
+  expect(
+    scriptNonces.length,
+    "the document must render nonce-bearing Next scripts",
+  ).toBeGreaterThan(0);
   expect(new Set(scriptNonces)).toEqual(new Set([expectedNonce]));
 
-  const inlineScriptNonces = await page.locator("script:not([src])").evaluateAll((scripts) =>
-    scripts.map((script) => (script as HTMLScriptElement).nonce),
-  );
-  expect(inlineScriptNonces.length, "the document must render inline Next hydration scripts").toBeGreaterThan(0);
+  const inlineScriptNonces = await page
+    .locator("script:not([src])")
+    .evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).nonce));
+  expect(
+    inlineScriptNonces.length,
+    "the document must render inline Next hydration scripts",
+  ).toBeGreaterThan(0);
   expect(inlineScriptNonces.every((nonce) => nonce === expectedNonce)).toBe(true);
 }
 
-test("@component terminal and Research documents use a fresh nonce-bound production CSP", async ({ page }) => {
+test("@component terminal and Research documents use a fresh nonce-bound production CSP", async ({
+  page,
+}) => {
   for (const origin of [terminalWebOrigin(), researchWebOrigin()]) {
     const firstResponse = await page.goto(origin, { waitUntil: "domcontentloaded" });
     expect(firstResponse).not.toBeNull();
@@ -50,7 +65,9 @@ test("@component terminal and Research documents use a fresh nonce-bound product
   }
 });
 
-test("@component auth projection and hydration remain request-scoped across anonymous and OIDC documents", async ({ page }) => {
+test("@component auth projection and hydration remain request-scoped across anonymous and OIDC documents", async ({
+  page,
+}) => {
   const origin = terminalWebOrigin();
   const anonymousResponse = await page.goto(origin, { waitUntil: "domcontentloaded" });
   expect(anonymousResponse).not.toBeNull();
@@ -69,7 +86,9 @@ test("@component auth projection and hydration remain request-scoped across anon
 
   const authenticatedDocument = page.waitForResponse((response) => {
     const url = new URL(response.url());
-    return response.request().isNavigationRequest() && url.origin === origin && url.pathname === "/";
+    return (
+      response.request().isNavigationRequest() && url.origin === origin && url.pathname === "/"
+    );
   });
   await page.getByTestId("sign-in-button").click();
   await expect(page.getByTestId("mock-login-writer")).toBeVisible();
@@ -93,7 +112,9 @@ test("@component auth projection and hydration remain request-scoped across anon
   await expect(page.getByTestId("command-palette")).toBeHidden();
 });
 
-test("@api anonymous terminal and Research JSON responses omit page CSP and nonce material", async ({ request }) => {
+test("@api anonymous terminal and Research JSON responses omit page CSP and nonce material", async ({
+  request,
+}) => {
   const cases = [
     { origin: terminalWebOrigin(), path: "/api/workspaces" },
     { origin: researchWebOrigin(), path: `/api/research/yfinance/daily?${YFINANCE_DAILY_QUERY}` },

@@ -11,7 +11,9 @@ function webOrigin(): string {
 function candidateSha(): string {
   const sha = process.env.E2E_CANDIDATE_SHA;
   if (!sha || !/^[0-9a-f]{40}$/iu.test(sha)) {
-    throw new Error("E2E_CANDIDATE_SHA must be the frozen native source-head SHA supplied by the Compose helper.");
+    throw new Error(
+      "E2E_CANDIDATE_SHA must be the frozen native source-head SHA supplied by the Compose helper.",
+    );
   }
   return sha.toLowerCase();
 }
@@ -22,10 +24,14 @@ async function signInAsWriter(page: Page): Promise<void> {
   await page.getByTestId("mock-login-writer").click();
   await expect(page.getByTestId("account-menu")).toBeVisible();
   await expect(page.getByTestId("workspace-root")).toBeVisible();
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
 }
 
-test("signed-in workspace tabs survive reload and export contains layout-only data", async ({ page }, testInfo: TestInfo) => {
+test("signed-in workspace tabs survive reload and export contains layout-only data", async ({
+  page,
+}, testInfo: TestInfo) => {
   const authenticationStartedAt = Date.now();
   await signInAsWriter(page);
   const firstUsableWorkspaceMs = Date.now() - authenticationStartedAt;
@@ -33,19 +39,29 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   const workspaceName = `Acceptance ${randomUUID().slice(0, 8)}`;
   const saveStartedAt = Date.now();
   await page.getByRole("button", { name: "New workspace" }).click();
-  await expect(page.getByLabel("Workspace").locator("option", { hasText: workspaceName })).toHaveCount(1);
+  await expect(
+    page.getByLabel("Workspace").locator("option", { hasText: workspaceName }),
+  ).toHaveCount(1);
   await page.getByLabel("Workspace").selectOption({ label: workspaceName });
   const tabs = page.getByRole("tablist", { name: "Workspace tabs" });
   await expect(tabs.getByRole("tab")).toHaveCount(1);
-  await expect(tabs.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 
   await page.getByTestId("workspace-add-tab").click();
   await expect(tabs.getByRole("tab")).toHaveCount(2);
   await expect(tabs.getByRole("tab", { name: "New tab" })).toHaveAttribute("aria-selected", "true");
   await page.getByTestId("workspace-duplicate-tab").click();
   await expect(tabs.getByRole("tab")).toHaveCount(3);
-  await expect(tabs.getByRole("tab", { name: "New tab copy" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(tabs.getByRole("tab", { name: "New tab copy" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
   const workspaceMutationSaveMs = Date.now() - saveStartedAt;
 
   const duplicateTab = tabs.getByRole("tab", { name: "New tab copy" });
@@ -57,9 +73,16 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   const reloadStartedAt = Date.now();
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("workspace-root")).toBeVisible();
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
   const workspaceReloadUsableMs = Date.now() - reloadStartedAt;
-  await expect(page.getByLabel("Workspace")).toHaveValue(await page.getByLabel("Workspace").locator("option", { hasText: workspaceName }).getAttribute("value") ?? "");
+  await expect(page.getByLabel("Workspace")).toHaveValue(
+    (await page
+      .getByLabel("Workspace")
+      .locator("option", { hasText: workspaceName })
+      .getAttribute("value")) ?? "",
+  );
   const reloadedTabs = page.getByRole("tablist", { name: "Workspace tabs" }).getByRole("tab");
   await expect(reloadedTabs).toHaveCount(3);
   await expect(reloadedTabs.nth(0)).toHaveText("Overview");
@@ -85,11 +108,19 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   };
   const activeWorkspace = document.workspaces.find(({ id }) => id === document.activeWorkspaceId);
   expect(activeWorkspace?.name).toBe(workspaceName);
-  expect(activeWorkspace?.tabs.map(({ name }) => name)).toEqual(["Overview", "New tab", "New tab copy"]);
-  expect(JSON.stringify(envelope)).not.toMatch(/native-e2e-writer|workspace-editor|access.?token|refresh.?token|account|broker|order|quote|bar/iu);
+  expect(activeWorkspace?.tabs.map(({ name }) => name)).toEqual([
+    "Overview",
+    "New tab",
+    "New tab copy",
+  ]);
+  expect(JSON.stringify(envelope)).not.toMatch(
+    /native-e2e-writer|workspace-editor|access.?token|refresh.?token|account|broker|order|quote|bar/iu,
+  );
 
   const navigationMetrics = await page.evaluate(() => {
-    const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const entry = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
     return {
       responseStartMs: entry?.responseStart ?? null,
       domContentLoadedMs: entry?.domContentLoadedEventEnd ?? null,
@@ -99,20 +130,24 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
     };
   });
   await testInfo.attach("native-workspace-candidate-sample", {
-    body: JSON.stringify({
-      evidenceStatus: "candidate-sample-only",
-      pairedLegacyBaseline: "NOT_RUN",
-      candidateSha: candidateSha(),
-      browserVersion: page.context().browser()?.version() ?? null,
-      sampleCount: 1,
-      phases: {
-        firstUsableWorkspaceAfterOidcMs: firstUsableWorkspaceMs,
-        workspaceMutationToSavedMs: workspaceMutationSaveMs,
-        workspaceReloadToUsableMs: workspaceReloadUsableMs,
+    body: JSON.stringify(
+      {
+        evidenceStatus: "candidate-sample-only",
+        pairedLegacyBaseline: "NOT_RUN",
+        candidateSha: candidateSha(),
+        browserVersion: page.context().browser()?.version() ?? null,
+        sampleCount: 1,
+        phases: {
+          firstUsableWorkspaceAfterOidcMs: firstUsableWorkspaceMs,
+          workspaceMutationToSavedMs: workspaceMutationSaveMs,
+          workspaceReloadToUsableMs: workspaceReloadUsableMs,
+        },
+        exportPayloadBytes,
+        navigationMetrics,
       },
-      exportPayloadBytes,
-      navigationMetrics,
-    }, null, 2),
+      null,
+      2,
+    ),
     contentType: "application/json",
   });
 });

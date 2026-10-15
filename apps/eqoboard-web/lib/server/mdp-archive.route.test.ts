@@ -28,12 +28,24 @@ describe("diagnostic archive signer availability", () => {
     vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://research.example.test");
     vi.stubEnv("EQO_MDP_URL", "http://market-data-platform:4452");
     for (const name of [
-      "EQO_GATEWAY_JWT_SECRET", "MDP_TERMINAL_JWT_SECRET", "QUANT_TERMINAL_JWT_SECRET",
-      "ENGINE_TERMINAL_JWT_SECRET", "EQO_RESEARCH_JWT_SECRET", "MDP_RESEARCH_JWT_SECRET",
-      "QUANT_RESEARCH_JWT_SECRET", "ENGINE_RESEARCH_JWT_SECRET", "EQO_RESEARCH_API_KEY",
-      "ALPACA_KEY", "ALPACA_SECRET", "EQO_ADAPTER_ALPACA_TOKEN", "EQO_ADAPTER_IBKR_TOKEN",
-      "EQO_ADAPTER_SCHWAB_TOKEN", "ANTHROPIC_API_KEY", "EQO_OPENBB_OIDC_CLIENT_SECRET",
-    ]) vi.stubEnv(name, "");
+      "EQO_GATEWAY_JWT_SECRET",
+      "MDP_TERMINAL_JWT_SECRET",
+      "QUANT_TERMINAL_JWT_SECRET",
+      "ENGINE_TERMINAL_JWT_SECRET",
+      "EQO_RESEARCH_JWT_SECRET",
+      "MDP_RESEARCH_JWT_SECRET",
+      "QUANT_RESEARCH_JWT_SECRET",
+      "ENGINE_RESEARCH_JWT_SECRET",
+      "EQO_RESEARCH_API_KEY",
+      "ALPACA_KEY",
+      "ALPACA_SECRET",
+      "EQO_ADAPTER_ALPACA_TOKEN",
+      "EQO_ADAPTER_IBKR_TOKEN",
+      "EQO_ADAPTER_SCHWAB_TOKEN",
+      "ANTHROPIC_API_KEY",
+      "EQO_OPENBB_OIDC_CLIENT_SECRET",
+    ])
+      vi.stubEnv(name, "");
     securityMocks.authorizeRequest.mockResolvedValue({
       ok: true,
       principal: {

@@ -1,6 +1,11 @@
 import { attachMacroSnapshots, loadMacro, type MacroData } from "./macro";
 import { loadNews, type ResearchNewsItem } from "./news";
-import { attachSipSnapshots, loadMarketMetadata, type ResearchMarketData, type ResearchMarketRow } from "./screener";
+import {
+  attachSipSnapshots,
+  loadMarketMetadata,
+  type ResearchMarketData,
+  type ResearchMarketRow,
+} from "./screener";
 import {
   readSipSnapshotsWithDelegation,
   type MarketDelegation,
@@ -61,8 +66,17 @@ export type ResearchRecapCoverage = Readonly<{
     source: string | null;
     asOf: null;
   }>;
-  macro: Readonly<{ status: "available" | "partial" | "unavailable"; source: string | null; asOf: null }>;
-  headlines: Readonly<{ status: "available" | "partial" | "unavailable"; returned: number; source: string | null; asOf: null }>;
+  macro: Readonly<{
+    status: "available" | "partial" | "unavailable";
+    source: string | null;
+    asOf: null;
+  }>;
+  headlines: Readonly<{
+    status: "available" | "partial" | "unavailable";
+    returned: number;
+    source: string | null;
+    asOf: null;
+  }>;
 }>;
 
 export type ResearchRecapData = Readonly<{
@@ -85,7 +99,9 @@ const SOURCE: ResearchSource = Object.freeze({
 type Settled<T> = Readonly<{ status: "available"; value: T }> | Readonly<{ status: "unavailable" }>;
 
 function fulfilled<T>(result: PromiseSettledResult<T>): Settled<T> {
-  return result.status === "fulfilled" ? { status: "available", value: result.value } : { status: "unavailable" };
+  return result.status === "fulfilled"
+    ? { status: "available", value: result.value }
+    : { status: "unavailable" };
 }
 
 function capSample(data: ResearchMarketData): ResearchMarketData {
@@ -112,28 +128,43 @@ function capSample(data: ResearchMarketData): ResearchMarketData {
   });
 }
 
-function metric(value: number | null, source: string | null, asOf: string | null): RecapObservation<number> {
+function metric(
+  value: number | null,
+  source: string | null,
+  asOf: string | null,
+): RecapObservation<number> {
   return Object.freeze({ value, source, asOf });
 }
 
 function buildIndexes(macro: MacroData | null, snapshotsAvailable: boolean): ResearchRecapIndex[] {
   if (!macro) return [];
-  const rows = macro.indexObservations.length > 0
-    ? macro.indexObservations
-    : macro.indexProxies.map((proxy) => ({
-        ...proxy,
-        price: null,
-        changePercent: null,
-        source: "",
-        sourceMode: null,
-        asOf: null,
-      }));
-  return rows.map((row) => Object.freeze({
-    symbol: row.symbol,
-    label: row.label,
-    price: metric(snapshotsAvailable ? row.price : null, snapshotsAvailable ? row.source : null, snapshotsAvailable ? row.asOf : null),
-    changePercent: metric(snapshotsAvailable ? row.changePercent : null, snapshotsAvailable ? row.source : null, snapshotsAvailable ? row.asOf : null),
-  }));
+  const rows =
+    macro.indexObservations.length > 0
+      ? macro.indexObservations
+      : macro.indexProxies.map((proxy) => ({
+          ...proxy,
+          price: null,
+          changePercent: null,
+          source: "",
+          sourceMode: null,
+          asOf: null,
+        }));
+  return rows.map((row) =>
+    Object.freeze({
+      symbol: row.symbol,
+      label: row.label,
+      price: metric(
+        snapshotsAvailable ? row.price : null,
+        snapshotsAvailable ? row.source : null,
+        snapshotsAvailable ? row.asOf : null,
+      ),
+      changePercent: metric(
+        snapshotsAvailable ? row.changePercent : null,
+        snapshotsAvailable ? row.source : null,
+        snapshotsAvailable ? row.asOf : null,
+      ),
+    }),
+  );
 }
 
 function macroIndexData(macro: MacroData, batch: SipSnapshotCollection | null): MacroData {
@@ -142,16 +173,24 @@ function macroIndexData(macro: MacroData, batch: SipSnapshotCollection | null): 
 
 function leaders(rows: readonly ResearchMarketRow[]): ResearchRecapLeader[] {
   return rows.flatMap((row): ResearchRecapLeader[] => {
-    if (row.marketCap === null || row.marketCap < MIN_LEADER_MARKET_CAP || row.changePercent === null ||
-        row.price === null || row.priceAsOf === null) return [];
-    return [Object.freeze({
-      symbol: row.symbol,
-      name: row.name,
-      sector: row.sector,
-      price: metric(row.price, row.priceSource, row.priceAsOf),
-      changePercent: metric(row.changePercent, row.priceSource, row.priceAsOf),
-      marketCap: metric(row.marketCap, row.marketCapSource, row.marketCapAsOf),
-    })];
+    if (
+      row.marketCap === null ||
+      row.marketCap < MIN_LEADER_MARKET_CAP ||
+      row.changePercent === null ||
+      row.price === null ||
+      row.priceAsOf === null
+    )
+      return [];
+    return [
+      Object.freeze({
+        symbol: row.symbol,
+        name: row.name,
+        sector: row.sector,
+        price: metric(row.price, row.priceSource, row.priceAsOf),
+        changePercent: metric(row.changePercent, row.priceSource, row.priceAsOf),
+        marketCap: metric(row.marketCap, row.marketCapSource, row.marketCapAsOf),
+      }),
+    ];
   });
 }
 
@@ -163,22 +202,40 @@ function sectorRows(rows: readonly ResearchMarketRow[]): ResearchRecapSector[] {
     group.push(row);
     groups.set(row.sector, group);
   }
-  return [...groups.entries()].map(([sector, values]) => {
-    const timestamps = values.map((row) => row.priceAsOf).filter((value): value is string => value !== null).sort();
-    const average = values.reduce((sum, row) => sum + row.changePercent!, 0) / values.length;
-    return Object.freeze({
-      sector,
-      averageChangePercent: metric(average, "Equal-weighted average of Rust Gateway SIP changes; sector labels from TradingView scanner", null),
-      sampleCount: values.length,
-      sourceTimeRange: Object.freeze({ earliest: timestamps[0] ?? null, latest: timestamps.at(-1) ?? null }),
-    });
-  }).sort((left, right) => (right.averageChangePercent.value ?? -Infinity) - (left.averageChangePercent.value ?? -Infinity));
+  return [...groups.entries()]
+    .map(([sector, values]) => {
+      const timestamps = values
+        .map((row) => row.priceAsOf)
+        .filter((value): value is string => value !== null)
+        .sort();
+      const average = values.reduce((sum, row) => sum + row.changePercent!, 0) / values.length;
+      return Object.freeze({
+        sector,
+        averageChangePercent: metric(
+          average,
+          "Equal-weighted average of Rust Gateway SIP changes; sector labels from TradingView scanner",
+          null,
+        ),
+        sampleCount: values.length,
+        sourceTimeRange: Object.freeze({
+          earliest: timestamps[0] ?? null,
+          latest: timestamps.at(-1) ?? null,
+        }),
+      });
+    })
+    .sort(
+      (left, right) =>
+        (right.averageChangePercent.value ?? -Infinity) -
+        (left.averageChangePercent.value ?? -Infinity),
+    );
 }
 
 function selectSectorLeaders(sectors: readonly ResearchRecapSector[]): ResearchRecapSector[] {
   const top = sectors.slice(0, 3);
   const bottom = sectors.slice(-3).reverse();
-  return [...top, ...bottom].filter((item, index, all) => all.findIndex((entry) => entry.sector === item.sector) === index);
+  return [...top, ...bottom].filter(
+    (item, index, all) => all.findIndex((entry) => entry.sector === item.sector) === index,
+  );
 }
 
 function errorCount(values: readonly boolean[]): number {
@@ -186,12 +243,18 @@ function errorCount(values: readonly boolean[]): number {
 }
 
 function hasCompleteIndexObservation(row: ResearchRecapIndex): boolean {
-  return row.price.value !== null && row.price.asOf !== null &&
-    row.changePercent.value !== null && row.changePercent.asOf !== null;
+  return (
+    row.price.value !== null &&
+    row.price.asOf !== null &&
+    row.changePercent.value !== null &&
+    row.changePercent.asOf !== null
+  );
 }
 
 /** Compose the former recap panels from bounded provider observations, with no generated narrative. */
-export async function loadResearchRecap(delegation: MarketDelegation): Promise<ProviderResult<ResearchRecapData>> {
+export async function loadResearchRecap(
+  delegation: MarketDelegation,
+): Promise<ProviderResult<ResearchRecapData>> {
   const [macroSettled, metadataSettled, newsSettled] = await Promise.allSettled([
     loadMacro("us"),
     loadMarketMetadata("us"),
@@ -200,44 +263,62 @@ export async function loadResearchRecap(delegation: MarketDelegation): Promise<P
   const macroResult = fulfilled(macroSettled);
   const metadataResult = fulfilled(metadataSettled);
   const newsResult = fulfilled(newsSettled);
-  const marketSample = metadataResult.status === "available" ? capSample(metadataResult.value.data) : null;
-  const gatewaySymbols = [...new Set([
-    ...(macroResult.status === "available" ? macroResult.value.data.indexProxies.map((entry) => entry.symbol) : []),
-    ...(marketSample?.rows.map((entry) => entry.symbol) ?? []),
-  ])];
+  const marketSample =
+    metadataResult.status === "available" ? capSample(metadataResult.value.data) : null;
+  const gatewaySymbols = [
+    ...new Set([
+      ...(macroResult.status === "available"
+        ? macroResult.value.data.indexProxies.map((entry) => entry.symbol)
+        : []),
+      ...(marketSample?.rows.map((entry) => entry.symbol) ?? []),
+    ]),
+  ];
   let gateway: SipSnapshotCollection | null = null;
   if (gatewaySymbols.length > 0) {
     const result = await readSipSnapshotsWithDelegation(delegation, gatewaySymbols);
     if (result.ok) gateway = result.value;
   }
 
-  const macroData = macroResult.status === "available" ? macroIndexData(macroResult.value.data, gateway) : null;
-  const marketData = marketSample && gateway ? attachSipSnapshots(marketSample, gateway) : marketSample;
+  const macroData =
+    macroResult.status === "available" ? macroIndexData(macroResult.value.data, gateway) : null;
+  const marketData =
+    marketSample && gateway ? attachSipSnapshots(marketSample, gateway) : marketSample;
   const indexRows = macroData ? buildIndexes(macroData, gateway !== null) : [];
   const macroValue = macroData?.observations.find((item) => item.id === "VIXCLS") ?? null;
   const allLeaders = marketData ? leaders(marketData.rows) : [];
   const sectorSummaries = marketData ? selectSectorLeaders(sectorRows(marketData.rows)) : [];
   const headlineRows = newsResult.status === "available" ? newsResult.value.data.slice(0, 6) : [];
-  const macroComplete = macroResult.status === "available" && macroResult.value.complete && indexRows.length > 0 &&
+  const macroComplete =
+    macroResult.status === "available" &&
+    macroResult.value.complete &&
+    indexRows.length > 0 &&
     indexRows.every(hasCompleteIndexObservation);
-  const metadataComplete = metadataResult.status === "available" && marketSample !== null && !marketSample.truncated;
-  const sipComplete = gateway !== null && marketData?.coverage.complete === true && indexRows.length > 0 &&
+  const metadataComplete =
+    metadataResult.status === "available" && marketSample !== null && !marketSample.truncated;
+  const sipComplete =
+    gateway !== null &&
+    marketData?.coverage.complete === true &&
+    indexRows.length > 0 &&
     indexRows.every(hasCompleteIndexObservation);
   const headlinesComplete = newsResult.status === "available" && newsResult.value.complete;
   const complete = macroComplete && metadataComplete && sipComplete && headlinesComplete;
   const missingSnapshotSymbols = new Set([
-    ...(marketData?.rows.filter((row) => row.price === null || row.changePercent === null || row.priceAsOf === null).map((row) => row.symbol) ?? []),
+    ...(marketData?.rows
+      .filter((row) => row.price === null || row.changePercent === null || row.priceAsOf === null)
+      .map((row) => row.symbol) ?? []),
     ...indexRows.filter((row) => !hasCompleteIndexObservation(row)).map((row) => row.symbol),
   ]);
   const missingSnapshotCount = missingSnapshotSymbols.size;
-  const failedItems = errorCount([
-    macroResult.status === "available",
-    metadataResult.status === "available",
-    newsResult.status === "available",
-    gateway !== null || gatewaySymbols.length === 0,
-  ]) + Math.max(0, missingSnapshotCount) +
-    (macroResult.status === "available" ? macroResult.value.failedItems ?? 0 : 0) +
-    (newsResult.status === "available" ? newsResult.value.failedItems ?? 0 : 0);
+  const failedItems =
+    errorCount([
+      macroResult.status === "available",
+      metadataResult.status === "available",
+      newsResult.status === "available",
+      gateway !== null || gatewaySymbols.length === 0,
+    ]) +
+    Math.max(0, missingSnapshotCount) +
+    (macroResult.status === "available" ? (macroResult.value.failedItems ?? 0) : 0) +
+    (newsResult.status === "available" ? (newsResult.value.failedItems ?? 0) : 0);
   const coverage: ResearchRecapCoverage = Object.freeze({
     marketMetadata: Object.freeze({
       status: metadataResult.status,
@@ -259,14 +340,41 @@ export async function loadResearchRecap(delegation: MarketDelegation): Promise<P
       source: gateway?.sourceLabel ?? null,
       asOf: null,
     }),
-    macro: Object.freeze({ status: macroResult.status === "unavailable" ? "unavailable" : macroResult.value.complete ? "available" : "partial", source: macroResult.status === "available" ? macroResult.value.source.provider : null, asOf: null }),
-    headlines: Object.freeze({ status: newsResult.status === "unavailable" ? "unavailable" : newsResult.value.complete ? "available" : "partial", returned: headlineRows.length, source: newsResult.status === "available" ? newsResult.value.source.provider : null, asOf: null }),
+    macro: Object.freeze({
+      status:
+        macroResult.status === "unavailable"
+          ? "unavailable"
+          : macroResult.value.complete
+            ? "available"
+            : "partial",
+      source: macroResult.status === "available" ? macroResult.value.source.provider : null,
+      asOf: null,
+    }),
+    headlines: Object.freeze({
+      status:
+        newsResult.status === "unavailable"
+          ? "unavailable"
+          : newsResult.value.complete
+            ? "available"
+            : "partial",
+      returned: headlineRows.length,
+      source: newsResult.status === "available" ? newsResult.value.source.provider : null,
+      asOf: null,
+    }),
   });
 
   const indexes = indexRows.map((row) => row);
-  const rankedGainers = [...allLeaders].sort((left, right) => (right.changePercent.value ?? -Infinity) - (left.changePercent.value ?? -Infinity));
+  const rankedGainers = [...allLeaders].sort(
+    (left, right) =>
+      (right.changePercent.value ?? -Infinity) - (left.changePercent.value ?? -Infinity),
+  );
   const rankedLosers = [...rankedGainers].reverse();
-  const vix = metric(macroValue?.value ?? null, macroValue?.provider ?? (macroResult.status === "available" ? macroResult.value.source.provider : null), macroValue?.asOf ?? null);
+  const vix = metric(
+    macroValue?.value ?? null,
+    macroValue?.provider ??
+      (macroResult.status === "available" ? macroResult.value.source.provider : null),
+    macroValue?.asOf ?? null,
+  );
   const data: ResearchRecapData = Object.freeze({
     indexes: Object.freeze(indexes),
     volatility: Object.freeze({ vix }),
@@ -278,17 +386,27 @@ export async function loadResearchRecap(delegation: MarketDelegation): Promise<P
   });
   const warning = [
     "Recap combines independent source observations and is not a synchronized market snapshot.",
-    marketSample?.truncated ? `The SIP market universe is capped at ${RECAP_MARKET_SAMPLE_LIMIT} TradingView market-cap-ranked listings.` : null,
-    gateway === null ? "Rust Gateway SIP snapshots are unavailable; price-based market sections remain empty." : null,
-    newsResult.status === "available" ? newsResult.value.warning : "Headline providers are unavailable.",
-  ].filter(Boolean).join(" ");
+    marketSample?.truncated
+      ? `The SIP market universe is capped at ${RECAP_MARKET_SAMPLE_LIMIT} TradingView market-cap-ranked listings.`
+      : null,
+    gateway === null
+      ? "Rust Gateway SIP snapshots are unavailable; price-based market sections remain empty."
+      : null,
+    newsResult.status === "available"
+      ? newsResult.value.warning
+      : "Headline providers are unavailable.",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return Object.freeze({
     source: SOURCE,
     data,
     asOf: null,
     complete,
     failedItems,
-    truncated: Boolean(marketSample?.truncated || newsResult.status === "available" && newsResult.value.truncated),
+    truncated: Boolean(
+      marketSample?.truncated || (newsResult.status === "available" && newsResult.value.truncated),
+    ),
     warning,
   });
 }

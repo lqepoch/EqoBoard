@@ -12,22 +12,33 @@ async function signInAsWriter(page: Page): Promise<void> {
   await page.getByTestId("mock-login-writer").click();
   await expect(page.getByTestId("account-menu")).toBeVisible();
   await expect(page.getByTestId("workspace-root")).toBeVisible();
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
 }
 
-test("@component workspace recovery restores a tab after deletion and persists the rollback", async ({ page }) => {
+test("@component workspace recovery restores a tab after deletion and persists the rollback", async ({
+  page,
+}) => {
   await signInAsWriter(page);
 
   // Isolate this destructive scenario in a newly created owner workspace.
   await page.getByRole("button", { name: "New workspace" }).click();
   const workspaceTabs = page.getByRole("tablist", { name: "Workspace tabs" });
   await expect(workspaceTabs.getByRole("tab")).toHaveCount(1);
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
 
   await page.getByTestId("workspace-add-tab").click();
   await expect(workspaceTabs.getByRole("tab")).toHaveCount(2);
-  await expect(workspaceTabs.getByRole("tab", { name: "New tab" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(workspaceTabs.getByRole("tab", { name: "New tab" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
 
   const deleteDialog = page.waitForEvent("dialog");
   await page.getByRole("button", { name: "Close New tab tab" }).click();
@@ -35,7 +46,9 @@ test("@component workspace recovery restores a tab after deletion and persists t
   expect(confirmation.message()).toContain("A local recovery copy will be written first");
   await confirmation.accept();
   await expect(workspaceTabs.getByRole("tab")).toHaveCount(1);
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
 
   const recovery = page.getByText("Recovery copies", { exact: true });
   await recovery.click();
@@ -48,7 +61,10 @@ test("@component workspace recovery restores a tab after deletion and persists t
     })),
   );
   const deletedWorkspacePoint = options.find(({ label }) => label.endsWith("· delete"));
-  expect(deletedWorkspacePoint, "tab deletion must first leave a partition-scoped recovery copy").toBeDefined();
+  expect(
+    deletedWorkspacePoint,
+    "tab deletion must first leave a partition-scoped recovery copy",
+  ).toBeDefined();
   await recoverySelector.selectOption(deletedWorkspacePoint!.value);
 
   const restoreDialog = page.waitForEvent("dialog");
@@ -60,22 +76,31 @@ test("@component workspace recovery restores a tab after deletion and persists t
   await expect(workspaceTabs.getByRole("tab")).toHaveCount(2);
   await expect(workspaceTabs.getByRole("tab", { name: "Overview" })).toBeVisible();
   await expect(workspaceTabs.getByRole("tab", { name: "New tab" })).toBeVisible();
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
 
-  const persistedResponse = await page.request.get(new URL("/api/workspaces", webOrigin()).toString(), {
-    headers: { Accept: "application/json" },
-  });
+  const persistedResponse = await page.request.get(
+    new URL("/api/workspaces", webOrigin()).toString(),
+    {
+      headers: { Accept: "application/json" },
+    },
+  );
   expect(persistedResponse.status()).toBe(200);
-  const persisted = await persistedResponse.json() as {
+  const persisted = (await persistedResponse.json()) as {
     document: {
       activeWorkspaceId: string;
       workspaces: Array<{ id: string; tabs: Array<{ name: string }> }>;
     };
   };
-  const restoredWorkspace = persisted.document.workspaces.find(({ id }) => id === persisted.document.activeWorkspaceId);
+  const restoredWorkspace = persisted.document.workspaces.find(
+    ({ id }) => id === persisted.document.activeWorkspaceId,
+  );
   expect(restoredWorkspace?.tabs.map(({ name }) => name)).toEqual(["Overview", "New tab"]);
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("workspace-root")).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Workspace tabs" }).getByRole("tab")).toHaveCount(2);
+  await expect(page.getByRole("tablist", { name: "Workspace tabs" }).getByRole("tab")).toHaveCount(
+    2,
+  );
 });

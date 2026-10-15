@@ -3,16 +3,24 @@ export type WorkspaceSelectionIdentity = Readonly<{
   tabId: string | null;
 }>;
 
-export function canRegisterActiveWorkspaceSymbolSelector(input: Readonly<{
-  authReady: boolean;
-  hasWorkspaceWritePermission: boolean;
-  canEdit: boolean;
-  loadStatus: "loading" | "ready" | "error";
-  workspaceId: string | null;
-  tabId: string | null;
-}>): boolean {
-  return input.authReady && input.hasWorkspaceWritePermission && input.canEdit &&
-    input.loadStatus === "ready" && input.workspaceId !== null && input.tabId !== null;
+export function canRegisterActiveWorkspaceSymbolSelector(
+  input: Readonly<{
+    authReady: boolean;
+    hasWorkspaceWritePermission: boolean;
+    canEdit: boolean;
+    loadStatus: "loading" | "ready" | "error";
+    workspaceId: string | null;
+    tabId: string | null;
+  }>,
+): boolean {
+  return (
+    input.authReady &&
+    input.hasWorkspaceWritePermission &&
+    input.canEdit &&
+    input.loadStatus === "ready" &&
+    input.workspaceId !== null &&
+    input.tabId !== null
+  );
 }
 
 /** Binds the shell command callback to the workspace and tab that registered it. */

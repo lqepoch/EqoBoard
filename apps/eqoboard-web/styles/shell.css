@@ -75,7 +75,10 @@
   border-radius: var(--eq-radius-sm);
   background: transparent;
   color: var(--eq-text-muted);
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 
 .eq-command-trigger {
@@ -537,30 +540,52 @@
   background: var(--eq-text-subtle);
 }
 
-.eq-resource-state[data-state="ready"] .eq-resource-state__marker { background: var(--eq-positive); }
-.eq-resource-state[data-state="fresh"] .eq-resource-state__marker { background: var(--eq-positive); }
-.eq-resource-state[data-state="connected"] .eq-resource-state__marker { background: var(--eq-positive); }
+.eq-resource-state[data-state="ready"] .eq-resource-state__marker {
+  background: var(--eq-positive);
+}
+.eq-resource-state[data-state="fresh"] .eq-resource-state__marker {
+  background: var(--eq-positive);
+}
+.eq-resource-state[data-state="connected"] .eq-resource-state__marker {
+  background: var(--eq-positive);
+}
 .eq-resource-state[data-state="ready"] .eq-resource-state__status,
 .eq-resource-state[data-state="fresh"] .eq-resource-state__status,
-.eq-resource-state[data-state="connected"] .eq-resource-state__status { color: var(--eq-positive); }
+.eq-resource-state[data-state="connected"] .eq-resource-state__status {
+  color: var(--eq-positive);
+}
 .eq-resource-state[data-state="partial"] .eq-resource-state__marker,
 .eq-resource-state[data-state="stale"] .eq-resource-state__marker,
 .eq-resource-state[data-state="synthetic"] .eq-resource-state__marker,
 .eq-resource-state[data-state="unsupported"] .eq-resource-state__marker,
-.eq-resource-state[data-state="reconnecting"] .eq-resource-state__marker { background: var(--eq-warning); }
+.eq-resource-state[data-state="reconnecting"] .eq-resource-state__marker {
+  background: var(--eq-warning);
+}
 .eq-resource-state[data-state="partial"] .eq-resource-state__status,
 .eq-resource-state[data-state="stale"] .eq-resource-state__status,
 .eq-resource-state[data-state="synthetic"] .eq-resource-state__status,
 .eq-resource-state[data-state="unsupported"] .eq-resource-state__status,
 .eq-resource-state[data-state="reconnecting"] .eq-resource-state__status,
-.eq-resource-state[data-state="restricted"] .eq-resource-state__status { color: var(--eq-warning); }
-.eq-resource-state[data-state="error"] .eq-resource-state__marker { background: var(--eq-negative); }
-.eq-resource-state[data-state="unavailable"] .eq-resource-state__marker { background: var(--eq-negative); }
-.eq-resource-state[data-state="restricted"] .eq-resource-state__marker { background: var(--eq-warning); }
+.eq-resource-state[data-state="restricted"] .eq-resource-state__status {
+  color: var(--eq-warning);
+}
+.eq-resource-state[data-state="error"] .eq-resource-state__marker {
+  background: var(--eq-negative);
+}
+.eq-resource-state[data-state="unavailable"] .eq-resource-state__marker {
+  background: var(--eq-negative);
+}
+.eq-resource-state[data-state="restricted"] .eq-resource-state__marker {
+  background: var(--eq-warning);
+}
 .eq-resource-state[data-state="error"] .eq-resource-state__status,
-.eq-resource-state[data-state="unavailable"] .eq-resource-state__status { color: var(--eq-negative); }
+.eq-resource-state[data-state="unavailable"] .eq-resource-state__status {
+  color: var(--eq-negative);
+}
 .eq-resource-state[data-state="loading"] .eq-resource-state__marker,
-.eq-resource-state[data-state="connecting"] .eq-resource-state__marker { background: var(--eq-accent); }
+.eq-resource-state[data-state="connecting"] .eq-resource-state__marker {
+  background: var(--eq-accent);
+}
 
 .eq-resource-state__body {
   display: grid;
@@ -805,7 +830,9 @@
   font-size: 11px;
 }
 
-.eq-mobile-nav-toggle { display: none; }
+.eq-mobile-nav-toggle {
+  display: none;
+}
 
 .eq-mobile-nav-dialog {
   display: none;
@@ -864,28 +891,93 @@
 }
 
 @media (max-width: 960px) {
-  .eq-app-shell { grid-template-columns: var(--eq-shell-nav-collapsed-width) minmax(0, 1fr); }
-  .eq-app-sidebar { align-items: stretch; padding-inline: 6px; }
-  .eq-primary-nav__label { overflow: hidden; height: 1px; padding: 0; clip-path: inset(50%); }
-  .eq-primary-nav__link { justify-content: center; min-height: 44px; padding-inline: 4px; }
-  .eq-primary-nav__link-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .eq-app-shell {
+    grid-template-columns: var(--eq-shell-nav-collapsed-width) minmax(0, 1fr);
+  }
+  .eq-app-sidebar {
+    align-items: stretch;
+    padding-inline: 6px;
+  }
+  .eq-primary-nav__label {
+    overflow: hidden;
+    height: 1px;
+    padding: 0;
+    clip-path: inset(50%);
+  }
+  .eq-primary-nav__link {
+    justify-content: center;
+    min-height: 44px;
+    padding-inline: 4px;
+  }
+  .eq-primary-nav__link-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 @media (max-width: 680px) {
-  .eq-app-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48px minmax(0, 1fr); }
-  .eq-app-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 7px; padding-inline: 8px; }
-  .eq-brand { gap: 6px; font-size: 12px; }
-  .eq-brand-mark { width: 23px; height: 23px; }
-  .eq-command-trigger { min-height: 36px; padding-inline: 8px; }
-  .eq-command-trigger__label { font-size: 12px; }
-  .eq-command-trigger .eq-shortcut { display: none; }
-  .eq-header-actions { gap: 4px; }
-  .eq-header-actions .eq-account-button__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .eq-app-sidebar { display: none; }
-  .eq-primary-nav__label { height: auto; padding: 9px 10px 5px; clip-path: none; }
-  .eq-primary-nav__link { justify-content: flex-start; min-height: 44px; padding-inline: 10px; }
-  .eq-primary-nav__link-text { position: static; width: auto; height: auto; clip-path: none; }
-  .eq-mobile-nav-toggle { display: inline-flex; }
+  .eq-app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 48px minmax(0, 1fr);
+  }
+  .eq-app-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 7px;
+    padding-inline: 8px;
+  }
+  .eq-brand {
+    gap: 6px;
+    font-size: 12px;
+  }
+  .eq-brand-mark {
+    width: 23px;
+    height: 23px;
+  }
+  .eq-command-trigger {
+    min-height: 36px;
+    padding-inline: 8px;
+  }
+  .eq-command-trigger__label {
+    font-size: 12px;
+  }
+  .eq-command-trigger .eq-shortcut {
+    display: none;
+  }
+  .eq-header-actions {
+    gap: 4px;
+  }
+  .eq-header-actions .eq-account-button__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .eq-app-sidebar {
+    display: none;
+  }
+  .eq-primary-nav__label {
+    height: auto;
+    padding: 9px 10px 5px;
+    clip-path: none;
+  }
+  .eq-primary-nav__link {
+    justify-content: flex-start;
+    min-height: 44px;
+    padding-inline: 10px;
+  }
+  .eq-primary-nav__link-text {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+  }
+  .eq-mobile-nav-toggle {
+    display: inline-flex;
+  }
   .eq-mobile-nav-dialog {
     position: fixed;
     z-index: 70;
@@ -902,11 +994,30 @@
     color: var(--eq-text);
     box-shadow: var(--eq-shadow);
   }
-  .eq-app-main { grid-column: 1; }
-  .eq-auth-banner { align-items: flex-start; padding-inline: 10px; }
-  .eq-command-dialog { margin-top: 7vh; }
-  .eq-access-state { width: calc(100% - 20px); margin-top: 20px; padding: 16px; }
-  .eq-access-followup { width: calc(100% - 20px); margin-bottom: 24px; }
-  .eq-access-followup .workspace-legacy-import { padding: 14px; }
-  .eq-access-followup .workspace-section-heading { align-items: flex-start; flex-direction: column; }
+  .eq-app-main {
+    grid-column: 1;
+  }
+  .eq-auth-banner {
+    align-items: flex-start;
+    padding-inline: 10px;
+  }
+  .eq-command-dialog {
+    margin-top: 7vh;
+  }
+  .eq-access-state {
+    width: calc(100% - 20px);
+    margin-top: 20px;
+    padding: 16px;
+  }
+  .eq-access-followup {
+    width: calc(100% - 20px);
+    margin-bottom: 24px;
+  }
+  .eq-access-followup .workspace-legacy-import {
+    padding: 14px;
+  }
+  .eq-access-followup .workspace-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }

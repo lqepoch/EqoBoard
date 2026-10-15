@@ -10,11 +10,17 @@ function webOrigin(): string {
 
 function fixtureControlOrigin(): string {
   const origin = process.env.E2E_FIXTURE_CONTROL_ORIGIN;
-  if (!origin) throw new Error("E2E_FIXTURE_CONTROL_ORIGIN must point at the isolated mock Gateway control listener.");
+  if (!origin)
+    throw new Error(
+      "E2E_FIXTURE_CONTROL_ORIGIN must point at the isolated mock Gateway control listener.",
+    );
   return origin;
 }
 
-test("@api legacy Pro query and Futu order path cannot activate simulated execution", async ({ page, request }) => {
+test("@api legacy Pro query and Futu order path cannot activate simulated execution", async ({
+  page,
+  request,
+}) => {
   const controlOrigin = fixtureControlOrigin();
   const reset = await request.post(new URL("/__test/counters/reset", controlOrigin).toString());
   expect(reset.status()).toBe(200);
@@ -31,8 +37,9 @@ test("@api legacy Pro query and Futu order path cannot activate simulated execut
   await expect(page.getByTestId("app-shell")).toBeVisible();
   await expect(page.getByTestId("access-state")).toBeVisible();
   await expect(page.locator("body")).not.toContainText(/PAPER_READY|FILLED|simulator-fallback/i);
-  await expect(page.getByTestId("primary-navigation").getByRole("link", { name: "Workspace" }))
-    .toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByTestId("primary-navigation").getByRole("link", { name: "Workspace" }),
+  ).toHaveAttribute("aria-current", "page");
 
   const legacySubmit = await page.request.post(new URL("/api/futu/order", webOrigin()).toString(), {
     data: { symbol: "SPY", side: "BUY", quantity: 1, source: "acceptance-negative-test" },
@@ -45,6 +52,6 @@ test("@api legacy Pro query and Futu order path cannot activate simulated execut
 
   const countersResponse = await request.get(new URL("/__test/counters", controlOrigin).toString());
   expect(countersResponse.status()).toBe(200);
-  const counters = await countersResponse.json() as CounterSnapshot;
+  const counters = (await countersResponse.json()) as CounterSnapshot;
   expect(counters.calls["/api/v1/orders/preview"] ?? 0).toBe(0);
 });

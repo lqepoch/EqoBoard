@@ -14,7 +14,13 @@ export type ResourceStateProps = Readonly<{
 }>;
 
 /** Displays a source-provided resource state. It never infers readiness from visual styling. */
-export function ResourceState({ state, title, detail, metadata, live = false }: ResourceStateProps) {
+export function ResourceState({
+  state,
+  title,
+  detail,
+  metadata,
+  live = false,
+}: ResourceStateProps) {
   const label = getResourceStateLabel(state);
 
   return (

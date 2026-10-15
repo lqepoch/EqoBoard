@@ -8,7 +8,11 @@ export default async function YahooResearchRoute({
 }: Readonly<{ params: Promise<{ symbol: string }> }>) {
   const { symbol: rawSymbol } = await params;
   const symbol = rawSymbol.toUpperCase();
-  if (getNativeRuntimeMode() !== "research" || !nativeRuntimeReadiness().ready || !isYfinanceResearchSymbol(symbol)) {
+  if (
+    getNativeRuntimeMode() !== "research" ||
+    !nativeRuntimeReadiness().ready ||
+    !isYfinanceResearchSymbol(symbol)
+  ) {
     notFound();
   }
   return <YahooResearchPage initialSymbol={symbol} />;

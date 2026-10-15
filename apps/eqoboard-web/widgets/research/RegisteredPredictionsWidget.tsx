@@ -20,7 +20,8 @@ export function RegisteredPredictionsWidget({ config, host, onConfigChange }: Pr
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [view, setView] = useState<RegisteredPredictionView | null>(null);
-  const allowed = host.auth.authenticated && host.auth.permissions.includes("research:private-read");
+  const allowed =
+    host.auth.authenticated && host.auth.permissions.includes("research:private-read");
 
   async function load(): Promise<void> {
     const runId = config.runId.trim();
@@ -38,7 +39,11 @@ export function RegisteredPredictionsWidget({ config, host, onConfigChange }: Pr
     setMessage(null);
     setView(null);
     try {
-      const value = await host.data.read("research.predictions", { runId }, { signal: controller.signal });
+      const value = await host.data.read(
+        "research.predictions",
+        { runId },
+        { signal: controller.signal },
+      );
       if (controller.signal.aborted) return;
       const parsed = parseRegisteredPredictionView(value, runId);
       if (!parsed) {
@@ -48,9 +53,11 @@ export function RegisteredPredictionsWidget({ config, host, onConfigChange }: Pr
       }
     } catch (error) {
       if (!controller.signal.aborted) {
-        setMessage(error instanceof Error && error.message === "request-failed"
-          ? "Registered prediction service is unavailable."
-          : "This identity may not read registered prediction evidence.");
+        setMessage(
+          error instanceof Error && error.message === "request-failed"
+            ? "Registered prediction service is unavailable."
+            : "This identity may not read registered prediction evidence.",
+        );
       }
     } finally {
       lifecycle.signal.removeEventListener("abort", abort);
@@ -62,24 +69,53 @@ export function RegisteredPredictionsWidget({ config, host, onConfigChange }: Pr
   const assessment = view?.assessment;
 
   return (
-    <section className={styles.widget} aria-label="Registered predictions" data-testid="registered-prediction-widget">
+    <section
+      className={styles.widget}
+      aria-label="Registered predictions"
+      data-testid="registered-prediction-widget"
+    >
       <header className={styles.header}>
-        <div><h2>Registered predictions</h2><p>Private research evidence is read-only and never promotes into an execution signal.</p></div>
+        <div>
+          <h2>Registered predictions</h2>
+          <p>Private research evidence is read-only and never promotes into an execution signal.</p>
+        </div>
       </header>
-      {!allowed ? <p className={styles.empty}>This view requires the separate research:private-read permission.</p> : null}
+      {!allowed ? (
+        <p className={styles.empty}>
+          This view requires the separate research:private-read permission.
+        </p>
+      ) : null}
       <div className={styles.form}>
         <label className={styles.control}>
           <span>Registered run ID</span>
-          <input value={config.runId} maxLength={255} autoComplete="off" spellCheck={false}
+          <input
+            value={config.runId}
+            maxLength={255}
+            autoComplete="off"
+            spellCheck={false}
             onChange={(event) => onConfigChange({ ...config, runId: event.currentTarget.value })}
-            placeholder="Registered run ID" aria-label="Registered run ID" />
+            placeholder="Registered run ID"
+            aria-label="Registered run ID"
+          />
         </label>
-        <button type="button" onClick={() => void load()} disabled={!allowed || loading || !REGISTERED_RUN_ID.test(config.runId.trim())}>
+        <button
+          type="button"
+          onClick={() => void load()}
+          disabled={!allowed || loading || !REGISTERED_RUN_ID.test(config.runId.trim())}
+        >
           {loading ? "Loading…" : "Look up"}
         </button>
       </div>
-      {message ? <p className={styles.error} role="alert">{message}</p> : null}
-      {!view && !message && allowed ? <p className={styles.empty}>Run lookup is explicit; no research service request has been made.</p> : null}
+      {message ? (
+        <p className={styles.error} role="alert">
+          {message}
+        </p>
+      ) : null}
+      {!view && !message && allowed ? (
+        <p className={styles.empty}>
+          Run lookup is explicit; no research service request has been made.
+        </p>
+      ) : null}
       {view && assessment ? (
         <div className={styles.compareResult} data-testid="prediction-evidence">
           <div className={styles.evidence}>
@@ -92,25 +128,59 @@ export function RegisteredPredictionsWidget({ config, host, onConfigChange }: Pr
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <tbody>
-                <tr><th scope="row">Identity resolution</th><td>{assessment.identity_resolution}</td></tr>
-                <tr><th scope="row">Source manifest binding</th><td>{assessment.source_manifest_binding}</td></tr>
-                <tr><th scope="row">Finite receipt binding</th><td>{assessment.finite_receipt_binding}</td></tr>
-                <tr><th scope="row">Point-in-time completeness</th><td>{assessment.point_in_time}</td></tr>
-                <tr><th scope="row">Source manifest SHA-256</th><td>{view.source_manifest_sha256}</td></tr>
-                <tr><th scope="row">Projection receipt SHA-256</th><td>{view.projection_receipt_sha256}</td></tr>
+                <tr>
+                  <th scope="row">Identity resolution</th>
+                  <td>{assessment.identity_resolution}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Source manifest binding</th>
+                  <td>{assessment.source_manifest_binding}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Finite receipt binding</th>
+                  <td>{assessment.finite_receipt_binding}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Point-in-time completeness</th>
+                  <td>{assessment.point_in_time}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Source manifest SHA-256</th>
+                  <td>{view.source_manifest_sha256}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Projection receipt SHA-256</th>
+                  <td>{view.projection_receipt_sha256}</td>
+                </tr>
               </tbody>
             </table>
           </div>
           {assessment.reason_codes.length ? (
-            <div><h3>Assessment reasons</h3><ul className={styles.reasonList}>{assessment.reason_codes.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>
+            <div>
+              <h3>Assessment reasons</h3>
+              <ul className={styles.reasonList}>
+                {assessment.reason_codes.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
           ) : null}
           {projection ? (
             <details>
-              <summary className={styles.summary}>Show BFF-validated public ProtoJSON projection</summary>
+              <summary className={styles.summary}>
+                Show BFF-validated public ProtoJSON projection
+              </summary>
               <pre className={styles.projection}>{projection}</pre>
             </details>
-          ) : <p className={styles.notice}>No public projection is available; private artifacts are not returned to the browser.</p>}
-          <p className={styles.notice}>The BFF validates the public projection. Source completeness is unknown and promotion remains disabled.</p>
+          ) : (
+            <p className={styles.notice}>
+              No public projection is available; private artifacts are not returned to the browser.
+            </p>
+          )}
+          <p className={styles.notice}>
+            The BFF validates the public projection. Source completeness is unknown and promotion
+            remains disabled.
+          </p>
         </div>
       ) : null}
     </section>

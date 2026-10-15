@@ -4,7 +4,8 @@ const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_BATCH_EVENTS = 256;
 
 export function parseGatewayEventBatch(data: string): readonly unknown[] | null {
-  if (typeof data !== "string" || new TextEncoder().encode(data).byteLength > MAX_FRAME_BYTES) return null;
+  if (typeof data !== "string" || new TextEncoder().encode(data).byteLength > MAX_FRAME_BYTES)
+    return null;
   try {
     const parsed: unknown = JSON.parse(data);
     if (!Array.isArray(parsed) || parsed.length > MAX_BATCH_EVENTS) return null;
@@ -14,7 +15,10 @@ export function parseGatewayEventBatch(data: string): readonly unknown[] | null 
   }
 }
 
-export type MarketEventSource = Pick<EventSource, "close" | "addEventListener" | "removeEventListener">;
+export type MarketEventSource = Pick<
+  EventSource,
+  "close" | "addEventListener" | "removeEventListener"
+>;
 export type MarketEventSourceFactory = (url: string) => MarketEventSource;
 
 /** One same-origin EventSource endpoint shared by every mounted market widget. */

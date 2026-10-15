@@ -45,8 +45,13 @@ describe("legacy-to-native static registry parity", () => {
 
     for (const { legacyType, manifestId } of LEGACY_NATIVE_WIDGET_BINDINGS) {
       const registration = builtinWidgetRegistry.get(manifestId);
-      expect(registration?.manifest.id, `${legacyType} must resolve to ${manifestId}`).toBe(manifestId);
-      expect(registration?.Component, `${manifestId} must have a statically compiled renderer`).toBeDefined();
+      expect(registration?.manifest.id, `${legacyType} must resolve to ${manifestId}`).toBe(
+        manifestId,
+      );
+      expect(
+        registration?.Component,
+        `${manifestId} must have a statically compiled renderer`,
+      ).toBeDefined();
     }
   });
 
@@ -75,7 +80,9 @@ describe("legacy-to-native static registry parity", () => {
       expect(instance, legacyType).toBeDefined();
       if (!instance) return;
       expect(instance?.manifestId, legacyType).toBe(`legacy.imported.${legacyType}`);
-      expect(builtinWidgetRegistry.resolveInstance(instance).status, legacyType).toBe("unsupported-manifest");
+      expect(builtinWidgetRegistry.resolveInstance(instance).status, legacyType).toBe(
+        "unsupported-manifest",
+      );
     });
 
     expect(tab?.placements.map(({ i }) => i).sort()).toEqual(
@@ -85,20 +92,30 @@ describe("legacy-to-native static registry parity", () => {
       activeSymbol: "SPY",
       watchlist: ["SPY", "QQQ"],
     });
-    expect(JSON.stringify(result.value.document)).not.toMatch(/PAPER_READY|FILLED|simulator-fallback|optionLegs/u);
+    expect(JSON.stringify(result.value.document)).not.toMatch(
+      /PAPER_READY|FILLED|simulator-fallback|optionLegs/u,
+    );
   });
 
   it("preserves the legacy nine-widget default order while resolving each tile to its actual static renderer", () => {
-    const result = previewLegacyWorkspaceImport(legacyEnvelope(LEGACY_DEFAULT_WIDGETS), builtinWidgetRegistry);
+    const result = previewLegacyWorkspaceImport(
+      legacyEnvelope(LEGACY_DEFAULT_WIDGETS),
+      builtinWidgetRegistry,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
     const widgets = result.value.document.workspaces[0]?.tabs[0]?.widgets ?? [];
     expect(widgets.map(({ manifestId }) => manifestId)).toEqual(
-      LEGACY_DEFAULT_WIDGETS.map((type) => LEGACY_NATIVE_WIDGET_BINDINGS.find((binding) => binding.legacyType === type)?.manifestId),
+      LEGACY_DEFAULT_WIDGETS.map(
+        (type) =>
+          LEGACY_NATIVE_WIDGET_BINDINGS.find((binding) => binding.legacyType === type)?.manifestId,
+      ),
     );
     expect(widgets).toHaveLength(LEGACY_DEFAULT_WIDGETS.length);
-    expect(widgets.every((widget) => builtinWidgetRegistry.resolveInstance(widget).status === "ready")).toBe(true);
+    expect(
+      widgets.every((widget) => builtinWidgetRegistry.resolveInstance(widget).status === "ready"),
+    ).toBe(true);
     expect(result.value.retainedAsInert).toEqual([]);
   });
 });

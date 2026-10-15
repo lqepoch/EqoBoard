@@ -4,7 +4,11 @@ import {
   type BarRowV1,
   type BarsResponseV1,
 } from "@lqepoch/trading-core-contracts";
-import { decodeCoreBarsPageEnvelope, type CoreBarsPageEnvelope, type CoreBarsPageRequest } from "../features/market/core-bars-page";
+import {
+  decodeCoreBarsPageEnvelope,
+  type CoreBarsPageEnvelope,
+  type CoreBarsPageRequest,
+} from "../features/market/core-bars-page";
 import { projectChartRows, type ChartProjectionResult } from "./projection";
 import { withinCoreBarsWindow } from "./request";
 import type { ChartDisplayEvidence, ChartPlotBar } from "./types";
@@ -19,8 +23,13 @@ export type DecodedCoreBarsPage = Readonly<{
 function timestampSeconds(value: unknown): number | null {
   if (value === null || typeof value !== "object") return null;
   const timestamp = value as { seconds?: unknown; nanos?: unknown };
-  if (typeof timestamp.seconds !== "bigint" || typeof timestamp.nanos !== "number" ||
-      !Number.isSafeInteger(timestamp.nanos) || timestamp.nanos !== 0) return null;
+  if (
+    typeof timestamp.seconds !== "bigint" ||
+    typeof timestamp.nanos !== "number" ||
+    !Number.isSafeInteger(timestamp.nanos) ||
+    timestamp.nanos !== 0
+  )
+    return null;
   const seconds = Number(timestamp.seconds);
   return Number.isSafeInteger(seconds) && seconds > 0 ? seconds : null;
 }
@@ -34,11 +43,20 @@ function timestampText(value: unknown): string {
 
 function expectedResponseMatches(request: CoreBarsPageRequest, response: BarsResponseV1): boolean {
   const downgraded = response.effectiveResolution !== request.resolution;
-  if (response.schemaVersion !== 1 || response.requestedResolution !== request.resolution ||
-      response.adjustment !== request.adjustment ||
-      (downgraded && (!request.allow_daily_downgrade || response.effectiveResolution !== "1d"))) return false;
-  return response.rows.every((row) => row.symbol === request.symbol && row.assetClass === request.asset_class &&
-    row.resolution === response.effectiveResolution && row.adjustment === request.adjustment);
+  if (
+    response.schemaVersion !== 1 ||
+    response.requestedResolution !== request.resolution ||
+    response.adjustment !== request.adjustment ||
+    (downgraded && (!request.allow_daily_downgrade || response.effectiveResolution !== "1d"))
+  )
+    return false;
+  return response.rows.every(
+    (row) =>
+      row.symbol === request.symbol &&
+      row.assetClass === request.asset_class &&
+      row.resolution === response.effectiveResolution &&
+      row.adjustment === request.adjustment,
+  );
 }
 
 type RowPrecision = "exact" | "provider-float" | "unknown";
@@ -53,11 +71,15 @@ function precisionByProvenance(response: BarsResponseV1): ReadonlyMap<string, Ro
     }
     seen.add(item.provenanceId);
     const encoding = item.numericEncoding;
-    precision.set(item.provenanceId, encoding === "decimal_token" || encoding === "integer_token"
-      ? "exact"
-      : encoding === "binary_float64_shortest_decimal" || encoding === "binary_float32_shortest_decimal"
-        ? "provider-float"
-        : "unknown");
+    precision.set(
+      item.provenanceId,
+      encoding === "decimal_token" || encoding === "integer_token"
+        ? "exact"
+        : encoding === "binary_float64_shortest_decimal" ||
+            encoding === "binary_float32_shortest_decimal"
+          ? "provider-float"
+          : "unknown",
+    );
   }
   return precision;
 }
@@ -80,11 +102,14 @@ function projectionCandidates(
 ) {
   return response.rows.map((row) => {
     const exactEncoding = precisionById.get(row.provenanceId) === "exact";
-    const exact = exactEncoding ? { open: row.open, high: row.high, low: row.low, close: row.close, volume: row.volume } : undefined;
+    const exact = exactEncoding
+      ? { open: row.open, high: row.high, low: row.low, close: row.close, volume: row.volume }
+      : undefined;
     const seconds = timestampSeconds(row.barStartUtc);
     return {
       sourceRow: row,
-      timeSeconds: seconds !== null && withinCoreBarsWindow(seconds, envelope.request) ? seconds : Number.NaN,
+      timeSeconds:
+        seconds !== null && withinCoreBarsWindow(seconds, envelope.request) ? seconds : Number.NaN,
       open: row.open,
       high: row.high,
       low: row.low,
@@ -101,12 +126,17 @@ function evidenceFor(
   rejectedRows: number,
   precisionById: ReadonlyMap<string, RowPrecision>,
 ): ChartDisplayEvidence {
-  const sources = [...new Set(response.sourceProvenance.map((source) => source.source).filter(Boolean))];
+  const sources = [
+    ...new Set(response.sourceProvenance.map((source) => source.source).filter(Boolean)),
+  ];
   const provider = response.provider || "unknown";
   const feed = response.feed || "unknown";
-  const completeness = response.coverageStatus === "complete" && !response.truncated && rejectedRows === 0
-    ? "complete"
-    : response.coverageStatus === "unknown" ? "unknown" : "partial";
+  const completeness =
+    response.coverageStatus === "complete" && !response.truncated && rejectedRows === 0
+      ? "complete"
+      : response.coverageStatus === "unknown"
+        ? "unknown"
+        : "partial";
   const precision = precisionForRows(response, precisionById);
   return {
     mode: "core-bars",
@@ -129,8 +159,14 @@ function evidenceFor(
       { label: "Fetched", value: timestampText(response.fetchedAt) },
       { label: "Verified at", value: timestampText(response.verifiedAt) },
       { label: "Calendar", value: response.marketCalendarVersion || "unknown" },
-      { label: "Provenance sources", value: sources.length ? sources.slice(0, 8).join(", ") : "unknown" },
-      { label: "Cursor", value: envelope.request.cursor ? "opaque continuation page" : "initial page" },
+      {
+        label: "Provenance sources",
+        value: sources.length ? sources.slice(0, 8).join(", ") : "unknown",
+      },
+      {
+        label: "Cursor",
+        value: envelope.request.cursor ? "opaque continuation page" : "initial page",
+      },
     ],
   };
 }
@@ -145,10 +181,16 @@ export function decodeCoreBarsPage(value: unknown): DecodedCoreBarsPage | null {
   } catch {
     return null;
   }
-  if (!expectedResponseMatches(envelope.request, response) || response.rows.length > 1_000) return null;
+  if (!expectedResponseMatches(envelope.request, response) || response.rows.length > 1_000)
+    return null;
   const precisionById = precisionByProvenance(response);
   const projection = projectChartRows(projectionCandidates(envelope, response, precisionById));
-  return { envelope, response, projection, evidence: evidenceFor(envelope, response, projection.rejectedRows, precisionById) };
+  return {
+    envelope,
+    response,
+    projection,
+    evidence: evidenceFor(envelope, response, projection.rejectedRows, precisionById),
+  };
 }
 
 export function coreBarsPlotRows(page: DecodedCoreBarsPage): readonly ChartPlotBar<BarRowV1>[] {

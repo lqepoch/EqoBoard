@@ -7,7 +7,10 @@ function makeNonce(): string {
   return btoa(binary);
 }
 
-export function contentSecurityPolicy(nonce: string, production = process.env.NODE_ENV === "production"): string {
+export function contentSecurityPolicy(
+  nonce: string,
+  production = process.env.NODE_ENV === "production",
+): string {
   const scriptSources = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
   if (!production) scriptSources.push("'unsafe-eval'");
   return [

@@ -145,14 +145,15 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
       command,
       label: command.label,
     }));
-    const symbolOptions: PaletteOption[] = symbolSearch.status === "ready"
-      ? symbolSearch.envelope.data.map((result) => ({
-        kind: "symbol",
-        key: `symbol-${result.symbol}`,
-        result,
-        label: `Select ${result.symbol}, ${result.name}, ${result.exchange}, ${result.type}`,
-      }))
-      : [];
+    const symbolOptions: PaletteOption[] =
+      symbolSearch.status === "ready"
+        ? symbolSearch.envelope.data.map((result) => ({
+            kind: "symbol",
+            key: `symbol-${result.symbol}`,
+            result,
+            label: `Select ${result.symbol}, ${result.name}, ${result.exchange}, ${result.type}`,
+          }))
+        : [];
     return [...commandOptions, ...symbolOptions];
   }, [filteredCommands, symbolSearch]);
 
@@ -217,9 +218,8 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
   }
 
   const activeOption = options[activeIndex];
-  const searchRestriction = symbolSearch.status === "restricted"
-    ? getRestrictionMessage(symbolSearch.reason)
-    : null;
+  const searchRestriction =
+    symbolSearch.status === "restricted" ? getRestrictionMessage(symbolSearch.reason) : null;
   const liveAnnouncement = activeOption
     ? `${activeOption.label}, ${activeIndex + 1} of ${options.length}`
     : symbolSearch.status === "debouncing" || symbolSearch.status === "loading"
@@ -228,7 +228,9 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
         ? getRestrictionMessage(symbolSearch.reason)
         : symbolSearch.status === "error"
           ? symbolSearch.message
-          : options.length === 0 ? "No matching commands or symbols" : "";
+          : options.length === 0
+            ? "No matching commands or symbols"
+            : "";
 
   return (
     <dialog
@@ -268,13 +270,12 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
             <ShellIcon name="close" size={16} />
           </button>
         </div>
-        <h2 className="eq-visually-hidden" id="eq-command-palette-title">Command palette</h2>
+        <h2 className="eq-visually-hidden" id="eq-command-palette-title">
+          Command palette
+        </h2>
         <div className="eq-command-dialog__results" id="eq-command-palette-list">
           <section aria-labelledby="eq-command-palette-commands-title">
-            <h3
-              className="eq-command-dialog__group-title"
-              id="eq-command-palette-commands-title"
-            >
+            <h3 className="eq-command-dialog__group-title" id="eq-command-palette-commands-title">
               Commands
             </h3>
             {filteredCommands.length ? (
@@ -289,7 +290,9 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
                       onFocus={() => setActiveIndex(index)}
                       onKeyDown={(event) => handleOptionKeyDown(event, index)}
                       onMouseEnter={() => setActiveIndex(index)}
-                      ref={(element) => { optionRefs.current[index] = element; }}
+                      ref={(element) => {
+                        optionRefs.current[index] = element;
+                      }}
                       type="button"
                     >
                       <span aria-hidden="true" className="eq-command-result-icon">
@@ -313,10 +316,7 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
               aria-labelledby="eq-command-palette-symbols-title"
               data-testid="command-symbol-results"
             >
-              <h3
-                className="eq-command-dialog__group-title"
-                id="eq-command-palette-symbols-title"
-              >
+              <h3 className="eq-command-dialog__group-title" id="eq-command-palette-symbols-title">
                 Symbols
               </h3>
               {queryIssue ? (
@@ -375,7 +375,9 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
                               onFocus={() => setActiveIndex(optionIndex)}
                               onKeyDown={(event) => handleOptionKeyDown(event, optionIndex)}
                               onMouseEnter={() => setActiveIndex(optionIndex)}
-                              ref={(element) => { optionRefs.current[optionIndex] = element; }}
+                              ref={(element) => {
+                                optionRefs.current[optionIndex] = element;
+                              }}
                               type="button"
                             >
                               <span aria-hidden="true" className="eq-command-result-icon">
@@ -414,9 +416,7 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
                     </p>
                   ) : null}
                   {symbolSearch.envelope.warning ? (
-                    <p className="eq-command-dialog__warning">
-                      {symbolSearch.envelope.warning}
-                    </p>
+                    <p className="eq-command-dialog__warning">{symbolSearch.envelope.warning}</p>
                   ) : null}
                 </>
               ) : (
@@ -436,9 +436,13 @@ export function CommandPalette({ open, commands, onOpenChange }: CommandPaletteP
             {selectionMessage}
           </div>
         ) : null}
-        <span aria-live="polite" className="eq-visually-hidden">{liveAnnouncement}</span>
+        <span aria-live="polite" className="eq-visually-hidden">
+          {liveAnnouncement}
+        </span>
         <div className="eq-command-dialog__footer" id="eq-command-palette-help">
-          <span>↑ ↓ Move</span><span>Enter Select</span><span>Esc Close</span>
+          <span>↑ ↓ Move</span>
+          <span>Enter Select</span>
+          <span>Esc Close</span>
         </div>
       </div>
     </dialog>
@@ -449,11 +453,8 @@ function SymbolSearchAttribution({ envelope }: { envelope: SymbolSearchEnvelope 
   return (
     <div className="eq-command-dialog__attribution" data-testid="command-symbol-source">
       <span>
-        Source: <a
-          href={envelope.source.providerUrl}
-          rel="noopener noreferrer"
-          target="_blank"
-        >
+        Source:{" "}
+        <a href={envelope.source.providerUrl} rel="noopener noreferrer" target="_blank">
           {envelope.source.provider}
         </a>
       </span>
@@ -464,11 +465,17 @@ function SymbolSearchAttribution({ envelope }: { envelope: SymbolSearchEnvelope 
 
 function getRestrictionMessage(reason: ReturnType<typeof getSymbolSearchAvailability>): string {
   switch (reason) {
-    case "identity-unavailable": return "Sign-in is unavailable; symbol search is closed.";
-    case "policy-rejected": return "This account cannot search symbols.";
-    case "sign-in-required": return "Sign in with research access to search.";
-    case "terminal-runtime-required": return "Use the terminal session to search symbols.";
-    case "research-permission-required": return "Research access is required to search symbols.";
-    case "ready": return "Type a symbol or company name to search.";
+    case "identity-unavailable":
+      return "Sign-in is unavailable; symbol search is closed.";
+    case "policy-rejected":
+      return "This account cannot search symbols.";
+    case "sign-in-required":
+      return "Sign in with research access to search.";
+    case "terminal-runtime-required":
+      return "Use the terminal session to search symbols.";
+    case "research-permission-required":
+      return "Research access is required to search symbols.";
+    case "ready":
+      return "Type a symbol or company name to search.";
   }
 }

@@ -55,7 +55,9 @@ beforeEach(() => {
 
 describe("closed native research data route", () => {
   it("hides the terminal-only provider route before authorization in Research mode", async () => {
-    vi.mocked(requireRuntimeMode).mockReturnValue(new Response(JSON.stringify({ error: "not_found" }), { status: 404 }) as never);
+    vi.mocked(requireRuntimeMode).mockReturnValue(
+      new Response(JSON.stringify({ error: "not_found" }), { status: 404 }) as never,
+    );
     const response = await GET(routeRequest("news"), context("news"));
 
     expect(response.status).toBe(404);
@@ -133,12 +135,19 @@ describe("closed native research data route", () => {
       warning: "Listing metadata only.",
     });
 
-    const response = await GET(routeRequest("symbol-search", "?query=AAPL"), context("symbol-search"));
+    const response = await GET(
+      routeRequest("symbol-search", "?query=AAPL"),
+      context("symbol-search"),
+    );
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(loadTradingViewSymbolSearch).toHaveBeenCalledWith("AAPL");
-    expect(body).toMatchObject({ operation: "symbol-search", source: { provider: "TradingView symbol search" }, data: [] });
+    expect(body).toMatchObject({
+      operation: "symbol-search",
+      source: { provider: "TradingView symbol search" },
+      data: [],
+    });
   });
 
   it("returns provider evidence and no-store cache headers for a valid read", async () => {

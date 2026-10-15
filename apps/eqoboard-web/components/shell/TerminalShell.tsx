@@ -26,20 +26,23 @@ export function TerminalShell({ children }: TerminalShellProps) {
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const { preference, cyclePreference } = useThemePreference();
 
-  const commands = useMemo<readonly ShellCommand[]>(() => [
-    {
-      id: "workspace",
-      label: "Open workspace",
-      keywords: ["terminal", "dashboard"],
-      run: () => router.push("/"),
-    },
-    {
-      id: "appearance",
-      label: "Cycle appearance",
-      keywords: ["theme", "light", "dark", "system"],
-      run: cyclePreference,
-    },
-  ], [cyclePreference, router]);
+  const commands = useMemo<readonly ShellCommand[]>(
+    () => [
+      {
+        id: "workspace",
+        label: "Open workspace",
+        keywords: ["terminal", "dashboard"],
+        run: () => router.push("/"),
+      },
+      {
+        id: "appearance",
+        label: "Cycle appearance",
+        keywords: ["theme", "light", "dark", "system"],
+        run: cyclePreference,
+      },
+    ],
+    [cyclePreference, router],
+  );
 
   const closeMobileNavigation = useCallback(() => {
     setMobileNavOpen(false);
@@ -77,7 +80,9 @@ export function TerminalShell({ children }: TerminalShellProps) {
 
   return (
     <div className="eq-app-shell" data-testid="app-shell">
-      <a className="eq-skip-link" href="#main-content">Skip to workspace</a>
+      <a className="eq-skip-link" href="#main-content">
+        Skip to workspace
+      </a>
       <header className="eq-app-header">
         <div className="eq-header-brand">
           <button
@@ -94,7 +99,9 @@ export function TerminalShell({ children }: TerminalShellProps) {
             <ShellIcon name="menu" size={17} />
           </button>
           <Link aria-label="EqoBoard home" className="eq-brand" href="/">
-            <span aria-hidden="true" className="eq-brand-mark">EQ</span>
+            <span aria-hidden="true" className="eq-brand-mark">
+              EQ
+            </span>
             <span>EqoBoard</span>
           </Link>
         </div>
@@ -109,9 +116,13 @@ export function TerminalShell({ children }: TerminalShellProps) {
           onClick={() => setPaletteOpen(true)}
           type="button"
         >
-          <span aria-hidden="true" className="eq-command-trigger__search"><ShellIcon name="search" size={16} /></span>
+          <span aria-hidden="true" className="eq-command-trigger__search">
+            <ShellIcon name="search" size={16} />
+          </span>
           <span className="eq-command-trigger__label">Search commands or symbols</span>
-          <span aria-hidden="true" className="eq-shortcut">Ctrl K / ⌘ K</span>
+          <span aria-hidden="true" className="eq-shortcut">
+            Ctrl K / ⌘ K
+          </span>
         </button>
         <div className="eq-header-actions">
           <ThemeToggle onCycle={cyclePreference} preference={preference} />
@@ -193,7 +204,9 @@ function AuthBanner({ status, authenticated }: AuthBannerProps) {
   return (
     <section className="eq-auth-banner" data-state={status}>
       <div className="eq-auth-banner__message" role={details.role}>
-        <span aria-hidden="true" className="eq-auth-banner__marker">●</span>
+        <span aria-hidden="true" className="eq-auth-banner__marker">
+          ●
+        </span>
         <span>{details.message}</span>
       </div>
     </section>

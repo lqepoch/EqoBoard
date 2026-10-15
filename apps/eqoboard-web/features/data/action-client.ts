@@ -9,10 +9,15 @@ import { decodePortfolio, decodePortfolioTransaction } from "./portfolio-decoder
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 20;
 
-async function readActionJson(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {
+async function readActionJson(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<unknown> {
   if (!response.ok) throw new WidgetDataReadError("request-failed");
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType !== "application/json" && !contentType?.endsWith("+json")) throw new WidgetDataReadError("request-failed");
+  if (contentType !== "application/json" && !contentType?.endsWith("+json"))
+    throw new WidgetDataReadError("request-failed");
   const reader = response.body?.getReader();
   if (!reader) throw new WidgetDataReadError("request-failed");
   const chunks: Uint8Array[] = [];
@@ -68,7 +73,11 @@ export function createNativeActionClient(
       const request = buildNativeActionRequest(actionId, input);
       if (!request) throw new WidgetDataReadError("request-failed");
       const auth = getAuth();
-      if (auth.runtimeMode === "research" || !auth.authenticated || !auth.permissions.includes(request.permission as Permission)) {
+      if (
+        auth.runtimeMode === "research" ||
+        !auth.authenticated ||
+        !auth.permissions.includes(request.permission as Permission)
+      ) {
         throw new WidgetDataReadError("request-failed");
       }
       let body: string;
@@ -78,18 +87,25 @@ export function createNativeActionClient(
         throw new WidgetDataReadError("request-failed");
       }
       const bodyBytes = new TextEncoder().encode(body).byteLength;
-      const maxBodyBytes = actionId === "research.ai" ? 16 * 1024
-        : actionId === "portfolio.create" ? 4 * 1024
-          : actionId === "portfolio.transaction.create" ? 8 * 1024
-            : 32 * 1024;
+      const maxBodyBytes =
+        actionId === "research.ai"
+          ? 16 * 1024
+          : actionId === "portfolio.create"
+            ? 4 * 1024
+            : actionId === "portfolio.transaction.create"
+              ? 8 * 1024
+              : 32 * 1024;
       if (bodyBytes > maxBodyBytes) throw new WidgetDataReadError("request-failed");
 
       const time = now();
       while (requestTimes.length > 0 && time - requestTimes[0]! >= WINDOW_MS) requestTimes.shift();
-      const priorActionTimes = (actionTimes.get(actionId) ?? []).filter((entry) => time - entry < WINDOW_MS);
+      const priorActionTimes = (actionTimes.get(actionId) ?? []).filter(
+        (entry) => time - entry < WINDOW_MS,
+      );
       const limit = actionId === "research.ai" ? 10 : MAX_REQUESTS;
       if (requestTimes.length >= MAX_REQUESTS || priorActionTimes.length >= limit) {
-        const oldest = requestTimes.length >= MAX_REQUESTS ? requestTimes[0]! : priorActionTimes[0]!;
+        const oldest =
+          requestTimes.length >= MAX_REQUESTS ? requestTimes[0]! : priorActionTimes[0]!;
         throw new WidgetDataReadError("rate-limited", Math.max(1, oldest + WINDOW_MS - time));
       }
       requestTimes.push(time);
@@ -108,7 +124,11 @@ export function createNativeActionClient(
           signal: options.signal,
         });
         if (request.method === "DELETE") {
-          if (response.status !== 204 || response.headers.has("content-length") && response.headers.get("content-length") !== "0") {
+          if (
+            response.status !== 204 ||
+            (response.headers.has("content-length") &&
+              response.headers.get("content-length") !== "0")
+          ) {
             throw new WidgetDataReadError("request-failed");
           }
           return undefined as NativeActionMap[ActionId]["output"];

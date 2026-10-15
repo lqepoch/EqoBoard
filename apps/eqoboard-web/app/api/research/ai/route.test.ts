@@ -5,7 +5,10 @@ import { requireRuntimeMode } from "@/lib/server/runtime-mode";
 import { readProviderJson } from "@/lib/server/research/transport";
 import { POST } from "./route";
 
-vi.mock("@/lib/server/bff-security", () => ({ authorizeRequest: vi.fn(), readBoundedJson: vi.fn() }));
+vi.mock("@/lib/server/bff-security", () => ({
+  authorizeRequest: vi.fn(),
+  readBoundedJson: vi.fn(),
+}));
 vi.mock("@/lib/server/rate-limit", () => ({ consumePrincipalRateLimit: vi.fn() }));
 vi.mock("@/lib/server/runtime-mode", () => ({ requireRuntimeMode: vi.fn() }));
 vi.mock("@/lib/server/research/transport", () => ({ readProviderJson: vi.fn() }));
@@ -39,7 +42,9 @@ beforeEach(() => {
 
 describe("terminal-only native AI research action", () => {
   it("hides the action in Research mode before identity, body, or provider work", async () => {
-    vi.mocked(requireRuntimeMode).mockReturnValue(new Response(JSON.stringify({ error: "not_found" }), { status: 404 }) as never);
+    vi.mocked(requireRuntimeMode).mockReturnValue(
+      new Response(JSON.stringify({ error: "not_found" }), { status: 404 }) as never,
+    );
     const response = await POST(request());
 
     expect(response.status).toBe(404);
@@ -59,7 +64,10 @@ describe("terminal-only native AI research action", () => {
       const response = await POST(request());
       expect(response.status).toBe(200);
       expect(response.headers.get("Cache-Control")).toBe("no-store");
-      expect(await response.json()).toMatchObject({ text: "Unverified summary.", provider: "Anthropic" });
+      expect(await response.json()).toMatchObject({
+        text: "Unverified summary.",
+        provider: "Anthropic",
+      });
       expect(authorizeRequest).toHaveBeenCalledWith(expect.any(Request), "research:ai");
       expect(readBoundedJson).toHaveBeenCalledWith(expect.any(Request), 16 * 1024);
       expect(readProviderJson).toHaveBeenCalledOnce();

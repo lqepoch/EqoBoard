@@ -9,7 +9,15 @@ type ShortcutEventTarget = EventTarget | ShortcutTarget;
 
 export type CommandPaletteKeyEvent = Pick<
   KeyboardEvent,
-  "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "isComposing" | "defaultPrevented" | "repeat" | "target"
+  | "key"
+  | "metaKey"
+  | "ctrlKey"
+  | "altKey"
+  | "shiftKey"
+  | "isComposing"
+  | "defaultPrevented"
+  | "repeat"
+  | "target"
 >;
 
 const TEXT_ENTRY_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);

@@ -277,9 +277,15 @@
   opacity: 0.75;
 }
 
-.tile_positive { background: color-mix(in srgb, #1f9d67 28%, #151a22); }
-.tile_negative { background: color-mix(in srgb, #c84949 28%, #151a22); }
-.tile_neutral { background: var(--eqo-control, #1d2430); }
+.tile_positive {
+  background: color-mix(in srgb, #1f9d67 28%, #151a22);
+}
+.tile_negative {
+  background: color-mix(in srgb, #c84949 28%, #151a22);
+}
+.tile_neutral {
+  background: var(--eqo-control, #1d2430);
+}
 
 .heatmapFootnote {
   margin: 0;
@@ -396,6 +402,10 @@
 }
 
 @media (max-width: 800px) {
-  .savedQueries { grid-template-columns: 1fr; }
-  .recapColumns { grid-template-columns: 1fr; }
+  .savedQueries {
+    grid-template-columns: 1fr;
+  }
+  .recapColumns {
+    grid-template-columns: 1fr;
+  }
 }

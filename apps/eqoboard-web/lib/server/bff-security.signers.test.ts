@@ -77,7 +77,9 @@ describe("mode-isolated service signers", () => {
     vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));
     vi.stubEnv("QUANT_RESEARCH_JWT_SECRET", quantResearchSecret);
 
-    const research = await security.signQuantPredictionReadDelegation(principal(["research:private-read"]));
+    const research = await security.signQuantPredictionReadDelegation(
+      principal(["research:private-read"]),
+    );
     expect(research.ok).toBe(true);
     if (research.ok) {
       await verifyDelegation(research.token, quantResearchSecret, {
@@ -95,7 +97,9 @@ describe("mode-isolated service signers", () => {
     vi.stubEnv("QUANT_RESEARCH_JWT_SECRET", "");
     const quantTerminalSecret = "t".repeat(64);
     vi.stubEnv("QUANT_TERMINAL_JWT_SECRET", quantTerminalSecret);
-    const terminal = await security.signQuantPredictionReadDelegation(principal(["research:private-read"]));
+    const terminal = await security.signQuantPredictionReadDelegation(
+      principal(["research:private-read"]),
+    );
     expect(terminal.ok).toBe(true);
     if (terminal.ok) {
       await verifyDelegation(terminal.token, quantTerminalSecret, {

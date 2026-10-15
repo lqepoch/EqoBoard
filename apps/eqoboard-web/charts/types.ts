@@ -10,7 +10,16 @@ export type ChartResolutionChoice = "auto" | ChartResolution;
 export const CHART_STYLES = ["candles", "bars", "line", "area"] as const;
 export type ChartStyle = (typeof CHART_STYLES)[number];
 
-export const CHART_INDICATORS = ["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "RSI", "MACD", "BOLL"] as const;
+export const CHART_INDICATORS = [
+  "SMA20",
+  "SMA50",
+  "SMA200",
+  "EMA20",
+  "VWAP",
+  "RSI",
+  "MACD",
+  "BOLL",
+] as const;
 export type IndicatorId = (typeof CHART_INDICATORS)[number];
 
 export const CHART_DATA_MODES = ["core-bars", "yahoo-daily", "diagnostic-archive"] as const;

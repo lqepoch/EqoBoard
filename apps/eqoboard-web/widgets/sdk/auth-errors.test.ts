@@ -12,15 +12,20 @@ describe("widget safe auth and error projections", () => {
       permissions: ["market:read", "workspace:write"],
       storagePartition: "opaque-owner-cache-key",
     });
-    expect(projected).toEqual({ authenticated: true, permissions: ["market:read", "workspace:write"] });
+    expect(projected).toEqual({
+      authenticated: true,
+      permissions: ["market:read", "workspace:write"],
+    });
     expect(Object.keys(projected).sort()).toEqual(["authenticated", "permissions"]);
-    expect(projectWidgetAuthorization({
-      status: "sign-in-required",
-      authenticated: false,
-      displayName: null,
-      permissions: [],
-      storagePartition: null,
-    }).permissions).toEqual([]);
+    expect(
+      projectWidgetAuthorization({
+        status: "sign-in-required",
+        authenticated: false,
+        displayName: null,
+        permissions: [],
+        storagePartition: null,
+      }).permissions,
+    ).toEqual([]);
   });
 
   it("normalizes private exception details to bounded UI messages", () => {
@@ -28,10 +33,15 @@ describe("widget safe auth and error projections", () => {
     const safe = toWidgetRuntimeError(raw);
     expect(safe).toEqual({ code: "request-failed", retryable: true });
     expect(widgetErrorMessage(safe)).not.toContain("credentials");
-    expect(toWidgetRuntimeError(new WidgetDataReadError("hidden")))
-      .toEqual({ code: "cancelled", retryable: false });
-    expect(toWidgetRuntimeError(new WidgetDataReadError("rate-limited", 100_000)))
-      .toEqual({ code: "rate-limited", retryable: true, retryAfterMs: 60_000 });
+    expect(toWidgetRuntimeError(new WidgetDataReadError("hidden"))).toEqual({
+      code: "cancelled",
+      retryable: false,
+    });
+    expect(toWidgetRuntimeError(new WidgetDataReadError("rate-limited", 100_000))).toEqual({
+      code: "rate-limited",
+      retryable: true,
+      retryAfterMs: 60_000,
+    });
   });
 
   it("does not invoke getters on untrusted thrown values", () => {

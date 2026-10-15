@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { bindActiveWorkspaceSymbolSelector, canRegisterActiveWorkspaceSymbolSelector } from "./command-selector";
+import {
+  bindActiveWorkspaceSymbolSelector,
+  canRegisterActiveWorkspaceSymbolSelector,
+} from "./command-selector";
 
 describe("active workspace symbol command binding", () => {
   it("registers only for a ready authenticated writable workspace and active tab", () => {
@@ -14,10 +17,18 @@ describe("active workspace symbol command binding", () => {
     expect(canRegisterActiveWorkspaceSymbolSelector(eligible)).toBe(true);
     expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, canEdit: false })).toBe(false);
     expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, authReady: false })).toBe(false);
-    expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, hasWorkspaceWritePermission: false })).toBe(false);
-    expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, loadStatus: "loading" })).toBe(false);
-    expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, loadStatus: "error" })).toBe(false);
-    expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, workspaceId: null })).toBe(false);
+    expect(
+      canRegisterActiveWorkspaceSymbolSelector({ ...eligible, hasWorkspaceWritePermission: false }),
+    ).toBe(false);
+    expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, loadStatus: "loading" })).toBe(
+      false,
+    );
+    expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, loadStatus: "error" })).toBe(
+      false,
+    );
+    expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, workspaceId: null })).toBe(
+      false,
+    );
     expect(canRegisterActiveWorkspaceSymbolSelector({ ...eligible, tabId: null })).toBe(false);
   });
 

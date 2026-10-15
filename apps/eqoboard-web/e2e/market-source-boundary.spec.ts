@@ -10,7 +10,10 @@ function webOrigin(): string {
 
 function gatewayControlOrigin(): string {
   const origin = process.env.E2E_FIXTURE_CONTROL_ORIGIN;
-  if (!origin) throw new Error("E2E_FIXTURE_CONTROL_ORIGIN must point at the isolated mock Gateway control listener.");
+  if (!origin)
+    throw new Error(
+      "E2E_FIXTURE_CONTROL_ORIGIN must point at the isolated mock Gateway control listener.",
+    );
   return origin;
 }
 
@@ -22,21 +25,27 @@ async function signInAsWriter(page: Page): Promise<void> {
   await expect(page.getByTestId("workspace-root")).toBeVisible();
 }
 
-test("@component order-book depth remains unsupported with no source rows or provider dispatch", async ({ page, request }) => {
+test("@component order-book depth remains unsupported with no source rows or provider dispatch", async ({
+  page,
+  request,
+}) => {
   const appOrigin = new URL(webOrigin()).origin;
   const oidcOrigin = "http://native-mock-oidc:4450";
   const externalRequests: string[] = [];
   const forbiddenExecutionRequests: string[] = [];
   page.on("request", (browserRequest) => {
     const url = new URL(browserRequest.url());
-    if (url.origin !== appOrigin && url.origin !== oidcOrigin) externalRequests.push(browserRequest.url());
+    if (url.origin !== appOrigin && url.origin !== oidcOrigin)
+      externalRequests.push(browserRequest.url());
     if (/\/api\/(?:futu\/order|eqo\/orders\/(?:submit|preview))$/u.test(url.pathname)) {
       forbiddenExecutionRequests.push(`${browserRequest.method()} ${url.pathname}`);
     }
   });
 
   await signInAsWriter(page);
-  const reset = await request.post(new URL("/__test/counters/reset", gatewayControlOrigin()).toString());
+  const reset = await request.post(
+    new URL("/__test/counters/reset", gatewayControlOrigin()).toString(),
+  );
   expect(reset.status()).toBe(200);
 
   await page.getByRole("button", { name: "Add widget" }).click();
@@ -46,16 +55,23 @@ test("@component order-book depth remains unsupported with no source rows or pro
   const orderbook = page.getByTestId("market-orderbook-widget");
   await expect(orderbook).toBeVisible();
   await expect(orderbook.getByRole("group", { name: "Depth data: Unsupported" })).toBeVisible();
-  await expect(orderbook).toContainText("No typed depth source is available; depth is not displayed.");
+  await expect(orderbook).toContainText(
+    "No typed depth source is available; depth is not displayed.",
+  );
   await expect(orderbook.locator("table,[role=grid],[data-row-index]")).toHaveCount(0);
   await expect(orderbook).not.toContainText(/bid|ask|size|price level|simulated|fixture quote/i);
   expect(externalRequests).toEqual([]);
   expect(forbiddenExecutionRequests).toEqual([]);
 
-  const countersResponse = await request.get(new URL("/__test/counters", gatewayControlOrigin()).toString());
+  const countersResponse = await request.get(
+    new URL("/__test/counters", gatewayControlOrigin()).toString(),
+  );
   expect(countersResponse.status()).toBe(200);
-  const counters = await countersResponse.json() as GatewayCounters;
+  const counters = (await countersResponse.json()) as GatewayCounters;
   for (const path of ["/api/v1/stocks/snapshots", "/api/v1/stocks/bars", "/api/v1/options/chain"]) {
-    expect(counters.calls[path] ?? 0, `unsupported depth must not dispatch a market read to ${path}`).toBe(0);
+    expect(
+      counters.calls[path] ?? 0,
+      `unsupported depth must not dispatch a market read to ${path}`,
+    ).toBe(0);
   }
 });

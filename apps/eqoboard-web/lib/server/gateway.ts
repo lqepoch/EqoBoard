@@ -28,14 +28,26 @@ export type GatewayFetchOptions = Readonly<{
 
 export type GatewayFetchResult =
   | Readonly<{ ok: true; response: Response }>
-  | Readonly<{ ok: false; error: "gateway_unavailable" | "gateway_redirect_rejected" | "gateway_timeout" }>;
+  | Readonly<{
+      ok: false;
+      error: "gateway_unavailable" | "gateway_redirect_rejected" | "gateway_timeout";
+    }>;
 
 const MAX_JSON_RESPONSE_BYTES = 4 * 1024 * 1024;
-const ALLOWED_HTTP_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "gateway", "native-mock-gateway"]);
+const ALLOWED_HTTP_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+  "gateway",
+  "native-mock-gateway",
+]);
 
 function validDnsName(value: string): boolean {
-  if (value.length < 1 || value.length > 253 || value.endsWith(".") || isIP(value) !== 0) return false;
-  return value.split(".").every((label) => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/iu.test(label));
+  if (value.length < 1 || value.length > 253 || value.endsWith(".") || isIP(value) !== 0)
+    return false;
+  return value
+    .split(".")
+    .every((label) => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/iu.test(label));
 }
 
 export function parseGatewayBaseUrl(raw: string | undefined): URL | null {
@@ -43,7 +55,8 @@ export function parseGatewayBaseUrl(raw: string | undefined): URL | null {
   try {
     const url = new URL(value);
     if (url.username || url.password || url.search || url.hash || url.pathname !== "/") return null;
-    if (url.port && (!/^\d+$/u.test(url.port) || Number(url.port) < 1 || Number(url.port) > 65_535)) return null;
+    if (url.port && (!/^\d+$/u.test(url.port) || Number(url.port) < 1 || Number(url.port) > 65_535))
+      return null;
     if (url.protocol === "http:") {
       if (!ALLOWED_HTTP_HOSTS.has(url.hostname.toLowerCase())) return null;
     } else if (url.protocol === "https:") {
@@ -57,7 +70,10 @@ export function parseGatewayBaseUrl(raw: string | undefined): URL | null {
   }
 }
 
-export function gatewayUrl(path: GatewayPath, query: Readonly<Record<string, string>> = {}): URL | null {
+export function gatewayUrl(
+  path: GatewayPath,
+  query: Readonly<Record<string, string>> = {},
+): URL | null {
   if (!(GATEWAY_PATHS as readonly string[]).includes(path)) return null;
   const base = parseGatewayBaseUrl(process.env.EQO_RUST_URL);
   if (!base) return null;
@@ -73,11 +89,16 @@ export async function fetchGateway(
 ): Promise<GatewayFetchResult> {
   const url = gatewayUrl(path, options.query);
   if (!url) return { ok: false, error: "gateway_unavailable" };
-  const timeoutMs = Number.isSafeInteger(options.timeoutMs) && options.timeoutMs! >= 1_000 && options.timeoutMs! <= 60_000
-    ? options.timeoutMs!
-    : 12_000;
+  const timeoutMs =
+    Number.isSafeInteger(options.timeoutMs) &&
+    options.timeoutMs! >= 1_000 &&
+    options.timeoutMs! <= 60_000
+      ? options.timeoutMs!
+      : 12_000;
   const timeout = AbortSignal.timeout(timeoutMs);
-  const signal = options.signal ? AbortSignal.any([request.signal, options.signal, timeout]) : AbortSignal.any([request.signal, timeout]);
+  const signal = options.signal
+    ? AbortSignal.any([request.signal, options.signal, timeout])
+    : AbortSignal.any([request.signal, timeout]);
   try {
     const response = await fetch(url, {
       method: options.method ?? "GET",
@@ -106,9 +127,15 @@ export type BoundedResponseResult =
   | Readonly<{ ok: true; bytes: Uint8Array }>
   | Readonly<{ ok: false; reason: "too_large" | "invalid_body" }>;
 
-export async function readBoundedResponse(response: Response, maxBytes = MAX_JSON_RESPONSE_BYTES): Promise<BoundedResponseResult> {
+export async function readBoundedResponse(
+  response: Response,
+  maxBytes = MAX_JSON_RESPONSE_BYTES,
+): Promise<BoundedResponseResult> {
   const declaredLength = response.headers.get("content-length");
-  if (declaredLength !== null && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maxBytes)) {
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maxBytes)
+  ) {
     await response.body?.cancel().catch(() => undefined);
     return { ok: false, reason: "too_large" };
   }
@@ -142,23 +169,38 @@ export async function readBoundedResponse(response: Response, maxBytes = MAX_JSO
   }
 }
 
-export async function relayGatewayJson(response: Response, maxBytes = MAX_JSON_RESPONSE_BYTES): Promise<NextResponse> {
+export async function relayGatewayJson(
+  response: Response,
+  maxBytes = MAX_JSON_RESPONSE_BYTES,
+): Promise<NextResponse> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
     await response.body?.cancel().catch(() => undefined);
-    return NextResponse.json({ error: "invalid_gateway_response" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { error: "invalid_gateway_response" },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
   }
   const body = await readBoundedResponse(response, maxBytes);
   if (!body.ok) {
-    return NextResponse.json({ error: body.reason === "too_large" ? "gateway_response_too_large" : "invalid_gateway_response" }, {
-      status: body.reason === "too_large" ? 502 : 502,
-      headers: { "Cache-Control": "no-store" },
-    });
+    return NextResponse.json(
+      {
+        error:
+          body.reason === "too_large" ? "gateway_response_too_large" : "invalid_gateway_response",
+      },
+      {
+        status: body.reason === "too_large" ? 502 : 502,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
   }
   try {
     JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body.bytes)) as unknown;
   } catch {
-    return NextResponse.json({ error: "invalid_gateway_response" }, { status: 502, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { error: "invalid_gateway_response" },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
+    );
   }
   return new NextResponse(body.bytes, {
     status: response.status,

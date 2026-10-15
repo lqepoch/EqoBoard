@@ -95,8 +95,16 @@ function record(value: unknown): Record<string, unknown> | null {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (Reflect.ownKeys(value).some((key) => typeof key !== "string" ||
-        !descriptors[key] || !descriptors[key]!.enumerable || !("value" in descriptors[key]!))) return null;
+    if (
+      Reflect.ownKeys(value).some(
+        (key) =>
+          typeof key !== "string" ||
+          !descriptors[key] ||
+          !descriptors[key]!.enumerable ||
+          !("value" in descriptors[key]!),
+      )
+    )
+      return null;
     return value as Record<string, unknown>;
   } catch {
     return null;
@@ -104,8 +112,13 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 function string(value: unknown, max = 256): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= max &&
-    value === value.trim() && !CONTROL.test(value);
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= max &&
+    value === value.trim() &&
+    !CONTROL.test(value)
+  );
 }
 
 function nullableString(value: unknown, max = 256): value is string | null {
@@ -124,13 +137,20 @@ function optionalNullableString(row: Record<string, unknown>, key: string): bool
   return !Object.hasOwn(row, key) || nullableString(row[key], 128);
 }
 
-function evidence(row: Record<string, unknown>, sourceDefault: string | null = null): MarketSourceEvidence {
-  const source = typeof row.source === "string" && string(row.source, 64) ? row.source : sourceDefault;
-  const sourceMode = typeof row.source_mode === "string" && string(row.source_mode, 64) ? row.source_mode : null;
-  const sourceLabel = typeof row.source_label === "string" && string(row.source_label, 128) ? row.source_label : null;
-  const sourceEntitlement = typeof row.source_entitlement === "string" && string(row.source_entitlement, 64)
-    ? row.source_entitlement
-    : null;
+function evidence(
+  row: Record<string, unknown>,
+  sourceDefault: string | null = null,
+): MarketSourceEvidence {
+  const source =
+    typeof row.source === "string" && string(row.source, 64) ? row.source : sourceDefault;
+  const sourceMode =
+    typeof row.source_mode === "string" && string(row.source_mode, 64) ? row.source_mode : null;
+  const sourceLabel =
+    typeof row.source_label === "string" && string(row.source_label, 128) ? row.source_label : null;
+  const sourceEntitlement =
+    typeof row.source_entitlement === "string" && string(row.source_entitlement, 64)
+      ? row.source_entitlement
+      : null;
   const feed = typeof row.feed === "string" && string(row.feed, 64) ? row.feed : null;
   const rawAsOf = row.as_of ?? row.market_as_of ?? row.received_at ?? null;
   const asOf = nullableString(rawAsOf, 128) ? rawAsOf : null;
@@ -140,15 +160,26 @@ function evidence(row: Record<string, unknown>, sourceDefault: string | null = n
 function parseSnapshot(value: unknown): StockSnapshotRow | null {
   const row = record(value);
   if (!row || !string(row.symbol, 16) || !TICKER.test(row.symbol)) return null;
-  for (const key of ["last", "bid", "ask", "open", "high", "low", "previous_close", "change_percent", "volume"]) {
+  for (const key of [
+    "last",
+    "bid",
+    "ask",
+    "open",
+    "high",
+    "low",
+    "previous_close",
+    "change_percent",
+    "volume",
+  ]) {
     if (!optionalNullableFinite(row, key)) return null;
   }
   for (const key of ["quote_at", "trade_at", "market_as_of", "last_as_of", "updated_at"]) {
     if (!optionalNullableString(row, key)) return null;
   }
-  const readNumber = (key: string): number | null => nullableFinite(row[key]) ? row[key] : null;
+  const readNumber = (key: string): number | null => (nullableFinite(row[key]) ? row[key] : null);
   const readText = (...keys: string[]): string | null => {
-    for (const key of keys) if (nullableString(row[key], 128) && row[key] !== null) return row[key] as string;
+    for (const key of keys)
+      if (nullableString(row[key], 128) && row[key] !== null) return row[key] as string;
     return null;
   };
   return Object.freeze({
@@ -175,9 +206,19 @@ export function decodeQuoteResponse(value: unknown): QuoteResponse | null {
   if (!row) return null;
   const sourceEvidence = evidence(row);
   if (row.source !== "alpaca") {
-    return Object.freeze({ status: "unsupported-source", evidence: sourceEvidence, wire: Object.freeze({ ...row }) });
+    return Object.freeze({
+      status: "unsupported-source",
+      evidence: sourceEvidence,
+      wire: Object.freeze({ ...row }),
+    });
   }
-  if (!string(row.feed, 64) || !nullableString(row.as_of, 128) || !Array.isArray(row.snapshots) || row.snapshots.length > 50) return null;
+  if (
+    !string(row.feed, 64) ||
+    !nullableString(row.as_of, 128) ||
+    !Array.isArray(row.snapshots) ||
+    row.snapshots.length > 50
+  )
+    return null;
   const snapshots: StockSnapshotRow[] = [];
   const seen = new Set<string>();
   for (const item of row.snapshots) {
@@ -194,28 +235,74 @@ export function decodeQuoteResponse(value: unknown): QuoteResponse | null {
   });
 }
 
-export function parseOccContractSymbol(value: string): Readonly<{ underlyingRoot: string; yymmdd: string; right: "call" | "put"; strike: number }> | null {
+export function parseOccContractSymbol(
+  value: string,
+): Readonly<{
+  underlyingRoot: string;
+  yymmdd: string;
+  right: "call" | "put";
+  strike: number;
+}> | null {
   const match = OCC.exec(value);
   if (!match) return null;
   const strikeUnits = Number(match[4]);
   if (!Number.isSafeInteger(strikeUnits)) return null;
-  return Object.freeze({ underlyingRoot: match[1]!, yymmdd: match[2]!, right: match[3] === "C" ? "call" : "put", strike: strikeUnits / 1_000 });
+  return Object.freeze({
+    underlyingRoot: match[1]!,
+    yymmdd: match[2]!,
+    right: match[3] === "C" ? "call" : "put",
+    strike: strikeUnits / 1_000,
+  });
 }
 
-function parseOptionContract(value: unknown, underlying: string, expiration: string, feed: string): OptionContractRow | null {
+function parseOptionContract(
+  value: unknown,
+  underlying: string,
+  expiration: string,
+  feed: string,
+): OptionContractRow | null {
   const row = record(value);
-  if (!row || !string(row.symbol, 32) || !string(row.underlying, 16) ||
-      row.underlying !== underlying || row.expiration !== expiration ||
-      (row.right !== "call" && row.right !== "put") || typeof row.strike !== "number" ||
-      !Number.isFinite(row.strike) || row.strike < 0 || row.feed !== feed) return null;
+  if (
+    !row ||
+    !string(row.symbol, 32) ||
+    !string(row.underlying, 16) ||
+    row.underlying !== underlying ||
+    row.expiration !== expiration ||
+    (row.right !== "call" && row.right !== "put") ||
+    typeof row.strike !== "number" ||
+    !Number.isFinite(row.strike) ||
+    row.strike < 0 ||
+    row.feed !== feed
+  )
+    return null;
   const occ = parseOccContractSymbol(row.symbol);
-  if (!occ || occ.underlyingRoot !== underlying || occ.yymmdd !== expiration.slice(2).replaceAll("-", "") ||
-      occ.right !== row.right || Math.round(occ.strike * 1_000) !== Math.round(row.strike * 1_000)) return null;
-  const numberKeys = ["bid", "ask", "last", "bid_size", "ask_size", "iv", "delta", "gamma", "theta", "vega"] as const;
+  if (
+    !occ ||
+    occ.underlyingRoot !== underlying ||
+    occ.yymmdd !== expiration.slice(2).replaceAll("-", "") ||
+    occ.right !== row.right ||
+    Math.round(occ.strike * 1_000) !== Math.round(row.strike * 1_000)
+  )
+    return null;
+  const numberKeys = [
+    "bid",
+    "ask",
+    "last",
+    "bid_size",
+    "ask_size",
+    "iv",
+    "delta",
+    "gamma",
+    "theta",
+    "vega",
+  ] as const;
   for (const key of numberKeys) if (!optionalNullableFinite(row, key)) return null;
-  for (const key of ["updated_at", "quote_at", "trade_at", "model_as_of"]) if (!optionalNullableString(row, key)) return null;
-  const number = (key: (typeof numberKeys)[number]): number | null => nullableFinite(row[key]) ? row[key] : null;
-  const text = (key: string): string | null => nullableString(row[key], 128) && row[key] !== null ? row[key] as string : null;
+  for (const key of ["updated_at", "quote_at", "trade_at", "model_as_of"])
+    if (!optionalNullableString(row, key)) return null;
+  const number = (key: (typeof numberKeys)[number]): number | null =>
+    nullableFinite(row[key]) ? row[key] : null;
+  const text = (key: string): string | null =>
+    nullableString(row[key], 128) && row[key] !== null ? (row[key] as string) : null;
   return Object.freeze({
     symbol: row.symbol,
     underlying,
@@ -241,11 +328,24 @@ function parseOptionContract(value: unknown, underlying: string, expiration: str
 }
 
 /** Validates the Alpaca chain envelope and its contracts without relabeling feed/Greeks evidence. */
-export function decodeOptionChainResponse(value: unknown, expectedUnderlying: string, expectedExpiration: string): OptionChainResponse | null {
+export function decodeOptionChainResponse(
+  value: unknown,
+  expectedUnderlying: string,
+  expectedExpiration: string,
+): OptionChainResponse | null {
   const row = record(value);
-  if (!row || row.source !== "alpaca" || row.underlying !== expectedUnderlying || row.expiration !== expectedExpiration ||
-      !string(row.feed, 64) || !nullableString(row.as_of, 128) || typeof row.truncated !== "boolean" ||
-      !Array.isArray(row.contracts) || row.contracts.length > 10_000) return null;
+  if (
+    !row ||
+    row.source !== "alpaca" ||
+    row.underlying !== expectedUnderlying ||
+    row.expiration !== expectedExpiration ||
+    !string(row.feed, 64) ||
+    !nullableString(row.as_of, 128) ||
+    typeof row.truncated !== "boolean" ||
+    !Array.isArray(row.contracts) ||
+    row.contracts.length > 10_000
+  )
+    return null;
   const contracts: OptionContractRow[] = [];
   const seen = new Set<string>();
   for (const item of row.contracts) {
@@ -268,20 +368,51 @@ export function decodeOptionChainResponse(value: unknown, expectedUnderlying: st
 
 function previewIntent(value: unknown): VerticalPreviewIntent | null {
   const row = record(value);
-  if (!row || Reflect.ownKeys(row).length !== 8 || row.broker !== "alpaca" || row.environment !== "paper" || row.kind !== "vertical" || row.symbol !== null ||
-      !Number.isSafeInteger(row.quantity) || (row.quantity as number) <= 0 || (row.quantity as number) > 0xffff_ffff ||
-      typeof row.limit_price !== "number" || !Number.isFinite(row.limit_price) ||
-      row.limit_price <= 0 || !Number.isSafeInteger(row.limit_price * 100) || row.limit_price * 100 / 100 !== row.limit_price ||
-      (row.net_effect !== "debit" && row.net_effect !== "credit") || !Array.isArray(row.legs) || row.legs.length !== 2) return null;
+  if (
+    !row ||
+    Reflect.ownKeys(row).length !== 8 ||
+    row.broker !== "alpaca" ||
+    row.environment !== "paper" ||
+    row.kind !== "vertical" ||
+    row.symbol !== null ||
+    !Number.isSafeInteger(row.quantity) ||
+    (row.quantity as number) <= 0 ||
+    (row.quantity as number) > 0xffff_ffff ||
+    typeof row.limit_price !== "number" ||
+    !Number.isFinite(row.limit_price) ||
+    row.limit_price <= 0 ||
+    !Number.isSafeInteger(row.limit_price * 100) ||
+    (row.limit_price * 100) / 100 !== row.limit_price ||
+    (row.net_effect !== "debit" && row.net_effect !== "credit") ||
+    !Array.isArray(row.legs) ||
+    row.legs.length !== 2
+  )
+    return null;
   const legs = row.legs.map((value) => {
     const leg = record(value);
-    if (!leg || Reflect.ownKeys(leg).length !== 2 || !string(leg.symbol, 32) || !OCC.test(leg.symbol) || (leg.side !== "buy" && leg.side !== "sell")) return null;
+    if (
+      !leg ||
+      Reflect.ownKeys(leg).length !== 2 ||
+      !string(leg.symbol, 32) ||
+      !OCC.test(leg.symbol) ||
+      (leg.side !== "buy" && leg.side !== "sell")
+    )
+      return null;
     return Object.freeze({ symbol: leg.symbol, side: leg.side });
   });
-  if (!legs[0] || !legs[1] || legs[0].side === legs[1].side || legs[0].symbol === legs[1].symbol) return null;
+  if (!legs[0] || !legs[1] || legs[0].side === legs[1].side || legs[0].symbol === legs[1].symbol)
+    return null;
   const first = OCC.exec(legs[0].symbol);
   const second = OCC.exec(legs[1].symbol);
-  if (!first || !second || first[1] !== second[1] || first[2] !== second[2] || first[3] !== second[3] || first[4] === second[4]) return null;
+  if (
+    !first ||
+    !second ||
+    first[1] !== second[1] ||
+    first[2] !== second[2] ||
+    first[3] !== second[3] ||
+    first[4] === second[4]
+  )
+    return null;
   const buy = legs.find((leg) => leg.side === "buy");
   const sell = legs.find((leg) => leg.side === "sell");
   if (!buy || !sell) return null;
@@ -292,9 +423,14 @@ function previewIntent(value: unknown): VerticalPreviewIntent | null {
   const sellStrike = BigInt(sellContract[4]!);
   const width = buyStrike > sellStrike ? buyStrike - sellStrike : sellStrike - buyStrike;
   if (BigInt(Math.round(row.limit_price * 100)) * 10n >= width) return null;
-  const expectedEffect = buyContract[3] === "C"
-    ? buyStrike < sellStrike ? "debit" : "credit"
-    : buyStrike > sellStrike ? "debit" : "credit";
+  const expectedEffect =
+    buyContract[3] === "C"
+      ? buyStrike < sellStrike
+        ? "debit"
+        : "credit"
+      : buyStrike > sellStrike
+        ? "debit"
+        : "credit";
   if (row.net_effect !== expectedEffect) return null;
   return Object.freeze({
     broker: "alpaca",
@@ -309,22 +445,47 @@ function previewIntent(value: unknown): VerticalPreviewIntent | null {
 }
 
 /** Only accepts an explicit disabled-execution preview receipt. */
-export function decodeVerticalPreviewReceipt(value: unknown, expectedIntent?: VerticalPreviewIntent): VerticalPreviewReceipt | null {
+export function decodeVerticalPreviewReceipt(
+  value: unknown,
+  expectedIntent?: VerticalPreviewIntent,
+): VerticalPreviewReceipt | null {
   const row = record(value);
   const preview = row && record(row.preview);
-  if (!row || Reflect.ownKeys(row).length !== 2 || row.execution_enabled !== false || !preview ||
-      Reflect.ownKeys(preview).length !== 5 ||
-      !string(preview.preview_id, 128) || !string(preview.expires_at, 128) || !Number.isFinite(Date.parse(preview.expires_at)) ||
-      typeof preview.estimated_max_loss !== "number" || !Number.isFinite(preview.estimated_max_loss) || preview.estimated_max_loss < 0 ||
-      !string(preview.currency, 8) || !/^[A-Z]{3}$/u.test(preview.currency)) return null;
+  if (
+    !row ||
+    Reflect.ownKeys(row).length !== 2 ||
+    row.execution_enabled !== false ||
+    !preview ||
+    Reflect.ownKeys(preview).length !== 5 ||
+    !string(preview.preview_id, 128) ||
+    !string(preview.expires_at, 128) ||
+    !Number.isFinite(Date.parse(preview.expires_at)) ||
+    typeof preview.estimated_max_loss !== "number" ||
+    !Number.isFinite(preview.estimated_max_loss) ||
+    preview.estimated_max_loss < 0 ||
+    !string(preview.currency, 8) ||
+    !/^[A-Z]{3}$/u.test(preview.currency)
+  )
+    return null;
   const intent = previewIntent(preview.intent);
   if (!intent) return null;
-  if (expectedIntent && (
-    intent.broker !== expectedIntent.broker || intent.environment !== expectedIntent.environment || intent.kind !== expectedIntent.kind ||
-    intent.symbol !== expectedIntent.symbol || intent.quantity !== expectedIntent.quantity || intent.limit_price !== expectedIntent.limit_price ||
-    intent.net_effect !== expectedIntent.net_effect || intent.legs.length !== expectedIntent.legs.length ||
-    intent.legs.some((leg, index) => leg.symbol !== expectedIntent.legs[index]?.symbol || leg.side !== expectedIntent.legs[index]?.side)
-  )) return null;
+  if (
+    expectedIntent &&
+    (intent.broker !== expectedIntent.broker ||
+      intent.environment !== expectedIntent.environment ||
+      intent.kind !== expectedIntent.kind ||
+      intent.symbol !== expectedIntent.symbol ||
+      intent.quantity !== expectedIntent.quantity ||
+      intent.limit_price !== expectedIntent.limit_price ||
+      intent.net_effect !== expectedIntent.net_effect ||
+      intent.legs.length !== expectedIntent.legs.length ||
+      intent.legs.some(
+        (leg, index) =>
+          leg.symbol !== expectedIntent.legs[index]?.symbol ||
+          leg.side !== expectedIntent.legs[index]?.side,
+      ))
+  )
+    return null;
   return Object.freeze({
     executionEnabled: false,
     preview: Object.freeze({

@@ -16,7 +16,8 @@ export const portfolioWidgetManifest = Object.freeze({
   id: "eqoboard.portfolio.manual-ledger",
   version: "1.0.0",
   title: "Manual portfolio ledger",
-  description: "User-maintained transaction ledger with average cost and realized results. No broker positions or live valuation.",
+  description:
+    "User-maintained transaction ledger with average cost and realized results. No broker positions or live valuation.",
   category: "portfolio",
   rendererId: "eqoboard.portfolio.manual-ledger.v1",
   configSchemaId: "eqoboard.portfolio.manual-ledger.v1",
@@ -56,7 +57,8 @@ export const portfolioWidgetRegistration: WidgetRegistration<
     "portfolio.transaction.delete",
   ],
   parseConfig(value) {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) return { ok: false, code: "config-invalid" };
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      return { ok: false, code: "config-invalid" };
     const keys = Reflect.ownKeys(value);
     const record = value as Record<string, unknown>;
     return keys.length === 1 && keys[0] === "schemaVersion" && record.schemaVersion === 1

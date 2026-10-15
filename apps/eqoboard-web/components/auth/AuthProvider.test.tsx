@@ -18,7 +18,9 @@ describe("AuthProvider safe projection", () => {
       return <output>{JSON.stringify(auth)}</output>;
     }
     const html = renderToString(
-      <AuthProvider snapshot={snapshot}><SnapshotReader /></AuthProvider>,
+      <AuthProvider snapshot={snapshot}>
+        <SnapshotReader />
+      </AuthProvider>,
     );
     expect(html).toContain(JSON.stringify(snapshot));
     expect(html).not.toMatch(/issuer|subject|role|token|secret/i);

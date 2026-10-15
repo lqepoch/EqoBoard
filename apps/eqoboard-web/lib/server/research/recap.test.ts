@@ -16,15 +16,31 @@ vi.mock("./screener", async (importOriginal) => {
   return { ...actual, loadMarketMetadata: mocks.loadMarketMetadata };
 });
 vi.mock("./news", () => ({ loadNews: mocks.loadNews }));
-vi.mock("./gateway", () => ({ readSipSnapshotsWithDelegation: mocks.readSipSnapshotsWithDelegation }));
+vi.mock("./gateway", () => ({
+  readSipSnapshotsWithDelegation: mocks.readSipSnapshotsWithDelegation,
+}));
 
 import { loadResearchRecap } from "./recap";
 
 const macroResult = {
-  source: { provider: "FRED", providerUrl: "https://fred.stlouisfed.org/", sourcePath: "apps/openterminal/server/src/providers/fred.ts", license: null },
+  source: {
+    provider: "FRED",
+    providerUrl: "https://fred.stlouisfed.org/",
+    sourcePath: "apps/openterminal/server/src/providers/fred.ts",
+    license: null,
+  },
   data: {
     region: "us",
-    observations: [{ id: "VIXCLS", label: "CBOE VIX close", value: 18, unit: "index", provider: "FRED", asOf: "2026-10-14" }],
+    observations: [
+      {
+        id: "VIXCLS",
+        label: "CBOE VIX close",
+        value: 18,
+        unit: "index",
+        provider: "FRED",
+        asOf: "2026-10-14",
+      },
+    ],
     indexProxies: [{ symbol: "SPY", label: "S&P 500 (SPY)" }],
     indexObservations: [],
   },
@@ -36,30 +52,46 @@ const macroResult = {
 } as const;
 
 const marketMetadata = {
-  source: { provider: "TradingView scanner", providerUrl: "https://scanner.tradingview.com/", sourcePath: "apps/openterminal/server/src/providers/tradingview.ts", license: null },
+  source: {
+    provider: "TradingView scanner",
+    providerUrl: "https://scanner.tradingview.com/",
+    sourcePath: "apps/openterminal/server/src/providers/tradingview.ts",
+    license: null,
+  },
   data: {
     market: "us",
-    rows: [{
-      symbol: "AAPL",
-      name: "Apple Inc.",
-      price: null,
-      changePercent: null,
-      volume: null,
-      marketCap: 3_000_000_000_000,
-      marketCapCurrency: "USD",
-      marketCapEur: null,
-      marketCapEurAsOf: null,
-      sector: "Technology",
-      exchange: "NASDAQ",
-      country: "United States",
-      priceSource: "awaiting Gateway SIP snapshot",
-      priceAsOf: null,
-      marketCapSource: "TradingView scanner",
-      marketCapAsOf: null,
-      sourceMode: null,
-      sourceLabel: null,
-    }],
-    coverage: { requested: 1, snapshots: 0, priced: 0, timed: 0, snapshotComplete: false, priceComplete: false, timeComplete: false, complete: false },
+    rows: [
+      {
+        symbol: "AAPL",
+        name: "Apple Inc.",
+        price: null,
+        changePercent: null,
+        volume: null,
+        marketCap: 3_000_000_000_000,
+        marketCapCurrency: "USD",
+        marketCapEur: null,
+        marketCapEurAsOf: null,
+        sector: "Technology",
+        exchange: "NASDAQ",
+        country: "United States",
+        priceSource: "awaiting Gateway SIP snapshot",
+        priceAsOf: null,
+        marketCapSource: "TradingView scanner",
+        marketCapAsOf: null,
+        sourceMode: null,
+        sourceLabel: null,
+      },
+    ],
+    coverage: {
+      requested: 1,
+      snapshots: 0,
+      priced: 0,
+      timed: 0,
+      snapshotComplete: false,
+      priceComplete: false,
+      timeComplete: false,
+      complete: false,
+    },
     truncated: false,
   },
   asOf: null,
@@ -70,7 +102,12 @@ const marketMetadata = {
 } as const;
 
 const emptyNews = {
-  source: { provider: "RSS headlines", providerUrl: "https://news.google.com/", sourcePath: "apps/openterminal/server/src/providers/news.ts", license: null },
+  source: {
+    provider: "RSS headlines",
+    providerUrl: "https://news.google.com/",
+    sourcePath: "apps/openterminal/server/src/providers/news.ts",
+    license: null,
+  },
   data: [],
   asOf: null,
   complete: true,
@@ -84,8 +121,24 @@ const gatewayBatch = {
   value: {
     feed: "sip",
     snapshots: [
-      { feed: "sip", symbol: "SPY", last: 600, change_percent: 0.5, last_as_of: "2026-10-15T14:00:00.000Z", source_label: "Alpaca SIP", source_mode: "live" },
-      { feed: "sip", symbol: "AAPL", last: 250, change_percent: 1.25, last_as_of: "2026-10-15T14:00:00.000Z", source_label: "Alpaca SIP", source_mode: "live" },
+      {
+        feed: "sip",
+        symbol: "SPY",
+        last: 600,
+        change_percent: 0.5,
+        last_as_of: "2026-10-15T14:00:00.000Z",
+        source_label: "Alpaca SIP",
+        source_mode: "live",
+      },
+      {
+        feed: "sip",
+        symbol: "AAPL",
+        last: 250,
+        change_percent: 1.25,
+        last_as_of: "2026-10-15T14:00:00.000Z",
+        source_label: "Alpaca SIP",
+        source_mode: "live",
+      },
     ],
     requestedSymbols: ["SPY", "AAPL"],
     receivedAt: "2026-10-15T14:00:01.000Z",
@@ -110,10 +163,25 @@ describe("bounded provider recap", () => {
 
     expect(result.complete).toBe(false);
     expect(result.data.volatility.vix).toEqual({ value: 18, source: "FRED", asOf: "2026-10-14" });
-    expect(result.data.indexes[0]?.price).toEqual({ value: 600, source: "Alpaca SIP", asOf: "2026-10-15T14:00:00.000Z" });
-    expect(result.data.gainers[0]?.changePercent).toEqual({ value: 1.25, source: "Alpaca SIP", asOf: "2026-10-15T14:00:00.000Z" });
-    expect(result.data.gainers[0]?.marketCap).toEqual({ value: 3_000_000_000_000, source: "TradingView scanner", asOf: null });
-    expect(result.data.sectors[0]?.sourceTimeRange).toEqual({ earliest: "2026-10-15T14:00:00.000Z", latest: "2026-10-15T14:00:00.000Z" });
+    expect(result.data.indexes[0]?.price).toEqual({
+      value: 600,
+      source: "Alpaca SIP",
+      asOf: "2026-10-15T14:00:00.000Z",
+    });
+    expect(result.data.gainers[0]?.changePercent).toEqual({
+      value: 1.25,
+      source: "Alpaca SIP",
+      asOf: "2026-10-15T14:00:00.000Z",
+    });
+    expect(result.data.gainers[0]?.marketCap).toEqual({
+      value: 3_000_000_000_000,
+      source: "TradingView scanner",
+      asOf: null,
+    });
+    expect(result.data.sectors[0]?.sourceTimeRange).toEqual({
+      earliest: "2026-10-15T14:00:00.000Z",
+      latest: "2026-10-15T14:00:00.000Z",
+    });
     expect(result.data.headlines).toEqual([]);
     expect(result.data.coverage.headlines.status).toBe("unavailable");
     expect(result.data.coverage.sipSnapshots.source).toBe("Alpaca SIP");
@@ -124,7 +192,10 @@ describe("bounded provider recap", () => {
     mocks.loadMacro.mockResolvedValue(macroResult);
     mocks.loadMarketMetadata.mockRejectedValue(new Error("scanner unavailable"));
     mocks.loadNews.mockRejectedValue(new Error("rss unavailable"));
-    mocks.readSipSnapshotsWithDelegation.mockResolvedValue({ ok: false, response: new Response(null, { status: 502 }) });
+    mocks.readSipSnapshotsWithDelegation.mockResolvedValue({
+      ok: false,
+      response: new Response(null, { status: 502 }),
+    });
 
     const result = await loadResearchRecap({ token: "delegated-test-token" });
 
@@ -147,7 +218,9 @@ describe("bounded provider recap", () => {
       ...gatewayBatch,
       value: {
         ...gatewayBatch.value,
-        snapshots: gatewayBatch.value.snapshots.map((row) => row.symbol === "SPY" ? { ...row, change_percent: null } : row),
+        snapshots: gatewayBatch.value.snapshots.map((row) =>
+          row.symbol === "SPY" ? { ...row, change_percent: null } : row,
+        ),
       },
     });
 

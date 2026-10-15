@@ -23,12 +23,32 @@ describe("native chart workspace config", () => {
   });
 
   it("rejects unknown fields, duplicate indicators, and non-JSON records", () => {
-    expect(parseNativeChartConfig({ ...createDefaultChartConfig(), apiUrl: "https://provider.invalid" }).ok).toBe(false);
-    expect(parseNativeChartConfig({ ...createDefaultChartConfig(), indicators: ["RSI", "RSI"] }).ok).toBe(false);
-    expect(parseNativeChartConfig({ ...createDefaultChartConfig(), sessionScope: "all-hours-plus-future" }).ok).toBe(false);
-    expect(parseNativeChartConfig({ ...createDefaultChartConfig(), allowDailyDowngrade: "yes" }).ok).toBe(false);
-    expect(parseNativeChartConfig({ ...createDefaultChartConfig(), dataMode: "yahoo-daily" }).ok).toBe(false);
-    expect(parseNativeChartConfig({ ...createDefaultChartConfig(), diagnosticDatasetId: "../other" }).ok).toBe(false);
-    expect(parseNativeChartConfig(Object.assign(Object.create({ inherited: true }), createDefaultChartConfig())).ok).toBe(false);
+    expect(
+      parseNativeChartConfig({ ...createDefaultChartConfig(), apiUrl: "https://provider.invalid" })
+        .ok,
+    ).toBe(false);
+    expect(
+      parseNativeChartConfig({ ...createDefaultChartConfig(), indicators: ["RSI", "RSI"] }).ok,
+    ).toBe(false);
+    expect(
+      parseNativeChartConfig({
+        ...createDefaultChartConfig(),
+        sessionScope: "all-hours-plus-future",
+      }).ok,
+    ).toBe(false);
+    expect(
+      parseNativeChartConfig({ ...createDefaultChartConfig(), allowDailyDowngrade: "yes" }).ok,
+    ).toBe(false);
+    expect(
+      parseNativeChartConfig({ ...createDefaultChartConfig(), dataMode: "yahoo-daily" }).ok,
+    ).toBe(false);
+    expect(
+      parseNativeChartConfig({ ...createDefaultChartConfig(), diagnosticDatasetId: "../other" }).ok,
+    ).toBe(false);
+    expect(
+      parseNativeChartConfig(
+        Object.assign(Object.create({ inherited: true }), createDefaultChartConfig()),
+      ).ok,
+    ).toBe(false);
   });
 });

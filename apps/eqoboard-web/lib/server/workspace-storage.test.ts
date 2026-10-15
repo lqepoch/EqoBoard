@@ -10,19 +10,23 @@ const ownerB = "b".repeat(64);
 const document = {
   schemaVersion: 1 as const,
   activeWorkspaceId: "00000000-0000-4000-8000-000000000001",
-  workspaces: [{
-    id: "00000000-0000-4000-8000-000000000001",
-    name: "Workspace 1",
-    activeTabId: "00000000-0000-4000-8000-000000000002",
-    marketContext: { activeSymbol: "SPY", watchlist: ["SPY"] },
-    tabs: [{
-      id: "00000000-0000-4000-8000-000000000002",
-      name: "Overview",
-      widgets: [],
-      placements: [],
-      maximizedInstanceId: null,
-    }],
-  }],
+  workspaces: [
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      name: "Workspace 1",
+      activeTabId: "00000000-0000-4000-8000-000000000002",
+      marketContext: { activeSymbol: "SPY", watchlist: ["SPY"] },
+      tabs: [
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          name: "Overview",
+          widgets: [],
+          placements: [],
+          maximizedInstanceId: null,
+        },
+      ],
+    },
+  ],
   userTemplates: [],
 };
 
@@ -42,12 +46,19 @@ describe("workspace owner storage CAS", () => {
   });
 
   it("starts at revision zero, saves with a strong ETag and rejects stale writes", () => {
-    expect(loadWorkspaceDocument(db, ownerA)).toEqual({ schemaVersion: 1, revision: "0", document: null });
+    expect(loadWorkspaceDocument(db, ownerA)).toEqual({
+      schemaVersion: 1,
+      revision: "0",
+      document: null,
+    });
     const first = saveWorkspaceDocument(db, ownerA, '"0"', document);
     expect(first.kind).toBe("saved");
     if (first.kind !== "saved") return;
     expect(first.snapshot.revision).toBe("1");
-    expect(saveWorkspaceDocument(db, ownerA, '"0"', document)).toEqual({ kind: "conflict", revision: "1" });
+    expect(saveWorkspaceDocument(db, ownerA, '"0"', document)).toEqual({
+      kind: "conflict",
+      revision: "1",
+    });
 
     const second = saveWorkspaceDocument(db, ownerA, '"1"', document);
     expect(second.kind).toBe("saved");
@@ -56,7 +67,11 @@ describe("workspace owner storage CAS", () => {
 
   it("isolates revisions by owner key", () => {
     saveWorkspaceDocument(db, ownerA, '"0"', document);
-    expect(loadWorkspaceDocument(db, ownerB)).toEqual({ schemaVersion: 1, revision: "0", document: null });
+    expect(loadWorkspaceDocument(db, ownerB)).toEqual({
+      schemaVersion: 1,
+      revision: "0",
+      document: null,
+    });
     expect(saveWorkspaceDocument(db, ownerB, '"0"', document).kind).toBe("saved");
     expect(loadWorkspaceDocument(db, ownerA).revision).toBe("1");
   });

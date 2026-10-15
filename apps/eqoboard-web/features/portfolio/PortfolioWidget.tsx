@@ -16,7 +16,8 @@ export type PortfolioWidgetConfigV1 = Readonly<{ schemaVersion: 1 }>;
 type PortfolioWidgetProps = WidgetProps<
   PortfolioWidgetConfigV1,
   NativeDataOperationMap,
-  Pick<NativeActionMap,
+  Pick<
+    NativeActionMap,
     | "portfolio.create"
     | "portfolio.delete"
     | "portfolio.transaction.create"
@@ -55,13 +56,21 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const canWrite = host.auth.authenticated && host.auth.permissions.includes("workspace:write");
-  const selected = useMemo(() => portfolios.find((item) => item.id === selectedId) ?? null, [portfolios, selectedId]);
+  const selected = useMemo(
+    () => portfolios.find((item) => item.id === selectedId) ?? null,
+    [portfolios, selectedId],
+  );
 
-  const reloadPortfolios = useCallback(async (signal: AbortSignal) => {
-    const next = await host.data.read("portfolio.list", {}, { signal });
-    setPortfolios(next);
-    setSelectedId((current) => next.some((item) => item.id === current) ? current : next[0]?.id ?? null);
-  }, [host.data]);
+  const reloadPortfolios = useCallback(
+    async (signal: AbortSignal) => {
+      const next = await host.data.read("portfolio.list", {}, { signal });
+      setPortfolios(next);
+      setSelectedId((current) =>
+        next.some((item) => item.id === current) ? current : (next[0]?.id ?? null),
+      );
+    },
+    [host.data],
+  );
 
   useEffect(() => {
     const lifecycle = host.lifecycle.getSnapshot();
@@ -92,17 +101,27 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
     const cancel = () => controller.abort();
     lifecycle.signal.addEventListener("abort", cancel, { once: true });
     void Promise.all([
-      host.data.read("portfolio.positions", { portfolioId: selectedId }, { signal: controller.signal }),
-      host.data.read("portfolio.transactions", { portfolioId: selectedId }, { signal: controller.signal }),
-    ]).then(([nextPositions, nextTransactions]) => {
-      if (controller.signal.aborted) return;
-      setPositions(nextPositions);
-      setTransactions(nextTransactions);
-    }).catch((cause: unknown) => {
-      if (controller.signal.aborted) return;
-      setError(asErrorMessage(cause));
-      host.reportError({ code: "data-unavailable", retryable: true });
-    });
+      host.data.read(
+        "portfolio.positions",
+        { portfolioId: selectedId },
+        { signal: controller.signal },
+      ),
+      host.data.read(
+        "portfolio.transactions",
+        { portfolioId: selectedId },
+        { signal: controller.signal },
+      ),
+    ])
+      .then(([nextPositions, nextTransactions]) => {
+        if (controller.signal.aborted) return;
+        setPositions(nextPositions);
+        setTransactions(nextTransactions);
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(asErrorMessage(cause));
+        host.reportError({ code: "data-unavailable", retryable: true });
+      });
     return () => {
       lifecycle.signal.removeEventListener("abort", cancel);
       controller.abort();
@@ -153,22 +172,32 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
     const numericQuantity = Number(quantity);
     const numericPrice = Number(price);
     const localDate = new Date(executedAt);
-    if (!/^[A-Z0-9.^=-]{1,12}$/u.test(normalizedSymbol) ||
-        !Number.isFinite(numericQuantity) || numericQuantity <= 0 || numericQuantity > 1_000_000_000 ||
-        !Number.isFinite(numericPrice) || numericPrice < 0 || numericPrice > 1_000_000_000 ||
-        !Number.isFinite(localDate.getTime())) {
+    if (
+      !/^[A-Z0-9.^=-]{1,12}$/u.test(normalizedSymbol) ||
+      !Number.isFinite(numericQuantity) ||
+      numericQuantity <= 0 ||
+      numericQuantity > 1_000_000_000 ||
+      !Number.isFinite(numericPrice) ||
+      numericPrice < 0 ||
+      numericPrice > 1_000_000_000 ||
+      !Number.isFinite(localDate.getTime())
+    ) {
       setError("Enter a valid symbol, quantity, price, and transaction time.");
       return;
     }
     void runMutation(async (signal) => {
-      await host.actions.invoke("portfolio.transaction.create", {
-        portfolioId: selectedId,
-        symbol: normalizedSymbol,
-        side,
-        quantity: numericQuantity,
-        price: numericPrice,
-        executed_at: localDate.toISOString(),
-      }, { signal });
+      await host.actions.invoke(
+        "portfolio.transaction.create",
+        {
+          portfolioId: selectedId,
+          symbol: normalizedSymbol,
+          side,
+          quantity: numericQuantity,
+          price: numericPrice,
+          executed_at: localDate.toISOString(),
+        },
+        { signal },
+      );
       setSymbol("");
       setQuantity("");
       setPrice("");
@@ -182,14 +211,20 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
         <div>
           <p className={styles.eyebrow}>Manual ledger</p>
           <h2>Portfolios</h2>
-          <p className={styles.note}>Entries are user-maintained. No broker positions or live market valuation are shown.</p>
+          <p className={styles.note}>
+            Entries are user-maintained. No broker positions or live market valuation are shown.
+          </p>
         </div>
         <button type="button" className={styles.quietButton} onClick={refresh} disabled={busy}>
           Refresh
         </button>
       </header>
 
-      {error && <p role="alert" className={styles.error}>{error}</p>}
+      {error && (
+        <p role="alert" className={styles.error}>
+          {error}
+        </p>
+      )}
 
       <div className={styles.layout}>
         <aside className={styles.sidebar} aria-label="Portfolio list">
@@ -197,7 +232,9 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
             <h3>Your ledgers</h3>
             <span>{portfolios.length}</span>
           </div>
-          {portfolios.length === 0 ? <p className={styles.empty}>No manual ledgers yet.</p> : (
+          {portfolios.length === 0 ? (
+            <p className={styles.empty}>No manual ledgers yet.</p>
+          ) : (
             <ul className={styles.portfolioList}>
               {portfolios.map((portfolio) => (
                 <li key={portfolio.id}>
@@ -218,8 +255,16 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
             <form className={styles.createForm} onSubmit={submitPortfolio}>
               <label htmlFor="portfolio-name">New ledger</label>
               <div className={styles.inlineForm}>
-                <input id="portfolio-name" value={portfolioName} maxLength={64} onChange={(event) => setPortfolioName(event.target.value)} placeholder="Name" />
-                <button type="submit" disabled={busy || portfolioName.trim().length === 0}>Add</button>
+                <input
+                  id="portfolio-name"
+                  value={portfolioName}
+                  maxLength={64}
+                  onChange={(event) => setPortfolioName(event.target.value)}
+                  placeholder="Name"
+                />
+                <button type="submit" disabled={busy || portfolioName.trim().length === 0}>
+                  Add
+                </button>
               </div>
             </form>
           )}
@@ -228,7 +273,9 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
 
         <div className={styles.content}>
           {!selected ? (
-            <p className={styles.emptyLarge}>Select or create a manual ledger to review its entries.</p>
+            <p className={styles.emptyLarge}>
+              Select or create a manual ledger to review its entries.
+            </p>
           ) : (
             <>
               <div className={styles.selectedHeader}>
@@ -242,31 +289,66 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
                     className={styles.dangerButton}
                     disabled={busy}
                     onClick={() => {
-                      if (!window.confirm(`Delete the manual ledger “${selected.name}” and its entries?`)) return;
+                      if (
+                        !window.confirm(
+                          `Delete the manual ledger “${selected.name}” and its entries?`,
+                        )
+                      )
+                        return;
                       void runMutation(async (signal) => {
-                        await host.actions.invoke("portfolio.delete", { portfolioId: selected.id }, { signal });
+                        await host.actions.invoke(
+                          "portfolio.delete",
+                          { portfolioId: selected.id },
+                          { signal },
+                        );
                       });
                     }}
-                  >Delete ledger</button>
+                  >
+                    Delete ledger
+                  </button>
                 )}
               </div>
 
               <section className={styles.positions} aria-label="Manual ledger positions">
                 <div className={styles.sectionHeading}>
-                  <div><h4>Ledger positions</h4><p>Average cost and realized result from entered transactions only.</p></div>
+                  <div>
+                    <h4>Ledger positions</h4>
+                    <p>Average cost and realized result from entered transactions only.</p>
+                  </div>
                 </div>
                 <div className={styles.tableWrap}>
                   <table>
-                    <thead><tr><th>Symbol</th><th>Quantity</th><th>Average cost</th><th>Realized P&amp;L</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th>Symbol</th>
+                        <th>Quantity</th>
+                        <th>Average cost</th>
+                        <th>Realized P&amp;L</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {positions.length === 0 ? <tr><td colSpan={4} className={styles.emptyCell}>No transaction-derived positions.</td></tr> : positions.map((position) => (
-                        <tr key={position.symbol}>
-                          <td className={styles.symbol}>{position.symbol}</td>
-                          <td>{formatLedgerNumber(position.quantity)}</td>
-                          <td>{formatLedgerNumber(position.avgCost)}</td>
-                          <td className={position.realizedPnl < 0 ? styles.negative : styles.positive}>{formatLedgerNumber(position.realizedPnl)}</td>
+                      {positions.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className={styles.emptyCell}>
+                            No transaction-derived positions.
+                          </td>
                         </tr>
-                      ))}
+                      ) : (
+                        positions.map((position) => (
+                          <tr key={position.symbol}>
+                            <td className={styles.symbol}>{position.symbol}</td>
+                            <td>{formatLedgerNumber(position.quantity)}</td>
+                            <td>{formatLedgerNumber(position.avgCost)}</td>
+                            <td
+                              className={
+                                position.realizedPnl < 0 ? styles.negative : styles.positive
+                              }
+                            >
+                              {formatLedgerNumber(position.realizedPnl)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -275,39 +357,142 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
               {canWrite && (
                 <form className={styles.transactionForm} onSubmit={submitTransaction}>
                   <div className={styles.sectionHeading}>
-                    <div><h4>Add a transaction</h4><p>Manual record only; this does not submit a broker order.</p></div>
+                    <div>
+                      <h4>Add a transaction</h4>
+                      <p>Manual record only; this does not submit a broker order.</p>
+                    </div>
                   </div>
                   <div className={styles.formGrid}>
-                    <label>Side<select value={side} onChange={(event) => setSide(event.target.value as "BUY" | "SELL")}><option value="BUY">Buy</option><option value="SELL">Sell</option></select></label>
-                    <label>Symbol<input value={symbol} maxLength={12} onChange={(event) => setSymbol(event.target.value)} placeholder="AAPL" autoCapitalize="characters" /></label>
-                    <label>Quantity<input type="number" min="0.000001" max="1000000000" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-                    <label>Unit price<input type="number" min="0" max="1000000000" step="any" value={price} onChange={(event) => setPrice(event.target.value)} /></label>
-                    <label className={styles.timeField}>Transaction time<input type="datetime-local" value={executedAt} onChange={(event) => setExecutedAt(event.target.value)} /></label>
-                    <button type="submit" disabled={busy || !symbol || !quantity || !price}>Add transaction</button>
+                    <label>
+                      Side
+                      <select
+                        value={side}
+                        onChange={(event) => setSide(event.target.value as "BUY" | "SELL")}
+                      >
+                        <option value="BUY">Buy</option>
+                        <option value="SELL">Sell</option>
+                      </select>
+                    </label>
+                    <label>
+                      Symbol
+                      <input
+                        value={symbol}
+                        maxLength={12}
+                        onChange={(event) => setSymbol(event.target.value)}
+                        placeholder="AAPL"
+                        autoCapitalize="characters"
+                      />
+                    </label>
+                    <label>
+                      Quantity
+                      <input
+                        type="number"
+                        min="0.000001"
+                        max="1000000000"
+                        step="any"
+                        value={quantity}
+                        onChange={(event) => setQuantity(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Unit price
+                      <input
+                        type="number"
+                        min="0"
+                        max="1000000000"
+                        step="any"
+                        value={price}
+                        onChange={(event) => setPrice(event.target.value)}
+                      />
+                    </label>
+                    <label className={styles.timeField}>
+                      Transaction time
+                      <input
+                        type="datetime-local"
+                        value={executedAt}
+                        onChange={(event) => setExecutedAt(event.target.value)}
+                      />
+                    </label>
+                    <button type="submit" disabled={busy || !symbol || !quantity || !price}>
+                      Add transaction
+                    </button>
                   </div>
                 </form>
               )}
 
               <section className={styles.transactions} aria-label="Manual transactions">
                 <div className={styles.sectionHeading}>
-                  <div><h4>Transactions</h4><p>{transactions.length} manual {transactions.length === 1 ? "entry" : "entries"}</p></div>
+                  <div>
+                    <h4>Transactions</h4>
+                    <p>
+                      {transactions.length} manual {transactions.length === 1 ? "entry" : "entries"}
+                    </p>
+                  </div>
                 </div>
                 <div className={styles.tableWrap}>
                   <table>
-                    <thead><tr><th>Time (UTC)</th><th>Side</th><th>Symbol</th><th>Quantity</th><th>Unit price</th>{canWrite && <th><span className={styles.srOnly}>Actions</span></th>}</tr></thead>
+                    <thead>
+                      <tr>
+                        <th>Time (UTC)</th>
+                        <th>Side</th>
+                        <th>Symbol</th>
+                        <th>Quantity</th>
+                        <th>Unit price</th>
+                        {canWrite && (
+                          <th>
+                            <span className={styles.srOnly}>Actions</span>
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
                     <tbody>
-                      {transactions.length === 0 ? <tr><td colSpan={canWrite ? 6 : 5} className={styles.emptyCell}>No transactions recorded.</td></tr> : transactions.map((transaction) => (
-                        <tr key={transaction.id}>
-                          <td>{new Date(transaction.executed_at).toLocaleString(undefined, { timeZone: "UTC" })}</td>
-                          <td><span className={transaction.side === "BUY" ? styles.buy : styles.sell}>{transaction.side}</span></td>
-                          <td className={styles.symbol}>{transaction.symbol}</td>
-                          <td>{formatLedgerNumber(transaction.quantity)}</td>
-                          <td>{formatLedgerNumber(transaction.price)}</td>
-                          {canWrite && <td><button type="button" className={styles.removeButton} disabled={busy} onClick={() => void runMutation(async (signal) => {
-                            await host.actions.invoke("portfolio.transaction.delete", { portfolioId: selected.id, transactionId: transaction.id }, { signal });
-                          })}>Remove</button></td>}
+                      {transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={canWrite ? 6 : 5} className={styles.emptyCell}>
+                            No transactions recorded.
+                          </td>
                         </tr>
-                      ))}
+                      ) : (
+                        transactions.map((transaction) => (
+                          <tr key={transaction.id}>
+                            <td>
+                              {new Date(transaction.executed_at).toLocaleString(undefined, {
+                                timeZone: "UTC",
+                              })}
+                            </td>
+                            <td>
+                              <span
+                                className={transaction.side === "BUY" ? styles.buy : styles.sell}
+                              >
+                                {transaction.side}
+                              </span>
+                            </td>
+                            <td className={styles.symbol}>{transaction.symbol}</td>
+                            <td>{formatLedgerNumber(transaction.quantity)}</td>
+                            <td>{formatLedgerNumber(transaction.price)}</td>
+                            {canWrite && (
+                              <td>
+                                <button
+                                  type="button"
+                                  className={styles.removeButton}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void runMutation(async (signal) => {
+                                      await host.actions.invoke(
+                                        "portfolio.transaction.delete",
+                                        { portfolioId: selected.id, transactionId: transaction.id },
+                                        { signal },
+                                      );
+                                    })
+                                  }
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

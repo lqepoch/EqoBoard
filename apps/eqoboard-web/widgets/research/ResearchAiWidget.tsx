@@ -12,16 +12,29 @@ export type ResearchAiConfigV1 = Readonly<{ schemaVersion: 1 }>;
 
 type ResearchAiActionMap = Pick<NativeActionMap, "research.ai">;
 
-export function ResearchAiWidget({ host }: WidgetProps<ResearchAiConfigV1, WidgetOperationMap, ResearchAiActionMap>) {
+export function ResearchAiWidget({
+  host,
+}: WidgetProps<ResearchAiConfigV1, WidgetOperationMap, ResearchAiActionMap>) {
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [answer, setAnswer] = useState<Readonly<{ text: string; generatedAt: string; provider: string }> | null>(null);
+  const [answer, setAnswer] = useState<Readonly<{
+    text: string;
+    generatedAt: string;
+    provider: string;
+  }> | null>(null);
   const allowed = host.auth.authenticated && host.auth.permissions.includes("research:ai");
 
   async function ask(): Promise<void> {
     const text = prompt.trim();
-    if (!allowed || busy || text.length === 0 || text.length > 4_000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text)) return;
+    if (
+      !allowed ||
+      busy ||
+      text.length === 0 ||
+      text.length > 4_000 ||
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text)
+    )
+      return;
     const lifecycle = host.lifecycle.getSnapshot();
     if (lifecycle.phase !== "active" || lifecycle.signal.aborted) return;
     const controller = new AbortController();
@@ -30,9 +43,13 @@ export function ResearchAiWidget({ host }: WidgetProps<ResearchAiConfigV1, Widge
     setBusy(true);
     setMessage("");
     try {
-      const result = await host.actions.invoke("research.ai", {
-        messages: [{ role: "user", content: text }],
-      }, { signal: controller.signal });
+      const result = await host.actions.invoke(
+        "research.ai",
+        {
+          messages: [{ role: "user", content: text }],
+        },
+        { signal: controller.signal },
+      );
       const parsed = parseResearchAiResponse(result);
       if (!parsed) {
         setMessage("The AI service returned an invalid response.");
@@ -51,9 +68,14 @@ export function ResearchAiWidget({ host }: WidgetProps<ResearchAiConfigV1, Widge
   return (
     <section className={styles.widget} aria-label="AI research assistant">
       <header className={styles.header}>
-        <div><h2>AI research assistant</h2><p>Generated analysis is not a provider observation or an investment instruction.</p></div>
+        <div>
+          <h2>AI research assistant</h2>
+          <p>Generated analysis is not a provider observation or an investment instruction.</p>
+        </div>
       </header>
-      {!allowed ? <p className={styles.empty}>This view requires the research:ai permission.</p> : null}
+      {!allowed ? (
+        <p className={styles.empty}>This view requires the research:ai permission.</p>
+      ) : null}
       <label className={styles.control}>
         <span>Prompt</span>
         <textarea
@@ -66,15 +88,27 @@ export function ResearchAiWidget({ host }: WidgetProps<ResearchAiConfigV1, Widge
         />
       </label>
       <div className={styles.form}>
-        <button type="button" onClick={() => void ask()} disabled={!allowed || busy || prompt.trim().length === 0}>
+        <button
+          type="button"
+          onClick={() => void ask()}
+          disabled={!allowed || busy || prompt.trim().length === 0}
+        >
           {busy ? "Generating…" : "Ask"}
         </button>
-        <span className={styles.notice}>The service does not receive market, account, or order data from this widget.</span>
+        <span className={styles.notice}>
+          The service does not receive market, account, or order data from this widget.
+        </span>
       </div>
-      {message ? <p className={styles.error} role="alert">{message}</p> : null}
+      {message ? (
+        <p className={styles.error} role="alert">
+          {message}
+        </p>
+      ) : null}
       {answer ? (
         <article className={styles.compareResult} aria-label="AI-generated response">
-          <p className={styles.notice}>AI-generated · {answer.provider} · {answer.generatedAt}</p>
+          <p className={styles.notice}>
+            AI-generated · {answer.provider} · {answer.generatedAt}
+          </p>
           <p className={styles.aiText}>{answer.text}</p>
         </article>
       ) : null}

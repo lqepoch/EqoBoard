@@ -20,9 +20,13 @@ const ROLE_PERMISSIONS: Readonly<Record<string, readonly Permission[]>> = Object
 
 export function allowlistedRoles(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((role): role is string =>
-    typeof role === "string" && Object.hasOwn(ROLE_PERMISSIONS, role),
-  ))];
+  return [
+    ...new Set(
+      value.filter(
+        (role): role is string => typeof role === "string" && Object.hasOwn(ROLE_PERMISSIONS, role),
+      ),
+    ),
+  ];
 }
 
 export function permissionsForRoles(roles: readonly string[]): Permission[] {

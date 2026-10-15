@@ -56,12 +56,17 @@ describe("native market store", () => {
   it("advances the instance-wide watermark for unknown Gateway event kinds", () => {
     const store = new MarketStore(() => 10_000);
     store.acceptBatch([quote({ local_sequence: 1 })], 10_000);
-    store.acceptBatch([{
-      kind: "future_gateway_event",
-      gateway_instance_id: "gateway-a",
-      connection_epoch: 1,
-      local_sequence: 3,
-    }], 12_000);
+    store.acceptBatch(
+      [
+        {
+          kind: "future_gateway_event",
+          gateway_instance_id: "gateway-a",
+          connection_epoch: 1,
+          local_sequence: 3,
+        },
+      ],
+      12_000,
+    );
     store.acceptBatch([quote({ local_sequence: 2, bid: 98 })], 13_000);
 
     const snapshot = store.getSnapshot();
@@ -72,25 +77,30 @@ describe("native market store", () => {
 
   it("clears one feed on epoch change and all old Gateway state on instance change", () => {
     const store = new MarketStore(() => 1_000);
-    store.acceptBatch([quote(), {
-      kind: "option_trade",
-      gateway_instance_id: "gateway-a",
-      connection_epoch: 4,
-      local_sequence: 2,
-      symbol: "SPY261218C00600000",
-      event_time: null,
-      received_at: "2026-10-15T02:00:00Z",
-      price: 1,
-      size: 1,
-      source_mode: "unknown",
-      source_label: "Unknown",
-      source_entitlement: "unknown",
-    }]);
+    store.acceptBatch([
+      quote(),
+      {
+        kind: "option_trade",
+        gateway_instance_id: "gateway-a",
+        connection_epoch: 4,
+        local_sequence: 2,
+        symbol: "SPY261218C00600000",
+        event_time: null,
+        received_at: "2026-10-15T02:00:00Z",
+        price: 1,
+        size: 1,
+        source_mode: "unknown",
+        source_label: "Unknown",
+        source_entitlement: "unknown",
+      },
+    ]);
     store.acceptBatch([quote({ connection_epoch: 2, local_sequence: 3 })]);
     expect(store.getSnapshot().stockQuotes.SPY?.connection_epoch).toBe(2);
     expect(store.getSnapshot().optionTrades).toHaveLength(1);
 
-    store.acceptBatch([quote({ gateway_instance_id: "gateway-b", local_sequence: 1, connection_epoch: 1 })]);
+    store.acceptBatch([
+      quote({ gateway_instance_id: "gateway-b", local_sequence: 1, connection_epoch: 1 }),
+    ]);
     const snapshot = store.getSnapshot();
     expect(snapshot.gatewayInstanceId).toBe("gateway-b");
     expect(snapshot.lastSequence).toBe(1);
@@ -101,12 +111,26 @@ describe("native market store", () => {
   it("fences stale lease acknowledgements and reports cap omissions", () => {
     let now = 5_000;
     const store = new MarketStore(() => now);
-    const targetKey = JSON.stringify(Array.from({ length: 16 }, (_, index) => `SPY261218C${String(index + 1).padStart(8, "0")}`));
+    const targetKey = JSON.stringify(
+      Array.from({ length: 16 }, (_, index) => `SPY261218C${String(index + 1).padStart(8, "0")}`),
+    );
     store.setLeaseTargets("options", 22, 16, targetKey);
-    const ack = { active: 16, max: 16, expires_in_seconds: 90, generation: 2, state: "lease_active" };
+    const ack = {
+      active: 16,
+      max: 16,
+      expires_in_seconds: 90,
+      generation: 2,
+      state: "lease_active",
+    };
     store.setLeaseAck("options", 2, 16, ack, targetKey);
     now += 1_000;
-    store.setLeaseAck("options", 1, 22, { active: 22, max: 22, expires_in_seconds: 90, generation: 1, state: "lease_active" }, targetKey);
+    store.setLeaseAck(
+      "options",
+      1,
+      22,
+      { active: 22, max: 22, expires_in_seconds: 90, generation: 1, state: "lease_active" },
+      targetKey,
+    );
     const lease = store.getSnapshot().leases.options;
     expect(lease.generation).toBe(2);
     expect(lease.acknowledgedAt).toBe(5_000);
@@ -121,7 +145,13 @@ describe("native market store", () => {
     const store = new MarketStore(() => 5_000);
     store.setLeaseTargets("stocks", 2, 2, "target-a");
     store.setLeaseTargets("stocks", 1, 1, "target-b");
-    store.setLeaseAck("stocks", 0, 1, { active: 1, max: 1_000, expires_in_seconds: 90 }, "target-a");
+    store.setLeaseAck(
+      "stocks",
+      0,
+      1,
+      { active: 1, max: 1_000, expires_in_seconds: 90 },
+      "target-a",
+    );
 
     const lease = store.getSnapshot().leases.stocks;
     expect(lease.acknowledgedAt).toBeNull();

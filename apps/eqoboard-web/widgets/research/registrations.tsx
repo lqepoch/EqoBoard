@@ -4,11 +4,21 @@ import type { NativeActionMap, NativeDataOperationMap } from "@/features/data/op
 import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
 import type { WidgetOperationMap } from "@/widgets/sdk/data";
 import type { ResearchDataOperationMap } from "@/features/research/data";
-import { RESEARCH_VIEW_DEFINITIONS, createDefaultResearchViewConfig, parseResearchViewConfig, type ResearchViewConfigV1, type ResearchViewId } from "./ResearchViews";
+import {
+  RESEARCH_VIEW_DEFINITIONS,
+  createDefaultResearchViewConfig,
+  parseResearchViewConfig,
+  type ResearchViewConfigV1,
+  type ResearchViewId,
+} from "./ResearchViews";
 import { ResearchViewWidget } from "./ResearchViews";
 import { ResearchAiWidget, type ResearchAiConfigV1 } from "./ResearchAiWidget";
 import { SavedQueriesWidget, type SavedQueriesConfigV1 } from "./SavedQueriesWidget";
-import { emptyResearchQueryConfig, parseResearchQueryConfig, RESEARCH_QUERY_CONFIG_SCHEMA_ID } from "@/features/research/query-config";
+import {
+  emptyResearchQueryConfig,
+  parseResearchQueryConfig,
+  RESEARCH_QUERY_CONFIG_SCHEMA_ID,
+} from "@/features/research/query-config";
 import { YfinanceDailyWidget } from "./YfinanceDailyWidget";
 import {
   DEFAULT_YFINANCE_RESEARCH_CONFIG,
@@ -21,7 +31,10 @@ import {
   type RegisteredPredictionConfigV1,
 } from "@/features/research/predictions";
 import { RegisteredPredictionsWidget } from "./RegisteredPredictionsWidget";
-import { EngineOfflinePreviewWidget, type EngineOfflinePreviewConfigV1 } from "./EngineOfflinePreviewWidget";
+import {
+  EngineOfflinePreviewWidget,
+  type EngineOfflinePreviewConfigV1,
+} from "./EngineOfflinePreviewWidget";
 import { RecapWidget, type ResearchRecapConfigV1 } from "./RecapWidget";
 
 const SOURCE_REPOSITORY = "https://github.com/lqepoch/EqoBoard";
@@ -42,28 +55,47 @@ function provenance(id: string, sourcePath: string) {
 }
 
 function symbolInput() {
-  return Object.freeze([{ name: "symbol" as const, kind: "symbol" as const, source: "symbol-binding" as const, required: true as const }]);
+  return Object.freeze([
+    {
+      name: "symbol" as const,
+      kind: "symbol" as const,
+      source: "symbol-binding" as const,
+      required: true as const,
+    },
+  ]);
 }
 
-function exactDataRecord(value: unknown, fields: readonly string[]): Record<string, unknown> | null {
+function exactDataRecord(
+  value: unknown,
+  fields: readonly string[],
+): Record<string, unknown> | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
     const keys = Reflect.ownKeys(value);
-    if (keys.length !== fields.length || keys.some((key) => typeof key !== "string" || !fields.includes(key))) return null;
+    if (
+      keys.length !== fields.length ||
+      keys.some((key) => typeof key !== "string" || !fields.includes(key))
+    )
+      return null;
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (keys.some((key) => {
-      const descriptor = descriptors[key as string];
-      return !descriptor?.enumerable || !("value" in descriptor);
-    })) return null;
+    if (
+      keys.some((key) => {
+        const descriptor = descriptors[key as string];
+        return !descriptor?.enumerable || !("value" in descriptor);
+      })
+    )
+      return null;
     return value as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
-function parseSchemaVersionConfig(value: unknown):
+function parseSchemaVersionConfig(
+  value: unknown,
+):
   | Readonly<{ ok: true; value: Readonly<{ schemaVersion: 1 }> }>
   | Readonly<{ ok: false; code: "config-invalid" }> {
   const record = exactDataRecord(value, ["schemaVersion"]);
@@ -71,7 +103,12 @@ function parseSchemaVersionConfig(value: unknown):
   return { ok: true, value: Object.freeze({ schemaVersion: 1 }) };
 }
 
-function createViewManifest(view: ResearchViewId, title: string, description: string, withSymbol: boolean): WidgetManifestV1 {
+function createViewManifest(
+  view: ResearchViewId,
+  title: string,
+  description: string,
+  withSymbol: boolean,
+): WidgetManifestV1 {
   const id = `eqoboard.research.${view}`;
   return {
     manifestVersion: 1,
@@ -93,10 +130,21 @@ function createViewManifest(view: ResearchViewId, title: string, description: st
   };
 }
 
-function createViewRegistration(view: ResearchViewId): WidgetRegistration<ResearchViewConfigV1, ResearchDataOperationMap, WidgetNoActionMap> {
+function createViewRegistration(
+  view: ResearchViewId,
+): WidgetRegistration<ResearchViewConfigV1, ResearchDataOperationMap, WidgetNoActionMap> {
   const definition = RESEARCH_VIEW_DEFINITIONS.find((entry) => entry.id === view)!;
-  const withSymbol = view === "news" || view === "earnings-calendar" || view === "earnings-history" || view === "insider";
-  const manifest = createViewManifest(view, definition.title, `${definition.title} observations from bounded, same-origin research reads.`, withSymbol);
+  const withSymbol =
+    view === "news" ||
+    view === "earnings-calendar" ||
+    view === "earnings-history" ||
+    view === "insider";
+  const manifest = createViewManifest(
+    view,
+    definition.title,
+    `${definition.title} observations from bounded, same-origin research reads.`,
+    withSymbol,
+  );
   return {
     manifest,
     allowedReadOperations: [definition.operation],
@@ -104,7 +152,10 @@ function createViewRegistration(view: ResearchViewId): WidgetRegistration<Resear
     Component: (props) => <ResearchViewWidget {...props} definition={definition} />,
     parseConfig: (value) => parseResearchViewConfig(view, value),
     createDefaultConfig: () => createDefaultResearchViewConfig(view),
-    provenance: provenance(manifest.provenanceId, "apps/eqoboard-web/widgets/research/ResearchViews.tsx"),
+    provenance: provenance(
+      manifest.provenanceId,
+      "apps/eqoboard-web/widgets/research/ResearchViews.tsx",
+    ),
   };
 }
 
@@ -115,7 +166,8 @@ const savedQueriesManifest: WidgetManifestV1 = {
   id: savedQueriesId,
   version: "1.0.0",
   title: "Saved research queries",
-  description: "Persist bounded native view filters as workspace widget configuration and compare their current observations.",
+  description:
+    "Persist bounded native view filters as workspace widget configuration and compare their current observations.",
   category: "research",
   rendererId: `${savedQueriesId}.renderer.v1`,
   configSchemaId: RESEARCH_QUERY_CONFIG_SCHEMA_ID,
@@ -129,12 +181,23 @@ const savedQueriesManifest: WidgetManifestV1 = {
 };
 
 const SAVED_QUERY_OPERATIONS = [
-  "research.news", "research.macro", "research.economicCalendar", "research.earningsCalendar",
-  "research.earningsHistory", "research.insider", "research.screener", "research.heatmap",
-  "research.crypto", "research.cryptoGlobal",
+  "research.news",
+  "research.macro",
+  "research.economicCalendar",
+  "research.earningsCalendar",
+  "research.earningsHistory",
+  "research.insider",
+  "research.screener",
+  "research.heatmap",
+  "research.crypto",
+  "research.cryptoGlobal",
 ] as const satisfies readonly (keyof ResearchDataOperationMap)[];
 
-const savedQueriesRegistration: WidgetRegistration<SavedQueriesConfigV1, ResearchDataOperationMap, WidgetNoActionMap> = {
+const savedQueriesRegistration: WidgetRegistration<
+  SavedQueriesConfigV1,
+  ResearchDataOperationMap,
+  WidgetNoActionMap
+> = {
   manifest: savedQueriesManifest,
   allowedReadOperations: SAVED_QUERY_OPERATIONS,
   allowedActions: [],
@@ -144,7 +207,10 @@ const savedQueriesRegistration: WidgetRegistration<SavedQueriesConfigV1, Researc
     return parsed.ok ? parsed : { ok: false, code: "config-invalid" };
   },
   createDefaultConfig: emptyResearchQueryConfig,
-  provenance: provenance(savedQueriesManifest.provenanceId, "apps/eqoboard-web/widgets/research/SavedQueriesWidget.tsx"),
+  provenance: provenance(
+    savedQueriesManifest.provenanceId,
+    "apps/eqoboard-web/widgets/research/SavedQueriesWidget.tsx",
+  ),
 };
 
 const recapId = "eqoboard.research.recap";
@@ -154,27 +220,41 @@ const recapManifest: WidgetManifestV1 = {
   id: recapId,
   version: "1.0.0",
   title: "Market recap",
-  description: "A bounded, partially covered view of macro, TradingView listing metadata, Gateway SIP observations, and source-linked headlines.",
+  description:
+    "A bounded, partially covered view of macro, TradingView listing metadata, Gateway SIP observations, and source-linked headlines.",
   category: "research",
   rendererId: `${recapId}.renderer.v1`,
   configSchemaId: `${recapId}.config.v1`,
   defaultSize: { w: 8, h: 8, minW: 5, minH: 5, maxW: 12, maxH: 12 },
   inputs: [],
   requiredPermissions: ["research:read", "market:read"],
-  refresh: { mode: "poll", minIntervalMs: 15_000, maxRequestsPerMinute: 4, maxConcurrentRequests: 1, whenHidden: "pause" },
+  refresh: {
+    mode: "poll",
+    minIntervalMs: 15_000,
+    maxRequestsPerMinute: 4,
+    maxConcurrentRequests: 1,
+    whenHidden: "pause",
+  },
   symbolBinding: "unsupported",
   provenanceId: `${recapId}.provenance.v1`,
   provenancePolicy: "surface-response-evidence",
 };
 
-const recapRegistration: WidgetRegistration<ResearchRecapConfigV1, Pick<ResearchDataOperationMap, "research.recap">, WidgetNoActionMap> = {
+const recapRegistration: WidgetRegistration<
+  ResearchRecapConfigV1,
+  Pick<ResearchDataOperationMap, "research.recap">,
+  WidgetNoActionMap
+> = {
   manifest: recapManifest,
   allowedReadOperations: ["research.recap"],
   allowedActions: [],
   Component: RecapWidget,
   parseConfig: parseSchemaVersionConfig,
   createDefaultConfig: () => ({ schemaVersion: 1 }),
-  provenance: provenance(recapManifest.provenanceId, "apps/eqoboard-web/widgets/research/RecapWidget.tsx"),
+  provenance: provenance(
+    recapManifest.provenanceId,
+    "apps/eqoboard-web/widgets/research/RecapWidget.tsx",
+  ),
 };
 
 const aiId = "eqoboard.research.ai-assistant";
@@ -197,7 +277,9 @@ const aiManifest: WidgetManifestV1 = {
   provenancePolicy: "no-market-data",
 };
 
-function parseAiConfig(value: unknown):
+function parseAiConfig(
+  value: unknown,
+):
   | Readonly<{ ok: true; value: ResearchAiConfigV1 }>
   | Readonly<{ ok: false; code: "config-invalid" }> {
   return parseSchemaVersionConfig(value);
@@ -205,14 +287,21 @@ function parseAiConfig(value: unknown):
 
 type ResearchAiActionMap = Pick<NativeActionMap, "research.ai">;
 
-const aiRegistration: WidgetRegistration<ResearchAiConfigV1, WidgetOperationMap, ResearchAiActionMap> = {
+const aiRegistration: WidgetRegistration<
+  ResearchAiConfigV1,
+  WidgetOperationMap,
+  ResearchAiActionMap
+> = {
   manifest: aiManifest,
   allowedReadOperations: [],
   allowedActions: ["research.ai"],
   Component: ResearchAiWidget,
   parseConfig: parseAiConfig,
   createDefaultConfig: () => ({ schemaVersion: 1 }),
-  provenance: provenance(aiManifest.provenanceId, "apps/eqoboard-web/widgets/research/ResearchAiWidget.tsx"),
+  provenance: provenance(
+    aiManifest.provenanceId,
+    "apps/eqoboard-web/widgets/research/ResearchAiWidget.tsx",
+  ),
 };
 
 const yahooDailyId = "eqoboard.research.daily-history";
@@ -238,13 +327,20 @@ const yahooDailyManifest: WidgetManifestV1 = {
 };
 
 type YahooDailyOperationMap = Pick<NativeDataOperationMap, "research.yahoo.daily">;
-const yahooDailyRegistration: WidgetRegistration<YfinanceResearchConfigV1, YahooDailyOperationMap, WidgetNoActionMap> = {
+const yahooDailyRegistration: WidgetRegistration<
+  YfinanceResearchConfigV1,
+  YahooDailyOperationMap,
+  WidgetNoActionMap
+> = {
   manifest: yahooDailyManifest,
   allowedReadOperations: ["research.yahoo.daily"],
   allowedActions: [],
   Component: YfinanceDailyWidget,
   parseConfig: parseYfinanceResearchConfig,
-  createDefaultConfig: () => ({ ...DEFAULT_YFINANCE_RESEARCH_CONFIG, indicators: [...DEFAULT_YFINANCE_RESEARCH_CONFIG.indicators] }),
+  createDefaultConfig: () => ({
+    ...DEFAULT_YFINANCE_RESEARCH_CONFIG,
+    indicators: [...DEFAULT_YFINANCE_RESEARCH_CONFIG.indicators],
+  }),
   provenance: Object.freeze({
     provenanceId: yahooDailyManifest.provenanceId,
     origin: "adapted-upstream",
@@ -278,14 +374,21 @@ const predictionManifest: WidgetManifestV1 = {
 };
 
 type PredictionOperationMap = Pick<NativeDataOperationMap, "research.predictions">;
-const predictionRegistration: WidgetRegistration<RegisteredPredictionConfigV1, PredictionOperationMap, WidgetNoActionMap> = {
+const predictionRegistration: WidgetRegistration<
+  RegisteredPredictionConfigV1,
+  PredictionOperationMap,
+  WidgetNoActionMap
+> = {
   manifest: predictionManifest,
   allowedReadOperations: ["research.predictions"],
   allowedActions: [],
   Component: RegisteredPredictionsWidget,
   parseConfig: parseRegisteredPredictionConfig,
   createDefaultConfig: () => ({ ...DEFAULT_REGISTERED_PREDICTION_CONFIG }),
-  provenance: provenance(predictionManifest.provenanceId, "apps/eqoboard-web/widgets/research/RegisteredPredictionsWidget.tsx"),
+  provenance: provenance(
+    predictionManifest.provenanceId,
+    "apps/eqoboard-web/widgets/research/RegisteredPredictionsWidget.tsx",
+  ),
 };
 
 const enginePreviewId = "eqoboard.research.engine-offline-preview";
@@ -309,14 +412,21 @@ const enginePreviewManifest: WidgetManifestV1 = {
 };
 
 type EngineReadOperationMap = Pick<NativeDataOperationMap, "engine.status" | "engine.preview">;
-const enginePreviewRegistration: WidgetRegistration<EngineOfflinePreviewConfigV1, EngineReadOperationMap, WidgetNoActionMap> = {
+const enginePreviewRegistration: WidgetRegistration<
+  EngineOfflinePreviewConfigV1,
+  EngineReadOperationMap,
+  WidgetNoActionMap
+> = {
   manifest: enginePreviewManifest,
   allowedReadOperations: ["engine.status", "engine.preview"],
   allowedActions: [],
   Component: EngineOfflinePreviewWidget,
   parseConfig: parseSchemaVersionConfig,
   createDefaultConfig: () => ({ schemaVersion: 1 }),
-  provenance: provenance(enginePreviewManifest.provenanceId, "apps/eqoboard-web/widgets/research/EngineOfflinePreviewWidget.tsx"),
+  provenance: provenance(
+    enginePreviewManifest.provenanceId,
+    "apps/eqoboard-web/widgets/research/EngineOfflinePreviewWidget.tsx",
+  ),
 };
 
 /** Static, audited first-party research built-ins. */

@@ -42,10 +42,17 @@ describe("widget resolved inputs", () => {
       symbol: "SPY",
       watchlist: ["SPY", "QQQ"],
     });
-    expect(resolveWidgetInputs(manifest, {
-      ...instance,
-      symbolBinding: { mode: "fixed", symbol: "BRK.B" },
-    }, "SPY", ["SPY"])).toEqual({
+    expect(
+      resolveWidgetInputs(
+        manifest,
+        {
+          ...instance,
+          symbolBinding: { mode: "fixed", symbol: "BRK.B" },
+        },
+        "SPY",
+        ["SPY"],
+      ),
+    ).toEqual({
       symbol: "BRK.B",
       watchlist: ["SPY"],
     });
@@ -92,31 +99,48 @@ describe("per-registration host capability scope", () => {
     });
     const signal = new AbortController().signal;
 
-    await expect(scoped.data.read("safe.read", { query: "SPY" }, { signal })).resolves.toBe("read:safe.read");
-    await expect(scoped.actions.invoke("research.ai", { prompt: "summary" }, { signal }))
-      .resolves.toBe("action:research.ai");
+    await expect(scoped.data.read("safe.read", { query: "SPY" }, { signal })).resolves.toBe(
+      "read:safe.read",
+    );
+    await expect(
+      scoped.actions.invoke("research.ai", { prompt: "summary" }, { signal }),
+    ).resolves.toBe("action:research.ai");
     expect(readDispatch).toHaveBeenCalledTimes(1);
     expect(actionDispatch).toHaveBeenCalledTimes(1);
     expect(scoped.market.getSnapshot()).toBe("snapshot");
 
-    await expect((scoped.data.read as unknown as (id: string, input: unknown, options: { signal: AbortSignal }) => Promise<unknown>)(
-      "blocked.read", {}, { signal },
-    )).rejects.toMatchObject({ code: "request-failed" });
-    await expect((scoped.actions.invoke as unknown as (id: string, input: unknown, options: { signal: AbortSignal }) => Promise<unknown>)(
-      "portfolio.delete", { id: 1 }, { signal },
-    )).rejects.toMatchObject({ code: "request-failed" });
+    await expect(
+      (
+        scoped.data.read as unknown as (
+          id: string,
+          input: unknown,
+          options: { signal: AbortSignal },
+        ) => Promise<unknown>
+      )("blocked.read", {}, { signal }),
+    ).rejects.toMatchObject({ code: "request-failed" });
+    await expect(
+      (
+        scoped.actions.invoke as unknown as (
+          id: string,
+          input: unknown,
+          options: { signal: AbortSignal },
+        ) => Promise<unknown>
+      )("portfolio.delete", { id: 1 }, { signal }),
+    ).rejects.toMatchObject({ code: "request-failed" });
     expect(readDispatch).toHaveBeenCalledTimes(1);
     expect(actionDispatch).toHaveBeenCalledTimes(1);
 
     let deniedRefresh: WidgetScheduledReadState<string> | undefined;
-    const unsubscribe = (scoped.refresh.observe as unknown as (
-      id: string,
-      input: unknown,
-      options: Readonly<{ refreshIntervalMs: number }>,
-      listener: (state: WidgetScheduledReadState<string>) => void,
-    ) => () => void)(
-      "blocked.read", {}, { refreshIntervalMs: 1_000 }, (state) => { deniedRefresh = state; },
-    );
+    const unsubscribe = (
+      scoped.refresh.observe as unknown as (
+        id: string,
+        input: unknown,
+        options: Readonly<{ refreshIntervalMs: number }>,
+        listener: (state: WidgetScheduledReadState<string>) => void,
+      ) => () => void
+    )("blocked.read", {}, { refreshIntervalMs: 1_000 }, (state) => {
+      deniedRefresh = state;
+    });
     unsubscribe();
     expect(deniedRefresh).toEqual({ status: "error", code: "request-failed" });
     expect(refreshDispatch).not.toHaveBeenCalled();
@@ -127,8 +151,9 @@ describe("per-registration host capability scope", () => {
     const base = {
       auth: { authenticated: true, permissions: [] },
       lifecycle: createWidgetLifecycleController(),
-      events: createWidgetEventBus({ onCommand: () => ({ accepted: true }) })
-        .forInstance("80e310b0-4a9e-4b0b-b500-01a1a5d06e0d"),
+      events: createWidgetEventBus({ onCommand: () => ({ accepted: true }) }).forInstance(
+        "80e310b0-4a9e-4b0b-b500-01a1a5d06e0d",
+      ),
       data: { read: readDispatch },
       actions: { invoke: vi.fn() },
       refresh: { observe: vi.fn(() => () => undefined) },
@@ -137,15 +162,34 @@ describe("per-registration host capability scope", () => {
     } as unknown as WidgetHostContext<ScopedTestOperations, ScopedTestActions, string>;
     const malformedCapabilities = Object.defineProperty({}, "allowedReadOperations", {
       enumerable: true,
-      get() { throw new Error("must not run"); },
+      get() {
+        throw new Error("must not run");
+      },
     });
-    const scoped = scopeWidgetHostContext<ScopedTestOperations, ScopedTestActions, string, never, never>(
+    const scoped = scopeWidgetHostContext<
+      ScopedTestOperations,
+      ScopedTestActions,
+      string,
+      never,
+      never
+    >(
       base,
-      malformedCapabilities as unknown as WidgetHostCapabilities<ScopedTestOperations, ScopedTestActions, never, never>,
+      malformedCapabilities as unknown as WidgetHostCapabilities<
+        ScopedTestOperations,
+        ScopedTestActions,
+        never,
+        never
+      >,
     );
-    await expect((scoped.data.read as unknown as (id: string, input: unknown, options: { signal: AbortSignal }) => Promise<unknown>)(
-      "safe.read", { query: "SPY" }, { signal: new AbortController().signal },
-    )).rejects.toMatchObject({ code: "request-failed" });
+    await expect(
+      (
+        scoped.data.read as unknown as (
+          id: string,
+          input: unknown,
+          options: { signal: AbortSignal },
+        ) => Promise<unknown>
+      )("safe.read", { query: "SPY" }, { signal: new AbortController().signal }),
+    ).rejects.toMatchObject({ code: "request-failed" });
     expect(readDispatch).not.toHaveBeenCalled();
   });
 });

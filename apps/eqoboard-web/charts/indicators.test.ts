@@ -5,13 +5,21 @@ import type { ChartPlotBar } from "./types";
 function closeBars(closes: readonly number[], volumes?: readonly number[]): ChartPlotBar[] {
   return closes.map((close, index) => ({
     time: (1_720_000_000 + index * 60) as ChartPlotBar["time"],
-    open: close, high: close, low: close, close, volume: volumes?.[index] ?? 1, sourceRow: index,
+    open: close,
+    high: close,
+    low: close,
+    close,
+    volume: volumes?.[index] ?? 1,
+    sourceRow: index,
   }));
 }
 
 describe("chart indicators", () => {
   it("computes 20-row SMA and starts it at the twentieth observed bar", () => {
-    const values = calculateChartIndicators(closeBars(Array.from({ length: 21 }, (_, i) => i + 1)), ["SMA20"]);
+    const values = calculateChartIndicators(
+      closeBars(Array.from({ length: 21 }, (_, i) => i + 1)),
+      ["SMA20"],
+    );
     const sma = values.overlays.SMA20;
 
     expect(sma).toHaveLength(2);
@@ -21,8 +29,12 @@ describe("chart indicators", () => {
 
   it("preserves legacy Wilder RSI zero-loss fallback for flat/upward data", () => {
     const flat = calculateChartIndicators(closeBars(Array(16).fill(5)), ["RSI"]).panes.rsi;
-    const up = calculateChartIndicators(closeBars(Array.from({ length: 16 }, (_, i) => i + 1)), ["RSI"]).panes.rsi;
-    const down = calculateChartIndicators(closeBars(Array.from({ length: 16 }, (_, i) => 16 - i)), ["RSI"]).panes.rsi;
+    const up = calculateChartIndicators(closeBars(Array.from({ length: 16 }, (_, i) => i + 1)), [
+      "RSI",
+    ]).panes.rsi;
+    const down = calculateChartIndicators(closeBars(Array.from({ length: 16 }, (_, i) => 16 - i)), [
+      "RSI",
+    ]).panes.rsi;
 
     expect(flat?.[0]?.value).toBeCloseTo(100 - 100 / 101);
     expect(up?.[0]?.value).toBeCloseTo(100 - 100 / 101);
@@ -32,7 +44,13 @@ describe("chart indicators", () => {
   it("labels cumulative loaded-window VWAP semantics in its title contract and volume-weights points", () => {
     const rows = [
       { ...closeBars([10])[0]!, high: 12, low: 8, volume: 1 },
-      { ...closeBars([20])[0]!, time: (1_720_000_060) as ChartPlotBar["time"], high: 22, low: 18, volume: 3 },
+      {
+        ...closeBars([20])[0]!,
+        time: 1_720_000_060 as ChartPlotBar["time"],
+        high: 22,
+        low: 18,
+        volume: 3,
+      },
     ];
     const vwap = calculateChartIndicators(rows, ["VWAP"]).overlays.VWAP;
 
@@ -49,6 +67,8 @@ describe("chart indicators", () => {
     expect(macd?.histogram).toHaveLength(15);
     expect(macd?.histogram.every((point) => Number.isFinite(point.value))).toBe(true);
     expect(bands?.middle[0]?.value).toBe(109.5);
-    expect((bands?.upper[0]?.value ?? 0) - (bands?.middle[0]?.value ?? 0)).toBeCloseTo(Math.sqrt(33.25) * 2);
+    expect((bands?.upper[0]?.value ?? 0) - (bands?.middle[0]?.value ?? 0)).toBeCloseTo(
+      Math.sqrt(33.25) * 2,
+    );
   });
 });

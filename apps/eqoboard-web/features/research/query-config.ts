@@ -42,8 +42,22 @@ export const RESEARCH_FILTER_FIELDS = Object.freeze({
   "earnings-calendar": ["symbol", "source"] as const,
   "earnings-history": ["fiscalQuarterEnd", "reportedAt", "priceMoveSource"] as const,
   insider: ["filingDate", "transactionDate", "ownerName", "ownerTitle", "transactionCode"] as const,
-  "screener-us": ["symbol", "name", "sector", "exchange", "priceSource", "marketCapSource"] as const,
-  "screener-eu": ["symbol", "name", "sector", "exchange", "priceSource", "marketCapSource"] as const,
+  "screener-us": [
+    "symbol",
+    "name",
+    "sector",
+    "exchange",
+    "priceSource",
+    "marketCapSource",
+  ] as const,
+  "screener-eu": [
+    "symbol",
+    "name",
+    "sector",
+    "exchange",
+    "priceSource",
+    "marketCapSource",
+  ] as const,
   "heatmap-us": ["symbol", "name", "sector", "exchange", "priceSource", "marketCapSource"] as const,
   "heatmap-eu": ["symbol", "name", "sector", "exchange", "priceSource", "marketCapSource"] as const,
   crypto: ["symbol", "name", "id"] as const,
@@ -51,7 +65,7 @@ export const RESEARCH_FILTER_FIELDS = Object.freeze({
 } satisfies Record<ResearchViewId, readonly string[]>);
 
 export type ResearchFilterField = {
-  [View in ResearchViewId]: (typeof RESEARCH_FILTER_FIELDS)[View][number]
+  [View in ResearchViewId]: (typeof RESEARCH_FILTER_FIELDS)[View][number];
 }[ResearchViewId];
 
 export type ResearchFilterV1 = Readonly<{
@@ -76,7 +90,13 @@ export type ResearchQueryConfigV1 = Readonly<{
 
 export type ResearchQueryConfigError = Readonly<{
   path: string;
-  code: "invalid-shape" | "unknown-field" | "invalid-value" | "too-large" | "duplicate-id" | "invalid-reference";
+  code:
+    | "invalid-shape"
+    | "unknown-field"
+    | "invalid-value"
+    | "too-large"
+    | "duplicate-id"
+    | "invalid-reference";
 }>;
 
 export type ResearchQueryConfigResult =
@@ -94,8 +114,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(value).every((key) => keys.includes(key) && !FORBIDDEN_KEYS.has(key)) &&
-    keys.every((key) => Object.hasOwn(value, key));
+  return (
+    Object.keys(value).every((key) => keys.includes(key) && !FORBIDDEN_KEYS.has(key)) &&
+    keys.every((key) => Object.hasOwn(value, key))
+  );
 }
 
 function isViewId(value: unknown): value is ResearchViewId {
@@ -121,42 +143,71 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
     for (const key of Object.keys(input)) {
       if (FORBIDDEN_KEYS.has(key) || !allowed.has(key)) reject(`$.${key}`, "unknown-field");
     }
-    if (["schemaVersion", "queries", "selectedQueryId", "compareQueryIds"].some((key) => !Object.hasOwn(input, key))) {
+    if (
+      ["schemaVersion", "queries", "selectedQueryId", "compareQueryIds"].some(
+        (key) => !Object.hasOwn(input, key),
+      )
+    ) {
       reject("$", "invalid-shape");
     }
   }
-  if (input.schemaVersion !== RESEARCH_QUERY_CONFIG_VERSION) reject("$.schemaVersion", "invalid-value");
-  if (!Array.isArray(input.queries) || input.queries.length > RESEARCH_QUERY_LIMITS.maxSavedQueries) {
+  if (input.schemaVersion !== RESEARCH_QUERY_CONFIG_VERSION)
+    reject("$.schemaVersion", "invalid-value");
+  if (
+    !Array.isArray(input.queries) ||
+    input.queries.length > RESEARCH_QUERY_LIMITS.maxSavedQueries
+  ) {
     reject("$.queries", "too-large");
   }
-  if (!Array.isArray(input.compareQueryIds) || input.compareQueryIds.length > RESEARCH_QUERY_LIMITS.maxCompareQueries) {
+  if (
+    !Array.isArray(input.compareQueryIds) ||
+    input.compareQueryIds.length > RESEARCH_QUERY_LIMITS.maxCompareQueries
+  ) {
     reject("$.compareQueryIds", "too-large");
   }
-  if (input.selectedQueryId !== null && (typeof input.selectedQueryId !== "string" || !QUERY_ID.test(input.selectedQueryId))) {
+  if (
+    input.selectedQueryId !== null &&
+    (typeof input.selectedQueryId !== "string" || !QUERY_ID.test(input.selectedQueryId))
+  ) {
     reject("$.selectedQueryId", "invalid-value");
   }
 
   const queries: SavedResearchQueryV1[] = [];
-  if (Array.isArray(input.queries) && input.queries.length <= RESEARCH_QUERY_LIMITS.maxSavedQueries) {
+  if (
+    Array.isArray(input.queries) &&
+    input.queries.length <= RESEARCH_QUERY_LIMITS.maxSavedQueries
+  ) {
     input.queries.forEach((raw, index) => {
       const path = `$.queries[${index}]`;
       if (!isRecord(raw) || !hasExactKeys(raw, ["id", "name", "viewId", "filters"])) {
         reject(path, "invalid-shape");
         return;
       }
-      if (typeof raw.id !== "string" || !QUERY_ID.test(raw.id)) reject(`${path}.id`, "invalid-value");
-      if (typeof raw.name !== "string" || raw.name.trim() === "" || raw.name.trim() !== raw.name ||
-          raw.name.length > RESEARCH_QUERY_LIMITS.maxNameLength || CONTROL.test(raw.name)) {
+      if (typeof raw.id !== "string" || !QUERY_ID.test(raw.id))
+        reject(`${path}.id`, "invalid-value");
+      if (
+        typeof raw.name !== "string" ||
+        raw.name.trim() === "" ||
+        raw.name.trim() !== raw.name ||
+        raw.name.length > RESEARCH_QUERY_LIMITS.maxNameLength ||
+        CONTROL.test(raw.name)
+      ) {
         reject(`${path}.name`, "invalid-value");
       }
       if (!isViewId(raw.viewId)) reject(`${path}.viewId`, "invalid-value");
-      if (!Array.isArray(raw.filters) || raw.filters.length > RESEARCH_QUERY_LIMITS.maxFiltersPerQuery) {
+      if (
+        !Array.isArray(raw.filters) ||
+        raw.filters.length > RESEARCH_QUERY_LIMITS.maxFiltersPerQuery
+      ) {
         reject(`${path}.filters`, "too-large");
       }
 
       const viewId = isViewId(raw.viewId) ? raw.viewId : null;
       const filters: ResearchFilterV1[] = [];
-      if (Array.isArray(raw.filters) && raw.filters.length <= RESEARCH_QUERY_LIMITS.maxFiltersPerQuery) {
+      if (
+        Array.isArray(raw.filters) &&
+        raw.filters.length <= RESEARCH_QUERY_LIMITS.maxFiltersPerQuery
+      ) {
         const seenFields = new Set<string>();
         raw.filters.forEach((filter, filterIndex) => {
           const filterPath = `${path}.filters[${filterIndex}]`;
@@ -164,32 +215,55 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
             reject(filterPath, "invalid-shape");
             return;
           }
-          const fieldIsValid = typeof filter.field === "string" && viewId !== null &&
+          const fieldIsValid =
+            typeof filter.field === "string" &&
+            viewId !== null &&
             fieldsForView(viewId).includes(filter.field);
           if (!fieldIsValid) reject(`${filterPath}.field`, "invalid-value");
           if (filter.operator !== "contains" && filter.operator !== "equals") {
             reject(`${filterPath}.operator`, "invalid-value");
           }
-          if (typeof filter.value !== "string" || filter.value.trim() === "" ||
-              filter.value.length > RESEARCH_QUERY_LIMITS.maxFilterValueLength || CONTROL.test(filter.value)) {
+          if (
+            typeof filter.value !== "string" ||
+            filter.value.trim() === "" ||
+            filter.value.length > RESEARCH_QUERY_LIMITS.maxFilterValueLength ||
+            CONTROL.test(filter.value)
+          ) {
             reject(`${filterPath}.value`, "invalid-value");
           }
           if (typeof filter.field === "string") {
             if (seenFields.has(filter.field)) reject(`${filterPath}.field`, "invalid-value");
             seenFields.add(filter.field);
           }
-          if (fieldIsValid && (filter.operator === "contains" || filter.operator === "equals") &&
-              typeof filter.value === "string" && filter.value.trim() !== "" &&
-              filter.value.length <= RESEARCH_QUERY_LIMITS.maxFilterValueLength && !CONTROL.test(filter.value)) {
-            filters.push({ field: filter.field as ResearchFilterField, operator: filter.operator, value: filter.value });
+          if (
+            fieldIsValid &&
+            (filter.operator === "contains" || filter.operator === "equals") &&
+            typeof filter.value === "string" &&
+            filter.value.trim() !== "" &&
+            filter.value.length <= RESEARCH_QUERY_LIMITS.maxFilterValueLength &&
+            !CONTROL.test(filter.value)
+          ) {
+            filters.push({
+              field: filter.field as ResearchFilterField,
+              operator: filter.operator,
+              value: filter.value,
+            });
           }
         });
       }
-      if (typeof raw.id === "string" && QUERY_ID.test(raw.id) && typeof raw.name === "string" &&
-          raw.name.trim() === raw.name && raw.name.trim() !== "" &&
-          raw.name.length <= RESEARCH_QUERY_LIMITS.maxNameLength && !CONTROL.test(raw.name) &&
-          viewId !== null && Array.isArray(raw.filters) && raw.filters.length === filters.length &&
-          raw.filters.length <= RESEARCH_QUERY_LIMITS.maxFiltersPerQuery) {
+      if (
+        typeof raw.id === "string" &&
+        QUERY_ID.test(raw.id) &&
+        typeof raw.name === "string" &&
+        raw.name.trim() === raw.name &&
+        raw.name.trim() !== "" &&
+        raw.name.length <= RESEARCH_QUERY_LIMITS.maxNameLength &&
+        !CONTROL.test(raw.name) &&
+        viewId !== null &&
+        Array.isArray(raw.filters) &&
+        raw.filters.length === filters.length &&
+        raw.filters.length <= RESEARCH_QUERY_LIMITS.maxFiltersPerQuery
+      ) {
         queries.push({ id: raw.id.toLowerCase(), name: raw.name, viewId, filters });
       }
     });
@@ -200,12 +274,19 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
     if (ids.has(query.id)) reject("$.queries", "duplicate-id");
     ids.add(query.id);
   }
-  if (typeof input.selectedQueryId === "string" && QUERY_ID.test(input.selectedQueryId) && !ids.has(input.selectedQueryId.toLowerCase())) {
+  if (
+    typeof input.selectedQueryId === "string" &&
+    QUERY_ID.test(input.selectedQueryId) &&
+    !ids.has(input.selectedQueryId.toLowerCase())
+  ) {
     reject("$.selectedQueryId", "invalid-reference");
   }
 
   const compareQueryIds: string[] = [];
-  if (Array.isArray(input.compareQueryIds) && input.compareQueryIds.length <= RESEARCH_QUERY_LIMITS.maxCompareQueries) {
+  if (
+    Array.isArray(input.compareQueryIds) &&
+    input.compareQueryIds.length <= RESEARCH_QUERY_LIMITS.maxCompareQueries
+  ) {
     for (const [index, rawId] of input.compareQueryIds.entries()) {
       if (typeof rawId !== "string" || !QUERY_ID.test(rawId)) {
         reject(`$.compareQueryIds[${index}]`, "invalid-value");
@@ -216,14 +297,27 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
       else compareQueryIds.push(query.id);
     }
   }
-  if (new Set(compareQueryIds).size !== compareQueryIds.length) reject("$.compareQueryIds", "invalid-value");
-  const comparisonViews = compareQueryIds.map((id) => queries.find((query) => query.id === id)?.viewId);
-  if (comparisonViews.length > 1 && comparisonViews.some((viewId) => viewId !== comparisonViews[0])) {
+  if (new Set(compareQueryIds).size !== compareQueryIds.length)
+    reject("$.compareQueryIds", "invalid-value");
+  const comparisonViews = compareQueryIds.map(
+    (id) => queries.find((query) => query.id === id)?.viewId,
+  );
+  if (
+    comparisonViews.length > 1 &&
+    comparisonViews.some((viewId) => viewId !== comparisonViews[0])
+  ) {
     reject("$.compareQueryIds", "invalid-reference");
   }
   if (typeof input.selectedQueryId === "string" && QUERY_ID.test(input.selectedQueryId)) {
-    const selectedView = queries.find((query) => query.id === input.selectedQueryId!.toLowerCase())?.viewId;
-    if (selectedView && compareQueryIds.some((id) => queries.find((query) => query.id === id)?.viewId !== selectedView)) {
+    const selectedView = queries.find(
+      (query) => query.id === input.selectedQueryId!.toLowerCase(),
+    )?.viewId;
+    if (
+      selectedView &&
+      compareQueryIds.some(
+        (id) => queries.find((query) => query.id === id)?.viewId !== selectedView,
+      )
+    ) {
       reject("$.compareQueryIds", "invalid-reference");
     }
   }
@@ -232,17 +326,26 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
   const config: ResearchQueryConfigV1 = {
     schemaVersion: RESEARCH_QUERY_CONFIG_VERSION,
     queries,
-    selectedQueryId: typeof input.selectedQueryId === "string" ? input.selectedQueryId.toLowerCase() : null,
+    selectedQueryId:
+      typeof input.selectedQueryId === "string" ? input.selectedQueryId.toLowerCase() : null,
     compareQueryIds,
   };
-  if (new TextEncoder().encode(JSON.stringify(config)).byteLength > RESEARCH_QUERY_LIMITS.maxSerializedBytes) {
+  if (
+    new TextEncoder().encode(JSON.stringify(config)).byteLength >
+    RESEARCH_QUERY_LIMITS.maxSerializedBytes
+  ) {
     return { ok: false, errors: [{ path: "$", code: "too-large" }] };
   }
   return { ok: true, value: config };
 }
 
 export function emptyResearchQueryConfig(): ResearchQueryConfigV1 {
-  return { schemaVersion: RESEARCH_QUERY_CONFIG_VERSION, queries: [], selectedQueryId: null, compareQueryIds: [] };
+  return {
+    schemaVersion: RESEARCH_QUERY_CONFIG_VERSION,
+    queries: [],
+    selectedQueryId: null,
+    compareQueryIds: [],
+  };
 }
 
 /** Adds/replaces one saved query while enforcing the same bounds used by storage parsing. */
@@ -268,11 +371,13 @@ export function filterResearchRows<Row extends object>(
   rows: readonly Row[],
   filters: readonly ResearchFilterV1[],
 ): readonly Row[] {
-  return rows.filter((row) => filters.every((filter) => {
-    const raw = Reflect.get(row, filter.field) as unknown;
-    if (typeof raw !== "string") return false;
-    const actual = raw.toLocaleLowerCase("en-US");
-    const expected = filter.value.toLocaleLowerCase("en-US");
-    return filter.operator === "equals" ? actual === expected : actual.includes(expected);
-  }));
+  return rows.filter((row) =>
+    filters.every((filter) => {
+      const raw = Reflect.get(row, filter.field) as unknown;
+      if (typeof raw !== "string") return false;
+      const actual = raw.toLocaleLowerCase("en-US");
+      const expected = filter.value.toLocaleLowerCase("en-US");
+      return filter.operator === "equals" ? actual === expected : actual.includes(expected);
+    }),
+  );
 }

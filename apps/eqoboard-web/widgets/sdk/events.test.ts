@@ -11,18 +11,33 @@ describe("widget host event bus", () => {
     const listener = vi.fn();
     client.subscribe(listener);
 
-    expect(parseWidgetCommandIntent({ type: "active-symbol.select.v1", symbol: "SPY" }))
-      .not.toBeNull();
-    expect(client.dispatch({ type: "active-symbol.select.v1", symbol: "SPY" }))
-      .toEqual({ accepted: true });
-    expect(client.dispatch({ type: "active-symbol.select.v1", symbol: "spy" }))
-      .toEqual({ accepted: false, reason: "invalid-command" });
-    expect(client.dispatch({ type: "market.quote.v1", symbol: "SPY" } as never))
-      .toEqual({ accepted: false, reason: "invalid-command" });
-    expect(client.dispatch({ type: "active-symbol.select.v1", symbol: "QQQ", originInstanceId: "forged" } as never))
-      .toEqual({ accepted: false, reason: "invalid-command" });
+    expect(
+      parseWidgetCommandIntent({ type: "active-symbol.select.v1", symbol: "SPY" }),
+    ).not.toBeNull();
+    expect(client.dispatch({ type: "active-symbol.select.v1", symbol: "SPY" })).toEqual({
+      accepted: true,
+    });
+    expect(client.dispatch({ type: "active-symbol.select.v1", symbol: "spy" })).toEqual({
+      accepted: false,
+      reason: "invalid-command",
+    });
+    expect(client.dispatch({ type: "market.quote.v1", symbol: "SPY" } as never)).toEqual({
+      accepted: false,
+      reason: "invalid-command",
+    });
+    expect(
+      client.dispatch({
+        type: "active-symbol.select.v1",
+        symbol: "QQQ",
+        originInstanceId: "forged",
+      } as never),
+    ).toEqual({ accepted: false, reason: "invalid-command" });
     expect(onCommand).toHaveBeenCalledTimes(1);
-    expect(onCommand).toHaveBeenCalledWith({ type: "active-symbol.select.v1", symbol: "SPY", originInstanceId: instanceId });
+    expect(onCommand).toHaveBeenCalledWith({
+      type: "active-symbol.select.v1",
+      symbol: "SPY",
+      originInstanceId: instanceId,
+    });
     expect("publishActiveSymbol" in client).toBe(false);
 
     expect(bus.publishActiveSymbol("SPY", instanceId)).toBe(true);
@@ -37,11 +52,14 @@ describe("widget host event bus", () => {
   });
 
   it("fails closed when a command proxy throws during inspection", () => {
-    const hostile = new Proxy({}, {
-      getPrototypeOf() {
-        throw new Error("must not escape event validation");
+    const hostile = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error("must not escape event validation");
+        },
       },
-    });
+    );
     expect(parseWidgetCommandIntent(hostile)).toBeNull();
   });
 });

@@ -32,11 +32,21 @@ import {
   replaceWorkspaceInDocument,
 } from "../../workspace/transforms";
 import { parseWorkspaceDocument } from "../../workspace/schema";
-import { createWorkspaceClientRepository, type WorkspaceClientRepository, type WorkspaceClientSnapshot } from "./repository";
+import {
+  createWorkspaceClientRepository,
+  type WorkspaceClientRepository,
+  type WorkspaceClientSnapshot,
+} from "./repository";
 import type { WorkspaceRecoveryPoint } from "./backups";
 
 export type WorkspaceLoadStatus = "loading" | "ready" | "error";
-export type WorkspaceSyncStatus = "loading" | "saved" | "pending" | "saving" | "conflict" | "failed";
+export type WorkspaceSyncStatus =
+  | "loading"
+  | "saved"
+  | "pending"
+  | "saving"
+  | "conflict"
+  | "failed";
 
 export type WorkspaceStoreState = Readonly<{
   document: WorkspaceDocumentV1 | null;
@@ -65,13 +75,33 @@ export type WorkspaceStoreState = Readonly<{
   addWidget(workspaceId: string, tabId: string, manifestId: string): string | null;
   duplicateWidget(workspaceId: string, tabId: string, instanceId: string): string | null;
   removeWidget(workspaceId: string, tabId: string, instanceId: string): Promise<boolean>;
-  updateWidgetConfig(workspaceId: string, tabId: string, instanceId: string, nextConfig: unknown): boolean;
-  setSymbolBinding(workspaceId: string, tabId: string, instanceId: string, binding: WidgetInstanceV1["symbolBinding"]): boolean;
+  updateWidgetConfig(
+    workspaceId: string,
+    tabId: string,
+    instanceId: string,
+    nextConfig: unknown,
+  ): boolean;
+  setSymbolBinding(
+    workspaceId: string,
+    tabId: string,
+    instanceId: string,
+    binding: WidgetInstanceV1["symbolBinding"],
+  ): boolean;
   setActiveSymbol(workspaceId: string, symbol: string): boolean;
   setWatchlist(workspaceId: string, symbols: readonly string[]): boolean;
   commitGrid(workspaceId: string, tabId: string, layout: readonly GridPlacementV1[]): boolean;
-  moveWidget(workspaceId: string, tabId: string, instanceId: string, key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"): boolean;
-  resizeWidget(workspaceId: string, tabId: string, instanceId: string, key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"): boolean;
+  moveWidget(
+    workspaceId: string,
+    tabId: string,
+    instanceId: string,
+    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+  ): boolean;
+  resizeWidget(
+    workspaceId: string,
+    tabId: string,
+    instanceId: string,
+    key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+  ): boolean;
   maximizeWidget(workspaceId: string, tabId: string, instanceId: string | null): boolean;
   resetTab(workspaceId: string, tabId: string): Promise<boolean>;
   saveTemplate(workspaceId: string, name: string): boolean;
@@ -91,11 +121,13 @@ type CreateStoreOptions = Readonly<{
 }>;
 
 const SAVE_DEBOUNCE_MS = 250;
-const WORKSPACE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WORKSPACE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function validName(value: string): string | null {
   const trimmed = value.trim();
-  return trimmed.length > 0 && trimmed.length <= WORKSPACE_LIMITS.maxNameLength &&
+  return trimmed.length > 0 &&
+    trimmed.length <= WORKSPACE_LIMITS.maxNameLength &&
     !/[\u0000-\u001f\u007f]/u.test(trimmed)
     ? trimmed
     : null;
@@ -103,13 +135,17 @@ function validName(value: string): string | null {
 
 function validSymbol(value: string): string | null {
   const normalized = value.trim().toUpperCase();
-  return normalized.length > 0 && normalized.length <= WORKSPACE_LIMITS.maxSymbolLength &&
+  return normalized.length > 0 &&
+    normalized.length <= WORKSPACE_LIMITS.maxSymbolLength &&
     /^(?=.*[A-Z0-9])[A-Z0-9.\-^=&]{1,24}$/u.test(normalized)
     ? normalized
     : null;
 }
 
-function activeWorkspace(document: WorkspaceDocumentV1 | null, workspaceId: string): WorkspaceV1 | null {
+function activeWorkspace(
+  document: WorkspaceDocumentV1 | null,
+  workspaceId: string,
+): WorkspaceV1 | null {
   return document?.workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
 }
 
@@ -118,7 +154,10 @@ function activeTab(workspace: WorkspaceV1 | null, tabId: string): WorkspaceTabV1
 }
 
 function replaceTab(workspace: WorkspaceV1, tab: WorkspaceTabV1): WorkspaceV1 {
-  return { ...workspace, tabs: workspace.tabs.map((candidate) => candidate.id === tab.id ? tab : candidate) };
+  return {
+    ...workspace,
+    tabs: workspace.tabs.map((candidate) => (candidate.id === tab.id ? tab : candidate)),
+  };
 }
 
 function uniqueWorkspaceName(document: WorkspaceDocumentV1, requested: string): string {
@@ -133,12 +172,20 @@ function uniqueWorkspaceName(document: WorkspaceDocumentV1, requested: string): 
   return base;
 }
 
-function parseRemoteMessage(value: unknown): value is { type: "workspace.changed.v1"; workspaceId: string; revision: string } {
+function parseRemoteMessage(
+  value: unknown,
+): value is { type: "workspace.changed.v1"; workspaceId: string; revision: string } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  return Object.keys(record).length === 3 && record.type === "workspace.changed.v1" &&
-    typeof record.workspaceId === "string" && WORKSPACE_ID_PATTERN.test(record.workspaceId) &&
-    typeof record.revision === "string" && record.revision.length > 0 && record.revision.length <= 256;
+  return (
+    Object.keys(record).length === 3 &&
+    record.type === "workspace.changed.v1" &&
+    typeof record.workspaceId === "string" &&
+    WORKSPACE_ID_PATTERN.test(record.workspaceId) &&
+    typeof record.revision === "string" &&
+    record.revision.length > 0 &&
+    record.revision.length <= 256
+  );
 }
 
 /** Per-auth-snapshot Zustand store. The browser partition is cache-only; the BFF owns identity. */
@@ -181,18 +228,29 @@ export function createWorkspaceStore(
       return false;
     }
     mutationVersion += 1;
-    store.setState({ document: parsed.value, dirty: true, syncStatus: "pending", error: null, remoteConflict: null });
+    store.setState({
+      document: parsed.value,
+      dirty: true,
+      syncStatus: "pending",
+      error: null,
+      remoteConflict: null,
+    });
     scheduleSave();
     return true;
   }
 
-  async function backupWorkspaces(workspaces: readonly WorkspaceV1[], reason: "replace" | "reset" | "delete" | "import" | "restore"): Promise<boolean> {
+  async function backupWorkspaces(
+    workspaces: readonly WorkspaceV1[],
+    reason: "replace" | "reset" | "delete" | "import" | "restore",
+  ): Promise<boolean> {
     if (!repository.canWrite || disposed) return false;
     for (const workspace of workspaces) {
       try {
         await repository.backup(workspace, reason);
       } catch {
-        store.setState({ error: "The local recovery copy could not be written; the change was not applied." });
+        store.setState({
+          error: "The local recovery copy could not be written; the change was not applied.",
+        });
         return false;
       }
     }
@@ -204,12 +262,20 @@ export function createWorkspaceStore(
     const latest = await repository.load();
     if (disposed || sequence !== remoteReadSequence) return;
     if (!latest.ok) {
-      store.setState({ syncStatus: "conflict", error: "Another tab saved this workspace. Reload the latest version to continue." });
+      store.setState({
+        syncStatus: "conflict",
+        error: "Another tab saved this workspace. Reload the latest version to continue.",
+      });
       return;
     }
     const current = store.getState();
     if (current.dirty || current.syncStatus === "saving") {
-      store.setState({ remoteConflict: latest.value, syncStatus: "conflict", error: "This workspace changed in another tab. Keep your edits as a new workspace or reload." });
+      store.setState({
+        remoteConflict: latest.value,
+        syncStatus: "conflict",
+        error:
+          "This workspace changed in another tab. Keep your edits as a new workspace or reload.",
+      });
       return;
     }
     if (latest.value.document) {
@@ -240,11 +306,19 @@ export function createWorkspaceStore(
       const sequence = ++hydrateSequence;
       set({ loadStatus: "loading", syncStatus: "loading", error: null });
       if (!auth.authenticated) {
-        set({ loadStatus: "error", syncStatus: "failed", error: "Sign in to load or edit a workspace." });
+        set({
+          loadStatus: "error",
+          syncStatus: "failed",
+          error: "Sign in to load or edit a workspace.",
+        });
         return;
       }
       if (!repository.canRead) {
-        set({ loadStatus: "error", syncStatus: "failed", error: "This account cannot read workspace data." });
+        set({
+          loadStatus: "error",
+          syncStatus: "failed",
+          error: "This account cannot read workspace data.",
+        });
         return;
       }
       const result = await repository.load();
@@ -296,7 +370,8 @@ export function createWorkspaceStore(
     async saveNow() {
       clearSaveTimer();
       const current = get();
-      if (!current.dirty || !current.document || !current.etag || !repository.canWrite || disposed) return;
+      if (!current.dirty || !current.document || !current.etag || !repository.canWrite || disposed)
+        return;
       if (inFlight) {
         saveAgain = true;
         return;
@@ -329,7 +404,12 @@ export function createWorkspaceStore(
       if (disposed) return;
       if (!result.ok) {
         if (result.code === "conflict") {
-          set({ syncStatus: "conflict", remoteConflict: result.current, error: "Another tab saved a newer workspace version. Reload it or save your edits as a new workspace." });
+          set({
+            syncStatus: "conflict",
+            remoteConflict: result.current,
+            error:
+              "Another tab saved a newer workspace version. Reload it or save your edits as a new workspace.",
+          });
         } else {
           set({ syncStatus: "failed", error: result.message });
         }
@@ -344,13 +424,19 @@ export function createWorkspaceStore(
       set({
         revision: result.snapshot.revision,
         etag: result.snapshot.etag,
-        ...(unchanged ? { document: result.snapshot.document, dirty: false, syncStatus: "saved" as const } : { dirty: true, syncStatus: "pending" as const }),
+        ...(unchanged
+          ? { document: result.snapshot.document, dirty: false, syncStatus: "saved" as const }
+          : { dirty: true, syncStatus: "pending" as const }),
         error: now.error,
         remoteConflict: null,
       });
       const savedWorkspaceId = result.snapshot.document?.activeWorkspaceId;
       if (savedWorkspaceId && channel) {
-        channel.postMessage({ type: "workspace.changed.v1", workspaceId: savedWorkspaceId, revision: result.snapshot.revision });
+        channel.postMessage({
+          type: "workspace.changed.v1",
+          workspaceId: savedWorkspaceId,
+          revision: result.snapshot.revision,
+        });
       }
       if (!unchanged || saveAgain) {
         saveAgain = false;
@@ -362,21 +448,34 @@ export function createWorkspaceStore(
       const sequence = ++remoteReadSequence;
       const currentDocument = get().document;
       const startingVersion = mutationVersion;
-      const currentWorkspace = currentDocument && activeWorkspace(currentDocument, currentDocument.activeWorkspaceId);
+      const currentWorkspace =
+        currentDocument && activeWorkspace(currentDocument, currentDocument.activeWorkspaceId);
       if (currentWorkspace) {
         try {
           await repository.backup(currentWorkspace, "restore");
         } catch {
-          set({ error: "The local recovery copy could not be written; remote data was not loaded." });
+          set({
+            error: "The local recovery copy could not be written; remote data was not loaded.",
+          });
           return;
         }
       }
-      if (disposed || sequence !== remoteReadSequence || get().document !== currentDocument || mutationVersion !== startingVersion) {
+      if (
+        disposed ||
+        sequence !== remoteReadSequence ||
+        get().document !== currentDocument ||
+        mutationVersion !== startingVersion
+      ) {
         set({ error: "The workspace changed while reload was preparing; nothing was replaced." });
         return;
       }
       const latest = await repository.load();
-      if (disposed || sequence !== remoteReadSequence || get().document !== currentDocument || mutationVersion !== startingVersion) {
+      if (
+        disposed ||
+        sequence !== remoteReadSequence ||
+        get().document !== currentDocument ||
+        mutationVersion !== startingVersion
+      ) {
         set({ error: "The workspace changed while reload was in progress; nothing was replaced." });
         return;
       }
@@ -400,7 +499,8 @@ export function createWorkspaceStore(
     async saveLocalCopy() {
       if (!repository.canWrite || disposed) return false;
       const localDocument = get().document;
-      const localWorkspace = localDocument && activeWorkspace(localDocument, localDocument.activeWorkspaceId);
+      const localWorkspace =
+        localDocument && activeWorkspace(localDocument, localDocument.activeWorkspaceId);
       if (!localDocument || !localWorkspace) return false;
       const startingVersion = mutationVersion;
       try {
@@ -410,17 +510,24 @@ export function createWorkspaceStore(
         return false;
       }
       const latest = await repository.load();
-      if (disposed || startingVersion !== mutationVersion || get().document !== localDocument) return false;
+      if (disposed || startingVersion !== mutationVersion || get().document !== localDocument)
+        return false;
       if (!latest.ok) {
         set({ error: latest.message, syncStatus: "failed" });
         return false;
       }
       const baseDocument = latest.value.document ?? createEmptyWorkspaceDocument();
       if (baseDocument.workspaces.length >= WORKSPACE_LIMITS.maxWorkspaces) {
-        set({ error: "The workspace limit is full. Remove or export a workspace before saving this copy." });
+        set({
+          error:
+            "The workspace limit is full. Remove or export a workspace before saving this copy.",
+        });
         return false;
       }
-      const copy = cloneWorkspace(localWorkspace, uniqueWorkspaceName(baseDocument, `${localWorkspace.name} copy`));
+      const copy = cloneWorkspace(
+        localWorkspace,
+        uniqueWorkspaceName(baseDocument, `${localWorkspace.name} copy`),
+      );
       const merged: WorkspaceDocumentV1 = {
         ...baseDocument,
         activeWorkspaceId: copy.id,
@@ -439,7 +546,8 @@ export function createWorkspaceStore(
 
     selectWorkspace(workspaceId) {
       const document = get().document;
-      if (!document || !document.workspaces.some((workspace) => workspace.id === workspaceId)) return false;
+      if (!document || !document.workspaces.some((workspace) => workspace.id === workspaceId))
+        return false;
       return persist({ ...document, activeWorkspaceId: workspaceId });
     },
 
@@ -447,7 +555,10 @@ export function createWorkspaceStore(
       const document = get().document;
       if (!document || document.workspaces.length >= WORKSPACE_LIMITS.maxWorkspaces) return false;
       const source = activeWorkspace(document, document.activeWorkspaceId);
-      const context: WorkspaceMarketContextV1 = source?.marketContext ?? { activeSymbol: "SPY", watchlist: ["SPY"] };
+      const context: WorkspaceMarketContextV1 = source?.marketContext ?? {
+        activeSymbol: "SPY",
+        watchlist: ["SPY"],
+      };
       const tab = createEmptyTab();
       const workspace: WorkspaceV1 = {
         id: createId(),
@@ -456,16 +567,27 @@ export function createWorkspaceStore(
         marketContext: { activeSymbol: context.activeSymbol, watchlist: [...context.watchlist] },
         tabs: [tab],
       };
-      return persist({ ...document, activeWorkspaceId: workspace.id, workspaces: [...document.workspaces, workspace] });
+      return persist({
+        ...document,
+        activeWorkspaceId: workspace.id,
+        workspaces: [...document.workspaces, workspace],
+      });
     },
 
     renameWorkspace(workspaceId, requestedName) {
       const document = get().document;
       const name = validName(requestedName);
-      if (!document || !name || !document.workspaces.some((workspace) => workspace.id === workspaceId)) return false;
+      if (
+        !document ||
+        !name ||
+        !document.workspaces.some((workspace) => workspace.id === workspaceId)
+      )
+        return false;
       return persist({
         ...document,
-        workspaces: document.workspaces.map((workspace) => workspace.id === workspaceId ? { ...workspace, name } : workspace),
+        workspaces: document.workspaces.map((workspace) =>
+          workspace.id === workspaceId ? { ...workspace, name } : workspace,
+        ),
       });
     },
 
@@ -475,9 +597,11 @@ export function createWorkspaceStore(
       if (!document || document.workspaces.length <= 1) return false;
       const removed = activeWorkspace(document, workspaceId);
       if (!removed || !(await backupWorkspaces([removed], "delete"))) return false;
-      if (disposed || get().document !== document || startingVersion !== mutationVersion) return false;
+      if (disposed || get().document !== document || startingVersion !== mutationVersion)
+        return false;
       const workspaces = document.workspaces.filter((workspace) => workspace.id !== workspaceId);
-      const activeWorkspaceId = document.activeWorkspaceId === workspaceId ? workspaces[0].id : document.activeWorkspaceId;
+      const activeWorkspaceId =
+        document.activeWorkspaceId === workspaceId ? workspaces[0].id : document.activeWorkspaceId;
       return persist({ ...document, workspaces, activeWorkspaceId });
     },
 
@@ -491,17 +615,25 @@ export function createWorkspaceStore(
     createTab(workspaceId, requestedName = "New tab") {
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
-      if (!document || !workspace || workspace.tabs.length >= WORKSPACE_LIMITS.maxTabsPerWorkspace) return false;
+      if (!document || !workspace || workspace.tabs.length >= WORKSPACE_LIMITS.maxTabsPerWorkspace)
+        return false;
       const tab = createEmptyTab(validName(requestedName) ?? "New tab");
-      return persist(replaceWorkspaceInDocument(document, { ...workspace, activeTabId: tab.id, tabs: [...workspace.tabs, tab] }));
+      return persist(
+        replaceWorkspaceInDocument(document, {
+          ...workspace,
+          activeTabId: tab.id,
+          tabs: [...workspace.tabs, tab],
+        }),
+      );
     },
 
     renameTab(workspaceId, tabId, requestedName) {
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
       const name = validName(requestedName);
-      if (!document || !workspace || !name || !workspace.tabs.some((tab) => tab.id === tabId)) return false;
-      const tabs = workspace.tabs.map((tab) => tab.id === tabId ? { ...tab, name } : tab);
+      if (!document || !workspace || !name || !workspace.tabs.some((tab) => tab.id === tabId))
+        return false;
+      const tabs = workspace.tabs.map((tab) => (tab.id === tabId ? { ...tab, name } : tab));
       return persist(replaceWorkspaceInDocument(document, { ...workspace, tabs }));
     },
 
@@ -509,9 +641,21 @@ export function createWorkspaceStore(
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
       const source = activeTab(workspace, tabId);
-      if (!document || !workspace || !source || workspace.tabs.length >= WORKSPACE_LIMITS.maxTabsPerWorkspace) return false;
+      if (
+        !document ||
+        !workspace ||
+        !source ||
+        workspace.tabs.length >= WORKSPACE_LIMITS.maxTabsPerWorkspace
+      )
+        return false;
       const tab = cloneTab(source, uniqueTabName(workspace, `${source.name} copy`));
-      return persist(replaceWorkspaceInDocument(document, { ...workspace, activeTabId: tab.id, tabs: [...workspace.tabs, tab] }));
+      return persist(
+        replaceWorkspaceInDocument(document, {
+          ...workspace,
+          activeTabId: tab.id,
+          tabs: [...workspace.tabs, tab],
+        }),
+      );
     },
 
     async deleteTab(workspaceId, tabId) {
@@ -521,7 +665,8 @@ export function createWorkspaceStore(
       if (!document || !workspace || workspace.tabs.length <= 1) return false;
       const removed = activeTab(workspace, tabId);
       if (!removed || !(await backupWorkspaces([workspace], "delete"))) return false;
-      if (disposed || get().document !== document || startingVersion !== mutationVersion) return false;
+      if (disposed || get().document !== document || startingVersion !== mutationVersion)
+        return false;
       const tabs = workspace.tabs.filter((tab) => tab.id !== tabId);
       const activeTabId = workspace.activeTabId === tabId ? tabs[0].id : workspace.activeTabId;
       return persist(replaceWorkspaceInDocument(document, { ...workspace, tabs, activeTabId }));
@@ -532,8 +677,18 @@ export function createWorkspaceStore(
       const workspace = activeWorkspace(document, workspaceId);
       const tab = activeTab(workspace, tabId);
       const registration = registry.get(manifestId);
-      if (!document || !workspace || !tab || !registration || tab.widgets.length >= WORKSPACE_LIMITS.maxWidgetsPerTab) return null;
-      const config = registry.parseConfig(registration.manifest.configSchemaId, registration.createDefaultConfig());
+      if (
+        !document ||
+        !workspace ||
+        !tab ||
+        !registration ||
+        tab.widgets.length >= WORKSPACE_LIMITS.maxWidgetsPerTab
+      )
+        return null;
+      const config = registry.parseConfig(
+        registration.manifest.configSchemaId,
+        registration.createDefaultConfig(),
+      );
       if (!config.ok) return null;
       const instanceId = createId();
       const instance: WidgetInstanceV1 = {
@@ -544,14 +699,21 @@ export function createWorkspaceStore(
         config: config.value as WidgetInstanceV1["config"],
       };
       const constraints = constraintsForManifest(registry, manifestId);
-      const placement = findNextFreePlacement(tab.placements, instanceId, registration.manifest.defaultSize, constraints);
+      const placement = findNextFreePlacement(
+        tab.placements,
+        instanceId,
+        registration.manifest.defaultSize,
+        constraints,
+      );
       if (!placement) return null;
       const updatedTab: WorkspaceTabV1 = {
         ...tab,
         widgets: [...tab.widgets, instance],
         placements: [...tab.placements, placement].sort(byPosition),
       };
-      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, updatedTab))) ? instanceId : null;
+      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, updatedTab)))
+        ? instanceId
+        : null;
     },
 
     duplicateWidget(workspaceId, tabId, instanceId) {
@@ -559,7 +721,14 @@ export function createWorkspaceStore(
       const workspace = activeWorkspace(document, workspaceId);
       const tab = activeTab(workspace, tabId);
       const source = tab?.widgets.find((widget) => widget.instanceId === instanceId);
-      if (!document || !workspace || !tab || !source || tab.widgets.length >= WORKSPACE_LIMITS.maxWidgetsPerTab) return null;
+      if (
+        !document ||
+        !workspace ||
+        !tab ||
+        !source ||
+        tab.widgets.length >= WORKSPACE_LIMITS.maxWidgetsPerTab
+      )
+        return null;
       const registration = registry.get(source.manifestId);
       const config = registry.parseConfig(source.configSchemaId, source.config);
       if (!registration || !config.ok) return null;
@@ -570,14 +739,21 @@ export function createWorkspaceStore(
       };
       const sourcePlacement = tab.placements.find((placement) => placement.i === instanceId);
       if (!sourcePlacement) return null;
-      const placement = findNextFreePlacement(tab.placements, duplicate.instanceId, sourcePlacement, constraintsForManifest(registry, duplicate.manifestId));
+      const placement = findNextFreePlacement(
+        tab.placements,
+        duplicate.instanceId,
+        sourcePlacement,
+        constraintsForManifest(registry, duplicate.manifestId),
+      );
       if (!placement) return null;
       const updatedTab = {
         ...tab,
         widgets: [...tab.widgets, duplicate],
         placements: [...tab.placements, placement].sort(byPosition),
       };
-      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, updatedTab))) ? duplicate.instanceId : null;
+      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, updatedTab)))
+        ? duplicate.instanceId
+        : null;
     },
 
     async removeWidget(workspaceId, tabId, instanceId) {
@@ -585,14 +761,22 @@ export function createWorkspaceStore(
       const startingVersion = mutationVersion;
       const workspace = activeWorkspace(document, workspaceId);
       const tab = activeTab(workspace, tabId);
-      if (!document || !workspace || !tab || !tab.widgets.some((widget) => widget.instanceId === instanceId)) return false;
+      if (
+        !document ||
+        !workspace ||
+        !tab ||
+        !tab.widgets.some((widget) => widget.instanceId === instanceId)
+      )
+        return false;
       if (!(await backupWorkspaces([workspace], "delete"))) return false;
-      if (disposed || get().document !== document || startingVersion !== mutationVersion) return false;
+      if (disposed || get().document !== document || startingVersion !== mutationVersion)
+        return false;
       const updatedTab = {
         ...tab,
         widgets: tab.widgets.filter((widget) => widget.instanceId !== instanceId),
         placements: tab.placements.filter((placement) => placement.i !== instanceId),
-        maximizedInstanceId: tab.maximizedInstanceId === instanceId ? null : tab.maximizedInstanceId,
+        maximizedInstanceId:
+          tab.maximizedInstanceId === instanceId ? null : tab.maximizedInstanceId,
       };
       return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, updatedTab)));
     },
@@ -605,10 +789,14 @@ export function createWorkspaceStore(
       if (!document || !workspace || !tab || !widget) return false;
       const parsed = registry.parseConfig(widget.configSchemaId, nextConfig);
       if (!parsed.ok) return false;
-      const widgets = tab.widgets.map((candidate) => candidate.instanceId === instanceId
-        ? { ...candidate, config: parsed.value as WidgetInstanceV1["config"] }
-        : candidate);
-      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, widgets })));
+      const widgets = tab.widgets.map((candidate) =>
+        candidate.instanceId === instanceId
+          ? { ...candidate, config: parsed.value as WidgetInstanceV1["config"] }
+          : candidate,
+      );
+      return persist(
+        replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, widgets })),
+      );
     },
 
     setSymbolBinding(workspaceId, tabId, instanceId, binding) {
@@ -625,7 +813,9 @@ export function createWorkspaceStore(
         const { symbolBinding: _oldBinding, ...rest } = candidate;
         return binding ? { ...rest, symbolBinding: binding } : rest;
       });
-      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, widgets })));
+      return persist(
+        replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, widgets })),
+      );
     },
 
     setActiveSymbol(workspaceId, rawSymbol) {
@@ -633,18 +823,30 @@ export function createWorkspaceStore(
       const workspace = activeWorkspace(document, workspaceId);
       const symbol = validSymbol(rawSymbol);
       if (!document || !workspace || !symbol) return false;
-      return persist(replaceWorkspaceInDocument(document, { ...workspace, marketContext: { ...workspace.marketContext, activeSymbol: symbol } }));
+      return persist(
+        replaceWorkspaceInDocument(document, {
+          ...workspace,
+          marketContext: { ...workspace.marketContext, activeSymbol: symbol },
+        }),
+      );
     },
 
     setWatchlist(workspaceId, rawSymbols) {
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
-      if (!document || !workspace || rawSymbols.length > WORKSPACE_LIMITS.maxWatchlistSymbols) return false;
+      if (!document || !workspace || rawSymbols.length > WORKSPACE_LIMITS.maxWatchlistSymbols)
+        return false;
       const symbols = rawSymbols.map(validSymbol);
       if (symbols.some((symbol) => symbol === null)) return false;
       const normalized = symbols as string[];
-      if (new Set(normalized.map((symbol) => symbol.toUpperCase())).size !== normalized.length) return false;
-      return persist(replaceWorkspaceInDocument(document, { ...workspace, marketContext: { ...workspace.marketContext, watchlist: normalized } }));
+      if (new Set(normalized.map((symbol) => symbol.toUpperCase())).size !== normalized.length)
+        return false;
+      return persist(
+        replaceWorkspaceInDocument(document, {
+          ...workspace,
+          marketContext: { ...workspace.marketContext, watchlist: normalized },
+        }),
+      );
     },
 
     commitGrid(workspaceId, tabId, layout) {
@@ -654,7 +856,12 @@ export function createWorkspaceStore(
       if (!document || !workspace || !tab) return false;
       const normalized = fromGridCallback(layout, tab, registry);
       if (!normalized.ok) return false;
-      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, placements: normalized.placements })));
+      return persist(
+        replaceWorkspaceInDocument(
+          document,
+          replaceTab(workspace, { ...tab, placements: normalized.placements }),
+        ),
+      );
     },
 
     moveWidget(workspaceId, tabId, instanceId, key) {
@@ -663,7 +870,15 @@ export function createWorkspaceStore(
       const tab = activeTab(workspace, tabId);
       if (!document || !workspace || !tab) return false;
       const result = keyboardMove(tab.placements, instanceId, key);
-      return result.ok && persist(replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, placements: result.placements })));
+      return (
+        result.ok &&
+        persist(
+          replaceWorkspaceInDocument(
+            document,
+            replaceTab(workspace, { ...tab, placements: result.placements }),
+          ),
+        )
+      );
     },
 
     resizeWidget(workspaceId, tabId, instanceId, key) {
@@ -672,16 +887,40 @@ export function createWorkspaceStore(
       const tab = activeTab(workspace, tabId);
       const widget = tab?.widgets.find((candidate) => candidate.instanceId === instanceId);
       if (!document || !workspace || !tab || !widget) return false;
-      const result = keyboardResize(tab.placements, instanceId, key, constraintsForManifest(registry, widget.manifestId));
-      return result.ok && persist(replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, placements: result.placements })));
+      const result = keyboardResize(
+        tab.placements,
+        instanceId,
+        key,
+        constraintsForManifest(registry, widget.manifestId),
+      );
+      return (
+        result.ok &&
+        persist(
+          replaceWorkspaceInDocument(
+            document,
+            replaceTab(workspace, { ...tab, placements: result.placements }),
+          ),
+        )
+      );
     },
 
     maximizeWidget(workspaceId, tabId, instanceId) {
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
       const tab = activeTab(workspace, tabId);
-      if (!document || !workspace || !tab || (instanceId !== null && !tab.widgets.some((widget) => widget.instanceId === instanceId))) return false;
-      return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, { ...tab, maximizedInstanceId: instanceId })));
+      if (
+        !document ||
+        !workspace ||
+        !tab ||
+        (instanceId !== null && !tab.widgets.some((widget) => widget.instanceId === instanceId))
+      )
+        return false;
+      return persist(
+        replaceWorkspaceInDocument(
+          document,
+          replaceTab(workspace, { ...tab, maximizedInstanceId: instanceId }),
+        ),
+      );
     },
 
     async resetTab(workspaceId, tabId) {
@@ -689,8 +928,10 @@ export function createWorkspaceStore(
       const startingVersion = mutationVersion;
       const workspace = activeWorkspace(document, workspaceId);
       const tab = activeTab(workspace, tabId);
-      if (!document || !workspace || !tab || !(await backupWorkspaces([workspace], "reset"))) return false;
-      if (disposed || get().document !== document || startingVersion !== mutationVersion) return false;
+      if (!document || !workspace || !tab || !(await backupWorkspaces([workspace], "reset")))
+        return false;
+      if (disposed || get().document !== document || startingVersion !== mutationVersion)
+        return false;
       const reset = { ...tab, widgets: [], placements: [], maximizedInstanceId: null };
       return persist(replaceWorkspaceInDocument(document, replaceTab(workspace, reset)));
     },
@@ -699,23 +940,41 @@ export function createWorkspaceStore(
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
       const name = validName(requestedName);
-      if (!document || !workspace || !name || document.userTemplates.length >= WORKSPACE_LIMITS.maxUserTemplates) return false;
+      if (
+        !document ||
+        !workspace ||
+        !name ||
+        document.userTemplates.length >= WORKSPACE_LIMITS.maxUserTemplates
+      )
+        return false;
       const template = createTemplateFromWorkspace(workspace, name);
       return persist({ ...document, userTemplates: [...document.userTemplates, template] });
     },
 
     deleteTemplate(templateId) {
       const document = get().document;
-      if (!document || !document.userTemplates.some((template) => template.id === templateId)) return false;
-      return persist({ ...document, userTemplates: document.userTemplates.filter((template) => template.id !== templateId) });
+      if (!document || !document.userTemplates.some((template) => template.id === templateId))
+        return false;
+      return persist({
+        ...document,
+        userTemplates: document.userTemplates.filter((template) => template.id !== templateId),
+      });
     },
 
     createWorkspaceFromTemplate(templateId, requestedName) {
       const document = get().document;
       const template = document?.userTemplates.find((candidate) => candidate.id === templateId);
-      if (!document || !template || document.workspaces.length >= WORKSPACE_LIMITS.maxWorkspaces) return false;
-      const workspace = createWorkspaceFromTemplate(template, uniqueWorkspaceName(document, requestedName ?? template.name));
-      return persist({ ...document, activeWorkspaceId: workspace.id, workspaces: [...document.workspaces, workspace] });
+      if (!document || !template || document.workspaces.length >= WORKSPACE_LIMITS.maxWorkspaces)
+        return false;
+      const workspace = createWorkspaceFromTemplate(
+        template,
+        uniqueWorkspaceName(document, requestedName ?? template.name),
+      );
+      return persist({
+        ...document,
+        activeWorkspaceId: workspace.id,
+        workspaces: [...document.workspaces, workspace],
+      });
     },
 
     async applyTemplateToActiveTab(workspaceId, templateId) {
@@ -724,15 +983,28 @@ export function createWorkspaceStore(
       const workspace = activeWorkspace(document, workspaceId);
       const template = document?.userTemplates.find((candidate) => candidate.id === templateId);
       const currentTab = workspace && activeTab(workspace, workspace.activeTabId);
-      if (!document || !workspace || !template || !currentTab || !(await backupWorkspaces([workspace], "replace"))) return false;
-      if (disposed || get().document !== document || startingVersion !== mutationVersion) return false;
+      if (
+        !document ||
+        !workspace ||
+        !template ||
+        !currentTab ||
+        !(await backupWorkspaces([workspace], "replace"))
+      )
+        return false;
+      if (disposed || get().document !== document || startingVersion !== mutationVersion)
+        return false;
       const cloned = cloneTab(template.tab, currentTab.name);
       const nextWorkspace = replaceTab(workspace, cloned);
-      return persist(replaceWorkspaceInDocument(document, {
-        ...nextWorkspace,
-        activeTabId: cloned.id,
-        marketContext: { activeSymbol: template.marketContext.activeSymbol, watchlist: [...template.marketContext.watchlist] },
-      }));
+      return persist(
+        replaceWorkspaceInDocument(document, {
+          ...nextWorkspace,
+          activeTabId: cloned.id,
+          marketContext: {
+            activeSymbol: template.marketContext.activeSymbol,
+            watchlist: [...template.marketContext.watchlist],
+          },
+        }),
+      );
     },
 
     async importDocument(imported, mode) {
@@ -742,11 +1014,17 @@ export function createWorkspaceStore(
       if (!parsed.ok || !current) return false;
       if (mode === "replace") {
         if (!(await backupWorkspaces(current.workspaces, "import"))) return false;
-        if (disposed || get().document !== current || startingVersion !== mutationVersion) return false;
+        if (disposed || get().document !== current || startingVersion !== mutationVersion)
+          return false;
         return persist(cloneDocumentWorkspaces(parsed.value));
       }
-      if (current.workspaces.length + parsed.value.workspaces.length > WORKSPACE_LIMITS.maxWorkspaces ||
-          current.userTemplates.length + parsed.value.userTemplates.length > WORKSPACE_LIMITS.maxUserTemplates) return false;
+      if (
+        current.workspaces.length + parsed.value.workspaces.length >
+          WORKSPACE_LIMITS.maxWorkspaces ||
+        current.userTemplates.length + parsed.value.userTemplates.length >
+          WORKSPACE_LIMITS.maxUserTemplates
+      )
+        return false;
       const cloned = cloneDocumentWorkspaces(parsed.value);
       const workspaces: WorkspaceV1[] = [];
       for (const workspace of cloned.workspaces) {
@@ -755,7 +1033,10 @@ export function createWorkspaceStore(
       }
       const userTemplates = [
         ...current.userTemplates,
-        ...cloned.userTemplates.map((template) => ({ ...template, name: validName(template.name) ?? "Imported template" })),
+        ...cloned.userTemplates.map((template) => ({
+          ...template,
+          name: validName(template.name) ?? "Imported template",
+        })),
       ];
       const document: WorkspaceDocumentV1 = {
         schemaVersion: WORKSPACE_SCHEMA_VERSION,
@@ -774,21 +1055,41 @@ export function createWorkspaceStore(
       const current = get().document;
       const point = await repository.recoveryPoint(recoveryPointId);
       const startingVersion = mutationVersion;
-      if (!current || !point || disposed || get().document !== current || startingVersion !== mutationVersion) return false;
+      if (
+        !current ||
+        !point ||
+        disposed ||
+        get().document !== current ||
+        startingVersion !== mutationVersion
+      )
+        return false;
       const existing = activeWorkspace(current, point.workspaceId);
       if (existing && !(await backupWorkspaces([existing], "restore"))) return false;
-      if (disposed || get().document !== current || startingVersion !== mutationVersion) return false;
+      if (disposed || get().document !== current || startingVersion !== mutationVersion)
+        return false;
       if (existing) {
         const restored = { ...point.workspace, id: existing.id };
         return persist(replaceWorkspaceInDocument(current, restored));
       }
       if (current.workspaces.length >= WORKSPACE_LIMITS.maxWorkspaces) return false;
-      const restored = cloneWorkspace(point.workspace, uniqueWorkspaceName(current, point.workspace.name));
-      return persist({ ...current, activeWorkspaceId: restored.id, workspaces: [...current.workspaces, restored] });
+      const restored = cloneWorkspace(
+        point.workspace,
+        uniqueWorkspaceName(current, point.workspace.name),
+      );
+      return persist({
+        ...current,
+        activeWorkspaceId: restored.id,
+        workspaces: [...current.workspaces, restored],
+      });
     },
   }));
 
-  if (typeof window !== "undefined" && typeof BroadcastChannel !== "undefined" && auth.authenticated && repository.partition) {
+  if (
+    typeof window !== "undefined" &&
+    typeof BroadcastChannel !== "undefined" &&
+    auth.authenticated &&
+    repository.partition
+  ) {
     channel = new BroadcastChannel(`eqoboard-workspace-v1:${repository.partition}`);
     channel.onmessage = (event: MessageEvent<unknown>) => {
       if (!parseRemoteMessage(event.data)) return;

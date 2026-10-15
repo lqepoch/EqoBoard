@@ -20,7 +20,12 @@ function validIssuer(raw: string | undefined): string | null {
     const url = new URL(raw);
     const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
     const approvedNativeE2eIssuer = process.env.EQO_NATIVE_E2E === "1" && raw === NATIVE_E2E_ISSUER;
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback) && !approvedNativeE2eIssuer) return null;
+    if (
+      url.protocol !== "https:" &&
+      !(url.protocol === "http:" && loopback) &&
+      !approvedNativeE2eIssuer
+    )
+      return null;
     if (url.username || url.password || url.search || url.hash) return null;
     return url.toString().replace(/\/+$/u, "");
   } catch {
@@ -33,7 +38,15 @@ function validPublicOrigin(raw: string | undefined): string | null {
   try {
     const url = new URL(raw);
     const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-    if (url.origin !== raw || url.username || url.password || url.search || url.hash || url.pathname !== "/") return null;
+    if (
+      url.origin !== raw ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/"
+    )
+      return null;
     if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return null;
     const callbackOrigin = process.env.NEXTAUTH_URL;
     if (callbackOrigin && new URL(callbackOrigin).origin !== url.origin) return null;
@@ -72,7 +85,8 @@ export function isOidcConfigured(): boolean {
     issuer &&
       process.env.EQO_OIDC_CLIENT_ID?.trim() &&
       process.env.EQO_OIDC_CLIENT_SECRET?.trim() &&
-      process.env.NEXTAUTH_SECRET && process.env.NEXTAUTH_SECRET.length >= 32 &&
+      process.env.NEXTAUTH_SECRET &&
+      process.env.NEXTAUTH_SECRET.length >= 32 &&
       publicAppOrigin() &&
       sessionLifetimeSeconds() !== null,
   );
@@ -93,7 +107,10 @@ function secureCookies(): NonNullable<NextAuthOptions["cookies"]> {
   const flow = { ...base, maxAge: 15 * 60 };
   const lifetime = sessionLifetimeSeconds() ?? 60 * 60;
   return {
-    sessionToken: { name: `${hostPrefix}${cookiePrefix}.session-token`, options: { ...base, maxAge: lifetime } },
+    sessionToken: {
+      name: `${hostPrefix}${cookiePrefix}.session-token`,
+      options: { ...base, maxAge: lifetime },
+    },
     callbackUrl: { name: `${hostPrefix}${cookiePrefix}.callback-url`, options: flow },
     csrfToken: { name: `${hostPrefix}${cookiePrefix}.csrf-token`, options: flow },
     pkceCodeVerifier: { name: `${hostPrefix}${cookiePrefix}.pkce-code-verifier`, options: flow },
@@ -124,8 +141,12 @@ const provider: OAuthConfig<OidcProfile> = {
     return {
       id: profile.sub,
       name: safeDisplayName(profile.name),
-      email: typeof profile.email === "string" && profile.email.length <= 254 ? profile.email : null,
-      image: typeof profile.picture === "string" && profile.picture.length <= 2048 ? profile.picture : null,
+      email:
+        typeof profile.email === "string" && profile.email.length <= 254 ? profile.email : null,
+      image:
+        typeof profile.picture === "string" && profile.picture.length <= 2048
+          ? profile.picture
+          : null,
       eqoRoles: allowlistedRoles(profile.roles),
     };
   },
@@ -156,11 +177,13 @@ export const authOptions: NextAuthOptions = {
           token.nativeRoles = allowlistedRoles(oidcProfile.roles ?? user.eqoRoles);
           token.nativeDisplayName = safeDisplayName(oidcProfile.name ?? user.name);
           const localExpiry = Date.now() + lifetime * 1000;
-          const providerExpiry = typeof account.expires_at === "number" && Number.isSafeInteger(account.expires_at)
-            ? account.expires_at * 1000
-            : null;
+          const providerExpiry =
+            typeof account.expires_at === "number" && Number.isSafeInteger(account.expires_at)
+              ? account.expires_at * 1000
+              : null;
           token.nativeProviderExpiresAt = providerExpiry;
-          token.nativeExpiresAt = providerExpiry === null ? localExpiry : Math.min(localExpiry, providerExpiry);
+          token.nativeExpiresAt =
+            providerExpiry === null ? localExpiry : Math.min(localExpiry, providerExpiry);
         }
       }
       return token;

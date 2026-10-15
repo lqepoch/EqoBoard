@@ -25,9 +25,11 @@ function rateLimit(principal: ServerPrincipal): NextResponse | null {
     maxRequests: 60,
     windowMs: 60_000,
   });
-  return result.allowed ? null : noStoreJson({ error: "rate_limit_exceeded" }, 429, {
-    "Retry-After": String(result.retryAfterSeconds),
-  });
+  return result.allowed
+    ? null
+    : noStoreJson({ error: "rate_limit_exceeded" }, 429, {
+        "Retry-After": String(result.retryAfterSeconds),
+      });
 }
 
 function emptyRequest(request: Request): boolean {
@@ -49,7 +51,10 @@ function parseCoreMessage(value: unknown, resource: EngineReadResource): EngineR
   }
 }
 
-export async function proxyEngineRead(request: Request, resource: EngineReadResource): Promise<NextResponse> {
+export async function proxyEngineRead(
+  request: Request,
+  resource: EngineReadResource,
+): Promise<NextResponse> {
   const authorization = await authorizeRequest(request, "engine:offline-read");
   if (!authorization.ok) return authorization.response;
   if (new URL(request.url).search !== "" || !emptyRequest(request)) {
@@ -88,7 +93,8 @@ export async function proxyEngineRead(request: Request, resource: EngineReadReso
     const message = parseCoreMessage(body.value, resource);
     if (!message) return noStoreJson({ error: "invalid_engine_response" }, 502);
     const bytes = Buffer.from(JSON.stringify(message), "utf8");
-    if (bytes.byteLength > MAX_RESPONSE_BYTES) return noStoreJson({ error: "invalid_engine_response" }, 502);
+    if (bytes.byteLength > MAX_RESPONSE_BYTES)
+      return noStoreJson({ error: "invalid_engine_response" }, 502);
     return new NextResponse(bytes, {
       status: 200,
       headers: {
@@ -98,8 +104,10 @@ export async function proxyEngineRead(request: Request, resource: EngineReadReso
       },
     });
   } catch {
-    return noStoreJson({ error: deadline.timedOut() ? "engine_query_timeout" : "engine_service_unavailable" },
-      deadline.timedOut() ? 504 : 503);
+    return noStoreJson(
+      { error: deadline.timedOut() ? "engine_query_timeout" : "engine_service_unavailable" },
+      deadline.timedOut() ? 504 : 503,
+    );
   } finally {
     deadline.close();
   }

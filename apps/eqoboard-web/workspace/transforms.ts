@@ -7,10 +7,7 @@ import {
   type WorkspaceV1,
 } from "./model";
 
-function requireRemappedInstanceId(
-  idMap: ReadonlyMap<string, string>,
-  sourceId: string,
-): string {
+function requireRemappedInstanceId(idMap: ReadonlyMap<string, string>, sourceId: string): string {
   const remappedId = idMap.get(sourceId);
   if (remappedId === undefined) {
     throw new Error("Workspace clone invariant failed: widget identity was not mapped.");

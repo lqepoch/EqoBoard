@@ -31,18 +31,32 @@ describe("widget manifest runtime validation", () => {
   });
 
   it("rejects unknown fields, unsupported versions, invalid permissions and invalid bounds", () => {
-    expect(parseWidgetManifestV1({ ...validManifest(), executable: "window.alert(1)" }).ok).toBe(false);
-    expect(parseWidgetManifestV1({ ...validManifest(), entryPoint: "./plugin.js", signatureVerified: true }).ok).toBe(false);
+    expect(parseWidgetManifestV1({ ...validManifest(), executable: "window.alert(1)" }).ok).toBe(
+      false,
+    );
+    expect(
+      parseWidgetManifestV1({
+        ...validManifest(),
+        entryPoint: "./plugin.js",
+        signatureVerified: true,
+      }).ok,
+    ).toBe(false);
     expect(parseWidgetManifestV1({ ...validManifest(), sdkVersion: 2 }).ok).toBe(false);
-    expect(parseWidgetManifestV1({ ...validManifest(), requiredPermissions: ["admin"] }).ok).toBe(false);
-    expect(parseWidgetManifestV1({
-      ...validManifest(),
-      defaultSize: { w: 13, h: 4, minW: 1, minH: 1, maxW: 13, maxH: 8 },
-    }).ok).toBe(false);
+    expect(parseWidgetManifestV1({ ...validManifest(), requiredPermissions: ["admin"] }).ok).toBe(
+      false,
+    );
+    expect(
+      parseWidgetManifestV1({
+        ...validManifest(),
+        defaultSize: { w: 13, h: 4, minW: 1, minH: 1, maxW: 13, maxH: 8 },
+      }).ok,
+    ).toBe(false);
   });
 
   it("rejects oversized descriptions and non-data accessor config fields without invoking getters", () => {
-    expect(parseWidgetManifestV1({ ...validManifest(), description: "x".repeat(281) }).ok).toBe(false);
+    expect(parseWidgetManifestV1({ ...validManifest(), description: "x".repeat(281) }).ok).toBe(
+      false,
+    );
     let called = false;
     const accessorConfig = {};
     Object.defineProperty(accessorConfig, "value", {
@@ -64,7 +78,11 @@ describe("widget manifest runtime validation", () => {
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
       expect(Object.isFrozen(parsed.value)).toBe(true);
-      if (parsed.value !== null && typeof parsed.value === "object" && !Array.isArray(parsed.value)) {
+      if (
+        parsed.value !== null &&
+        typeof parsed.value === "object" &&
+        !Array.isArray(parsed.value)
+      ) {
         expect(Object.isFrozen(parsed.value.nested)).toBe(true);
       }
     }
@@ -82,8 +100,11 @@ describe("widget manifest runtime validation", () => {
     if (instance.ok) {
       expect(instance.value.manifestId).toBe("vendor.unavailable-widget");
       expect(Object.isFrozen(instance.value)).toBe(true);
-      expect(typeof instance.value.config === "object" && instance.value.config !== null &&
-        Object.isFrozen(instance.value.config)).toBe(true);
+      expect(
+        typeof instance.value.config === "object" &&
+          instance.value.config !== null &&
+          Object.isFrozen(instance.value.config),
+      ).toBe(true);
       const config = instance.value.config as { nested: readonly unknown[] };
       expect(Object.isFrozen(config.nested)).toBe(true);
     }
@@ -97,10 +118,12 @@ describe("widget manifest runtime validation", () => {
       configSchemaId: "eqoboard.chart.config.v1",
       config: {},
     };
-    expect(parseWidgetInstanceV1({ ...base, symbolBinding: { mode: "fixed", symbol: "BRK.B" } }).ok)
-      .toBe(true);
-    expect(parseWidgetInstanceV1({ ...base, symbolBinding: { mode: "fixed", symbol: "brk.b" } }).ok)
-      .toBe(false);
+    expect(
+      parseWidgetInstanceV1({ ...base, symbolBinding: { mode: "fixed", symbol: "BRK.B" } }).ok,
+    ).toBe(true);
+    expect(
+      parseWidgetInstanceV1({ ...base, symbolBinding: { mode: "fixed", symbol: "brk.b" } }).ok,
+    ).toBe(false);
   });
 
   it("rejects malformed persisted fields and prototype keys", () => {

@@ -1,4 +1,8 @@
-import { parseWidgetConfigData, parseWidgetInstanceV1, parseWidgetManifestV1 } from "../sdk/manifest";
+import {
+  parseWidgetConfigData,
+  parseWidgetInstanceV1,
+  parseWidgetManifestV1,
+} from "../sdk/manifest";
 import { isWidgetActionId } from "../sdk/actions";
 import type { WidgetInstanceV1, WidgetShortcut } from "../sdk/contracts";
 import type {
@@ -39,13 +43,21 @@ export class WidgetRegistryDefinitionError extends Error {
 }
 
 function boundedText(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= maxLength &&
-    value === value.trim() && !hasControlCharacters(value);
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maxLength &&
+    value === value.trim() &&
+    !hasControlCharacters(value)
+  );
 }
 
 function safeRelativePath(value: string): boolean {
-  return !value.startsWith("/") && !value.includes("\\") &&
-    value.split("/").every((segment) => segment !== ".." && segment !== ".");
+  return (
+    !value.startsWith("/") &&
+    !value.includes("\\") &&
+    value.split("/").every((segment) => segment !== ".." && segment !== ".")
+  );
 }
 
 function safeSourcePaths(value: string): boolean {
@@ -64,17 +76,29 @@ function readCapabilityIds(
     const ownKeys = Reflect.ownKeys(value);
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const lengthDescriptor = descriptors.length;
-    if (!lengthDescriptor || !("value" in lengthDescriptor) ||
-        !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value > 96 ||
-        ownKeys.length !== lengthDescriptor.value + 1) return null;
+    if (
+      !lengthDescriptor ||
+      !("value" in lengthDescriptor) ||
+      !Number.isSafeInteger(lengthDescriptor.value) ||
+      lengthDescriptor.value > 96 ||
+      ownKeys.length !== lengthDescriptor.value + 1
+    )
+      return null;
     const length = lengthDescriptor.value as number;
     const result: string[] = [];
     for (const key of ownKeys) {
       if (key === "length") continue;
-      if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length) return null;
+      if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length)
+        return null;
       const descriptor = descriptors[key];
-      if (!descriptor || !descriptor.enumerable || !("value" in descriptor) ||
-          typeof descriptor.value !== "string" || !validId(descriptor.value)) return null;
+      if (
+        !descriptor ||
+        !descriptor.enumerable ||
+        !("value" in descriptor) ||
+        typeof descriptor.value !== "string" ||
+        !validId(descriptor.value)
+      )
+        return null;
       result.push(descriptor.value);
     }
     if (result.length !== length || new Set(result).size !== result.length) return null;
@@ -85,16 +109,28 @@ function readCapabilityIds(
 }
 
 function validProvenance(value: BuiltinProvenance, expectedProvenanceId: string): boolean {
-  if (!boundedText(value.provenanceId, 120) || value.provenanceId !== expectedProvenanceId ||
-      (value.origin !== "first-party" && value.origin !== "adapted-upstream") ||
-      !boundedText(value.sourceRepository, 200) || !boundedText(value.sourcePath, 320) ||
-      !safeSourcePaths(value.sourcePath) ||
-      !boundedText(value.auditReference, 240)) return false;
+  if (
+    !boundedText(value.provenanceId, 120) ||
+    value.provenanceId !== expectedProvenanceId ||
+    (value.origin !== "first-party" && value.origin !== "adapted-upstream") ||
+    !boundedText(value.sourceRepository, 200) ||
+    !boundedText(value.sourcePath, 320) ||
+    !safeSourcePaths(value.sourcePath) ||
+    !boundedText(value.auditReference, 240)
+  )
+    return false;
   if (value.sourceCommit !== null && !/^[0-9a-f]{40}$/iu.test(value.sourceCommit)) return false;
   if (value.license !== null && !boundedText(value.license, 120)) return false;
-  if (value.noticePath !== null && (!boundedText(value.noticePath, 320) || !safeRelativePath(value.noticePath))) return false;
-  if (value.origin === "adapted-upstream" &&
-      (value.sourceCommit === null || value.license === null || value.noticePath === null)) return false;
+  if (
+    value.noticePath !== null &&
+    (!boundedText(value.noticePath, 320) || !safeRelativePath(value.noticePath))
+  )
+    return false;
+  if (
+    value.origin === "adapted-upstream" &&
+    (value.sourceCommit === null || value.license === null || value.noticePath === null)
+  )
+    return false;
   if (value.origin === "first-party" && value.sourceCommit !== null) return false;
   return true;
 }
@@ -137,15 +173,22 @@ export function createWidgetRegistry(entries: readonly AnyWidgetRegistration[]):
 
   for (const entry of entries) {
     try {
-      if (!entry || typeof entry !== "object" || entry.Component === undefined || entry.Component === null ||
-          typeof entry.parseConfig !== "function" || typeof entry.createDefaultConfig !== "function") {
+      if (
+        !entry ||
+        typeof entry !== "object" ||
+        entry.Component === undefined ||
+        entry.Component === null ||
+        typeof entry.parseConfig !== "function" ||
+        typeof entry.createDefaultConfig !== "function"
+      ) {
         throw new WidgetRegistryDefinitionError("invalid-registration");
       }
-      const allowedReadOperations = readCapabilityIds(
-        entry.allowedReadOperations,
-        (value) => /^[A-Za-z][A-Za-z0-9.-]{0,95}$/u.test(value),
+      const allowedReadOperations = readCapabilityIds(entry.allowedReadOperations, (value) =>
+        /^[A-Za-z][A-Za-z0-9.-]{0,95}$/u.test(value),
       );
-      const allowedActions = readCapabilityIds(entry.allowedActions, (value) => isWidgetActionId(value));
+      const allowedActions = readCapabilityIds(entry.allowedActions, (value) =>
+        isWidgetActionId(value),
+      );
       if (allowedReadOperations === null || allowedActions === null) {
         throw new WidgetRegistryDefinitionError("invalid-capabilities");
       }
@@ -155,9 +198,12 @@ export function createWidgetRegistry(entries: readonly AnyWidgetRegistration[]):
       if (!validProvenance(entry.provenance, manifest.provenanceId)) {
         throw new WidgetRegistryDefinitionError("invalid-provenance");
       }
-      if (byManifestId.has(manifest.id)) throw new WidgetRegistryDefinitionError("duplicate-manifest-id");
-      if (byConfigSchema.has(manifest.configSchemaId)) throw new WidgetRegistryDefinitionError("duplicate-config-schema");
-      if (rendererIds.has(manifest.rendererId)) throw new WidgetRegistryDefinitionError("duplicate-renderer-id");
+      if (byManifestId.has(manifest.id))
+        throw new WidgetRegistryDefinitionError("duplicate-manifest-id");
+      if (byConfigSchema.has(manifest.configSchemaId))
+        throw new WidgetRegistryDefinitionError("duplicate-config-schema");
+      if (rendererIds.has(manifest.rendererId))
+        throw new WidgetRegistryDefinitionError("duplicate-renderer-id");
       if (manifest.shortcut && byShortcut.has(manifest.shortcut)) {
         throw new WidgetRegistryDefinitionError("duplicate-shortcut");
       }

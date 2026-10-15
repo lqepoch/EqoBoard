@@ -39,16 +39,31 @@ describe("registered prediction browser adapter", () => {
   });
 
   it("rejects private fields, unexpected response fields, run mismatches, and promotable data", () => {
-    expect(parseRegisteredPredictionView({ ...publicView, private_artifact_sha256: "d".repeat(64) }, publicView.run_id)).toBeNull();
-    expect(parseRegisteredPredictionView({ ...publicView, extra: true }, publicView.run_id)).toBeNull();
+    expect(
+      parseRegisteredPredictionView(
+        { ...publicView, private_artifact_sha256: "d".repeat(64) },
+        publicView.run_id,
+      ),
+    ).toBeNull();
+    expect(
+      parseRegisteredPredictionView({ ...publicView, extra: true }, publicView.run_id),
+    ).toBeNull();
     expect(parseRegisteredPredictionView(publicView, "another-run")).toBeNull();
-    expect(parseRegisteredPredictionView({ ...publicView, promotion_allowed: true }, publicView.run_id)).toBeNull();
+    expect(
+      parseRegisteredPredictionView({ ...publicView, promotion_allowed: true }, publicView.run_id),
+    ).toBeNull();
   });
 
   it("keeps saved run identifiers bounded and rejects path-like or malformed values", () => {
     expect(parseRegisteredPredictionConfig(DEFAULT_REGISTERED_PREDICTION_CONFIG).ok).toBe(true);
-    expect(parseRegisteredPredictionConfig({ schemaVersion: 1, runId: "run:alpha-2" }).ok).toBe(true);
-    expect(parseRegisteredPredictionConfig({ schemaVersion: 1, runId: "../private" }).ok).toBe(false);
-    expect(parseRegisteredPredictionConfig({ schemaVersion: 1, runId: "x".repeat(256) }).ok).toBe(false);
+    expect(parseRegisteredPredictionConfig({ schemaVersion: 1, runId: "run:alpha-2" }).ok).toBe(
+      true,
+    );
+    expect(parseRegisteredPredictionConfig({ schemaVersion: 1, runId: "../private" }).ok).toBe(
+      false,
+    );
+    expect(parseRegisteredPredictionConfig({ schemaVersion: 1, runId: "x".repeat(256) }).ok).toBe(
+      false,
+    );
   });
 });

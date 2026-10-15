@@ -16,7 +16,9 @@ import type { ChartIndicatorValues, ChartPlotBar, ChartStyle, IndicatorId } from
 type ChartSeries = ReturnType<IChartApi["addSeries"]>;
 type CrosshairHandler = Parameters<IChartApi["subscribeCrosshairMove"]>[0];
 type CrosshairEvent = Parameters<CrosshairHandler>[0];
-type VisibleLogicalRangeHandler = Parameters<ReturnType<IChartApi["timeScale"]>["subscribeVisibleLogicalRangeChange"]>[0];
+type VisibleLogicalRangeHandler = Parameters<
+  ReturnType<IChartApi["timeScale"]>["subscribeVisibleLogicalRangeChange"]
+>[0];
 
 export type SnapshotBehavior = "reset" | "preserve" | "prepend" | "refresh";
 
@@ -28,7 +30,9 @@ export type ChartControllerOptions = Readonly<{
   onCrosshair?: (bar: ChartPlotBar | null) => void;
   onLeftEdge?: () => void;
   createChart?: typeof createChart;
-  resizeObserverFactory?: (callback: ResizeObserverCallback) => Pick<ResizeObserver, "observe" | "disconnect"> | null;
+  resizeObserverFactory?: (
+    callback: ResizeObserverCallback,
+  ) => Pick<ResizeObserver, "observe" | "disconnect"> | null;
 }>;
 
 type SeriesSet = {
@@ -98,7 +102,7 @@ export class LightweightChartController<TRow = unknown> {
 
   private readonly onCrosshairMove: CrosshairHandler = (event: CrosshairEvent) => {
     const time = typeof event.time === "number" ? event.time : null;
-    this.onCrosshair?.(time === null ? null : this.barsByTime.get(time) ?? null);
+    this.onCrosshair?.(time === null ? null : (this.barsByTime.get(time) ?? null));
   };
 
   private readonly onVisibleLogicalRangeChange: VisibleLogicalRangeHandler = (range) => {
@@ -118,7 +122,9 @@ export class LightweightChartController<TRow = unknown> {
     this.indicators = [...options.indicators];
     this.showVolume = options.showVolume;
     this.timeVisible = options.timeVisible;
-    this.onCrosshair = options.onCrosshair as ((bar: ChartPlotBar<TRow> | null) => void) | undefined;
+    this.onCrosshair = options.onCrosshair as
+      | ((bar: ChartPlotBar<TRow> | null) => void)
+      | undefined;
     this.onLeftEdge = options.onLeftEdge;
     const makeChart = options.createChart ?? createChart;
     this.chart = makeChart(container, {
@@ -149,7 +155,12 @@ export class LightweightChartController<TRow = unknown> {
         tickMarkFormatter: (time) => formatChartAxisTimeEt(time, this.timeVisible),
       },
       rightPriceScale: { borderColor: "#263244", scaleMargins: { top: 0.1, bottom: 0.22 } },
-      handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+      handleScroll: {
+        mouseWheel: false,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
       handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
     });
     this.timeScale = this.chart.timeScale();
@@ -158,7 +169,8 @@ export class LightweightChartController<TRow = unknown> {
     const makeResizeObserver = options.resizeObserverFactory ?? defaultResizeObserverFactory;
     this.resizeObserver = makeResizeObserver(this.onResize);
     this.resizeObserver?.observe(container);
-    if (!this.resizeObserver && typeof window !== "undefined") window.addEventListener("resize", this.onResize);
+    if (!this.resizeObserver && typeof window !== "undefined")
+      window.addEventListener("resize", this.onResize);
     this.onResize();
     this.rebuildSeries();
   }
@@ -168,12 +180,14 @@ export class LightweightChartController<TRow = unknown> {
     this.onCrosshair = callback;
   }
 
-  updateOptions(options: Readonly<{
-    style: ChartStyle;
-    indicators: readonly IndicatorId[];
-    showVolume: boolean;
-    timeVisible: boolean;
-  }>): void {
+  updateOptions(
+    options: Readonly<{
+      style: ChartStyle;
+      indicators: readonly IndicatorId[];
+      showVolume: boolean;
+      timeVisible: boolean;
+    }>,
+  ): void {
     if (this.disposed) return;
     const previousRange = this.timeScale.getVisibleLogicalRange();
     const previousStructure = this.currentStructureKey();
@@ -181,7 +195,9 @@ export class LightweightChartController<TRow = unknown> {
     this.indicators = [...options.indicators];
     this.showVolume = options.showVolume;
     this.timeVisible = options.timeVisible;
-    this.chart.applyOptions({ timeScale: { timeVisible: this.timeVisible, secondsVisible: false } });
+    this.chart.applyOptions({
+      timeScale: { timeVisible: this.timeVisible, secondsVisible: false },
+    });
     if (previousStructure !== this.currentStructureKey()) {
       this.rebuildSeries();
       this.applySeriesData(this.lastIndicators ?? undefined);
@@ -198,9 +214,10 @@ export class LightweightChartController<TRow = unknown> {
     if (this.disposed) return;
     const previousBars = this.bars;
     const previousRange = this.timeScale.getVisibleLogicalRange();
-    const saved = previousRange && previousBars.length > 0
-      ? saveViewport(this.identity || identity, previousRange, previousBars)
-      : null;
+    const saved =
+      previousRange && previousBars.length > 0
+        ? saveViewport(this.identity || identity, previousRange, previousBars)
+        : null;
     const identityChanged = Boolean(this.identity && this.identity !== identity);
     if (identityChanged) this.onCrosshair?.(null);
     this.identity = identity;
@@ -225,7 +242,11 @@ export class LightweightChartController<TRow = unknown> {
       return;
     }
     if (behavior === "refresh") {
-      const retained = retainViewportOnRefresh(previousRange, previousBars.length, this.bars.length);
+      const retained = retainViewportOnRefresh(
+        previousRange,
+        previousBars.length,
+        this.bars.length,
+      );
       if (retained) this.timeScale.setVisibleLogicalRange(retained);
       return;
     }
@@ -255,7 +276,8 @@ export class LightweightChartController<TRow = unknown> {
     if (this.disposed) return;
     this.disposed = true;
     this.resizeObserver?.disconnect();
-    if (!this.resizeObserver && typeof window !== "undefined") window.removeEventListener("resize", this.onResize);
+    if (!this.resizeObserver && typeof window !== "undefined")
+      window.removeEventListener("resize", this.onResize);
     this.chart.unsubscribeCrosshairMove(this.onCrosshairMove);
     this.timeScale.unsubscribeVisibleLogicalRangeChange(this.onVisibleLogicalRangeChange);
     for (const series of this.allSeries()) this.chart.removeSeries(series);
@@ -272,7 +294,11 @@ export class LightweightChartController<TRow = unknown> {
   }
 
   private currentStructureKey(): string {
-    return [this.style, this.showVolume ? "volume" : "no-volume", [...this.indicators].sort().join(",")].join("|");
+    return [
+      this.style,
+      this.showVolume ? "volume" : "no-volume",
+      [...this.indicators].sort().join(","),
+    ].join("|");
   }
 
   private allSeries(): ChartSeries[] {
@@ -294,14 +320,24 @@ export class LightweightChartController<TRow = unknown> {
 
     if (this.style === "candles") {
       this.series.main = this.chart.addSeries(CandlestickSeries, {
-        upColor: COLORS.up, downColor: COLORS.down, borderUpColor: COLORS.up, borderDownColor: COLORS.down,
-        wickUpColor: COLORS.up, wickDownColor: COLORS.down,
+        upColor: COLORS.up,
+        downColor: COLORS.down,
+        borderUpColor: COLORS.up,
+        borderDownColor: COLORS.down,
+        wickUpColor: COLORS.up,
+        wickDownColor: COLORS.down,
       });
     } else if (this.style === "bars") {
-      this.series.main = this.chart.addSeries(BarSeries, { upColor: COLORS.up, downColor: COLORS.down });
+      this.series.main = this.chart.addSeries(BarSeries, {
+        upColor: COLORS.up,
+        downColor: COLORS.down,
+      });
     } else if (this.style === "area") {
       this.series.main = this.chart.addSeries(AreaSeries, {
-        lineColor: COLORS.line, topColor: COLORS.areaTop, bottomColor: COLORS.areaBottom, lineWidth: 2,
+        lineColor: COLORS.line,
+        topColor: COLORS.areaTop,
+        bottomColor: COLORS.areaBottom,
+        lineWidth: 2,
       });
     } else {
       this.series.main = this.chart.addSeries(LineSeries, { color: COLORS.line, lineWidth: 2 });
@@ -318,40 +354,90 @@ export class LightweightChartController<TRow = unknown> {
     }
 
     const lineDefinitions: Array<readonly [IndicatorId, string, number]> = [
-      ["SMA20", COLORS.SMA20, 1], ["SMA50", COLORS.SMA50, 1], ["SMA200", COLORS.SMA200, 1],
-      ["EMA20", COLORS.EMA20, 1], ["VWAP", COLORS.VWAP, 1],
+      ["SMA20", COLORS.SMA20, 1],
+      ["SMA50", COLORS.SMA50, 1],
+      ["SMA200", COLORS.SMA200, 1],
+      ["EMA20", COLORS.EMA20, 1],
+      ["VWAP", COLORS.VWAP, 1],
     ];
     for (const [id, color] of lineDefinitions) {
       if (!this.indicators.includes(id)) continue;
-      this.series.overlays.set(id, this.chart.addSeries(LineSeries, {
-        color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-      }));
+      this.series.overlays.set(
+        id,
+        this.chart.addSeries(LineSeries, {
+          color,
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        }),
+      );
     }
     if (this.indicators.includes("BOLL")) {
       for (const key of ["upper", "middle", "lower"] as const) {
-        this.series.overlays.set(`BOLL_${key}`, this.chart.addSeries(LineSeries, {
-          color: COLORS.BOLL, lineWidth: 1, lineStyle: key === "middle" ? LineStyle.Dotted : LineStyle.Solid,
-          priceLineVisible: false, lastValueVisible: false,
-        }));
+        this.series.overlays.set(
+          `BOLL_${key}`,
+          this.chart.addSeries(LineSeries, {
+            color: COLORS.BOLL,
+            lineWidth: 1,
+            lineStyle: key === "middle" ? LineStyle.Dotted : LineStyle.Solid,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          }),
+        );
       }
     }
 
     let paneIndex = 1;
     if (this.indicators.includes("RSI")) {
-      this.series.panes.push(this.chart.addSeries(LineSeries, {
-        color: COLORS.RSI, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-        title: "RSI 14 (flat=50)",
-      }, paneIndex));
+      this.series.panes.push(
+        this.chart.addSeries(
+          LineSeries,
+          {
+            color: COLORS.RSI,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: "RSI 14 (flat=50)",
+          },
+          paneIndex,
+        ),
+      );
       paneIndex += 1;
     }
     if (this.indicators.includes("MACD")) {
-      this.series.panes.push(this.chart.addSeries(HistogramSeries, { color: COLORS.MACD_HISTOGRAM, title: "MACD Histogram" }, paneIndex));
-      this.series.panes.push(this.chart.addSeries(LineSeries, {
-        color: COLORS.MACD, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, title: "MACD",
-      }, paneIndex));
-      this.series.panes.push(this.chart.addSeries(LineSeries, {
-        color: COLORS.MACD_SIGNAL, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, title: "Signal",
-      }, paneIndex));
+      this.series.panes.push(
+        this.chart.addSeries(
+          HistogramSeries,
+          { color: COLORS.MACD_HISTOGRAM, title: "MACD Histogram" },
+          paneIndex,
+        ),
+      );
+      this.series.panes.push(
+        this.chart.addSeries(
+          LineSeries,
+          {
+            color: COLORS.MACD,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: "MACD",
+          },
+          paneIndex,
+        ),
+      );
+      this.series.panes.push(
+        this.chart.addSeries(
+          LineSeries,
+          {
+            color: COLORS.MACD_SIGNAL,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            title: "Signal",
+          },
+          paneIndex,
+        ),
+      );
     }
   }
 
@@ -363,25 +449,35 @@ export class LightweightChartController<TRow = unknown> {
       this.series.main.setData(closeData(this.bars) as never);
     }
     if (this.series.volume) {
-      this.series.volume.setData(this.bars.map((bar) => ({
-        time: bar.time,
-        value: bar.volume,
-        color: bar.close >= bar.open ? COLORS.volumeUp : COLORS.volumeDown,
-      })) as never);
+      this.series.volume.setData(
+        this.bars.map((bar) => ({
+          time: bar.time,
+          value: bar.volume,
+          color: bar.close >= bar.open ? COLORS.volumeUp : COLORS.volumeDown,
+        })) as never,
+      );
     }
     if (!indicators) return;
     const mapLine = (points: readonly { time: number; value: number }[]) =>
       points.map((point) => ({ time: point.time as UTCTimestamp, value: point.value }));
     for (const [id, series] of this.series.overlays) {
-      if (id === "BOLL_upper") series.setData(mapLine(indicators.overlays.bollinger?.upper ?? []) as never);
-      else if (id === "BOLL_middle") series.setData(mapLine(indicators.overlays.bollinger?.middle ?? []) as never);
-      else if (id === "BOLL_lower") series.setData(mapLine(indicators.overlays.bollinger?.lower ?? []) as never);
+      if (id === "BOLL_upper")
+        series.setData(mapLine(indicators.overlays.bollinger?.upper ?? []) as never);
+      else if (id === "BOLL_middle")
+        series.setData(mapLine(indicators.overlays.bollinger?.middle ?? []) as never);
+      else if (id === "BOLL_lower")
+        series.setData(mapLine(indicators.overlays.bollinger?.lower ?? []) as never);
       else {
-        const points = id === "SMA20" ? indicators.overlays.SMA20
-          : id === "SMA50" ? indicators.overlays.SMA50
-            : id === "SMA200" ? indicators.overlays.SMA200
-              : id === "EMA20" ? indicators.overlays.EMA20
-                : indicators.overlays.VWAP;
+        const points =
+          id === "SMA20"
+            ? indicators.overlays.SMA20
+            : id === "SMA50"
+              ? indicators.overlays.SMA50
+              : id === "SMA200"
+                ? indicators.overlays.SMA200
+                : id === "EMA20"
+                  ? indicators.overlays.EMA20
+                  : indicators.overlays.VWAP;
         series.setData(mapLine(points ?? []) as never);
       }
     }

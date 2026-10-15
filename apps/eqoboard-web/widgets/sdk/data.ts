@@ -11,7 +11,9 @@ export type WidgetOperationDefinition = Readonly<{
 export type WidgetOperationMap = Readonly<Record<never, WidgetOperationDefinition>>;
 
 export interface WidgetDataClient<
-  TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition } = WidgetOperationMap,
+  TOperations extends {
+    readonly [K in keyof TOperations]: WidgetOperationDefinition;
+  } = WidgetOperationMap,
 > {
   read<K extends keyof TOperations & string>(
     operationId: K,
@@ -36,7 +38,9 @@ export type WidgetRefreshSchedulerOptions = Readonly<{ refreshIntervalMs: number
  * hidden-state behavior and transport before exposing this observer to a widget.
  */
 export interface WidgetRefreshScheduler<
-  TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition } = WidgetOperationMap,
+  TOperations extends {
+    readonly [K in keyof TOperations]: WidgetOperationDefinition;
+  } = WidgetOperationMap,
 > {
   observe<K extends keyof TOperations & string>(
     operationId: K,

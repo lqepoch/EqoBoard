@@ -48,14 +48,26 @@ describe("research runtime market isolation", () => {
     const signal = new AbortController().signal;
 
     await expect(client.read("market.quotes", { symbols: ["SPY"] }, { signal })).rejects.toThrow();
-    await expect(client.read("market.options.chain", { symbol: "SPY", expiry: "2027-01-15" }, { signal })).rejects.toThrow();
+    await expect(
+      client.read("market.options.chain", { symbol: "SPY", expiry: "2027-01-15" }, { signal }),
+    ).rejects.toThrow();
     await expect(client.read("market.status", {}, { signal })).rejects.toThrow();
-    await expect(client.read("market.history.core-bars", { symbol: "SPY" }, { signal })).rejects.toThrow();
+    await expect(
+      client.read("market.history.core-bars", { symbol: "SPY" }, { signal }),
+    ).rejects.toThrow();
     await expect(client.read("research.recap", {}, { signal })).rejects.toThrow();
-    await expect(client.read("research.symbolSearch", { query: "AAPL" }, { signal })).rejects.toThrow();
+    await expect(
+      client.read("research.symbolSearch", { query: "AAPL" }, { signal }),
+    ).rejects.toThrow();
     expect(calls).toBe(0);
 
-    await expect(client.read("market.archive.diagnostic-bars", { datasetId: "archive-1", symbol: "SPY" }, { signal })).resolves.toEqual({});
+    await expect(
+      client.read(
+        "market.archive.diagnostic-bars",
+        { datasetId: "archive-1", symbol: "SPY" },
+        { signal },
+      ),
+    ).resolves.toEqual({});
     expect(calls).toBe(1);
   });
 });

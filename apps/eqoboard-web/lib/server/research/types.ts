@@ -52,7 +52,11 @@ export type ProviderResult<T> = Readonly<{
 
 export class ResearchProviderError extends Error {
   constructor(
-    readonly code: "provider-unavailable" | "provider-unconfigured" | "provider-response-invalid" | "input-invalid",
+    readonly code:
+      | "provider-unavailable"
+      | "provider-unconfigured"
+      | "provider-response-invalid"
+      | "input-invalid",
     readonly status: 400 | 502 | 503,
   ) {
     super(code);

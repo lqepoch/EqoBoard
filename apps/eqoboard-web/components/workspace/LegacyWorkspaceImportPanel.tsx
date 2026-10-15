@@ -3,7 +3,11 @@
 import { useState } from "react";
 import type { WidgetRegistry } from "../../widgets/registry/types";
 import type { WorkspaceDocumentV1 } from "../../workspace/model";
-import { LEGACY_WORKSPACE_STORAGE_KEY, previewLegacyWorkspaceImport, type LegacyWorkspaceImportPreview } from "../../workspace/legacy-import";
+import {
+  LEGACY_WORKSPACE_STORAGE_KEY,
+  previewLegacyWorkspaceImport,
+  type LegacyWorkspaceImportPreview,
+} from "../../workspace/legacy-import";
 
 type LegacyWorkspaceImportPanelProps = Readonly<{
   registry: WidgetRegistry;
@@ -13,7 +17,12 @@ type LegacyWorkspaceImportPanelProps = Readonly<{
 }>;
 
 /** The legacy localStorage record is read only after an explicit preview action. */
-export function LegacyWorkspaceImportPanel({ registry, canImport, disabledLabel = "Sign in to import", onImport }: LegacyWorkspaceImportPanelProps) {
+export function LegacyWorkspaceImportPanel({
+  registry,
+  canImport,
+  disabledLabel = "Sign in to import",
+  onImport,
+}: LegacyWorkspaceImportPanelProps) {
   const [preview, setPreview] = useState<LegacyWorkspaceImportPreview | null>(null);
   const [sourceSnapshot, setSourceSnapshot] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -57,16 +66,20 @@ export function LegacyWorkspaceImportPanel({ registry, canImport, disabledLabel 
     if (current !== sourceSnapshot) {
       setPreview(null);
       setSourceSnapshot(null);
-      setMessage("The saved legacy layout changed after preview. Preview the current layout before importing.");
+      setMessage(
+        "The saved legacy layout changed after preview. Preview the current layout before importing.",
+      );
       return;
     }
     setImporting(true);
     setMessage(null);
     try {
       const imported = await onImport(preview.document);
-      setMessage(imported
-        ? "Import staged as a new workspace with fresh IDs. Check workspace sync status for server confirmation; the original legacy layout remains in this browser."
-        : "Import was not saved. Resolve the workspace save status and try again.");
+      setMessage(
+        imported
+          ? "Import staged as a new workspace with fresh IDs. Check workspace sync status for server confirmation; the original legacy layout remains in this browser."
+          : "Import was not saved. Resolve the workspace save status and try again.",
+      );
       if (imported) {
         setPreview(null);
         setSourceSnapshot(null);
@@ -94,21 +107,31 @@ export function LegacyWorkspaceImportPanel({ registry, canImport, disabledLabel 
         </button>
       </div>
       <p className="workspace-muted">
-        This reads <code>{LEGACY_WORKSPACE_STORAGE_KEY}</code> only after you ask. Preview never assigns it to an account or changes the saved record.
+        This reads <code>{LEGACY_WORKSPACE_STORAGE_KEY}</code> only after you ask. Preview never
+        assigns it to an account or changes the saved record.
       </p>
       {errors.length > 0 && (
         <ul className="workspace-import-errors" role="alert">
-          {errors.map((error) => <li key={error}>{error}</li>)}
+          {errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
         </ul>
       )}
       {preview && (
-        <div className="workspace-import-preview" data-testid="workspace-legacy-import-preview-result">
+        <div
+          className="workspace-import-preview"
+          data-testid="workspace-legacy-import-preview-result"
+        >
           <p>
-            <strong>{preview.widgetCount} widgets</strong> in one workspace. Unsupported legacy types retained as inert tiles: {preview.retainedAsInert.length > 0 ? preview.retainedAsInert.join(", ") : "none"}.
+            <strong>{preview.widgetCount} widgets</strong> in one workspace. Unsupported legacy
+            types retained as inert tiles:{" "}
+            {preview.retainedAsInert.length > 0 ? preview.retainedAsInert.join(", ") : "none"}.
           </p>
           {preview.warnings.length > 0 && (
             <ul className="workspace-import-warnings">
-              {preview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              {preview.warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
             </ul>
           )}
           <button
@@ -121,7 +144,11 @@ export function LegacyWorkspaceImportPanel({ registry, canImport, disabledLabel 
           </button>
         </div>
       )}
-      {message && <p aria-live="polite" className="workspace-status-message">{message}</p>}
+      {message && (
+        <p aria-live="polite" className="workspace-status-message">
+          {message}
+        </p>
+      )}
     </section>
   );
 }

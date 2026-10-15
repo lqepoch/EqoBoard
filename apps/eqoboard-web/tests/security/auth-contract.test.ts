@@ -4,7 +4,14 @@ import { isPermission, PERMISSIONS, type AuthUiSnapshot } from "../../lib/contra
 describe("browser auth projection contract", () => {
   it("accepts only the closed permission vocabulary", () => {
     for (const permission of PERMISSIONS) expect(isPermission(permission)).toBe(true);
-    for (const forged of ["admin", "broker:execute", "orders:submit", "workspace:owner", null, {}]) {
+    for (const forged of [
+      "admin",
+      "broker:execute",
+      "orders:submit",
+      "workspace:owner",
+      null,
+      {},
+    ]) {
       expect(isPermission(forged)).toBe(false);
     }
   });

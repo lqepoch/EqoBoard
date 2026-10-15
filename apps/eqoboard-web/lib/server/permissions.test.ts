@@ -11,7 +11,12 @@ describe("verified OIDC role projection", () => {
     ]);
     expect(roles).toEqual(["eqoboard-market-reader", "eqoboard-order-reviewer"]);
     expect(permissionsForRoles(roles)).toEqual([
-      "market:read", "market:stream", "market:subscribe", "orders:preview", "research:read", "workspace:read",
+      "market:read",
+      "market:stream",
+      "market:subscribe",
+      "orders:preview",
+      "research:read",
+      "workspace:read",
     ]);
   });
 

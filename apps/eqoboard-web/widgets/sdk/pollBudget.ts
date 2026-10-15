@@ -45,9 +45,12 @@ export interface WidgetPollBudget {
 }
 
 function validConfig(config: WidgetPollBudgetConfig): boolean {
-  return Number.isSafeInteger(config.maxConcurrentGlobal) && config.maxConcurrentGlobal >= 1 &&
+  return (
+    Number.isSafeInteger(config.maxConcurrentGlobal) &&
+    config.maxConcurrentGlobal >= 1 &&
     config.maxConcurrentGlobal <= MAX_CONCURRENT_GLOBAL &&
-    Number.isSafeInteger(config.maxConcurrentPerOperation) && config.maxConcurrentPerOperation >= 1 &&
+    Number.isSafeInteger(config.maxConcurrentPerOperation) &&
+    config.maxConcurrentPerOperation >= 1 &&
     config.maxConcurrentPerOperation <= MAX_CONCURRENT_PER_OPERATION &&
     config.maxConcurrentPerWidget === 1 &&
     [
@@ -55,23 +58,36 @@ function validConfig(config: WidgetPollBudgetConfig): boolean {
       config.maxRequestsPerMinutePerUser,
       config.maxRequestsPerMinutePerOperation,
       config.maxRequestsPerMinutePerWidget,
-    ].every((value) => Number.isSafeInteger(value) && value >= 1 && value <= MAX_REQUESTS_PER_MINUTE) &&
-    Number.isSafeInteger(config.minimumIntervalMs) && config.minimumIntervalMs >= 0 &&
-    config.minimumIntervalMs <= MAX_INTERVAL_MS;
+    ].every(
+      (value) => Number.isSafeInteger(value) && value >= 1 && value <= MAX_REQUESTS_PER_MINUTE,
+    ) &&
+    Number.isSafeInteger(config.minimumIntervalMs) &&
+    config.minimumIntervalMs >= 0 &&
+    config.minimumIntervalMs <= MAX_INTERVAL_MS
+  );
 }
 
 function validPollPolicy(policy: WidgetRefreshPolicyV1): boolean {
-  return policy.mode === "poll" && Number.isSafeInteger(policy.minIntervalMs) &&
-    policy.minIntervalMs >= 250 && policy.minIntervalMs <= MAX_INTERVAL_MS &&
+  return (
+    policy.mode === "poll" &&
+    Number.isSafeInteger(policy.minIntervalMs) &&
+    policy.minIntervalMs >= 250 &&
+    policy.minIntervalMs <= MAX_INTERVAL_MS &&
     Number.isSafeInteger(policy.maxRequestsPerMinute) &&
-    policy.maxRequestsPerMinute >= 1 && policy.maxRequestsPerMinute <= MAX_REQUESTS_PER_MINUTE &&
+    policy.maxRequestsPerMinute >= 1 &&
+    policy.maxRequestsPerMinute <= MAX_REQUESTS_PER_MINUTE &&
     policy.maxConcurrentRequests === 1 &&
-    (policy.whenHidden === "pause" || policy.whenHidden === "continue");
+    (policy.whenHidden === "pause" || policy.whenHidden === "continue")
+  );
 }
 
 type StableKeyBudget = { nodes: number; chars: number };
 
-function stableKey(value: unknown, depth = 0, budget: StableKeyBudget = { nodes: 0, chars: 0 }): string | null {
+function stableKey(
+  value: unknown,
+  depth = 0,
+  budget: StableKeyBudget = { nodes: 0, chars: 0 },
+): string | null {
   budget.nodes += 1;
   if (budget.nodes > 4096 || depth > 16 || budget.chars > 32_768) return null;
   if (value === null || typeof value === "boolean" || typeof value === "string") {
@@ -94,13 +110,19 @@ function stableKey(value: unknown, depth = 0, budget: StableKeyBudget = { nodes:
       if (keys.length > 4_097) return null;
       const descriptors = Object.getOwnPropertyDescriptors(value);
       const lengthDescriptor = descriptors.length;
-      if (!lengthDescriptor || !("value" in lengthDescriptor) ||
-          !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value > 4_096) return null;
+      if (
+        !lengthDescriptor ||
+        !("value" in lengthDescriptor) ||
+        !Number.isSafeInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value > 4_096
+      )
+        return null;
       const length = lengthDescriptor.value as number;
       if (keys.length !== length + 1) return null;
       for (const key of keys) {
         if (key === "length") continue;
-        if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length) return null;
+        if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length)
+          return null;
         const descriptor = descriptors[key];
         if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return null;
       }
@@ -176,19 +198,33 @@ export function createWidgetPollBudget(
   let globalCount = 0;
 
   return Object.freeze({
-    async run<T>(request: WidgetPollRequest, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
-      if (!request || typeof request.instanceId !== "string" || !INSTANCE_ID.test(request.instanceId) ||
-          typeof request.operationId !== "string" || !OPERATION_ID.test(request.operationId) ||
-          !validPollPolicy(request.policy)) {
+    async run<T>(
+      request: WidgetPollRequest,
+      operation: (signal: AbortSignal) => Promise<T>,
+    ): Promise<T> {
+      if (
+        !request ||
+        typeof request.instanceId !== "string" ||
+        !INSTANCE_ID.test(request.instanceId) ||
+        typeof request.operationId !== "string" ||
+        !OPERATION_ID.test(request.operationId) ||
+        !validPollPolicy(request.policy)
+      ) {
         throw new WidgetDataReadError("request-failed");
       }
       const snapshot = request.lifecycle.getSnapshot();
       if (snapshot.phase === "disposed") throw new WidgetDataReadError("disposed");
-      if (snapshot.phase !== "active" || snapshot.signal.aborted) throw new WidgetDataReadError("suspended");
-      if (request.hidden && request.policy.whenHidden === "pause") throw new WidgetDataReadError("hidden");
-      if (typeof request.scopeKey !== "string" || request.scopeKey.length === 0 ||
-          request.scopeKey.length > 256 || request.scopeKey !== request.scopeKey.trim() ||
-          hasControlCharacters(request.scopeKey)) {
+      if (snapshot.phase !== "active" || snapshot.signal.aborted)
+        throw new WidgetDataReadError("suspended");
+      if (request.hidden && request.policy.whenHidden === "pause")
+        throw new WidgetDataReadError("hidden");
+      if (
+        typeof request.scopeKey !== "string" ||
+        request.scopeKey.length === 0 ||
+        request.scopeKey.length > 256 ||
+        request.scopeKey !== request.scopeKey.trim() ||
+        hasControlCharacters(request.scopeKey)
+      ) {
         throw new WidgetDataReadError("request-failed");
       }
 
@@ -236,7 +272,8 @@ export function createWidgetPollBudget(
         [perWidget, Math.min(config.maxRequestsPerMinutePerWidget, rateLimit)],
       ] as const;
       for (const [timestamps, limit] of rateCeilings) {
-        if (timestamps.length >= limit) throw new WidgetDataReadError("rate-limited", nextWindowDelay(timestamps, time));
+        if (timestamps.length >= limit)
+          throw new WidgetDataReadError("rate-limited", nextWindowDelay(timestamps, time));
       }
 
       const interval = Math.max(config.minimumIntervalMs, request.policy.minIntervalMs);
@@ -245,9 +282,11 @@ export function createWidgetPollBudget(
         throw new WidgetDataReadError("rate-limited", interval - (time - prior));
       }
 
-      if (globalCount >= config.maxConcurrentGlobal ||
-          (operationCounts.get(operationKey) ?? 0) >= config.maxConcurrentPerOperation ||
-          (widgetCounts.get(widgetKey) ?? 0) >= config.maxConcurrentPerWidget) {
+      if (
+        globalCount >= config.maxConcurrentGlobal ||
+        (operationCounts.get(operationKey) ?? 0) >= config.maxConcurrentPerOperation ||
+        (widgetCounts.get(widgetKey) ?? 0) >= config.maxConcurrentPerWidget
+      ) {
         throw new WidgetDataReadError("concurrency-limited");
       }
 
@@ -277,7 +316,11 @@ export function createWidgetPollBudget(
         try {
           const result = await Promise.race([work, aborted]);
           const after = request.lifecycle.getSnapshot();
-          if (after.phase !== "active" || after.generation !== snapshot.generation || snapshot.signal.aborted) {
+          if (
+            after.phase !== "active" ||
+            after.generation !== snapshot.generation ||
+            snapshot.signal.aborted
+          ) {
             throw new WidgetDataReadError("cancelled");
           }
           return result;

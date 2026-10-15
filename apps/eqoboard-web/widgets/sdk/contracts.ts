@@ -30,7 +30,12 @@ export type WidgetSymbolBinding =
 
 export type WidgetInputV1 =
   | Readonly<{ name: "symbol"; kind: "symbol"; source: "symbol-binding"; required: true }>
-  | Readonly<{ name: "watchlist"; kind: "symbol-list"; source: "workspace.watchlist"; required: true }>;
+  | Readonly<{
+      name: "watchlist";
+      kind: "symbol-list";
+      source: "workspace.watchlist";
+      required: true;
+    }>;
 
 export type WidgetRefreshPolicyV1 =
   | Readonly<{ mode: "none" }>
@@ -151,10 +156,12 @@ export type WidgetCommandV1 = Readonly<{
   originInstanceId: string;
 }>;
 
-export type WidgetCommandResult = Readonly<{ accepted: true }> | Readonly<{
-  accepted: false;
-  reason: "invalid-command" | "invalid-symbol" | "host-rejected";
-}>;
+export type WidgetCommandResult =
+  | Readonly<{ accepted: true }>
+  | Readonly<{
+      accepted: false;
+      reason: "invalid-command" | "invalid-symbol" | "host-rejected";
+    }>;
 
 /** Widgets can listen and request commands; only the host can publish events. */
 export interface WidgetEventBus {
@@ -163,7 +170,9 @@ export interface WidgetEventBus {
 }
 
 export interface WidgetHostContext<
-  TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition } = WidgetOperationMap,
+  TOperations extends {
+    readonly [K in keyof TOperations]: WidgetOperationDefinition;
+  } = WidgetOperationMap,
   TActions extends WidgetActionMap = WidgetNoActionMap,
   TMarketSnapshot = unknown,
 > {
@@ -180,7 +189,9 @@ export interface WidgetHostContext<
 
 export interface WidgetProps<
   C,
-  TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition } = WidgetOperationMap,
+  TOperations extends {
+    readonly [K in keyof TOperations]: WidgetOperationDefinition;
+  } = WidgetOperationMap,
   TActions extends WidgetActionMap = WidgetNoActionMap,
   TMarketSnapshot = unknown,
 > {
@@ -193,7 +204,10 @@ export interface WidgetProps<
 }
 
 export type WidgetRuntimeError =
-  | Readonly<{ code: "manifest-invalid" | "unsupported-version" | "config-invalid"; retryable: false }>
+  | Readonly<{
+      code: "manifest-invalid" | "unsupported-version" | "config-invalid";
+      retryable: false;
+    }>
   | Readonly<{ code: "permission-missing"; permission: Permission; retryable: false }>
   | Readonly<{ code: "rate-limited"; retryable: true; retryAfterMs?: number }>
   | Readonly<{ code: "data-unavailable" | "request-failed"; retryable: boolean }>

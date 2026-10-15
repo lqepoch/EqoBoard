@@ -70,18 +70,21 @@ export function scheduleSymbolSearch<Value>(
 ): () => void {
   const controller = new AbortController();
   let active = true;
-  const timeout = setTimeout(() => {
-    if (!active) return;
-    callbacks.onStart();
-    void read(query, controller.signal).then(
-      (value) => {
-        if (active && !controller.signal.aborted) callbacks.onResult(value);
-      },
-      (error: unknown) => {
-        if (active && !controller.signal.aborted) callbacks.onError(error);
-      },
-    );
-  }, Math.max(0, Math.min(delayMs, 1000)));
+  const timeout = setTimeout(
+    () => {
+      if (!active) return;
+      callbacks.onStart();
+      void read(query, controller.signal).then(
+        (value) => {
+          if (active && !controller.signal.aborted) callbacks.onResult(value);
+        },
+        (error: unknown) => {
+          if (active && !controller.signal.aborted) callbacks.onError(error);
+        },
+      );
+    },
+    Math.max(0, Math.min(delayMs, 1000)),
+  );
 
   return () => {
     if (!active) return;

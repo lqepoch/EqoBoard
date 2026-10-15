@@ -37,16 +37,22 @@ function diagnosticWindow(rows: readonly TradeMinuteBarV1[]): string {
 
 function coverageSummary(response: MdpBarsResponseV1, rejectedRows: number): string {
   const first = response.rows[0];
-  if (!first) return `No diagnostic rows returned; summary row_count=${response.summary.row_count}, returned_rows=${response.summary.returned_rows}.`;
-  const projectionNote = rejectedRows > 0 ? ` ${rejectedRows} row(s) could not be plotted within the bounded numeric projection.` : "";
-  return [
-    `Validated diagnostic window only; ${response.rows.length} returned trade-minute bars`,
-    `${first.window_expected_minutes} expected minutes, ${first.window_empty_trade_minutes} empty-trade minutes`,
-    `window_input_eof=${first.window_input_eof}`,
-    `source_pages_exhausted=${first.source_pages_exhausted ?? "unknown"}`,
-    `completion_mode=${first.completion_mode}`,
-    `summary row_count=${response.summary.row_count}, returned_rows=${response.summary.returned_rows}`,
-  ].join("; ") + `.${projectionNote}`;
+  if (!first)
+    return `No diagnostic rows returned; summary row_count=${response.summary.row_count}, returned_rows=${response.summary.returned_rows}.`;
+  const projectionNote =
+    rejectedRows > 0
+      ? ` ${rejectedRows} row(s) could not be plotted within the bounded numeric projection.`
+      : "";
+  return (
+    [
+      `Validated diagnostic window only; ${response.rows.length} returned trade-minute bars`,
+      `${first.window_expected_minutes} expected minutes, ${first.window_empty_trade_minutes} empty-trade minutes`,
+      `window_input_eof=${first.window_input_eof}`,
+      `source_pages_exhausted=${first.source_pages_exhausted ?? "unknown"}`,
+      `completion_mode=${first.completion_mode}`,
+      `summary row_count=${response.summary.row_count}, returned_rows=${response.summary.returned_rows}`,
+    ].join("; ") + `.${projectionNote}`
+  );
 }
 
 /** Projects one already-decoded fixed MDP diagnostic response; never treats it as Core history. */
@@ -63,19 +69,34 @@ export function buildMdpDiagnosticChartData(response: MdpBarsResponseV1): MdpDia
       low: row.low,
       close: row.close,
       volume: row.volume,
-      ...(exact ? { exact: { open: row.open, high: row.high, low: row.low, close: row.close, volume: row.volume } } : {}),
+      ...(exact
+        ? {
+            exact: {
+              open: row.open,
+              high: row.high,
+              low: row.low,
+              close: row.close,
+              volume: row.volume,
+            },
+          }
+        : {}),
     };
   });
   const projection = projectChartRows(candidates);
-  const precision: ChartDisplayEvidence["precision"] = response.rows.length === 0
-    ? "unknown"
-    : exact ? "exact-decimal" : isProviderFloatEncoding(sourceEncoding) ? "provider-float" : "unknown";
-  const completeness: ChartDisplayEvidence["completeness"] = response.rows.length === 0
-    ? "unknown"
-    : projection.rejectedRows === 0 ? "complete" : "partial";
+  const precision: ChartDisplayEvidence["precision"] =
+    response.rows.length === 0
+      ? "unknown"
+      : exact
+        ? "exact-decimal"
+        : isProviderFloatEncoding(sourceEncoding)
+          ? "provider-float"
+          : "unknown";
+  const completeness: ChartDisplayEvidence["completeness"] =
+    response.rows.length === 0 ? "unknown" : projection.rejectedRows === 0 ? "complete" : "partial";
   const source = response.summary.source;
   const first = response.rows[0];
-  const syntheticSource = source.provider === "synthetic" || first?.completion_mode === "synthetic_eof";
+  const syntheticSource =
+    source.provider === "synthetic" || first?.completion_mode === "synthetic_eof";
 
   const evidence: ChartDisplayEvidence = {
     mode: "diagnostic-archive",
@@ -90,25 +111,62 @@ export function buildMdpDiagnosticChartData(response: MdpBarsResponseV1): MdpDia
     completeness,
     precision,
     evidence: [
-      { label: "Status", value: syntheticSource
-        ? "synthetic diagnostic observations · NOT LIVE · noncanonical · promotion unavailable"
-        : "diagnostic only · NOT LIVE · noncanonical · promotion unavailable" },
+      {
+        label: "Status",
+        value: syntheticSource
+          ? "synthetic diagnostic observations · NOT LIVE · noncanonical · promotion unavailable"
+          : "diagnostic only · NOT LIVE · noncanonical · promotion unavailable",
+      },
       { label: "Dataset", value: response.summary.dataset_id },
-      { label: "Schema", value: `${response.summary.schema_id} · ${response.summary.parquet_schema_sha256}` },
+      {
+        label: "Schema",
+        value: `${response.summary.schema_id} · ${response.summary.parquet_schema_sha256}`,
+      },
       { label: "Content SHA-256", value: response.summary.content_sha256 },
       { label: "Archive cache hit", value: String(response.summary.cache_hit) },
       { label: "Source entitlement", value: source.entitlement },
       { label: "Source numeric encoding", value: source.numeric_encoding },
       { label: "Latest row available-at", value: latestAvailableAt(response.rows) },
-      { label: "As-of limitation", value: "No archive-level as-of timestamp is present in MDP Bars V1." },
-      { label: "Window / session", value: first ? `${first.trade_date} · ${first.session_id}` : "unknown" },
-      { label: "Session policy", value: first ? `${first.session_policy_id} · ${first.session_policy_sha256}` : "unknown" },
-      { label: "Session interval", value: first ? `${first.session_start_utc} → ${first.session_end_exclusive_utc}` : "unknown" },
-      { label: "Source interval", value: first ? `${first.source_start_utc} → ${first.source_end_exclusive_utc}` : "unknown" },
-      { label: "Quote / NBBO inputs", value: first ? `${first.quote_events_excluded} quote events excluded · NBBO ${first.nbbo_input_status}` : "unknown" },
-      { label: "Validation counters", value: first ? `missing timestamps ${first.source_timestamp_missing_rows} · sequence gaps ${first.sequence_gap_count} · late events ${first.late_event_count}` : "unknown" },
+      {
+        label: "As-of limitation",
+        value: "No archive-level as-of timestamp is present in MDP Bars V1.",
+      },
+      {
+        label: "Window / session",
+        value: first ? `${first.trade_date} · ${first.session_id}` : "unknown",
+      },
+      {
+        label: "Session policy",
+        value: first ? `${first.session_policy_id} · ${first.session_policy_sha256}` : "unknown",
+      },
+      {
+        label: "Session interval",
+        value: first
+          ? `${first.session_start_utc} → ${first.session_end_exclusive_utc}`
+          : "unknown",
+      },
+      {
+        label: "Source interval",
+        value: first ? `${first.source_start_utc} → ${first.source_end_exclusive_utc}` : "unknown",
+      },
+      {
+        label: "Quote / NBBO inputs",
+        value: first
+          ? `${first.quote_events_excluded} quote events excluded · NBBO ${first.nbbo_input_status}`
+          : "unknown",
+      },
+      {
+        label: "Validation counters",
+        value: first
+          ? `missing timestamps ${first.source_timestamp_missing_rows} · sequence gaps ${first.sequence_gap_count} · late events ${first.late_event_count}`
+          : "unknown",
+      },
       { label: "Page limit", value: "one fixed response; no cursor or pagination contract" },
-      { label: "Chart projection", value: "finite numeric coordinates; source rows remain unchanged and are not execution inputs" },
+      {
+        label: "Chart projection",
+        value:
+          "finite numeric coordinates; source rows remain unchanged and are not execution inputs",
+      },
     ],
   };
   return { bars: projection.bars, projection, evidence };

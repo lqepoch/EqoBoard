@@ -40,9 +40,8 @@ export function saveViewport<TRow>(
   range: LogicalRange,
   rows: readonly ChartPlotBar<TRow>[],
 ): SavedViewport {
-  const anchorIndex = rows.length === 0
-    ? 0
-    : Math.max(0, Math.min(rows.length - 1, Math.floor(range.from)));
+  const anchorIndex =
+    rows.length === 0 ? 0 : Math.max(0, Math.min(rows.length - 1, Math.floor(range.from)));
   return {
     identity,
     range: { from: range.from, to: range.to },

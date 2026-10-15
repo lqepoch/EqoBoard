@@ -13,7 +13,10 @@ import { useWidgetRefreshScheduler } from "../../features/data/MarketDataHost";
 import { resolveWidgetInputs } from "../../widgets/sdk/host";
 import { projectWidgetAuthorization } from "../../widgets/sdk/auth";
 import { WidgetErrorBoundary } from "../../widgets/sdk/WidgetErrorBoundary";
-import { createWidgetLifecycleController, type WidgetLifecycleController } from "../../widgets/sdk/lifecycle";
+import {
+  createWidgetLifecycleController,
+  type WidgetLifecycleController,
+} from "../../widgets/sdk/lifecycle";
 import type { WidgetHostContext, WidgetInstanceV1, WidgetProps } from "../../widgets/sdk/contracts";
 import type { WidgetActionClient } from "../../widgets/sdk/actions";
 import type { WidgetDataClient, WidgetMarketReader } from "../../widgets/sdk/data";
@@ -22,7 +25,11 @@ import { toRglLayout } from "../../workspace/grid";
 import { createWorkspaceWidgetHostContext } from "../../workspace/widget-host";
 import { WORKSPACE_LIMITS } from "../../workspace/model";
 
-type NativeHostContext = WidgetHostContext<NativeDataOperationMap, NativeActionMap, MarketHostSnapshot>;
+type NativeHostContext = WidgetHostContext<
+  NativeDataOperationMap,
+  NativeActionMap,
+  MarketHostSnapshot
+>;
 
 export type WorkspaceGridProps = Readonly<{
   auth: AuthUiSnapshot;
@@ -37,7 +44,8 @@ export type WorkspaceGridProps = Readonly<{
   onWidgetError(errorCode: string): void;
 }>;
 
-const DRAG_CANCEL = "button,input,textarea,select,a,[contenteditable='true'],.workspace-widget__actions,.workspace-widget__binding";
+const DRAG_CANCEL =
+  "button,input,textarea,select,a,[contenteditable='true'],.workspace-widget__actions,.workspace-widget__binding";
 const KEY_ARROWS = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"] as const;
 
 function useContainerWidth(ref: RefObject<HTMLDivElement | null>): number {
@@ -64,7 +72,10 @@ function useDocumentHidden(): boolean {
     document.addEventListener("visibilitychange", listener);
     return () => document.removeEventListener("visibilitychange", listener);
   }, []);
-  const getSnapshot = useCallback(() => typeof document === "undefined" || document.visibilityState === "hidden", []);
+  const getSnapshot = useCallback(
+    () => typeof document === "undefined" || document.visibilityState === "hidden",
+    [],
+  );
   const getServerSnapshot = useCallback(() => true, []);
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
@@ -88,13 +99,20 @@ function useWidgetLifecycle(): WidgetLifecycleController {
 
 function resolutionMessage(resolution: WidgetInstanceResolution): string {
   switch (resolution.status) {
-    case "invalid-instance": return "This saved widget instance is malformed and cannot be opened.";
-    case "unsupported-manifest": return "This widget type is not installed in the native registry.";
-    case "unsupported-manifest-version": return "This widget version is not supported by the installed registry.";
-    case "unsupported-config-schema": return "This widget configuration version is not supported.";
-    case "unsupported-symbol-binding": return "This widget has a symbol binding the installed version cannot use.";
-    case "config-invalid": return "This widget configuration did not pass its registered schema.";
-    case "ready": return "";
+    case "invalid-instance":
+      return "This saved widget instance is malformed and cannot be opened.";
+    case "unsupported-manifest":
+      return "This widget type is not installed in the native registry.";
+    case "unsupported-manifest-version":
+      return "This widget version is not supported by the installed registry.";
+    case "unsupported-config-schema":
+      return "This widget configuration version is not supported.";
+    case "unsupported-symbol-binding":
+      return "This widget has a symbol binding the installed version cannot use.";
+    case "config-invalid":
+      return "This widget configuration did not pass its registered schema.";
+    case "ready":
+      return "";
   }
 }
 
@@ -122,32 +140,45 @@ function WidgetRenderer({
   onWidgetError(errorCode: string): void;
 }) {
   const lifecycle = useWidgetLifecycle();
-  const events = useMemo(() => eventBus.forInstance(instance.instanceId), [eventBus, instance.instanceId]);
+  const events = useMemo(
+    () => eventBus.forInstance(instance.instanceId),
+    [eventBus, instance.instanceId],
+  );
   const documentHidden = useDocumentHidden();
   const refresh = useWidgetRefreshScheduler(resolution.registration.manifest.refresh, lifecycle, {
     instanceId: instance.instanceId,
     hidden: documentHidden,
   });
   const authProjection = useMemo(() => projectWidgetAuthorization(auth), [auth]);
-  const host = useMemo(() => createWorkspaceWidgetHostContext({
-    auth: authProjection,
-    events,
-    data,
-    actions,
-    refresh,
-    market,
-    reportError(error) { onWidgetError(error.code); },
-  }, lifecycle, resolution.registration), [
-    authProjection,
-    events,
-    data,
-    actions,
-    refresh,
-    market,
-    lifecycle,
-    onWidgetError,
-    resolution.registration,
-  ]);
+  const host = useMemo(
+    () =>
+      createWorkspaceWidgetHostContext(
+        {
+          auth: authProjection,
+          events,
+          data,
+          actions,
+          refresh,
+          market,
+          reportError(error) {
+            onWidgetError(error.code);
+          },
+        },
+        lifecycle,
+        resolution.registration,
+      ),
+    [
+      authProjection,
+      events,
+      data,
+      actions,
+      refresh,
+      market,
+      lifecycle,
+      onWidgetError,
+      resolution.registration,
+    ],
+  );
   const inputs = resolveWidgetInputs(
     resolution.registration.manifest,
     instance,
@@ -163,7 +194,10 @@ function WidgetRenderer({
     onConfigChange,
   };
   return (
-    <WidgetErrorBoundary onError={(error) => onWidgetError(error.code)} title={resolution.registration.manifest.title}>
+    <WidgetErrorBoundary
+      onError={(error) => onWidgetError(error.code)}
+      title={resolution.registration.manifest.title}
+    >
       <Component {...props} />
     </WidgetErrorBoundary>
   );
@@ -184,12 +218,20 @@ function WidgetCard({
   onWidgetError,
 }: WorkspaceGridProps & Readonly<{ instance: WidgetInstanceV1; canEdit: boolean }>) {
   const resolution = registry.resolveInstance(instance);
-  const [fixedSymbol, setFixedSymbol] = useState(instance.symbolBinding?.mode === "fixed" ? instance.symbolBinding.symbol : "");
-  const title = resolution.status === "ready" ? resolution.registration.manifest.title : "Unsupported widget";
-  const missingPermissions = resolution.status === "ready"
-    ? resolution.registration.manifest.requiredPermissions.filter((permission) => !auth.permissions.includes(permission))
-    : [];
-  const bindingSupported = resolution.status === "ready" && resolution.registration.manifest.symbolBinding === "active-or-fixed";
+  const [fixedSymbol, setFixedSymbol] = useState(
+    instance.symbolBinding?.mode === "fixed" ? instance.symbolBinding.symbol : "",
+  );
+  const title =
+    resolution.status === "ready" ? resolution.registration.manifest.title : "Unsupported widget";
+  const missingPermissions =
+    resolution.status === "ready"
+      ? resolution.registration.manifest.requiredPermissions.filter(
+          (permission) => !auth.permissions.includes(permission),
+        )
+      : [];
+  const bindingSupported =
+    resolution.status === "ready" &&
+    resolution.registration.manifest.symbolBinding === "active-or-fixed";
   const activeWorkspaceId = workspace.id;
   const tabId = tab.id;
   const manifestId = instance.manifestId;
@@ -206,7 +248,11 @@ function WidgetCard({
     if (!event.ctrlKey && !event.altKey) return;
     if (!event.shiftKey || !KEY_ARROWS.includes(event.key as (typeof KEY_ARROWS)[number])) return;
     const target = event.target;
-    if (target instanceof HTMLElement && target.closest("input,textarea,select,[contenteditable='true']")) return;
+    if (
+      target instanceof HTMLElement &&
+      target.closest("input,textarea,select,[contenteditable='true']")
+    )
+      return;
     event.preventDefault();
     if (event.ctrlKey) move(event.key as (typeof KEY_ARROWS)[number]);
     else resize(event.key as (typeof KEY_ARROWS)[number]);
@@ -228,23 +274,71 @@ function WidgetCard({
         <div aria-label={`${title} controls`} className="workspace-widget__actions">
           {canEdit && (
             <>
-              <button aria-label={`Maximize ${title}`} onClick={() => store.getState().maximizeWidget(activeWorkspaceId, tabId, instance.instanceId)} type="button">Maximize</button>
-              <button aria-label={`Duplicate ${title}`} onClick={() => store.getState().duplicateWidget(activeWorkspaceId, tabId, instance.instanceId)} type="button">Duplicate</button>
-              <button aria-label={`Remove ${title}`} onClick={() => void store.getState().removeWidget(activeWorkspaceId, tabId, instance.instanceId)} type="button">Remove</button>
+              <button
+                aria-label={`Maximize ${title}`}
+                onClick={() =>
+                  store.getState().maximizeWidget(activeWorkspaceId, tabId, instance.instanceId)
+                }
+                type="button"
+              >
+                Maximize
+              </button>
+              <button
+                aria-label={`Duplicate ${title}`}
+                onClick={() =>
+                  store.getState().duplicateWidget(activeWorkspaceId, tabId, instance.instanceId)
+                }
+                type="button"
+              >
+                Duplicate
+              </button>
+              <button
+                aria-label={`Remove ${title}`}
+                onClick={() =>
+                  void store.getState().removeWidget(activeWorkspaceId, tabId, instance.instanceId)
+                }
+                type="button"
+              >
+                Remove
+              </button>
             </>
           )}
         </div>
       </header>
       {canEdit && (
         <div aria-label={`${title} layout controls`} className="workspace-widget__layout-controls">
-          <button aria-label={`Move ${title} left`} onClick={() => move("ArrowLeft")} type="button">←</button>
-          <button aria-label={`Move ${title} up`} onClick={() => move("ArrowUp")} type="button">↑</button>
-          <button aria-label={`Move ${title} down`} onClick={() => move("ArrowDown")} type="button">↓</button>
-          <button aria-label={`Move ${title} right`} onClick={() => move("ArrowRight")} type="button">→</button>
-          <button aria-label={`Narrow ${title}`} onClick={() => resize("ArrowLeft")} type="button">− width</button>
-          <button aria-label={`Widen ${title}`} onClick={() => resize("ArrowRight")} type="button">+ width</button>
-          <button aria-label={`Shorten ${title}`} onClick={() => resize("ArrowUp")} type="button">− height</button>
-          <button aria-label={`Lengthen ${title}`} onClick={() => resize("ArrowDown")} type="button">+ height</button>
+          <button aria-label={`Move ${title} left`} onClick={() => move("ArrowLeft")} type="button">
+            ←
+          </button>
+          <button aria-label={`Move ${title} up`} onClick={() => move("ArrowUp")} type="button">
+            ↑
+          </button>
+          <button aria-label={`Move ${title} down`} onClick={() => move("ArrowDown")} type="button">
+            ↓
+          </button>
+          <button
+            aria-label={`Move ${title} right`}
+            onClick={() => move("ArrowRight")}
+            type="button"
+          >
+            →
+          </button>
+          <button aria-label={`Narrow ${title}`} onClick={() => resize("ArrowLeft")} type="button">
+            − width
+          </button>
+          <button aria-label={`Widen ${title}`} onClick={() => resize("ArrowRight")} type="button">
+            + width
+          </button>
+          <button aria-label={`Shorten ${title}`} onClick={() => resize("ArrowUp")} type="button">
+            − height
+          </button>
+          <button
+            aria-label={`Lengthen ${title}`}
+            onClick={() => resize("ArrowDown")}
+            type="button"
+          >
+            + height
+          </button>
         </div>
       )}
       {bindingSupported && canEdit && (
@@ -252,14 +346,32 @@ function WidgetCard({
           className="workspace-widget__binding"
           onSubmit={(event) => {
             event.preventDefault();
-            store.getState().setSymbolBinding(activeWorkspaceId, tabId, instance.instanceId, { mode: "fixed", symbol: fixedSymbol.trim().toUpperCase() });
+            store
+              .getState()
+              .setSymbolBinding(activeWorkspaceId, tabId, instance.instanceId, {
+                mode: "fixed",
+                symbol: fixedSymbol.trim().toUpperCase(),
+              });
           }}
         >
           <span>Symbol:</span>
-          <button onClick={() => store.getState().setSymbolBinding(activeWorkspaceId, tabId, instance.instanceId, undefined)} type="button">Follow {workspace.marketContext.activeSymbol}</button>
+          <button
+            onClick={() =>
+              store
+                .getState()
+                .setSymbolBinding(activeWorkspaceId, tabId, instance.instanceId, undefined)
+            }
+            type="button"
+          >
+            Follow {workspace.marketContext.activeSymbol}
+          </button>
           <label>
             <span className="workspace-visually-hidden">Fixed symbol for {title}</span>
-            <input maxLength={24} onChange={(event) => setFixedSymbol(event.currentTarget.value)} value={fixedSymbol} />
+            <input
+              maxLength={24}
+              onChange={(event) => setFixedSymbol(event.currentTarget.value)}
+              value={fixedSymbol}
+            />
           </label>
           <button type="submit">Set fixed</button>
         </form>
@@ -268,7 +380,9 @@ function WidgetCard({
         {resolution.status !== "ready" ? (
           <div className="workspace-widget__inert" role="status">
             <p>{resolutionMessage(resolution)}</p>
-            <p>Saved data is retained. Add a supported widget from the toolbar or remove this tile.</p>
+            <p>
+              Saved data is retained. Add a supported widget from the toolbar or remove this tile.
+            </p>
           </div>
         ) : missingPermissions.length > 0 ? (
           <div className="workspace-widget__inert" role="status">
@@ -283,14 +397,20 @@ function WidgetCard({
             eventBus={eventBus}
             instance={instance}
             market={market}
-            onConfigChange={(next) => { store.getState().updateWidgetConfig(activeWorkspaceId, tabId, instance.instanceId, next); }}
+            onConfigChange={(next) => {
+              store
+                .getState()
+                .updateWidgetConfig(activeWorkspaceId, tabId, instance.instanceId, next);
+            }}
             onWidgetError={onWidgetError}
             resolution={resolution}
             workspace={workspace}
           />
         )}
       </div>
-      <p className="workspace-widget__keyboard-hint">Ctrl+Shift+arrows move · Alt+Shift+arrows resize</p>
+      <p className="workspace-widget__keyboard-hint">
+        Ctrl+Shift+arrows move · Alt+Shift+arrows resize
+      </p>
     </article>
   );
 }
@@ -310,11 +430,18 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
     const workspace = current?.workspaces.find((candidate) => candidate.id === props.workspace.id);
     const tab = workspace?.tabs.find((candidate) => candidate.id === props.tab.id);
     if (!tab) return;
-    props.store.getState().commitGrid(props.workspace.id, props.tab.id, next.map(({ i, x, y, w, h }) => ({ i, x, y, w, h })));
+    props.store.getState().commitGrid(
+      props.workspace.id,
+      props.tab.id,
+      next.map(({ i, x, y, w, h }) => ({ i, x, y, w, h })),
+    );
   }
 
   return (
-    <div className={`workspace-grid-shell${isStacked ? " workspace-grid-shell--stacked" : ""}`} ref={containerRef}>
+    <div
+      className={`workspace-grid-shell${isStacked ? " workspace-grid-shell--stacked" : ""}`}
+      ref={containerRef}
+    >
       {props.tab.widgets.length === 0 ? (
         <div className="workspace-empty-grid">
           <h2>This tab is ready for widgets</h2>
@@ -325,17 +452,31 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
           <button
             aria-label="Restore widget grid"
             className="workspace-restore-grid"
-            onClick={() => props.store.getState().maximizeWidget(props.workspace.id, props.tab.id, null)}
+            onClick={() =>
+              props.store.getState().maximizeWidget(props.workspace.id, props.tab.id, null)
+            }
             type="button"
-          >Restore grid</button>
+          >
+            Restore grid
+          </button>
           {visibleWidgets.map((instance) => (
-            <WidgetCard key={instance.instanceId} {...props} canEdit={props.store.getState().canEdit} instance={instance} />
+            <WidgetCard
+              key={instance.instanceId}
+              {...props}
+              canEdit={props.store.getState().canEdit}
+              instance={instance}
+            />
           ))}
         </div>
       ) : isStacked ? (
         <div className="workspace-stacked-grid">
           {visibleWidgets.map((instance) => (
-            <WidgetCard key={instance.instanceId} {...props} canEdit={props.store.getState().canEdit} instance={instance} />
+            <WidgetCard
+              key={instance.instanceId}
+              {...props}
+              canEdit={props.store.getState().canEdit}
+              instance={instance}
+            />
           ))}
         </div>
       ) : (

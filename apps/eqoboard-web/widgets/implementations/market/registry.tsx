@@ -4,7 +4,11 @@ import type { MarketHostSnapshot } from "@/stores/market/market-store";
 import type { WidgetManifestV1 } from "@/widgets/sdk/contracts";
 import type { WidgetOperationMap } from "@/widgets/sdk/data";
 import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
-import type { AnyWidgetRegistration, BuiltinProvenance, WidgetRegistration } from "@/widgets/registry/types";
+import type {
+  AnyWidgetRegistration,
+  BuiltinProvenance,
+  WidgetRegistration,
+} from "@/widgets/registry/types";
 
 import { FeedStatusWidget, OrderbookWidget, QuoteWidget, WatchlistWidget } from "./QuoteWidgets";
 import {
@@ -90,7 +94,19 @@ function provenance(provenanceId: string, sourcePath: string): BuiltinProvenance
   });
 }
 
-function emptyManifest(id: string, title: string, description: string, rendererId: string, size: WidgetManifestV1["defaultSize"], input: WidgetManifestV1["inputs"], permissions: readonly Permission[], refresh: WidgetManifestV1["refresh"], symbolBinding: WidgetManifestV1["symbolBinding"], provenanceId: string, evidence = true): WidgetManifestV1 {
+function emptyManifest(
+  id: string,
+  title: string,
+  description: string,
+  rendererId: string,
+  size: WidgetManifestV1["defaultSize"],
+  input: WidgetManifestV1["inputs"],
+  permissions: readonly Permission[],
+  refresh: WidgetManifestV1["refresh"],
+  symbolBinding: WidgetManifestV1["symbolBinding"],
+  provenanceId: string,
+  evidence = true,
+): WidgetManifestV1 {
   return manifest(
     id,
     title,
@@ -107,11 +123,36 @@ function emptyManifest(id: string, title: string, description: string, rendererI
   );
 }
 
-const SMALL_SIZE: WidgetManifestV1["defaultSize"] = Object.freeze({ w: 4, h: 5, minW: 3, minH: 3, maxW: 12, maxH: 12 });
-const WIDE_SIZE: WidgetManifestV1["defaultSize"] = Object.freeze({ w: 8, h: 7, minW: 4, minH: 4, maxW: 12, maxH: 12 });
-const LARGE_SIZE: WidgetManifestV1["defaultSize"] = Object.freeze({ w: 10, h: 9, minW: 5, minH: 5, maxW: 12, maxH: 12 });
-const SYMBOL_INPUT = Object.freeze([{ name: "symbol", kind: "symbol", source: "symbol-binding", required: true }] as const);
-const WATCHLIST_INPUT = Object.freeze([{ name: "watchlist", kind: "symbol-list", source: "workspace.watchlist", required: true }] as const);
+const SMALL_SIZE: WidgetManifestV1["defaultSize"] = Object.freeze({
+  w: 4,
+  h: 5,
+  minW: 3,
+  minH: 3,
+  maxW: 12,
+  maxH: 12,
+});
+const WIDE_SIZE: WidgetManifestV1["defaultSize"] = Object.freeze({
+  w: 8,
+  h: 7,
+  minW: 4,
+  minH: 4,
+  maxW: 12,
+  maxH: 12,
+});
+const LARGE_SIZE: WidgetManifestV1["defaultSize"] = Object.freeze({
+  w: 10,
+  h: 9,
+  minW: 5,
+  minH: 5,
+  maxW: 12,
+  maxH: 12,
+});
+const SYMBOL_INPUT = Object.freeze([
+  { name: "symbol", kind: "symbol", source: "symbol-binding", required: true },
+] as const);
+const WATCHLIST_INPUT = Object.freeze([
+  { name: "watchlist", kind: "symbol-list", source: "workspace.watchlist", required: true },
+] as const);
 const NO_INPUT = Object.freeze([] as const);
 
 const quoteId = "market.quote";
@@ -123,14 +164,103 @@ const feedId = "market.feed-status";
 const depthId = "market.orderbook";
 const previewId = "market.vertical-preview";
 
-const quoteManifest = emptyManifest(quoteId, "Quote", "Provider snapshot values and Gateway events with explicit source and entitlement evidence.", "eqoboard.market.quote.v1", SMALL_SIZE, SYMBOL_INPUT, ["market:read", "market:stream", "market:subscribe"], snapshotRefresh, "active-or-fixed", "eqoboard.native06.market.quote.v1");
-const watchlistManifest = emptyManifest(watchlistId, "Watchlist", "Bounded watchlist snapshots and shared Gateway stream updates.", "eqoboard.market.watchlist.v1", LARGE_SIZE, WATCHLIST_INPUT, ["market:read", "market:stream", "market:subscribe"], snapshotRefresh, "unsupported", "eqoboard.native06.market.watchlist.v1");
-const optionsManifest = emptyManifest(optionsId, "Options chain", "Alpaca option-chain snapshots with reported Greeks and separately labeled Gateway quote events.", "eqoboard.market.options-chain.v1", LARGE_SIZE, SYMBOL_INPUT, ["market:read", "market:stream", "market:subscribe"], optionsSnapshotRefresh, "active-or-fixed", "eqoboard.native06.market.options-chain.v1");
-const ivManifest = emptyManifest(ivId, "IV and Greeks", "Provider-returned per-contract implied volatility and Greeks without interpolation.", "eqoboard.market.iv-skew.v1", LARGE_SIZE, SYMBOL_INPUT, ["market:read", "market:stream", "market:subscribe"], optionsSnapshotRefresh, "active-or-fixed", "eqoboard.native06.market.iv-skew.v1");
-const tapeManifest = emptyManifest(tapeId, "Option tape", "Recent Gateway option trade events with source metadata and unknown aggressor side.", "eqoboard.market.option-tape.v1", WIDE_SIZE, SYMBOL_INPUT, ["market:stream"], sharedRefresh, "active-or-fixed", "eqoboard.native06.market.option-tape.v1");
-const feedManifest = emptyManifest(feedId, "Feed status", "Shared Gateway transport, per-feed freshness, epoch and lease coverage.", "eqoboard.market.feed-status.v1", WIDE_SIZE, NO_INPUT, ["market:stream"], sharedRefresh, "unsupported", "eqoboard.native06.market.feed-status.v1");
-const orderbookManifest = emptyManifest(depthId, "Order book", "Depth is unavailable until a typed provider depth source exists.", "eqoboard.market.orderbook.v1", SMALL_SIZE, NO_INPUT, [], noRefresh, "unsupported", "eqoboard.native06.market.orderbook.v1", false);
-const previewManifest = emptyManifest(previewId, "Vertical preview", "Server-side Alpaca Paper vertical risk preview; order execution is disabled.", "eqoboard.market.vertical-preview.v1", WIDE_SIZE, NO_INPUT, ["orders:preview"], noRefresh, "unsupported", "eqoboard.native06.market.vertical-preview.v1");
+const quoteManifest = emptyManifest(
+  quoteId,
+  "Quote",
+  "Provider snapshot values and Gateway events with explicit source and entitlement evidence.",
+  "eqoboard.market.quote.v1",
+  SMALL_SIZE,
+  SYMBOL_INPUT,
+  ["market:read", "market:stream", "market:subscribe"],
+  snapshotRefresh,
+  "active-or-fixed",
+  "eqoboard.native06.market.quote.v1",
+);
+const watchlistManifest = emptyManifest(
+  watchlistId,
+  "Watchlist",
+  "Bounded watchlist snapshots and shared Gateway stream updates.",
+  "eqoboard.market.watchlist.v1",
+  LARGE_SIZE,
+  WATCHLIST_INPUT,
+  ["market:read", "market:stream", "market:subscribe"],
+  snapshotRefresh,
+  "unsupported",
+  "eqoboard.native06.market.watchlist.v1",
+);
+const optionsManifest = emptyManifest(
+  optionsId,
+  "Options chain",
+  "Alpaca option-chain snapshots with reported Greeks and separately labeled Gateway quote events.",
+  "eqoboard.market.options-chain.v1",
+  LARGE_SIZE,
+  SYMBOL_INPUT,
+  ["market:read", "market:stream", "market:subscribe"],
+  optionsSnapshotRefresh,
+  "active-or-fixed",
+  "eqoboard.native06.market.options-chain.v1",
+);
+const ivManifest = emptyManifest(
+  ivId,
+  "IV and Greeks",
+  "Provider-returned per-contract implied volatility and Greeks without interpolation.",
+  "eqoboard.market.iv-skew.v1",
+  LARGE_SIZE,
+  SYMBOL_INPUT,
+  ["market:read", "market:stream", "market:subscribe"],
+  optionsSnapshotRefresh,
+  "active-or-fixed",
+  "eqoboard.native06.market.iv-skew.v1",
+);
+const tapeManifest = emptyManifest(
+  tapeId,
+  "Option tape",
+  "Recent Gateway option trade events with source metadata and unknown aggressor side.",
+  "eqoboard.market.option-tape.v1",
+  WIDE_SIZE,
+  SYMBOL_INPUT,
+  ["market:stream"],
+  sharedRefresh,
+  "active-or-fixed",
+  "eqoboard.native06.market.option-tape.v1",
+);
+const feedManifest = emptyManifest(
+  feedId,
+  "Feed status",
+  "Shared Gateway transport, per-feed freshness, epoch and lease coverage.",
+  "eqoboard.market.feed-status.v1",
+  WIDE_SIZE,
+  NO_INPUT,
+  ["market:stream"],
+  sharedRefresh,
+  "unsupported",
+  "eqoboard.native06.market.feed-status.v1",
+);
+const orderbookManifest = emptyManifest(
+  depthId,
+  "Order book",
+  "Depth is unavailable until a typed provider depth source exists.",
+  "eqoboard.market.orderbook.v1",
+  SMALL_SIZE,
+  NO_INPUT,
+  [],
+  noRefresh,
+  "unsupported",
+  "eqoboard.native06.market.orderbook.v1",
+  false,
+);
+const previewManifest = emptyManifest(
+  previewId,
+  "Vertical preview",
+  "Server-side Alpaca Paper vertical risk preview; order execution is disabled.",
+  "eqoboard.market.vertical-preview.v1",
+  WIDE_SIZE,
+  NO_INPUT,
+  ["orders:preview"],
+  noRefresh,
+  "unsupported",
+  "eqoboard.native06.market.vertical-preview.v1",
+);
 
 export const quoteWidgetRegistration: WidgetRegistration<
   EmptyMarketConfigV1,
@@ -144,7 +274,10 @@ export const quoteWidgetRegistration: WidgetRegistration<
   allowedActions: noActions,
   parseConfig: parseEmptyMarketConfig,
   createDefaultConfig: () => EMPTY_MARKET_CONFIG,
-  provenance: provenance("eqoboard.native06.market.quote.v1", "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx"),
+  provenance: provenance(
+    "eqoboard.native06.market.quote.v1",
+    "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+  ),
 };
 
 export const watchlistWidgetRegistration: WidgetRegistration<
@@ -159,14 +292,27 @@ export const watchlistWidgetRegistration: WidgetRegistration<
   allowedActions: noActions,
   parseConfig: parseEmptyMarketConfig,
   createDefaultConfig: () => EMPTY_MARKET_CONFIG,
-  provenance: provenance("eqoboard.native06.market.watchlist.v1", "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx"),
+  provenance: provenance(
+    "eqoboard.native06.market.watchlist.v1",
+    "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+  ),
 };
 
 function optionRegistration(
   widgetManifest: WidgetManifestV1,
-  component: WidgetRegistration<OptionExpiryConfigV1, Pick<NativeDataOperationMap, "market.quotes" | "market.options.chain">, WidgetNoActionMap, MarketHostSnapshot>["Component"],
+  component: WidgetRegistration<
+    OptionExpiryConfigV1,
+    Pick<NativeDataOperationMap, "market.quotes" | "market.options.chain">,
+    WidgetNoActionMap,
+    MarketHostSnapshot
+  >["Component"],
   provenanceId: string,
-): WidgetRegistration<OptionExpiryConfigV1, Pick<NativeDataOperationMap, "market.quotes" | "market.options.chain">, WidgetNoActionMap, MarketHostSnapshot> {
+): WidgetRegistration<
+  OptionExpiryConfigV1,
+  Pick<NativeDataOperationMap, "market.quotes" | "market.options.chain">,
+  WidgetNoActionMap,
+  MarketHostSnapshot
+> {
   return {
     manifest: widgetManifest,
     Component: component,
@@ -174,12 +320,23 @@ function optionRegistration(
     allowedActions: noActions,
     parseConfig: parseOptionExpiryConfig,
     createDefaultConfig: createDefaultOptionExpiryConfig,
-    provenance: provenance(provenanceId, "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx"),
+    provenance: provenance(
+      provenanceId,
+      "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx",
+    ),
   };
 }
 
-export const optionsChainWidgetRegistration = optionRegistration(optionsManifest, OptionsChainWidget, "eqoboard.native06.market.options-chain.v1");
-export const ivSkewWidgetRegistration = optionRegistration(ivManifest, IvSkewWidget, "eqoboard.native06.market.iv-skew.v1");
+export const optionsChainWidgetRegistration = optionRegistration(
+  optionsManifest,
+  OptionsChainWidget,
+  "eqoboard.native06.market.options-chain.v1",
+);
+export const ivSkewWidgetRegistration = optionRegistration(
+  ivManifest,
+  IvSkewWidget,
+  "eqoboard.native06.market.iv-skew.v1",
+);
 
 export const optionTapeWidgetRegistration: WidgetRegistration<
   EmptyMarketConfigV1,
@@ -193,7 +350,10 @@ export const optionTapeWidgetRegistration: WidgetRegistration<
   allowedActions: noActions,
   parseConfig: parseEmptyMarketConfig,
   createDefaultConfig: () => EMPTY_MARKET_CONFIG,
-  provenance: provenance("eqoboard.native06.market.option-tape.v1", "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx"),
+  provenance: provenance(
+    "eqoboard.native06.market.option-tape.v1",
+    "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx",
+  ),
 };
 
 export const feedStatusWidgetRegistration: WidgetRegistration<
@@ -208,7 +368,10 @@ export const feedStatusWidgetRegistration: WidgetRegistration<
   allowedActions: noActions,
   parseConfig: parseEmptyMarketConfig,
   createDefaultConfig: () => EMPTY_MARKET_CONFIG,
-  provenance: provenance("eqoboard.native06.market.feed-status.v1", "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx"),
+  provenance: provenance(
+    "eqoboard.native06.market.feed-status.v1",
+    "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+  ),
 };
 
 export const orderbookWidgetRegistration: WidgetRegistration<
@@ -223,7 +386,10 @@ export const orderbookWidgetRegistration: WidgetRegistration<
   allowedActions: noActions,
   parseConfig: parseEmptyMarketConfig,
   createDefaultConfig: () => EMPTY_MARKET_CONFIG,
-  provenance: provenance("eqoboard.native06.market.orderbook.v1", "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx"),
+  provenance: provenance(
+    "eqoboard.native06.market.orderbook.v1",
+    "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+  ),
 };
 
 export const verticalPreviewWidgetRegistration: WidgetRegistration<
@@ -238,7 +404,10 @@ export const verticalPreviewWidgetRegistration: WidgetRegistration<
   allowedActions: previewActions,
   parseConfig: parseEmptyMarketConfig,
   createDefaultConfig: () => EMPTY_MARKET_CONFIG,
-  provenance: provenance("eqoboard.native06.market.vertical-preview.v1", "apps/eqoboard-web/widgets/implementations/market/VerticalPreviewWidget.tsx"),
+  provenance: provenance(
+    "eqoboard.native06.market.vertical-preview.v1",
+    "apps/eqoboard-web/widgets/implementations/market/VerticalPreviewWidget.tsx",
+  ),
 };
 
 export const marketWidgetRegistrations: readonly AnyWidgetRegistration[] = Object.freeze([

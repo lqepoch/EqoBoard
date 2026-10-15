@@ -73,9 +73,7 @@ export const LEGACY_NATIVE_WIDGET_BINDINGS = [
 ] as const;
 
 /** Explicit V1 gaps; these kinds stay inert rather than resolving arbitrary code. */
-export const LEGACY_WIDGETS_RETAINED_INERT = [
-  "tv",
-] as const;
+export const LEGACY_WIDGETS_RETAINED_INERT = ["tv"] as const;
 
 export const LEGACY_PRO_PANELS = [
   {

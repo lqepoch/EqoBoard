@@ -48,8 +48,14 @@ describe("Core Bars chart request selection", () => {
     const input = buildCoreBarsReadInput("SPY", config);
 
     expect(input).toEqual({
-      symbol: "SPY", range: "MAX", resolution: "1d", asset_class: "etf", session_scope: "all",
-      adjustment: "unadjusted", provider_mode: "auto", allow_daily_downgrade: true,
+      symbol: "SPY",
+      range: "MAX",
+      resolution: "1d",
+      asset_class: "etf",
+      session_scope: "all",
+      adjustment: "unadjusted",
+      provider_mode: "auto",
+      allow_daily_downgrade: true,
     });
     expect(coreBarsPageMatchesInput(page(), input)).toBe(true);
     expect(coreBarsWindowKey(page().envelope.request)).toContain("2020-01-01T00:00:00Z");
@@ -59,13 +65,23 @@ describe("Core Bars chart request selection", () => {
     const cursor = "cursor-next";
     const first = page();
     const input = {
-      ...buildCoreBarsReadInput("SPY", { ...createDefaultChartConfig(), range: "MAX", assetClass: "etf" }),
+      ...buildCoreBarsReadInput("SPY", {
+        ...createDefaultChartConfig(),
+        range: "MAX",
+        assetClass: "etf",
+      }),
       request_start: request.request_start,
       request_end: request.request_end,
       cursor,
     };
     const matching = { ...first, envelope: { ...first.envelope, request: { ...request, cursor } } };
-    const wrongWindow = { ...matching, envelope: { ...matching.envelope, request: { ...matching.envelope.request, request_end: "2026-10-14T00:00:00Z" } } };
+    const wrongWindow = {
+      ...matching,
+      envelope: {
+        ...matching.envelope,
+        request: { ...matching.envelope.request, request_end: "2026-10-14T00:00:00Z" },
+      },
+    };
 
     expect(coreBarsPageMatchesInput(matching, input)).toBe(true);
     expect(coreBarsPageMatchesInput(wrongWindow, input)).toBe(false);

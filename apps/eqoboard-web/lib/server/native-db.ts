@@ -15,7 +15,8 @@ let unavailable = false;
 function ensurePrivateDirectory(path: string): void {
   mkdirSync(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
   const info = lstatSync(path);
-  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Native data path is not a real directory.");
+  if (!info.isDirectory() || info.isSymbolicLink())
+    throw new Error("Native data path is not a real directory.");
   chmodSync(path, PRIVATE_DIRECTORY_MODE);
 }
 
@@ -87,7 +88,11 @@ export function getNativeDb(): Database.Database | null {
   if (unavailable) return null;
 
   const configuredDirectory = process.env.EQOBOARD_DATA_DIR;
-  if (!configuredDirectory || configuredDirectory.trim() !== configuredDirectory || !isAbsolute(configuredDirectory)) {
+  if (
+    !configuredDirectory ||
+    configuredDirectory.trim() !== configuredDirectory ||
+    !isAbsolute(configuredDirectory)
+  ) {
     unavailable = true;
     return null;
   }

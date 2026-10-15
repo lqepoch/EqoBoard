@@ -1,4 +1,10 @@
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 
 type CounterSnapshot = Readonly<{ calls: Readonly<Record<string, number>> }>;
 const SECRET_SENTINEL_PREFIX = "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_";
@@ -15,19 +21,26 @@ function webOrigin(): string {
 
 function fixtureControlOrigin(): string {
   const origin = process.env.E2E_FIXTURE_CONTROL_ORIGIN;
-  if (!origin) throw new Error("E2E_FIXTURE_CONTROL_ORIGIN must point at the isolated mock Gateway control listener.");
+  if (!origin)
+    throw new Error(
+      "E2E_FIXTURE_CONTROL_ORIGIN must point at the isolated mock Gateway control listener.",
+    );
   return origin;
 }
 
 async function resetGatewayCounters(request: APIRequestContext): Promise<void> {
-  const response = await request.post(new URL("/__test/counters/reset", fixtureControlOrigin()).toString());
+  const response = await request.post(
+    new URL("/__test/counters/reset", fixtureControlOrigin()).toString(),
+  );
   expect(response.status()).toBe(200);
 }
 
 async function gatewayCounters(request: APIRequestContext): Promise<CounterSnapshot> {
-  const response = await request.get(new URL("/__test/counters", fixtureControlOrigin()).toString());
+  const response = await request.get(
+    new URL("/__test/counters", fixtureControlOrigin()).toString(),
+  );
   expect(response.status()).toBe(200);
-  const value = await response.json() as unknown;
+  const value = (await response.json()) as unknown;
   expect(value).toMatchObject({ calls: expect.any(Object) });
   return value as CounterSnapshot;
 }
@@ -52,13 +65,17 @@ function workspaceDocument(name: string, workspaceId: string, tabId: string) {
   return {
     schemaVersion: 1,
     activeWorkspaceId: workspaceId,
-    workspaces: [{
-      id: workspaceId,
-      name,
-      activeTabId: tabId,
-      marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
-      tabs: [{ id: tabId, name: "Overview", widgets: [], placements: [], maximizedInstanceId: null }],
-    }],
+    workspaces: [
+      {
+        id: workspaceId,
+        name,
+        activeTabId: tabId,
+        marketContext: { activeSymbol: "SPY", watchlist: ["SPY", "QQQ"] },
+        tabs: [
+          { id: tabId, name: "Overview", widgets: [], placements: [], maximizedInstanceId: null },
+        ],
+      },
+    ],
     userTemplates: [],
   };
 }
@@ -100,14 +117,18 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
   const unexpectedBrowserRequests: string[] = [];
   page.on("request", (browserRequest) => {
     const origin = new URL(browserRequest.url()).origin;
-    if (origin !== appOrigin && origin !== issuerOrigin) unexpectedBrowserRequests.push(browserRequest.url());
+    if (origin !== appOrigin && origin !== issuerOrigin)
+      unexpectedBrowserRequests.push(browserRequest.url());
   });
   await resetGatewayCounters(request);
   await page.goto(webOrigin(), { waitUntil: "domcontentloaded" });
 
-  const anonymousQuote = await page.request.get(new URL("/api/quotes?symbols=SPY", webOrigin()).toString(), {
-    headers: { Accept: "application/json" },
-  });
+  const anonymousQuote = await page.request.get(
+    new URL("/api/quotes?symbols=SPY", webOrigin()).toString(),
+    {
+      headers: { Accept: "application/json" },
+    },
+  );
   expect(anonymousQuote.status()).toBe(401);
   const anonymousQuoteBody = await anonymousQuote.json();
   expect(anonymousQuoteBody).toEqual({ error: "unauthenticated" });
@@ -121,22 +142,32 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
     sessionStorage: Object.entries(sessionStorage),
   }));
   const browserVisibleState = JSON.stringify(responseProjection);
-  expect(browserVisibleState).not.toMatch(/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u);
-  expect(browserVisibleState).not.toMatch(/access[_-]?token|refresh[_-]?token|client[_-]?secret|broker[_-]?key/iu);
+  expect(browserVisibleState).not.toMatch(
+    /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u,
+  );
+  expect(browserVisibleState).not.toMatch(
+    /access[_-]?token|refresh[_-]?token|client[_-]?secret|broker[_-]?key/iu,
+  );
   expect(browserVisibleState).not.toContain(SECRET_SENTINEL_PREFIX);
   expect(page.url()).not.toContain(SECRET_SENTINEL_PREFIX);
   expect(browserVisibleState).not.toContain("native-e2e-writer");
   expect(browserVisibleState).not.toContain("eqoboard-workspace-editor");
   const authSession = await page.request.get(new URL("/api/auth/session", webOrigin()).toString());
   expect(authSession.status()).toBe(200);
-  const publicSession = await authSession.json() as unknown;
+  const publicSession = (await authSession.json()) as unknown;
   expect(publicSession).toMatchObject({ expires: expect.any(String) });
   expect(Object.keys(publicSession as object).sort()).toEqual(["expires"]);
-  expect(JSON.stringify(publicSession)).not.toMatch(/native-e2e-writer|workspace-editor|token|secret|issuer|subject/iu);
-  expectNoServerSecret(publicSession);
-  const appScripts = await page.locator("script[src]").evaluateAll((scripts) =>
-    scripts.map((script) => (script as HTMLScriptElement).src).filter((url) => new URL(url).origin === location.origin),
+  expect(JSON.stringify(publicSession)).not.toMatch(
+    /native-e2e-writer|workspace-editor|token|secret|issuer|subject/iu,
   );
+  expectNoServerSecret(publicSession);
+  const appScripts = await page
+    .locator("script[src]")
+    .evaluateAll((scripts) =>
+      scripts
+        .map((script) => (script as HTMLScriptElement).src)
+        .filter((url) => new URL(url).origin === location.origin),
+    );
   for (const scriptUrl of appScripts) {
     const script = await page.request.get(scriptUrl);
     expect(script.ok()).toBe(true);
@@ -146,18 +177,36 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
   expect(JSON.stringify(browserCookies)).not.toContain(SECRET_SENTINEL_PREFIX);
 
   const portfolioName = `Native acceptance ${Date.now()}`;
-  const createdPortfolio = await page.request.post(new URL("/api/portfolios", webOrigin()).toString(), {
-    headers: { Accept: "application/json", "Content-Type": "application/json", Origin: appOrigin },
-    data: { name: portfolioName },
-  });
+  const createdPortfolio = await page.request.post(
+    new URL("/api/portfolios", webOrigin()).toString(),
+    {
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Origin: appOrigin,
+      },
+      data: { name: portfolioName },
+    },
+  );
   expect(createdPortfolio.status()).toBe(201);
-  const portfolioRecord = await createdPortfolio.json() as { id: number; name: string; created_at: string };
-  expect(portfolioRecord).toMatchObject({ id: expect.any(Number), name: portfolioName, created_at: expect.any(String) });
+  const portfolioRecord = (await createdPortfolio.json()) as {
+    id: number;
+    name: string;
+    created_at: string;
+  };
+  expect(portfolioRecord).toMatchObject({
+    id: expect.any(Number),
+    name: portfolioName,
+    created_at: expect.any(String),
+  });
   expectNoServerSecret(portfolioRecord);
   expect(Object.keys(portfolioRecord).sort()).toEqual(["created_at", "id", "name"]);
-  const ownPositions = await page.request.get(new URL(`/api/portfolios/${portfolioRecord.id}/positions`, webOrigin()).toString(), {
-    headers: { Accept: "application/json" },
-  });
+  const ownPositions = await page.request.get(
+    new URL(`/api/portfolios/${portfolioRecord.id}/positions`, webOrigin()).toString(),
+    {
+      headers: { Accept: "application/json" },
+    },
+  );
   expect(ownPositions.status()).toBe(200);
   const ownPositionsBody = await ownPositions.json();
   expect(ownPositionsBody).toEqual([]);
@@ -169,7 +218,7 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
   });
   expect(statusResponse.status()).toBe(200);
   expect(statusResponse.headers()["cache-control"]).toMatch(/no-store/u);
-  const fixtureStatus = await statusResponse.json() as Record<string, unknown>;
+  const fixtureStatus = (await statusResponse.json()) as Record<string, unknown>;
   expect(fixtureStatus).toMatchObject({
     source_mode: "test-fixture",
     source_label: "native-e2e synthetic fixture; not provider data",
@@ -177,16 +226,29 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
   expectNoServerSecret(fixtureStatus);
   expect((await gatewayCounters(request)).calls["/api/v1/status"]).toBe(1);
 
-  await expect.poll(async () => {
-    const response = await page.request.get(putWorkspaceUrl(), { headers: { Accept: "application/json" } });
-    if (response.status() !== 200) return false;
-    const value = await response.json() as { document: unknown };
-    return value.document !== null;
-  }, { timeout: 10_000 }).toBe(true);
-  const initial = await page.request.get(putWorkspaceUrl(), { headers: { Accept: "application/json" } });
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get(putWorkspaceUrl(), {
+          headers: { Accept: "application/json" },
+        });
+        if (response.status() !== 200) return false;
+        const value = (await response.json()) as { document: unknown };
+        return value.document !== null;
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
+  const initial = await page.request.get(putWorkspaceUrl(), {
+    headers: { Accept: "application/json" },
+  });
   expect(initial.status()).toBe(200);
   expect(initial.headers()["cache-control"]).toMatch(/no-store/u);
-  const initialBody = await initial.json() as { schemaVersion: number; revision: string; document: unknown };
+  const initialBody = (await initial.json()) as {
+    schemaVersion: number;
+    revision: string;
+    document: unknown;
+  };
   expectNoServerSecret(initialBody);
   expect(initialBody).toMatchObject({ schemaVersion: 1 });
   expect(initialBody.revision).toMatch(/^(0|[1-9][0-9]*)$/u);
@@ -199,11 +261,24 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
       "Content-Type": "application/json",
       Origin: new URL(webOrigin()).origin,
     },
-    data: { schemaVersion: 1, document: workspaceDocument("missing-etag", "11111111-1111-4111-8111-000000000001", "22222222-2222-4222-8222-000000000001") },
+    data: {
+      schemaVersion: 1,
+      document: workspaceDocument(
+        "missing-etag",
+        "11111111-1111-4111-8111-000000000001",
+        "22222222-2222-4222-8222-000000000001",
+      ),
+    },
   });
   expect(missingRevision.status()).toBe(412);
 
-  const crossOrigin = await writeWorkspace(page, "cross-origin-must-not-save", etag!, "000000000002", "https://attacker.invalid");
+  const crossOrigin = await writeWorkspace(
+    page,
+    "cross-origin-must-not-save",
+    etag!,
+    "000000000002",
+    "https://attacker.invalid",
+  );
   expect(crossOrigin.status()).toBe(403);
   expect(await crossOrigin.json()).toEqual({ error: "origin_rejected" });
 
@@ -212,19 +287,33 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
     writeWorkspace(page, "writer-cas-b", etag!, "000000000004"),
   ]);
   expect(race.map((result) => result.status()).sort()).toEqual([200, 412]);
-  const writerCurrent = await page.request.get(putWorkspaceUrl(), { headers: { Accept: "application/json" } });
+  const writerCurrent = await page.request.get(putWorkspaceUrl(), {
+    headers: { Accept: "application/json" },
+  });
   expect(writerCurrent.status()).toBe(200);
   const writerCurrentEtag = writerCurrent.headers().etag;
-  const writerBody = await writerCurrent.json() as { revision: string; document: { workspaces: Array<{ name: string }> } };
+  const writerBody = (await writerCurrent.json()) as {
+    revision: string;
+    document: { workspaces: Array<{ name: string }> };
+  };
   expectNoServerSecret(writerBody);
   expect(writerBody.revision).toBe(String(Number(initialBody.revision) + 1));
   expect(writerCurrentEtag).toBe(`"${writerBody.revision}"`);
   expect(["writer-cas-a", "writer-cas-b"]).toContain(writerBody.document.workspaces[0]?.name);
-  const staleReplay = await writeWorkspace(page, "stale-replay-must-not-overwrite", etag, "000000000006");
+  const staleReplay = await writeWorkspace(
+    page,
+    "stale-replay-must-not-overwrite",
+    etag,
+    "000000000006",
+  );
   expect(staleReplay.status()).toBe(412);
-  const afterStaleReplay = await page.request.get(putWorkspaceUrl(), { headers: { Accept: "application/json" } });
-  expect((await afterStaleReplay.json() as { document: { workspaces: Array<{ name: string }> } })
-    .document.workspaces[0]?.name).toBe(writerBody.document.workspaces[0]?.name);
+  const afterStaleReplay = await page.request.get(putWorkspaceUrl(), {
+    headers: { Accept: "application/json" },
+  });
+  expect(
+    ((await afterStaleReplay.json()) as { document: { workspaces: Array<{ name: string }> } })
+      .document.workspaces[0]?.name,
+  ).toBe(writerBody.document.workspaces[0]?.name);
 
   const secondWriterTab = await page.context().newPage();
   await secondWriterTab.goto(webOrigin(), { waitUntil: "domcontentloaded" });
@@ -244,34 +333,43 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
       },
     });
     expect(readerSnapshot.status()).toBe(200);
-    const readerBody = await readerSnapshot.json() as { document: unknown };
+    const readerBody = (await readerSnapshot.json()) as { document: unknown };
     expect(readerBody.document).toBeNull();
     expectNoServerSecret(readerBody);
 
-    const readerPortfolios = await readerPage.request.get(new URL("/api/portfolios", webOrigin()).toString(), {
-      headers: {
-        Accept: "application/json",
-        "X-Auth-Issuer": "https://attacker.invalid",
-        "X-Auth-Subject": "writer",
-        "X-Workspace-Owner": "writer",
+    const readerPortfolios = await readerPage.request.get(
+      new URL("/api/portfolios", webOrigin()).toString(),
+      {
+        headers: {
+          Accept: "application/json",
+          "X-Auth-Issuer": "https://attacker.invalid",
+          "X-Auth-Subject": "writer",
+          "X-Workspace-Owner": "writer",
+        },
       },
-    });
+    );
     expect(readerPortfolios.status()).toBe(200);
     const readerPortfolioBody = await readerPortfolios.json();
     expect(readerPortfolioBody).toEqual([]);
     expectNoServerSecret(readerPortfolioBody);
-    const foreignPositions = await readerPage.request.get(new URL(`/api/portfolios/${portfolioRecord.id}/positions`, webOrigin()).toString(), {
-      headers: { Accept: "application/json", "X-Workspace-Owner": "writer" },
-    });
+    const foreignPositions = await readerPage.request.get(
+      new URL(`/api/portfolios/${portfolioRecord.id}/positions`, webOrigin()).toString(),
+      {
+        headers: { Accept: "application/json", "X-Workspace-Owner": "writer" },
+      },
+    );
     expect(foreignPositions.status()).toBe(404);
     const foreignPositionsBody = await foreignPositions.json();
     expect(foreignPositionsBody).toEqual({ error: "portfolio_not_found" });
     expectNoServerSecret(foreignPositionsBody);
 
     await resetGatewayCounters(request);
-    const readerQuote = await readerPage.request.get(new URL("/api/quotes?symbols=SPY", webOrigin()).toString(), {
-      headers: { Accept: "application/json" },
-    });
+    const readerQuote = await readerPage.request.get(
+      new URL("/api/quotes?symbols=SPY", webOrigin()).toString(),
+      {
+        headers: { Accept: "application/json" },
+      },
+    );
     expect(readerQuote.status()).toBe(200);
     const readerQuoteBody = await readerQuote.json();
     expect(readerQuoteBody).toMatchObject({ feed: "fixture", source_mode: "test-fixture" });
@@ -279,16 +377,30 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
     expect((await gatewayCounters(request)).calls["/api/v1/stocks/snapshots"]).toBe(1);
 
     await resetGatewayCounters(request);
-    const deniedPreview = await readerPage.request.post(new URL("/api/eqo/orders/preview", webOrigin()).toString(), {
-      headers: { Accept: "application/json", "Content-Type": "application/json", Origin: appOrigin },
-      data: {},
-    });
+    const deniedPreview = await readerPage.request.post(
+      new URL("/api/eqo/orders/preview", webOrigin()).toString(),
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Origin: appOrigin,
+        },
+        data: {},
+      },
+    );
     expect(deniedPreview.status()).toBe(403);
     expect(await deniedPreview.json()).toEqual({ error: "forbidden" });
-    const deniedAi = await readerPage.request.post(new URL("/api/research/ai", webOrigin()).toString(), {
-      headers: { Accept: "application/json", "Content-Type": "application/json", Origin: appOrigin },
-      data: { messages: [{ role: "user", content: "must not reach an external AI provider" }] },
-    });
+    const deniedAi = await readerPage.request.post(
+      new URL("/api/research/ai", webOrigin()).toString(),
+      {
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Origin: appOrigin,
+        },
+        data: { messages: [{ role: "user", content: "must not reach an external AI provider" }] },
+      },
+    );
     expect(deniedAi.status()).toBe(403);
     expect(await deniedAi.json()).toEqual({ error: "forbidden" });
     expect((await gatewayCounters(request)).calls["/api/v1/orders/preview"] ?? 0).toBe(0);
@@ -298,27 +410,39 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
       "/api/eqo/engine/status",
       "/api/eqo/engine/preview",
     ]) {
-      const deniedPrivateRead = await readerPage.request.get(new URL(path, webOrigin()).toString(), {
-        headers: { Accept: "application/json" },
-      });
+      const deniedPrivateRead = await readerPage.request.get(
+        new URL(path, webOrigin()).toString(),
+        {
+          headers: { Accept: "application/json" },
+        },
+      );
       expect(deniedPrivateRead.status(), path).toBe(403);
       expect(deniedPrivateRead.headers()["cache-control"], path).toMatch(/no-store/u);
       expectNoServerSecret(await deniedPrivateRead.json());
     }
 
-    const readerWrite = await writeWorkspace(readerPage, "reader-must-not-write", readerSnapshot.headers().etag ?? "\"0\"", "000000000005");
+    const readerWrite = await writeWorkspace(
+      readerPage,
+      "reader-must-not-write",
+      readerSnapshot.headers().etag ?? '"0"',
+      "000000000005",
+    );
     expect(readerWrite.status()).toBe(403);
     expect(JSON.stringify(readerBody)).not.toContain("writer-cas");
 
     await signOut(page);
     // The second tab must react to the signed-out broadcast itself. Reloading
     // here would hide a broken cross-tab cache/session boundary.
-    await expect(secondWriterTab.getByTestId("access-state")).toContainText("Sign in to open your workspace");
+    await expect(secondWriterTab.getByTestId("access-state")).toContainText(
+      "Sign in to open your workspace",
+    );
 
     await signIn(page, "reader");
-    const switchedReaderSnapshot = await page.request.get(putWorkspaceUrl(), { headers: { Accept: "application/json" } });
+    const switchedReaderSnapshot = await page.request.get(putWorkspaceUrl(), {
+      headers: { Accept: "application/json" },
+    });
     expect(switchedReaderSnapshot.status()).toBe(200);
-    expect((await switchedReaderSnapshot.json() as { document: unknown }).document).toBeNull();
+    expect(((await switchedReaderSnapshot.json()) as { document: unknown }).document).toBeNull();
     await expect(page.locator("body")).not.toContainText(/writer-cas-[ab]/u);
     expect(unexpectedBrowserRequests).toEqual([]);
   } finally {

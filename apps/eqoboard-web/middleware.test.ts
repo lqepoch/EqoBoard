@@ -27,9 +27,11 @@ describe("request nonce and Content-Security-Policy", () => {
   });
 
   it("keeps API responses no-store without returning nonce or cookie material", () => {
-    const response = middleware(new NextRequest("https://terminal.example.test/api/workspaces", {
-      headers: { cookie: "eqoboard.session-token=private" },
-    }));
+    const response = middleware(
+      new NextRequest("https://terminal.example.test/api/workspaces", {
+        headers: { cookie: "eqoboard.session-token=private" },
+      }),
+    );
 
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("content-security-policy")).toBeNull();

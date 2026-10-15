@@ -35,15 +35,28 @@ function validInstanceId(value: unknown): value is string {
 
 export function parseWidgetCommandIntent(input: unknown): WidgetCommandIntentV1 | null {
   try {
-    if (!isRecord(input) || Reflect.ownKeys(input).length !== 2 ||
-        !Object.hasOwn(input, "type") || !Object.hasOwn(input, "symbol")) return null;
+    if (
+      !isRecord(input) ||
+      Reflect.ownKeys(input).length !== 2 ||
+      !Object.hasOwn(input, "type") ||
+      !Object.hasOwn(input, "symbol")
+    )
+      return null;
     const descriptors = Object.getOwnPropertyDescriptors(input);
     const type = descriptors.type;
     const symbol = descriptors.symbol;
-    if (!type || !symbol || !("value" in type) || !("value" in symbol) ||
-        !type.enumerable || !symbol.enumerable ||
-        type.value !== "active-symbol.select.v1" || !validSymbol(symbol.value) ||
-        typeof symbol.value !== "string") return null;
+    if (
+      !type ||
+      !symbol ||
+      !("value" in type) ||
+      !("value" in symbol) ||
+      !type.enumerable ||
+      !symbol.enumerable ||
+      type.value !== "active-symbol.select.v1" ||
+      !validSymbol(symbol.value) ||
+      typeof symbol.value !== "string"
+    )
+      return null;
     return Object.freeze({ type: "active-symbol.select.v1", symbol: symbol.value });
   } catch {
     return null;
@@ -75,7 +88,8 @@ export function createWidgetEventBus(options: WidgetEventBusOptions): WidgetEven
       });
     },
     publishActiveSymbol(symbol: string, originInstanceId: string | null) {
-      if (!validSymbol(symbol) || (originInstanceId !== null && !validInstanceId(originInstanceId))) return false;
+      if (!validSymbol(symbol) || (originInstanceId !== null && !validInstanceId(originInstanceId)))
+        return false;
       sequence += 1;
       const event: WidgetHostEventV1 = Object.freeze({
         type: "active-symbol.changed.v1",

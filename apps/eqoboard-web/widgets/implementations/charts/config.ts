@@ -45,8 +45,19 @@ export type NativeChartConfigV1 = Readonly<{
 }>;
 
 const FIELDS = new Set([
-  "schemaVersion", "dataMode", "diagnosticDatasetId", "range", "resolution", "style", "showVolume", "indicators",
-  "providerPreference", "assetClass", "sessionScope", "adjustment", "allowDailyDowngrade",
+  "schemaVersion",
+  "dataMode",
+  "diagnosticDatasetId",
+  "range",
+  "resolution",
+  "style",
+  "showVolume",
+  "indicators",
+  "providerPreference",
+  "assetClass",
+  "sessionScope",
+  "adjustment",
+  "allowDailyDowngrade",
 ]);
 
 export function createDefaultChartConfig(): NativeChartConfigV1 {
@@ -68,21 +79,29 @@ export function createDefaultChartConfig(): NativeChartConfigV1 {
 }
 
 /** Closed, JSON-safe parser for workspace-owned chart preferences only. */
-export function parseNativeChartConfig(value: unknown):
+export function parseNativeChartConfig(
+  value: unknown,
+):
   | Readonly<{ ok: true; value: NativeChartConfigV1 }>
   | Readonly<{ ok: false; code: "config-invalid"; field?: string }> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return { ok: false, code: "config-invalid" };
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return { ok: false, code: "config-invalid" };
   let record: Record<string, unknown>;
   try {
     const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return { ok: false, code: "config-invalid" };
+    if (prototype !== Object.prototype && prototype !== null)
+      return { ok: false, code: "config-invalid" };
     const keys = Reflect.ownKeys(value);
-    if (keys.some((key) => typeof key !== "string" || !FIELDS.has(key))) return { ok: false, code: "config-invalid" };
+    if (keys.some((key) => typeof key !== "string" || !FIELDS.has(key)))
+      return { ok: false, code: "config-invalid" };
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (keys.some((key) => {
-      const descriptor = descriptors[key as string];
-      return !descriptor || !descriptor.enumerable || !("value" in descriptor);
-    })) return { ok: false, code: "config-invalid" };
+    if (
+      keys.some((key) => {
+        const descriptor = descriptors[key as string];
+        return !descriptor || !descriptor.enumerable || !("value" in descriptor);
+      })
+    )
+      return { ok: false, code: "config-invalid" };
     record = value as Record<string, unknown>;
   } catch {
     return { ok: false, code: "config-invalid" };
@@ -90,27 +109,54 @@ export function parseNativeChartConfig(value: unknown):
 
   const fail = (field: string) => ({ ok: false as const, code: "config-invalid" as const, field });
   if (record.schemaVersion !== 1) return fail("schemaVersion");
-  if (typeof record.dataMode !== "string" || !CHART_DATA_MODES.includes(record.dataMode as ChartDataMode)) return fail("dataMode");
-  if (record.diagnosticDatasetId !== null && !isDiagnosticDatasetId(record.diagnosticDatasetId)) return fail("diagnosticDatasetId");
-  if (typeof record.range !== "string" || !CHART_RANGES.includes(record.range as ChartRange)) return fail("range");
-  if (record.resolution !== "auto" &&
-      (typeof record.resolution !== "string" || !CHART_RESOLUTIONS.includes(record.resolution as never))) return fail("resolution");
-  if (typeof record.style !== "string" || !CHART_STYLES.includes(record.style as ChartStyle)) return fail("style");
+  if (
+    typeof record.dataMode !== "string" ||
+    !CHART_DATA_MODES.includes(record.dataMode as ChartDataMode)
+  )
+    return fail("dataMode");
+  if (record.diagnosticDatasetId !== null && !isDiagnosticDatasetId(record.diagnosticDatasetId))
+    return fail("diagnosticDatasetId");
+  if (typeof record.range !== "string" || !CHART_RANGES.includes(record.range as ChartRange))
+    return fail("range");
+  if (
+    record.resolution !== "auto" &&
+    (typeof record.resolution !== "string" ||
+      !CHART_RESOLUTIONS.includes(record.resolution as never))
+  )
+    return fail("resolution");
+  if (typeof record.style !== "string" || !CHART_STYLES.includes(record.style as ChartStyle))
+    return fail("style");
   if (typeof record.showVolume !== "boolean") return fail("showVolume");
-  if (!Array.isArray(record.indicators) || record.indicators.length > CHART_INDICATORS.length) return fail("indicators");
+  if (!Array.isArray(record.indicators) || record.indicators.length > CHART_INDICATORS.length)
+    return fail("indicators");
   const indicators: IndicatorId[] = [];
   for (const indicator of record.indicators) {
-    if (typeof indicator !== "string" || !CHART_INDICATORS.includes(indicator as IndicatorId) || indicators.includes(indicator as IndicatorId)) {
+    if (
+      typeof indicator !== "string" ||
+      !CHART_INDICATORS.includes(indicator as IndicatorId) ||
+      indicators.includes(indicator as IndicatorId)
+    ) {
       return fail("indicators");
     }
     indicators.push(indicator as IndicatorId);
   }
-  if (typeof record.providerPreference !== "string" || !PROVIDER_PREFERENCES.includes(record.providerPreference as ProviderPreference)) {
+  if (
+    typeof record.providerPreference !== "string" ||
+    !PROVIDER_PREFERENCES.includes(record.providerPreference as ProviderPreference)
+  ) {
     return fail("providerPreference");
   }
   if (record.assetClass !== "stock" && record.assetClass !== "etf") return fail("assetClass");
-  if (typeof record.sessionScope !== "string" || !CHART_SESSION_SCOPES.includes(record.sessionScope as ChartSessionScope)) return fail("sessionScope");
-  if (typeof record.adjustment !== "string" || !CHART_ADJUSTMENTS.includes(record.adjustment as ChartAdjustment)) return fail("adjustment");
+  if (
+    typeof record.sessionScope !== "string" ||
+    !CHART_SESSION_SCOPES.includes(record.sessionScope as ChartSessionScope)
+  )
+    return fail("sessionScope");
+  if (
+    typeof record.adjustment !== "string" ||
+    !CHART_ADJUSTMENTS.includes(record.adjustment as ChartAdjustment)
+  )
+    return fail("adjustment");
   if (typeof record.allowDailyDowngrade !== "boolean") return fail("allowDailyDowngrade");
   try {
     if (new TextEncoder().encode(JSON.stringify(value)).byteLength > 8 * 1024) return fail("$");

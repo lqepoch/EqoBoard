@@ -12,7 +12,9 @@ export type GatewayRead<T> =
 
 export type MarketDelegation = Readonly<{ token: string }>;
 
-export async function authorizeMarketDelegation(principal: ServerPrincipal): Promise<GatewayRead<MarketDelegation>> {
+export async function authorizeMarketDelegation(
+  principal: ServerPrincipal,
+): Promise<GatewayRead<MarketDelegation>> {
   const delegated = await signGatewayDelegation(principal, "market:read");
   if (!delegated.ok) return { ok: false, response: delegated.response };
   return { ok: true, value: Object.freeze({ token: delegated.token }) };
@@ -62,20 +64,27 @@ export type SipSnapshotCollection = Readonly<{
 
 function splitSymbols(symbols: readonly string[], size: number): string[][] {
   const chunks: string[][] = [];
-  for (let index = 0; index < symbols.length; index += size) chunks.push(symbols.slice(index, index + size));
+  for (let index = 0; index < symbols.length; index += size)
+    chunks.push(symbols.slice(index, index + size));
   return chunks;
 }
 
-async function mapLimit<T, Result>(items: readonly T[], concurrency: number, run: (item: T) => Promise<Result>): Promise<Result[]> {
+async function mapLimit<T, Result>(
+  items: readonly T[],
+  concurrency: number,
+  run: (item: T) => Promise<Result>,
+): Promise<Result[]> {
   const result = new Array<Result>(items.length);
   let index = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    for (;;) {
-      const current = index++;
-      if (current >= items.length) return;
-      result[current] = await run(items[current]!);
-    }
-  }));
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      for (;;) {
+        const current = index++;
+        if (current >= items.length) return;
+        result[current] = await run(items[current]!);
+      }
+    }),
+  );
   return result;
 }
 
@@ -94,7 +103,11 @@ export async function readSipSnapshotsWithDelegation(
   inputSymbols: readonly string[],
 ): Promise<GatewayRead<SipSnapshotCollection>> {
   const symbols = [...new Set(inputSymbols.map((value) => value.trim().toUpperCase()))];
-  if (symbols.length < 1 || symbols.length > 1500 || symbols.some((symbol) => !/^[A-Z][A-Z0-9.-]{0,11}$/u.test(symbol))) {
+  if (
+    symbols.length < 1 ||
+    symbols.length > 1500 ||
+    symbols.some((symbol) => !/^[A-Z][A-Z0-9.-]{0,11}$/u.test(symbol))
+  ) {
     return { ok: false, response: responseError(400, "invalid_gateway_symbol_list") };
   }
   let base: URL;
@@ -111,7 +124,8 @@ export async function readSipSnapshotsWithDelegation(
     const snapshots: unknown[] = [];
     let responseMeta: unknown;
     for (const value of batches) {
-      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("research-gateway-response-invalid");
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new Error("research-gateway-response-invalid");
       const feed = stringField(value, "feed");
       const rows = Reflect.get(value, "snapshots");
       if (feed !== "sip" || !Array.isArray(rows)) throw new Error("research-gateway-feed-not-sip");
@@ -132,9 +146,10 @@ export async function readSipSnapshotsWithDelegation(
       }),
     };
   } catch (error) {
-    const code = error instanceof Error && error.message === "research-gateway-feed-not-sip"
-      ? "research_gateway_feed_not_sip"
-      : "research_gateway_unavailable";
+    const code =
+      error instanceof Error && error.message === "research-gateway-feed-not-sip"
+        ? "research_gateway_feed_not_sip"
+        : "research_gateway_unavailable";
     return { ok: false, response: responseError(502, code) };
   }
 }
@@ -171,13 +186,31 @@ export async function readSipDailyBarsWithDelegation(
   }
   try {
     const query = new URLSearchParams({ symbol, timeframe: "1Day", limit: "390", days: "650" });
-    const value = await getGatewayJson(base, `/api/v1/stocks/bars?${query.toString()}`, delegation.token);
-    if (!value || typeof value !== "object" || Array.isArray(value) ||
-        stringField(value, "feed") !== "sip" || stringField(value, "timeframe") !== "1Day" ||
-        stringField(value, "symbol")?.toUpperCase() !== symbol || !Array.isArray(Reflect.get(value, "bars"))) {
+    const value = await getGatewayJson(
+      base,
+      `/api/v1/stocks/bars?${query.toString()}`,
+      delegation.token,
+    );
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      stringField(value, "feed") !== "sip" ||
+      stringField(value, "timeframe") !== "1Day" ||
+      stringField(value, "symbol")?.toUpperCase() !== symbol ||
+      !Array.isArray(Reflect.get(value, "bars"))
+    ) {
       return { ok: false, response: responseError(502, "research_gateway_feed_not_sip") };
     }
-    return { ok: true, value: Object.freeze({ symbol, timeframe: "1Day", feed: "sip", bars: Object.freeze(Reflect.get(value, "bars") as unknown[]) }) };
+    return {
+      ok: true,
+      value: Object.freeze({
+        symbol,
+        timeframe: "1Day",
+        feed: "sip",
+        bars: Object.freeze(Reflect.get(value, "bars") as unknown[]),
+      }),
+    };
   } catch {
     return { ok: false, response: responseError(502, "research_gateway_unavailable") };
   }

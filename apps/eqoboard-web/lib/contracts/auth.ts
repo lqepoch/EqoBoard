@@ -2,9 +2,17 @@
  * These values retain service compatibility and never enable execution.
  */
 export const PERMISSIONS = [
-  "market:read", "market:stream", "market:subscribe", "research:read",
-  "research:ai", "research:private-read", "engine:offline-read",
-  "workspace:read", "workspace:write", "orders:preview", "paper:submit",
+  "market:read",
+  "market:stream",
+  "market:subscribe",
+  "research:read",
+  "research:ai",
+  "research:private-read",
+  "engine:offline-read",
+  "workspace:read",
+  "workspace:write",
+  "orders:preview",
+  "paper:submit",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

@@ -44,7 +44,14 @@ function verifyResearchDelegation(raw, secret) {
   if (parts.length !== 3 || parts.some((part) => part.length === 0)) return false;
   const header = decodeSegment(parts[0]);
   const claims = decodeSegment(parts[1]);
-  if (!header || !claims || header.alg !== "HS256" || header.typ !== "JWT" || header.kid !== "mdp-research") return false;
+  if (
+    !header ||
+    !claims ||
+    header.alg !== "HS256" ||
+    header.typ !== "JWT" ||
+    header.kid !== "mdp-research"
+  )
+    return false;
   const expected = createHmac("sha256", secret).update(`${parts[0]}.${parts[1]}`).digest();
   let signature;
   try {
@@ -55,34 +62,81 @@ function verifyResearchDelegation(raw, secret) {
   if (!equalBytes(expected, signature)) return false;
 
   const now = Math.floor(Date.now() / 1_000);
-  return claims.iss === "openterminal-research" && claims.aud === "lqepoch-market-data" &&
-    claims.idp_iss === OIDC_ISSUER && typeof claims.sub === "string" && claims.sub.length > 0 &&
-    claims.sub.length <= 255 && typeof claims.jti === "string" && claims.jti.length > 0 &&
-    claims.jti.length <= 128 && typeof claims.iat === "number" && Number.isSafeInteger(claims.iat) &&
-    claims.iat <= now + 30 && typeof claims.exp === "number" && Number.isSafeInteger(claims.exp) &&
-    claims.exp > now && claims.exp - claims.iat <= 60 &&
-    Array.isArray(claims.scope) && claims.scope.length === 1 && claims.scope[0] === "market:read";
+  return (
+    claims.iss === "openterminal-research" &&
+    claims.aud === "lqepoch-market-data" &&
+    claims.idp_iss === OIDC_ISSUER &&
+    typeof claims.sub === "string" &&
+    claims.sub.length > 0 &&
+    claims.sub.length <= 255 &&
+    typeof claims.jti === "string" &&
+    claims.jti.length > 0 &&
+    claims.jti.length <= 128 &&
+    typeof claims.iat === "number" &&
+    Number.isSafeInteger(claims.iat) &&
+    claims.iat <= now + 30 &&
+    typeof claims.exp === "number" &&
+    Number.isSafeInteger(claims.exp) &&
+    claims.exp > now &&
+    claims.exp - claims.iat <= 60 &&
+    Array.isArray(claims.scope) &&
+    claims.scope.length === 1 &&
+    claims.scope[0] === "market:read"
+  );
 }
 
 function readRequest(url) {
-  const permitted = new Set(["symbols", "asset_class", "start_utc", "end_utc", "adjustment", "cursor"]);
+  const permitted = new Set([
+    "symbols",
+    "asset_class",
+    "start_utc",
+    "end_utc",
+    "adjustment",
+    "cursor",
+  ]);
   const params = url.searchParams;
-  if ([...params.keys()].some((key) => !permitted.has(key)) ||
-      [...permitted].some((key) => params.getAll(key).length > 1)) return null;
+  if (
+    [...params.keys()].some((key) => !permitted.has(key)) ||
+    [...permitted].some((key) => params.getAll(key).length > 1)
+  )
+    return null;
   const symbol = params.get("symbols");
   const assetClass = params.get("asset_class");
   const start = params.get("start_utc");
   const end = params.get("end_utc");
   const adjustment = params.get("adjustment");
   const cursor = params.get("cursor");
-  if (!symbol || !/^[A-Z][A-Z0-9.-]{0,11}$/u.test(symbol) || !start || !end ||
-      !["stock", "etf"].includes(assetClass) || !["unadjusted", "adjusted"].includes(adjustment)) return null;
+  if (
+    !symbol ||
+    !/^[A-Z][A-Z0-9.-]{0,11}$/u.test(symbol) ||
+    !start ||
+    !end ||
+    !["stock", "etf"].includes(assetClass) ||
+    !["unadjusted", "adjusted"].includes(adjustment)
+  )
+    return null;
   const startMs = Date.parse(start);
   const endMs = Date.parse(end);
   const cursorMatch = cursor === null ? null : /^older:([1-9])$/u.exec(cursor);
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs ||
-      endMs - startMs > MAX_RANGE_DAYS * 86_400_000 || (cursor !== null && !cursorMatch)) return null;
-  return { symbol, assetClass, start, end, startMs, endMs, adjustment, cursor, pageIndex: cursorMatch ? Number(cursorMatch[1]) : 0 };
+  if (
+    !Number.isFinite(startMs) ||
+    !Number.isFinite(endMs) ||
+    endMs <= startMs ||
+    endMs - startMs > MAX_RANGE_DAYS * 86_400_000 ||
+    (cursor !== null && !cursorMatch)
+  )
+    return null;
+  return {
+    symbol,
+    assetClass,
+    start,
+    end,
+    startMs,
+    endMs,
+    adjustment,
+    cursor,
+    pageIndex: cursorMatch ? Number(cursorMatch[1]) : 0,
+  };
 }
 
 function syntheticObservation(input) {
@@ -94,8 +148,10 @@ function syntheticObservation(input) {
   const nextCursor = pageStartMs > input.startMs ? `older:${input.pageIndex + 1}` : null;
   if (input.pageIndex >= MAX_PAGE_INDEX && nextCursor !== null) return null;
 
-  const timestamps = Array.from({ length: 25 }, (_, index) => pageEndMs - (25 - index) * 86_400_000)
-    .filter((time) => time >= pageStartMs && time < pageEndMs);
+  const timestamps = Array.from(
+    { length: 25 },
+    (_, index) => pageEndMs - (25 - index) * 86_400_000,
+  ).filter((time) => time >= pageStartMs && time < pageEndMs);
   if (timestamps.length === 0) return null;
   const bars = timestamps.map((time, index) => {
     const value = 100 + index / 10;
@@ -153,13 +209,15 @@ function syntheticObservation(input) {
       requested_start: pageStart,
       requested_end: pageEnd,
       bar_count: bars.length,
-      per_symbol: [{
-        symbol: input.symbol,
-        bar_count: bars.length,
-        first_bar_at: rowTimes[0],
-        last_bar_at: rowTimes.at(-1),
-        gaps: ["DATE_GAPS_UNASSESSED", "SYMBOL_RENAME_HISTORY_UNAVAILABLE"],
-      }],
+      per_symbol: [
+        {
+          symbol: input.symbol,
+          bar_count: bars.length,
+          first_bar_at: rowTimes[0],
+          last_bar_at: rowTimes.at(-1),
+          gaps: ["DATE_GAPS_UNASSESSED", "SYMBOL_RENAME_HISTORY_UNAVAILABLE"],
+        },
+      ],
       gaps: [
         { code: "DATE_GAPS_UNASSESSED" },
         { code: "SYMBOL_RENAME_HISTORY_UNAVAILABLE" },
@@ -236,7 +294,10 @@ function syntheticObservation(input) {
 
 export function createMdpFixtureServer() {
   const secret = process.env.MDP_RESEARCH_JWT_SECRET;
-  if (!validSecret(secret)) throw new Error("MDP_RESEARCH_JWT_SECRET must be an isolated fake fixture key of at least 64 printable characters");
+  if (!validSecret(secret))
+    throw new Error(
+      "MDP_RESEARCH_JWT_SECRET must be an isolated fake fixture key of at least 64 printable characters",
+    );
   const calls = new Map();
   let acceptedDelegations = 0;
   let rejectedDelegations = 0;
@@ -248,7 +309,9 @@ export function createMdpFixtureServer() {
     }
     if (url.pathname === "/__test/counters" && request.method === "GET") {
       return sendJson(response, 200, {
-        calls: Object.fromEntries([...calls.entries()].sort(([left], [right]) => left.localeCompare(right))),
+        calls: Object.fromEntries(
+          [...calls.entries()].sort(([left], [right]) => left.localeCompare(right)),
+        ),
         acceptedDelegations,
         rejectedDelegations,
         fixture: FIXTURE_LABEL,
@@ -261,11 +324,16 @@ export function createMdpFixtureServer() {
       return sendJson(response, 200, { reset: true });
     }
 
-    if (url.pathname.startsWith("/v1/")) calls.set(url.pathname, (calls.get(url.pathname) ?? 0) + 1);
+    if (url.pathname.startsWith("/v1/"))
+      calls.set(url.pathname, (calls.get(url.pathname) ?? 0) + 1);
     if (url.pathname !== ROUTE) return sendJson(response, 404, { error: "not_found" });
-    if (request.method !== "GET") return sendJson(response, 405, { error: "method_not_allowed" }, { allow: "GET" });
-    if (request.headers["content-encoding"] || request.headers["transfer-encoding"] ||
-        (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0")) {
+    if (request.method !== "GET")
+      return sendJson(response, 405, { error: "method_not_allowed" }, { allow: "GET" });
+    if (
+      request.headers["content-encoding"] ||
+      request.headers["transfer-encoding"] ||
+      (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0")
+    ) {
       return sendJson(response, 400, { error: "invalid_request" });
     }
 
@@ -294,7 +362,8 @@ export function createMdpFixtureServer() {
 
 function start() {
   const port = Number(process.env.PORT ?? "4452");
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("PORT must be an integer from 1 to 65535");
+  if (!Number.isInteger(port) || port < 1 || port > 65_535)
+    throw new Error("PORT must be an integer from 1 to 65535");
   const server = createMdpFixtureServer();
   server.listen(port, "0.0.0.0", () => {
     process.stdout.write(`native synthetic MDP acceptance fixture listening on ${port}\n`);

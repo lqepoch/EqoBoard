@@ -1,6 +1,9 @@
 "use client";
 
-import type { EngineStatusResponseV1, SyntheticOfflinePreviewV1 } from "@lqepoch/trading-core-contracts";
+import type {
+  EngineStatusResponseV1,
+  SyntheticOfflinePreviewV1,
+} from "@lqepoch/trading-core-contracts";
 import { useEffect, useRef, useState } from "react";
 import type { NativeDataOperationMap } from "@/features/data/operations";
 import { parseEngineStatus, parseSyntheticOfflinePreview } from "@/features/research/engine";
@@ -48,27 +51,60 @@ export function EngineOfflinePreviewWidget({ host }: Props) {
     }
     if (controller.signal.aborted) return;
 
-    const parsedStatus = outcomes[0]?.status === "fulfilled" ? parseEngineStatus(outcomes[0].value) : null;
-    const parsedPreview = outcomes[1]?.status === "fulfilled" ? parseSyntheticOfflinePreview(outcomes[1].value) : null;
+    const parsedStatus =
+      outcomes[0]?.status === "fulfilled" ? parseEngineStatus(outcomes[0].value) : null;
+    const parsedPreview =
+      outcomes[1]?.status === "fulfilled" ? parseSyntheticOfflinePreview(outcomes[1].value) : null;
     setStatus(parsedStatus);
     setPreview(parsedPreview);
-    setStatusError(parsedStatus ? null : "Status is unavailable or did not match the Core-generated response contract.");
-    setPreviewError(parsedPreview ? null : "Preview is unavailable or did not match the Core-generated response contract.");
+    setStatusError(
+      parsedStatus
+        ? null
+        : "Status is unavailable or did not match the Core-generated response contract.",
+    );
+    setPreviewError(
+      parsedPreview
+        ? null
+        : "Preview is unavailable or did not match the Core-generated response contract.",
+    );
   }
 
   return (
-    <section className={styles.widget} aria-label="Engine offline preview" data-testid="engine-offline-preview-widget">
+    <section
+      className={styles.widget}
+      aria-label="Engine offline preview"
+      data-testid="engine-offline-preview-widget"
+    >
       <header className={styles.header}>
-        <div><h2>Offline state preview</h2><p>Synthetic diagnostic only. Source is unknown; account and market data are not loaded.</p></div>
+        <div>
+          <h2>Offline state preview</h2>
+          <p>
+            Synthetic diagnostic only. Source is unknown; account and market data are not loaded.
+          </p>
+        </div>
         <button type="button" onClick={() => void refresh()} disabled={!allowed || loading}>
           {loading ? "Loading…" : status || preview ? "Refresh" : "Load preview"}
         </button>
       </header>
-      {!allowed ? <p className={styles.empty}>This view requires the separate engine:offline-read permission.</p> : null}
-      {allowed && !status && !preview && !statusError && !previewError ? <p className={styles.empty}>Offline preview has not been queried.</p> : null}
-      {statusError ? <p className={styles.error} role="alert">{statusError}</p> : null}
-      {previewError ? <p className={styles.error} role="alert">{previewError}</p> : null}
-      {(status || preview) ? (
+      {!allowed ? (
+        <p className={styles.empty}>
+          This view requires the separate engine:offline-read permission.
+        </p>
+      ) : null}
+      {allowed && !status && !preview && !statusError && !previewError ? (
+        <p className={styles.empty}>Offline preview has not been queried.</p>
+      ) : null}
+      {statusError ? (
+        <p className={styles.error} role="alert">
+          {statusError}
+        </p>
+      ) : null}
+      {previewError ? (
+        <p className={styles.error} role="alert">
+          {previewError}
+        </p>
+      ) : null}
+      {status || preview ? (
         <div className={styles.compareResult} data-testid="engine-preview-evidence">
           <div className={styles.evidence}>
             <span>Source: unknown</span>
@@ -81,23 +117,60 @@ export function EngineOfflinePreviewWidget({ host }: Props) {
             <span>Account data loaded: no</span>
             <span>Market data connected: no</span>
           </div>
-          {(status || preview) ? (
+          {status || preview ? (
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <tbody>
-                  <tr><th scope="row">Pending unknown records</th><td>{preview?.pendingUnknownCount ?? status?.pendingUnknownCount ?? "unavailable"}</td></tr>
-                  <tr><th scope="row">Sample capped</th><td>{preview?.pendingUnknownCountCapped ?? status?.pendingUnknownCountCapped ?? "unknown"}</td></tr>
-                  <tr><th scope="row">Consumed risk reservations</th><td>{preview?.pendingUnknownConsumedRiskCount ?? status?.pendingUnknownConsumedRiskCount ?? "unavailable"}</td></tr>
-                  <tr><th scope="row">Unverified risk reservations</th><td>{preview?.pendingUnknownUnverifiedRiskCount ?? status?.pendingUnknownUnverifiedRiskCount ?? "unavailable"}</td></tr>
-                  {preview ? <tr><th scope="row">Disposition</th><td>{preview.disposition}</td></tr> : null}
-                  {status ? <tr><th scope="row">Core schema version</th><td>{status.schemaVersion}</td></tr> : null}
+                  <tr>
+                    <th scope="row">Pending unknown records</th>
+                    <td>
+                      {preview?.pendingUnknownCount ?? status?.pendingUnknownCount ?? "unavailable"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Sample capped</th>
+                    <td>
+                      {preview?.pendingUnknownCountCapped ??
+                        status?.pendingUnknownCountCapped ??
+                        "unknown"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Consumed risk reservations</th>
+                    <td>
+                      {preview?.pendingUnknownConsumedRiskCount ??
+                        status?.pendingUnknownConsumedRiskCount ??
+                        "unavailable"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Unverified risk reservations</th>
+                    <td>
+                      {preview?.pendingUnknownUnverifiedRiskCount ??
+                        status?.pendingUnknownUnverifiedRiskCount ??
+                        "unavailable"}
+                    </td>
+                  </tr>
+                  {preview ? (
+                    <tr>
+                      <th scope="row">Disposition</th>
+                      <td>{preview.disposition}</td>
+                    </tr>
+                  ) : null}
+                  {status ? (
+                    <tr>
+                      <th scope="row">Core schema version</th>
+                      <td>{status.schemaVersion}</td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
           ) : null}
           <p className={styles.notice}>
-            Status and preview are independent best-effort reads, not a transactional snapshot or reconciliation proof.
-            They do not grant trading, account, market-data, or promotion authority.
+            Status and preview are independent best-effort reads, not a transactional snapshot or
+            reconciliation proof. They do not grant trading, account, market-data, or promotion
+            authority.
           </p>
         </div>
       ) : null}

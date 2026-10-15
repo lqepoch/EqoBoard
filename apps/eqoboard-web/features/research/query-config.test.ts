@@ -24,12 +24,12 @@ const queryB: SavedResearchQueryV1 = {
 
 describe("native research saved queries", () => {
   it("accepts bounded static view and filter identifiers", () => {
-  const result = parseResearchQueryConfig({
-    schemaVersion: 1,
-    queries: [queryA],
-    selectedQueryId: queryA.id,
-    compareQueryIds: [queryA.id],
-  });
+    const result = parseResearchQueryConfig({
+      schemaVersion: 1,
+      queries: [queryA],
+      selectedQueryId: queryA.id,
+      compareQueryIds: [queryA.id],
+    });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -39,51 +39,63 @@ describe("native research saved queries", () => {
   });
 
   it("rejects arbitrary operation targets and non-allowlisted fields", () => {
-  const arbitraryTarget = parseResearchQueryConfig({
-    schemaVersion: 1,
-    queries: [{ ...queryA, viewId: "https://provider.invalid/data" }],
-    selectedQueryId: null,
-    compareQueryIds: [],
-  });
+    const arbitraryTarget = parseResearchQueryConfig({
+      schemaVersion: 1,
+      queries: [{ ...queryA, viewId: "https://provider.invalid/data" }],
+      selectedQueryId: null,
+      compareQueryIds: [],
+    });
     expect(arbitraryTarget.ok).toBe(false);
 
-  const unknownField = parseResearchQueryConfig({
-    schemaVersion: 1,
-    queries: [{ ...queryA, filters: [{ field: "url", operator: "equals", value: "https://provider.invalid" }] }],
-    selectedQueryId: null,
-    compareQueryIds: [],
-  });
+    const unknownField = parseResearchQueryConfig({
+      schemaVersion: 1,
+      queries: [
+        {
+          ...queryA,
+          filters: [{ field: "url", operator: "equals", value: "https://provider.invalid" }],
+        },
+      ],
+      selectedQueryId: null,
+      compareQueryIds: [],
+    });
     expect(unknownField.ok).toBe(false);
   });
 
   it("requires comparison references to resolve to the same view", () => {
-  const differentViews = parseResearchQueryConfig({
-    schemaVersion: 1,
-    queries: [queryA, { ...queryB, viewId: "macro", filters: [{ field: "series", operator: "equals", value: "DGS10" }] }],
-    selectedQueryId: queryA.id,
-    compareQueryIds: [queryA.id, queryB.id],
-  });
+    const differentViews = parseResearchQueryConfig({
+      schemaVersion: 1,
+      queries: [
+        queryA,
+        {
+          ...queryB,
+          viewId: "macro",
+          filters: [{ field: "series", operator: "equals", value: "DGS10" }],
+        },
+      ],
+      selectedQueryId: queryA.id,
+      compareQueryIds: [queryA.id, queryB.id],
+    });
     expect(differentViews.ok).toBe(false);
 
-  const missingQuery = parseResearchQueryConfig({
-    schemaVersion: 1,
-    queries: [queryA],
-    selectedQueryId: queryA.id,
-    compareQueryIds: [queryB.id],
-  });
+    const missingQuery = parseResearchQueryConfig({
+      schemaVersion: 1,
+      queries: [queryA],
+      selectedQueryId: queryA.id,
+      compareQueryIds: [queryB.id],
+    });
     expect(missingQuery.ok).toBe(false);
   });
 
   it("replaces a saved definition without duplicating its ID", () => {
-  const initial = parseResearchQueryConfig({
-    ...emptyResearchQueryConfig(),
-    queries: [queryA],
-    selectedQueryId: queryA.id,
-  });
+    const initial = parseResearchQueryConfig({
+      ...emptyResearchQueryConfig(),
+      queries: [queryA],
+      selectedQueryId: queryA.id,
+    });
     expect(initial.ok).toBe(true);
     if (!initial.ok) return;
 
-  const updated = saveResearchQuery(initial.value, { ...queryA, name: "Updated headlines" });
+    const updated = saveResearchQuery(initial.value, { ...queryA, name: "Updated headlines" });
     expect(updated.ok).toBe(true);
     if (updated.ok) {
       expect(updated.value.queries).toHaveLength(1);
@@ -98,7 +110,9 @@ describe("native research saved queries", () => {
       { symbol: "QQQ", range: "5Y", changePercent: 1.2 },
       { symbol: "IWM", range: null, changePercent: 0.3 },
     ];
-    const filtered = filterResearchRows(rows, [{ field: "range", operator: "contains", value: "1y" }]);
+    const filtered = filterResearchRows(rows, [
+      { field: "range", operator: "contains", value: "1y" },
+    ]);
     expect(filtered.map((row) => row.symbol)).toEqual(["SPY"]);
   });
 });

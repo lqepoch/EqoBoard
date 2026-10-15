@@ -1,7 +1,17 @@
 import type { AuthUiSnapshot } from "../../lib/contracts/auth";
-import { WORKSPACE_SCHEMA_VERSION, type WorkspaceDocumentV1, type WorkspaceRepositorySnapshot, type WorkspaceV1 } from "../../workspace/model";
+import {
+  WORKSPACE_SCHEMA_VERSION,
+  type WorkspaceDocumentV1,
+  type WorkspaceRepositorySnapshot,
+  type WorkspaceV1,
+} from "../../workspace/model";
 import { parseWorkspaceDocument } from "../../workspace/schema";
-import { IndexedDbWorkspaceBackupStore, type RecoveryReason, type WorkspaceBackupStore, type WorkspaceRecoveryPoint } from "./backups";
+import {
+  IndexedDbWorkspaceBackupStore,
+  type RecoveryReason,
+  type WorkspaceBackupStore,
+  type WorkspaceRecoveryPoint,
+} from "./backups";
 
 export type { WorkspaceBackupStore, WorkspaceRecoveryPoint } from "./backups";
 
@@ -47,25 +57,35 @@ type RepositoryOptions = Readonly<{
 
 const NO_STORE_HEADERS = Object.freeze({ Accept: "application/json" });
 
-function hasPermission(auth: AuthUiSnapshot, permission: "workspace:read" | "workspace:write"): boolean {
+function hasPermission(
+  auth: AuthUiSnapshot,
+  permission: "workspace:read" | "workspace:write",
+): boolean {
   return auth.authenticated && auth.permissions.includes(permission);
 }
 
 function parseRevision(value: unknown): string | null {
-  return typeof value === "string" && /^(0|[1-9]\d{0,255})$/u.test(value)
-    ? value
-    : null;
+  return typeof value === "string" && /^(0|[1-9]\d{0,255})$/u.test(value) ? value : null;
 }
 
 function isStrongEntityTag(value: string | null): value is string {
-  return value !== null && value.length >= 2 && value.length <= 512 &&
-    value.startsWith('"') && value.endsWith('"') &&
-    !/[\u0000-\u001f\u007f"]/u.test(value.slice(1, -1));
+  return (
+    value !== null &&
+    value.length >= 2 &&
+    value.length <= 512 &&
+    value.startsWith('"') &&
+    value.endsWith('"') &&
+    !/[\u0000-\u001f\u007f"]/u.test(value.slice(1, -1))
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value) &&
-    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+  );
 }
 
 function parseSnapshotResponse(body: unknown, etag: string | null): WorkspaceClientSnapshot | null {
@@ -74,7 +94,8 @@ function parseSnapshotResponse(body: unknown, etag: string | null): WorkspaceCli
   if (!revision || !isStrongEntityTag(etag) || etag !== `"${revision}"`) return null;
   const allowed = new Set(["schemaVersion", "revision", "document"]);
   if (Object.keys(body).some((key) => !allowed.has(key))) return null;
-  if (body.document === null) return { schemaVersion: WORKSPACE_SCHEMA_VERSION, revision, document: null, etag };
+  if (body.document === null)
+    return { schemaVersion: WORKSPACE_SCHEMA_VERSION, revision, document: null, etag };
   const parsed = parseWorkspaceDocument(body.document);
   if (!parsed.ok) return null;
   return { schemaVersion: WORKSPACE_SCHEMA_VERSION, revision, document: parsed.value, etag };
@@ -82,10 +103,14 @@ function parseSnapshotResponse(body: unknown, etag: string | null): WorkspaceCli
 
 function publicError(responseStatus?: number): WorkspaceRepositoryErrorCode {
   switch (responseStatus) {
-    case 401: return "authentication-required";
-    case 403: return "action-forbidden";
-    case 503: return "service-unavailable";
-    default: return responseStatus === undefined ? "network-error" : "save-failed";
+    case 401:
+      return "authentication-required";
+    case 403:
+      return "action-forbidden";
+    case 503:
+      return "service-unavailable";
+    default:
+      return responseStatus === undefined ? "network-error" : "save-failed";
   }
 }
 
@@ -100,14 +125,32 @@ export function createWorkspaceClientRepository(
   const requestController = new AbortController();
   const canRead = hasPermission(auth, "workspace:read");
   const canWrite = hasPermission(auth, "workspace:write");
-  const partition = auth.authenticated && typeof auth.storagePartition === "string" && auth.storagePartition.length > 0
-    ? auth.storagePartition
-    : null;
+  const partition =
+    auth.authenticated &&
+    typeof auth.storagePartition === "string" &&
+    auth.storagePartition.length > 0
+      ? auth.storagePartition
+      : null;
 
   async function load(): Promise<WorkspaceRepositoryResult<WorkspaceClientSnapshot>> {
-    if (!auth.authenticated) return { ok: false, code: "sign-in-required", message: "Sign in to load the owner workspace." };
-    if (!partition) return { ok: false, code: "identity-unavailable", message: "The signed-in workspace partition is unavailable." };
-    if (!canRead) return { ok: false, code: "permission-denied", message: "This account cannot read workspace data." };
+    if (!auth.authenticated)
+      return {
+        ok: false,
+        code: "sign-in-required",
+        message: "Sign in to load the owner workspace.",
+      };
+    if (!partition)
+      return {
+        ok: false,
+        code: "identity-unavailable",
+        message: "The signed-in workspace partition is unavailable.",
+      };
+    if (!canRead)
+      return {
+        ok: false,
+        code: "permission-denied",
+        message: "This account cannot read workspace data.",
+      };
     let response: Response;
     try {
       response = await fetcher(endpoint, {
@@ -120,30 +163,70 @@ export function createWorkspaceClientRepository(
         headers: NO_STORE_HEADERS,
       });
     } catch {
-      return { ok: false, code: "network-error", message: "Workspace storage could not be reached." };
+      return {
+        ok: false,
+        code: "network-error",
+        message: "Workspace storage could not be reached.",
+      };
     }
-    if (!response.ok) return { ok: false, code: publicError(response.status), message: "Workspace storage rejected the read request." };
+    if (!response.ok)
+      return {
+        ok: false,
+        code: publicError(response.status),
+        message: "Workspace storage rejected the read request.",
+      };
     let body: unknown;
     try {
-      body = await response.json() as unknown;
+      body = (await response.json()) as unknown;
     } catch {
-      return { ok: false, code: "invalid-response", message: "Workspace storage returned invalid JSON." };
+      return {
+        ok: false,
+        code: "invalid-response",
+        message: "Workspace storage returned invalid JSON.",
+      };
     }
     const snapshot = parseSnapshotResponse(body, response.headers.get("ETag"));
     return snapshot
       ? { ok: true, value: snapshot }
-      : { ok: false, code: "invalid-response", message: "Workspace storage returned an invalid revision or document." };
+      : {
+          ok: false,
+          code: "invalid-response",
+          message: "Workspace storage returned an invalid revision or document.",
+        };
   }
 
-  async function save(document: WorkspaceDocumentV1, expectedEtag: string): Promise<WorkspaceSaveResult> {
-    if (!auth.authenticated) return { ok: false, code: "sign-in-required", message: "Sign in before saving a workspace." };
-    if (!partition) return { ok: false, code: "identity-unavailable", message: "The signed-in workspace partition is unavailable." };
-    if (!canWrite) return { ok: false, code: "permission-denied", message: "This account cannot save workspace data." };
+  async function save(
+    document: WorkspaceDocumentV1,
+    expectedEtag: string,
+  ): Promise<WorkspaceSaveResult> {
+    if (!auth.authenticated)
+      return { ok: false, code: "sign-in-required", message: "Sign in before saving a workspace." };
+    if (!partition)
+      return {
+        ok: false,
+        code: "identity-unavailable",
+        message: "The signed-in workspace partition is unavailable.",
+      };
+    if (!canWrite)
+      return {
+        ok: false,
+        code: "permission-denied",
+        message: "This account cannot save workspace data.",
+      };
     if (!isStrongEntityTag(expectedEtag)) {
-      return { ok: false, code: "invalid-response", message: "The workspace save revision is invalid." };
+      return {
+        ok: false,
+        code: "invalid-response",
+        message: "The workspace save revision is invalid.",
+      };
     }
     const parsed = parseWorkspaceDocument(document);
-    if (!parsed.ok) return { ok: false, code: "save-failed", message: "The workspace document failed local validation." };
+    if (!parsed.ok)
+      return {
+        ok: false,
+        code: "save-failed",
+        message: "The workspace document failed local validation.",
+      };
 
     let response: Response;
     try {
@@ -162,23 +245,40 @@ export function createWorkspaceClientRepository(
         body: JSON.stringify({ schemaVersion: WORKSPACE_SCHEMA_VERSION, document: parsed.value }),
       });
     } catch {
-      return { ok: false, code: "network-error", message: "Workspace storage could not be reached." };
+      return {
+        ok: false,
+        code: "network-error",
+        message: "Workspace storage could not be reached.",
+      };
     }
     if (response.status === 412) {
       const latest = await load();
       return { ok: false, code: "conflict", current: latest.ok ? latest.value : null };
     }
-    if (!response.ok) return { ok: false, code: publicError(response.status), message: "Workspace storage rejected the save request." };
+    if (!response.ok)
+      return {
+        ok: false,
+        code: publicError(response.status),
+        message: "Workspace storage rejected the save request.",
+      };
     let body: unknown;
     try {
-      body = await response.json() as unknown;
+      body = (await response.json()) as unknown;
     } catch {
-      return { ok: false, code: "invalid-response", message: "Workspace storage returned invalid JSON after saving." };
+      return {
+        ok: false,
+        code: "invalid-response",
+        message: "Workspace storage returned invalid JSON after saving.",
+      };
     }
     const snapshot = parseSnapshotResponse(body, response.headers.get("ETag"));
     return snapshot?.document
       ? { ok: true, snapshot }
-      : { ok: false, code: "invalid-response", message: "Workspace storage did not confirm the saved document." };
+      : {
+          ok: false,
+          code: "invalid-response",
+          message: "Workspace storage did not confirm the saved document.",
+        };
   }
 
   return {
@@ -187,11 +287,13 @@ export function createWorkspaceClientRepository(
     canWrite,
     load,
     save,
-    backup: (workspace, reason) => partition
-      ? backupStore.save(partition, workspace, reason)
-      : Promise.reject(new Error("A local recovery partition is unavailable.")),
-    recoveryPoints: (workspaceId) => partition ? backupStore.list(partition, workspaceId) : Promise.resolve([]),
-    recoveryPoint: (id) => partition ? backupStore.get(partition, id) : Promise.resolve(null),
+    backup: (workspace, reason) =>
+      partition
+        ? backupStore.save(partition, workspace, reason)
+        : Promise.reject(new Error("A local recovery partition is unavailable.")),
+    recoveryPoints: (workspaceId) =>
+      partition ? backupStore.list(partition, workspaceId) : Promise.resolve([]),
+    recoveryPoint: (id) => (partition ? backupStore.get(partition, id) : Promise.resolve(null)),
     dispose: () => requestController.abort(),
   };
 }

@@ -14,7 +14,11 @@ import {
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024;
 const MAX_BODY_READ_MS = 5_000;
-const RESEARCH_RUNTIME_PERMISSIONS: readonly Permission[] = ["market:read", "research:read", "research:private-read"];
+const RESEARCH_RUNTIME_PERMISSIONS: readonly Permission[] = [
+  "market:read",
+  "research:read",
+  "research:private-read",
+];
 
 export type AuthorizationResult =
   | Readonly<{ ok: true; principal: ServerPrincipal }>
@@ -39,10 +43,13 @@ function responseHeaders(extra: HeadersInit = {}): Headers {
 }
 
 function jsonError(status: number, error: string, headers: HeadersInit = {}): NextResponse {
-  return NextResponse.json({ error }, {
-    status,
-    headers: responseHeaders(headers),
-  });
+  return NextResponse.json(
+    { error },
+    {
+      status,
+      headers: responseHeaders(headers),
+    },
+  );
 }
 
 function maxBodyBytes(value: number): number {
@@ -55,7 +62,10 @@ function isWriteMethod(method: string): boolean {
 }
 
 /** Enforce browser origin/site isolation before any identity or downstream work. */
-export function validateRequestBoundary(request: Request, options: { requireJson?: boolean } = {}): NextResponse | null {
+export function validateRequestBoundary(
+  request: Request,
+  options: { requireJson?: boolean } = {},
+): NextResponse | null {
   const method = request.method.toUpperCase();
   const isWrite = isWriteMethod(method);
   const expectedOrigin = publicAppOrigin();
@@ -63,10 +73,12 @@ export function validateRequestBoundary(request: Request, options: { requireJson
   const site = request.headers.get("sec-fetch-site");
   const mode = request.headers.get("sec-fetch-mode");
 
-  if (origin !== null && (!expectedOrigin || origin !== expectedOrigin)) return jsonError(403, "origin_rejected");
+  if (origin !== null && (!expectedOrigin || origin !== expectedOrigin))
+    return jsonError(403, "origin_rejected");
   if (site !== null && site !== "same-origin") return jsonError(403, "origin_rejected");
   if (mode !== null && isWrite && mode !== "same-origin") return jsonError(403, "origin_rejected");
-  if (isWrite && (!expectedOrigin || origin !== expectedOrigin)) return jsonError(403, "origin_rejected");
+  if (isWrite && (!expectedOrigin || origin !== expectedOrigin))
+    return jsonError(403, "origin_rejected");
 
   // Native routes never accept compressed request bodies or transfer-coded
   // bodies. This keeps the byte cap meaningful across the Next runtime and
@@ -80,7 +92,10 @@ export function validateRequestBoundary(request: Request, options: { requireJson
     if (contentType !== "application/json") return jsonError(415, "json_required");
   }
   const declaredLength = request.headers.get("content-length");
-  if (declaredLength !== null && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > DEFAULT_MAX_BODY_BYTES)) {
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > DEFAULT_MAX_BODY_BYTES)
+  ) {
     return jsonError(413, "request_too_large");
   }
   return null;
@@ -97,14 +112,20 @@ export function validateSameOriginWrite(request: Request): NextResponse | null {
   return null;
 }
 
-export async function authorizeRequest(request: Request, permission: Permission): Promise<AuthorizationResult> {
+export async function authorizeRequest(
+  request: Request,
+  permission: Permission,
+): Promise<AuthorizationResult> {
   const boundaryError = validateRequestBoundary(request);
   if (boundaryError) return { ok: false, response: boundaryError };
   const runtime = nativeRuntimeReadiness();
   if (!runtime.ready) return { ok: false, response: jsonError(503, "identity_unavailable") };
   const pathname = new URL(request.url).pathname;
-  if (!runtime.mode || !nativeRuntimeAllowsAuthorizedRoute(runtime.mode, request.method, pathname) ||
-      (runtime.mode === "research" && !RESEARCH_RUNTIME_PERMISSIONS.includes(permission))) {
+  if (
+    !runtime.mode ||
+    !nativeRuntimeAllowsAuthorizedRoute(runtime.mode, request.method, pathname) ||
+    (runtime.mode === "research" && !RESEARCH_RUNTIME_PERMISSIONS.includes(permission))
+  ) {
     return { ok: false, response: jsonError(404, "not_found") };
   }
   if (!isPermission(permission) || !isOidcConfigured()) {
@@ -178,11 +199,16 @@ export async function signGatewayDelegation(
   });
 }
 
-export async function signResearchGatewayReadDelegation(principal: ServerPrincipal): Promise<GatewayDelegationResult> {
+export async function signResearchGatewayReadDelegation(
+  principal: ServerPrincipal,
+): Promise<GatewayDelegationResult> {
   if (getNativeRuntimeMode() !== "research") {
     return { ok: false, response: jsonError(404, "not_found") };
   }
-  if (!principal.permissions.includes("research:read") || !principal.permissions.includes("market:read")) {
+  if (
+    !principal.permissions.includes("research:read") ||
+    !principal.permissions.includes("market:read")
+  ) {
     return { ok: false, response: jsonError(403, "forbidden") };
   }
   const secret = process.env.EQO_RESEARCH_JWT_SECRET;
@@ -200,7 +226,9 @@ export async function signResearchGatewayReadDelegation(principal: ServerPrincip
 }
 
 /** Mint the existing MDP terminal identity for a fixed native market read. */
-export async function signMdpMarketReadDelegation(principal: ServerPrincipal): Promise<GatewayDelegationResult> {
+export async function signMdpMarketReadDelegation(
+  principal: ServerPrincipal,
+): Promise<GatewayDelegationResult> {
   const mode = getNativeRuntimeMode();
   if (mode !== "terminal" && mode !== "research") {
     return { ok: false, response: jsonError(404, "not_found") };
@@ -220,7 +248,9 @@ export async function signMdpMarketReadDelegation(principal: ServerPrincipal): P
 }
 
 /** Mint the isolated NativeResearch MDP identity after the research:read role check. */
-export async function signMdpResearchReadDelegation(principal: ServerPrincipal): Promise<GatewayDelegationResult> {
+export async function signMdpResearchReadDelegation(
+  principal: ServerPrincipal,
+): Promise<GatewayDelegationResult> {
   if (getNativeRuntimeMode() !== "research") {
     return { ok: false, response: jsonError(404, "not_found") };
   }
@@ -238,7 +268,9 @@ export async function signMdpResearchReadDelegation(principal: ServerPrincipal):
 }
 
 /** Mint the existing private Quant read identity; no artifact is returned by this signer. */
-export async function signQuantPredictionReadDelegation(principal: ServerPrincipal): Promise<GatewayDelegationResult> {
+export async function signQuantPredictionReadDelegation(
+  principal: ServerPrincipal,
+): Promise<GatewayDelegationResult> {
   const mode = getNativeRuntimeMode();
   if (mode !== "terminal" && mode !== "research") {
     return { ok: false, response: jsonError(404, "not_found") };
@@ -258,7 +290,9 @@ export async function signQuantPredictionReadDelegation(principal: ServerPrincip
 }
 
 /** Mint the existing terminal-only offline Engine read identity. */
-export async function signEngineOfflineReadDelegation(principal: ServerPrincipal): Promise<GatewayDelegationResult> {
+export async function signEngineOfflineReadDelegation(
+  principal: ServerPrincipal,
+): Promise<GatewayDelegationResult> {
   if (getNativeRuntimeMode() !== "terminal") {
     return { ok: false, response: jsonError(404, "not_found") };
   }
@@ -286,15 +320,25 @@ async function signDelegation(
     scope: readonly string[];
   }>,
 ): Promise<GatewayDelegationResult> {
-  if (!validSigningKey(options.secret) || !nativeRuntimeReadiness().ready || !isOidcConfigured() ||
-      !distinctServiceKey(options.secret, options.secretName)) {
+  if (
+    !validSigningKey(options.secret) ||
+    !nativeRuntimeReadiness().ready ||
+    !isOidcConfigured() ||
+    !distinctServiceKey(options.secret, options.secretName)
+  ) {
     return { ok: false, response: jsonError(503, "identity_unavailable") };
   }
   const issuedAt = Math.floor(Date.now() / 1000);
-  const expiresAt = Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000) * 1000;
-  if (expiresAt <= issuedAt * 1000) return { ok: false, response: jsonError(401, "unauthenticated") };
+  const expiresAt =
+    Math.floor(Math.min(Date.now() + 60_000, principal.sessionExpiresAt) / 1000) * 1000;
+  if (expiresAt <= issuedAt * 1000)
+    return { ok: false, response: jsonError(401, "unauthenticated") };
   try {
-    const token = await new SignJWT({ idp_iss: principal.identityIssuer, scope: [...options.scope], jti: randomUUID() })
+    const token = await new SignJWT({
+      idp_iss: principal.identityIssuer,
+      scope: [...options.scope],
+      jti: randomUUID(),
+    })
       .setProtectedHeader({ alg: "HS256", typ: "JWT", kid: options.keyId })
       .setIssuer(options.issuer)
       .setAudience(options.audience)
@@ -317,10 +361,16 @@ export async function authorizeGatewayRequest(
   return signGatewayDelegation(authorization.principal, permission);
 }
 
-export async function readBoundedBody(request: Request, requestedMaxBytes = DEFAULT_MAX_BODY_BYTES): Promise<BoundedBodyResult> {
+export async function readBoundedBody(
+  request: Request,
+  requestedMaxBytes = DEFAULT_MAX_BODY_BYTES,
+): Promise<BoundedBodyResult> {
   const maxBytes = maxBodyBytes(requestedMaxBytes);
   const declaredLength = request.headers.get("content-length");
-  if (declaredLength !== null && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maxBytes)) {
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maxBytes)
+  ) {
     return { ok: false, response: jsonError(413, "request_too_large") };
   }
   if (!request.body) return { ok: false, response: jsonError(400, "invalid_json") };
@@ -355,10 +405,15 @@ export async function readBoundedBody(request: Request, requestedMaxBytes = DEFA
     await reader.cancel().catch(() => undefined);
     return {
       ok: false,
-      response: error instanceof RangeError
-        ? jsonError(413, "request_too_large")
-        : jsonError(error instanceof Error && error.message === "body_timeout" ? 408 : 400,
-          error instanceof Error && error.message === "body_timeout" ? "request_body_timeout" : "request_body_invalid"),
+      response:
+        error instanceof RangeError
+          ? jsonError(413, "request_too_large")
+          : jsonError(
+              error instanceof Error && error.message === "body_timeout" ? 408 : 400,
+              error instanceof Error && error.message === "body_timeout"
+                ? "request_body_timeout"
+                : "request_body_invalid",
+            ),
     };
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
@@ -366,9 +421,13 @@ export async function readBoundedBody(request: Request, requestedMaxBytes = DEFA
   }
 }
 
-export async function readBoundedJson(request: Request, requestedMaxBytes = DEFAULT_MAX_BODY_BYTES): Promise<BoundedJsonResult> {
+export async function readBoundedJson(
+  request: Request,
+  requestedMaxBytes = DEFAULT_MAX_BODY_BYTES,
+): Promise<BoundedJsonResult> {
   const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType !== "application/json") return { ok: false, response: jsonError(415, "json_required") };
+  if (contentType !== "application/json")
+    return { ok: false, response: jsonError(415, "json_required") };
   const body = await readBoundedBody(request, requestedMaxBytes);
   if (!body.ok) return body;
   let text: string;
@@ -384,7 +443,11 @@ export async function readBoundedJson(request: Request, requestedMaxBytes = DEFA
   }
 }
 
-export function noStoreJson(data: unknown, status = 200, extraHeaders: HeadersInit = {}): NextResponse {
+export function noStoreJson(
+  data: unknown,
+  status = 200,
+  extraHeaders: HeadersInit = {},
+): NextResponse {
   return NextResponse.json(data, {
     status,
     headers: responseHeaders(extraHeaders),

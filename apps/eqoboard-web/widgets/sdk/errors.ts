@@ -3,13 +3,22 @@ import { WidgetDataReadError } from "./data";
 import type { WidgetRuntimeError } from "./contracts";
 
 const SAFE_CODES = new Set<WidgetRuntimeError["code"]>([
-  "manifest-invalid", "unsupported-version", "config-invalid", "permission-missing",
-  "rate-limited", "data-unavailable", "request-failed", "render-failed", "cancelled",
+  "manifest-invalid",
+  "unsupported-version",
+  "config-invalid",
+  "permission-missing",
+  "rate-limited",
+  "data-unavailable",
+  "request-failed",
+  "render-failed",
+  "cancelled",
 ]);
 
 function ownDataValue(value: object, key: string): unknown {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
-  return descriptor && descriptor.enumerable && "value" in descriptor ? descriptor.value : undefined;
+  return descriptor && descriptor.enumerable && "value" in descriptor
+    ? descriptor.value
+    : undefined;
 }
 
 /** Maps arbitrary thrown values to a small UI-safe error union without raw messages. */
@@ -17,7 +26,12 @@ export function toWidgetRuntimeError(value: unknown): WidgetRuntimeError {
   try {
     if (value instanceof WidgetDataReadError) {
       const code = ownDataValue(value, "code");
-      if (code === "cancelled" || code === "suspended" || code === "disposed" || code === "hidden") {
+      if (
+        code === "cancelled" ||
+        code === "suspended" ||
+        code === "disposed" ||
+        code === "hidden"
+      ) {
         return { code: "cancelled", retryable: false };
       }
       if (code === "rate-limited") {
@@ -54,9 +68,7 @@ export function toWidgetRuntimeError(value: unknown): WidgetRuntimeError {
             const retryable = ownDataValue(value, "retryable");
             return {
               code,
-              retryable: typeof retryable === "boolean"
-                ? retryable
-                : true,
+              retryable: typeof retryable === "boolean" ? retryable : true,
             };
           }
           case "cancelled":
@@ -85,14 +97,21 @@ export function toWidgetRuntimeError(value: unknown): WidgetRuntimeError {
 /** Stable user-facing labels; never display response bodies or exception text. */
 export function widgetErrorMessage(error: WidgetRuntimeError): string {
   switch (error.code) {
-    case "permission-missing": return "You do not have permission to view this widget.";
-    case "rate-limited": return "This widget is refreshing too often. Try again shortly.";
-    case "data-unavailable": return "Data is currently unavailable.";
-    case "cancelled": return "This widget is paused.";
-    case "config-invalid": return "This widget configuration is not supported.";
+    case "permission-missing":
+      return "You do not have permission to view this widget.";
+    case "rate-limited":
+      return "This widget is refreshing too often. Try again shortly.";
+    case "data-unavailable":
+      return "Data is currently unavailable.";
+    case "cancelled":
+      return "This widget is paused.";
+    case "config-invalid":
+      return "This widget configuration is not supported.";
     case "manifest-invalid":
-    case "unsupported-version": return "This widget version is not supported.";
+    case "unsupported-version":
+      return "This widget version is not supported.";
     case "render-failed":
-    case "request-failed": return "This widget could not be loaded.";
+    case "request-failed":
+      return "This widget could not be loaded.";
   }
 }

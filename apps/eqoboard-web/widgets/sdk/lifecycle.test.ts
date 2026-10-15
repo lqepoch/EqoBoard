@@ -22,7 +22,9 @@ describe("widget lifecycle", () => {
 
   it("disposes idempotently and runs all cleanup even when one cleanup throws", () => {
     const lifecycle = createWidgetLifecycleController();
-    const cleanupOne = vi.fn(() => { throw new Error("private detail"); });
+    const cleanupOne = vi.fn(() => {
+      throw new Error("private detail");
+    });
     const cleanupTwo = vi.fn();
     lifecycle.onDispose(cleanupOne);
     lifecycle.onDispose(cleanupTwo);

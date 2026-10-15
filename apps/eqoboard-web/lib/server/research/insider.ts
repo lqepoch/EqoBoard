@@ -42,7 +42,7 @@ function asArray(value: unknown): unknown[] {
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -81,7 +81,9 @@ let lastSecRequestAt = 0;
 async function secRequestTurn(): Promise<() => void> {
   const prior = contactQueue;
   let release!: () => void;
-  contactQueue = new Promise<void>((resolve) => { release = resolve; });
+  contactQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   await prior;
   const waitMs = Math.max(0, 125 - (Date.now() - lastSecRequestAt));
   if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
@@ -129,9 +131,15 @@ async function recentFilings(cik: string, contact: string, limit: number): Promi
     const accessionNumber = accessions[index];
     const filingDate = filingDates[index];
     const primaryDocument = primaryDocuments[index];
-    if (typeof accessionNumber !== "string" || !/^\d{10}-\d{2}-\d{6}$/u.test(accessionNumber) ||
-        typeof filingDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(filingDate) ||
-        typeof primaryDocument !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/u.test(primaryDocument)) continue;
+    if (
+      typeof accessionNumber !== "string" ||
+      !/^\d{10}-\d{2}-\d{6}$/u.test(accessionNumber) ||
+      typeof filingDate !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/u.test(filingDate) ||
+      typeof primaryDocument !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,128}$/u.test(primaryDocument)
+    )
+      continue;
     found.push({ accessionNumber, filingDate, primaryDocument });
   }
   return found;
@@ -141,15 +149,26 @@ function isTrue(value: unknown): boolean {
   return value === "1" || value === 1 || value === true;
 }
 
-async function parseFiling(cik: string, filing: FilingRef, contact: string): Promise<InsiderTransaction[]> {
+async function parseFiling(
+  cik: string,
+  filing: FilingRef,
+  contact: string,
+): Promise<InsiderTransaction[]> {
   const accessionNoDashes = filing.accessionNumber.replace(/-/gu, "");
   const primaryDocument = filing.primaryDocument.split("/").at(-1)!;
-  const url = new URL(`https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accessionNoDashes}/${primaryDocument}`);
-  const body = await withSecRateLimit(() => readProviderText(url, {
-    timeoutMs: 8_000,
-    maxBytes: 1024 * 1024,
-    headers: { Accept: "application/xml,text/xml;q=0.9,*/*;q=0.1", "User-Agent": `EqoBoard Research ${contact}` },
-  }));
+  const url = new URL(
+    `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accessionNoDashes}/${primaryDocument}`,
+  );
+  const body = await withSecRateLimit(() =>
+    readProviderText(url, {
+      timeoutMs: 8_000,
+      maxBytes: 1024 * 1024,
+      headers: {
+        Accept: "application/xml,text/xml;q=0.9,*/*;q=0.1",
+        "User-Agent": `EqoBoard Research ${contact}`,
+      },
+    }),
+  );
   let document: unknown;
   try {
     document = parser.parse(body);
@@ -159,54 +178,84 @@ async function parseFiling(cik: string, filing: FilingRef, contact: string): Pro
   const ownership = readPath(document, ["ownershipDocument"]);
   if (!record(ownership)) throw new Error("sec-form4-response-invalid");
   const owners = asArray(readPath(ownership, ["reportingOwner"]));
-  const transactions = asArray(readPath(ownership, ["nonDerivativeTable", "nonDerivativeTransaction"]));
+  const transactions = asArray(
+    readPath(ownership, ["nonDerivativeTable", "nonDerivativeTransaction"]),
+  );
   const filingUrl = url.toString();
   const result: InsiderTransaction[] = [];
   for (const owner of owners.slice(0, 10)) {
-    const ownerName = safeText(readPath(owner, ["reportingOwnerId", "rptOwnerName"]), 160) ?? "Unknown";
+    const ownerName =
+      safeText(readPath(owner, ["reportingOwnerId", "rptOwnerName"]), 160) ?? "Unknown";
     const relation = readPath(owner, ["reportingOwnerRelationship"]);
     const ownerTitle = safeText(readPath(relation, ["officerTitle"]), 120);
     for (const transaction of transactions.slice(0, 100)) {
-      const acquired = safeText(readPath(transaction, ["transactionAmounts", "transactionAcquiredDisposedCode", "value"]), 1);
+      const acquired = safeText(
+        readPath(transaction, ["transactionAmounts", "transactionAcquiredDisposedCode", "value"]),
+        1,
+      );
       const transactionDate = safeText(readPath(transaction, ["transactionDate", "value"]), 10);
-      result.push(Object.freeze({
-        filingDate: filing.filingDate,
-        transactionDate: transactionDate && /^\d{4}-\d{2}-\d{2}$/u.test(transactionDate) ? transactionDate : null,
-        filingUrl,
-        ownerName,
-        ownerTitle,
-        isDirector: isTrue(readPath(relation, ["isDirector"])),
-        isOfficer: isTrue(readPath(relation, ["isOfficer"])),
-        isTenPercentOwner: isTrue(readPath(relation, ["isTenPercentOwner"])),
-        transactionCode: safeText(readPath(transaction, ["transactionCoding", "transactionCode"]), 4) ?? "?",
-        acquiredDisposed: acquired === "A" || acquired === "D" ? acquired : null,
-        shares: finiteNumber(readPath(transaction, ["transactionAmounts", "transactionShares", "value"])),
-        pricePerShare: finiteNumber(readPath(transaction, ["transactionAmounts", "transactionPricePerShare", "value"])),
-        sharesOwnedAfter: finiteNumber(readPath(transaction, ["postTransactionAmounts", "sharesOwnedFollowingTransaction", "value"])),
-      }));
+      result.push(
+        Object.freeze({
+          filingDate: filing.filingDate,
+          transactionDate:
+            transactionDate && /^\d{4}-\d{2}-\d{2}$/u.test(transactionDate)
+              ? transactionDate
+              : null,
+          filingUrl,
+          ownerName,
+          ownerTitle,
+          isDirector: isTrue(readPath(relation, ["isDirector"])),
+          isOfficer: isTrue(readPath(relation, ["isOfficer"])),
+          isTenPercentOwner: isTrue(readPath(relation, ["isTenPercentOwner"])),
+          transactionCode:
+            safeText(readPath(transaction, ["transactionCoding", "transactionCode"]), 4) ?? "?",
+          acquiredDisposed: acquired === "A" || acquired === "D" ? acquired : null,
+          shares: finiteNumber(
+            readPath(transaction, ["transactionAmounts", "transactionShares", "value"]),
+          ),
+          pricePerShare: finiteNumber(
+            readPath(transaction, ["transactionAmounts", "transactionPricePerShare", "value"]),
+          ),
+          sharesOwnedAfter: finiteNumber(
+            readPath(transaction, [
+              "postTransactionAmounts",
+              "sharesOwnedFollowingTransaction",
+              "value",
+            ]),
+          ),
+        }),
+      );
     }
   }
   return result;
 }
 
-async function mapLimited<T, Result>(items: readonly T[], limit: number, run: (item: T) => Promise<Result>): Promise<PromiseSettledResult<Result>[]> {
+async function mapLimited<T, Result>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T) => Promise<Result>,
+): Promise<PromiseSettledResult<Result>[]> {
   const results = new Array<PromiseSettledResult<Result>>(items.length);
   let index = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    for (;;) {
-      const current = index++;
-      if (current >= items.length) return;
-      try {
-        results[current] = { status: "fulfilled", value: await run(items[current]!) };
-      } catch (reason) {
-        results[current] = { status: "rejected", reason };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      for (;;) {
+        const current = index++;
+        if (current >= items.length) return;
+        try {
+          results[current] = { status: "fulfilled", value: await run(items[current]!) };
+        } catch (reason) {
+          results[current] = { status: "rejected", reason };
+        }
       }
-    }
-  }));
+    }),
+  );
   return results;
 }
 
-export async function loadInsiderTransactions(symbol: string): Promise<ProviderResult<readonly InsiderTransaction[]>> {
+export async function loadInsiderTransactions(
+  symbol: string,
+): Promise<ProviderResult<readonly InsiderTransaction[]>> {
   const contact = secContact();
   if (!contact) throw new Error("sec-contact-unconfigured");
   const cik = await resolveCik(symbol, contact);
@@ -224,8 +273,13 @@ export async function loadInsiderTransactions(symbol: string): Promise<ProviderR
   const filings = await recentFilings(cik, contact, 20);
   const results = await mapLimited(filings, 3, (filing) => parseFiling(cik, filing, contact));
   const failed = results.filter((result) => result.status === "rejected").length;
-  const transactions = results.flatMap((result) => result.status === "fulfilled" ? result.value : [])
-    .sort((left, right) => (right.transactionDate ?? right.filingDate).localeCompare(left.transactionDate ?? left.filingDate));
+  const transactions = results
+    .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+    .sort((left, right) =>
+      (right.transactionDate ?? right.filingDate).localeCompare(
+        left.transactionDate ?? left.filingDate,
+      ),
+    );
   return {
     source,
     data: transactions,
@@ -233,6 +287,7 @@ export async function loadInsiderTransactions(symbol: string): Promise<ProviderR
     complete: failed === 0,
     failedItems: failed,
     truncated: filings.length === 20,
-    warning: "Only non-derivative Form 4 transactions are included. Filing and transaction dates are source dates; unresolved filings are reported as partial.",
+    warning:
+      "Only non-derivative Form 4 transactions are included. Filing and transaction dates are source dates; unresolved filings are reported as partial.",
   };
 }

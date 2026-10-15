@@ -3,7 +3,11 @@
 import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { WORKSPACE_LIMITS, type WorkspaceDocumentV1 } from "../../workspace/model";
-import { createWorkspaceExport, parseWorkspaceExportJson, parseWorkspaceJson } from "../../workspace/schema";
+import {
+  createWorkspaceExport,
+  parseWorkspaceExportJson,
+  parseWorkspaceJson,
+} from "../../workspace/schema";
 
 type WorkspaceTransferControlsProps = Readonly<{
   document: WorkspaceDocumentV1;
@@ -11,7 +15,11 @@ type WorkspaceTransferControlsProps = Readonly<{
   onImport(document: WorkspaceDocumentV1, mode: "copy" | "replace"): Promise<boolean>;
 }>;
 
-export function WorkspaceTransferControls({ document, canEdit, onImport }: WorkspaceTransferControlsProps) {
+export function WorkspaceTransferControls({
+  document,
+  canEdit,
+  onImport,
+}: WorkspaceTransferControlsProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<WorkspaceDocumentV1 | null>(null);
   const [errors, setErrors] = useState<readonly string[]>([]);
@@ -62,7 +70,8 @@ export function WorkspaceTransferControls({ document, canEdit, onImport }: Works
     }
     const parsed = parseWorkspaceJson(text);
     if (!parsed.ok) {
-      const details = exported.errors.length <= parsed.errors.length ? exported.errors : parsed.errors;
+      const details =
+        exported.errors.length <= parsed.errors.length ? exported.errors : parsed.errors;
       setErrors(details.slice(0, 8).map((error) => `${error.path}: ${error.message}`));
       return;
     }
@@ -75,7 +84,11 @@ export function WorkspaceTransferControls({ document, canEdit, onImport }: Works
     setMessage(null);
     try {
       const success = await onImport(preview, "copy");
-      setMessage(success ? "Import applied with fresh IDs. Check workspace sync status for server confirmation." : "Import was not applied. Check the workspace sync status and limits.");
+      setMessage(
+        success
+          ? "Import applied with fresh IDs. Check workspace sync status for server confirmation."
+          : "Import was not applied. Check the workspace sync status and limits.",
+      );
       if (success) setPreview(null);
     } catch {
       setMessage("Import was not saved. Check the workspace sync status and try again.");
@@ -91,9 +104,11 @@ export function WorkspaceTransferControls({ document, canEdit, onImport }: Works
     try {
       const success = await onImport(preview, "replace");
       setReplaceOpen(false);
-      setMessage(success
-        ? "Replacement applied. Check workspace sync status for server confirmation; the previous version is available in local recovery copies."
-        : "Replacement was not saved. The previous workspace remains active.");
+      setMessage(
+        success
+          ? "Replacement applied. Check workspace sync status for server confirmation; the previous version is available in local recovery copies."
+          : "Replacement was not saved. The previous workspace remains active.",
+      );
       if (success) setPreview(null);
     } catch {
       setMessage("Replacement was not saved. The previous workspace remains active.");
@@ -106,7 +121,9 @@ export function WorkspaceTransferControls({ document, canEdit, onImport }: Works
     <details className="workspace-transfer">
       <summary>Import or export</summary>
       <div className="workspace-transfer-actions">
-        <button data-testid="workspace-export" onClick={exportDocument} type="button">Export JSON</button>
+        <button data-testid="workspace-export" onClick={exportDocument} type="button">
+          Export JSON
+        </button>
         <label className="workspace-file-button">
           <span>Choose workspace file</span>
           <input
@@ -118,16 +135,28 @@ export function WorkspaceTransferControls({ document, canEdit, onImport }: Works
           />
         </label>
       </div>
-      <p className="workspace-muted">Imports are validated before they are shown. Copy creates fresh workspace, tab, template and widget IDs.</p>
+      <p className="workspace-muted">
+        Imports are validated before they are shown. Copy creates fresh workspace, tab, template and
+        widget IDs.
+      </p>
       {errors.length > 0 && (
         <ul className="workspace-import-errors" role="alert">
-          {errors.map((error) => <li key={error}>{error}</li>)}
+          {errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
         </ul>
       )}
       {preview && (
         <div className="workspace-import-preview" data-testid="workspace-import-preview">
           <p>
-            Preview: {preview.workspaces.length} workspaces, {preview.workspaces.reduce((sum, workspace) => sum + workspace.tabs.length, 0)} tabs, {preview.workspaces.reduce((sum, workspace) => sum + workspace.tabs.reduce((tabSum, tab) => tabSum + tab.widgets.length, 0), 0)} widgets.
+            Preview: {preview.workspaces.length} workspaces,{" "}
+            {preview.workspaces.reduce((sum, workspace) => sum + workspace.tabs.length, 0)} tabs,{" "}
+            {preview.workspaces.reduce(
+              (sum, workspace) =>
+                sum + workspace.tabs.reduce((tabSum, tab) => tabSum + tab.widgets.length, 0),
+              0,
+            )}{" "}
+            widgets.
           </p>
           <div className="workspace-transfer-actions">
             <button
@@ -135,27 +164,47 @@ export function WorkspaceTransferControls({ document, canEdit, onImport }: Works
               disabled={!canEdit || busy}
               onClick={() => void importAsCopy()}
               type="button"
-            >Import as copies</button>
+            >
+              Import as copies
+            </button>
             <button
               data-testid="workspace-import-replace"
               disabled={!canEdit || busy}
               onClick={() => setReplaceOpen(true)}
               type="button"
-            >Review replacement</button>
+            >
+              Review replacement
+            </button>
           </div>
           {replaceOpen && (
-            <div aria-labelledby="workspace-replace-title" aria-modal="true" className="workspace-confirm" role="dialog">
+            <div
+              aria-labelledby="workspace-replace-title"
+              aria-modal="true"
+              className="workspace-confirm"
+              role="dialog"
+            >
               <h3 id="workspace-replace-title">Replace this account’s workspace?</h3>
-              <p>The current workspace will be backed up in this browser before the imported document replaces it.</p>
+              <p>
+                The current workspace will be backed up in this browser before the imported document
+                replaces it.
+              </p>
               <div className="workspace-transfer-actions">
-                <button disabled={busy} onClick={() => setReplaceOpen(false)} type="button">Cancel</button>
-                <button disabled={busy} onClick={() => void replaceCurrent()} type="button">Confirm replacement</button>
+                <button disabled={busy} onClick={() => setReplaceOpen(false)} type="button">
+                  Cancel
+                </button>
+                <button disabled={busy} onClick={() => void replaceCurrent()} type="button">
+                  Confirm replacement
+                </button>
               </div>
             </div>
           )}
         </div>
       )}
-      {message && <p aria-live="polite" className="workspace-status-message">{message}</p>}
+      {message && (
+        <p aria-live="polite" className="workspace-status-message">
+          {message}
+        </p>
+      )}
     </details>
   );
 }

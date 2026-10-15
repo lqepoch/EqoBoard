@@ -45,8 +45,13 @@ const EXCHANGE_SUFFIX: readonly Readonly<{ match: RegExp; suffix: string }>[] = 
 
 function plainText(value: unknown, maxLength: number): string | null {
   if (typeof value !== "string") return null;
-  const text = value.replace(/<[^>]{0,128}>/gu, "").replace(/\s+/gu, " ").trim();
-  return text.length > 0 && text.length <= maxLength && !/[\u0000-\u001f\u007f]/u.test(text) ? text : null;
+  const text = value
+    .replace(/<[^>]{0,128}>/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return text.length > 0 && text.length <= maxLength && !/[\u0000-\u001f\u007f]/u.test(text)
+    ? text
+    : null;
 }
 
 function listingSymbol(value: unknown): string | null {
@@ -98,8 +103,15 @@ function symbolSearchUrl(query: string): URL {
   return url;
 }
 
-export async function loadTradingViewSymbolSearch(query: string): Promise<ProviderResult<readonly ResearchSymbolSearchResult[]>> {
-  if (query !== query.trim() || query.length < 1 || query.length > 64 || /[\u0000-\u001f\u007f]/u.test(query)) {
+export async function loadTradingViewSymbolSearch(
+  query: string,
+): Promise<ProviderResult<readonly ResearchSymbolSearchResult[]>> {
+  if (
+    query !== query.trim() ||
+    query.length < 1 ||
+    query.length > 64 ||
+    /[\u0000-\u001f\u007f]/u.test(query)
+  ) {
     throw new TypeError("invalid-symbol-search-query");
   }
   const payload = await readProviderJson<unknown>(symbolSearchUrl(query), {
@@ -111,7 +123,10 @@ export async function loadTradingViewSymbolSearch(query: string): Promise<Provid
       Origin: "https://www.tradingview.com",
     },
   });
-  const rows = payload && typeof payload === "object" && !Array.isArray(payload) ? Reflect.get(payload, "symbols") : null;
+  const rows =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? Reflect.get(payload, "symbols")
+      : null;
   if (!Array.isArray(rows)) throw new Error("tradingview-symbol-search-response-invalid");
   const normalized = rows.slice(0, 500).flatMap((row): ResearchSymbolSearchResult[] => {
     const parsed = normalizeRow(row);
@@ -126,6 +141,7 @@ export async function loadTradingViewSymbolSearch(query: string): Promise<Provid
     complete: !truncated,
     failedItems: null,
     truncated,
-    warning: "TradingView symbol search returns listing metadata only. It provides no observation timestamp, quote, market feed, or SIP authority.",
+    warning:
+      "TradingView symbol search returns listing metadata only. It provides no observation timestamp, quote, market feed, or SIP authority.",
   });
 }

@@ -39,12 +39,20 @@ export function placementsOverlap(a: GridPlacementV1, b: GridPlacementV1): boole
 }
 
 function isWithinBounds(item: GridPlacementV1, size: GridSizeConstraints): boolean {
-  return Number.isSafeInteger(item.x) && Number.isSafeInteger(item.y) &&
-    Number.isSafeInteger(item.w) && Number.isSafeInteger(item.h) &&
-    item.x >= 0 && item.y >= 0 && item.w >= size.minW && item.h >= size.minH &&
-    item.w <= size.maxW && item.h <= size.maxH &&
+  return (
+    Number.isSafeInteger(item.x) &&
+    Number.isSafeInteger(item.y) &&
+    Number.isSafeInteger(item.w) &&
+    Number.isSafeInteger(item.h) &&
+    item.x >= 0 &&
+    item.y >= 0 &&
+    item.w >= size.minW &&
+    item.h >= size.minH &&
+    item.w <= size.maxW &&
+    item.h <= size.maxH &&
     item.x + item.w <= WORKSPACE_LIMITS.gridColumns &&
-    item.y + item.h <= WORKSPACE_LIMITS.gridMaxRows;
+    item.y + item.h <= WORKSPACE_LIMITS.gridMaxRows
+  );
 }
 
 function clampSize(item: GridPlacementV1, size: GridSizeConstraints): GridPlacementV1 {
@@ -86,7 +94,8 @@ export function moveGridItem(
     for (const item of collided) {
       const index = rest.findIndex((candidate) => candidate.i === item.i);
       const pushed = { ...item, y: current.y + current.h };
-      if (pushed.y + pushed.h > WORKSPACE_LIMITS.gridMaxRows) return { ok: false, reason: "grid-full" };
+      if (pushed.y + pushed.h > WORKSPACE_LIMITS.gridMaxRows)
+        return { ok: false, reason: "grid-full" };
       rest[index] = pushed;
       queue.push(pushed);
       pushes += 1;
@@ -108,7 +117,7 @@ export function resizeGridItem(
   if (!source) return { ok: false, reason: "unknown-item" };
   const next = clampSize({ ...source, ...requested }, constraints);
   if (!isWithinBounds(next, constraints)) return { ok: false, reason: "invalid-size" };
-  const withSize = placements.map((item) => item.i === instanceId ? next : { ...item });
+  const withSize = placements.map((item) => (item.i === instanceId ? next : { ...item }));
   return moveGridItem(withSize, instanceId, { x: next.x, y: next.y });
 }
 
@@ -153,7 +162,8 @@ export function fromGridCallback(
     let candidate = item;
     while (resolved.some((placed) => placementsOverlap(candidate, placed))) {
       candidate = { ...candidate, y: candidate.y + 1 };
-      if (candidate.y + candidate.h > WORKSPACE_LIMITS.gridMaxRows) return { ok: false, reason: "grid-full" };
+      if (candidate.y + candidate.h > WORKSPACE_LIMITS.gridMaxRows)
+        return { ok: false, reason: "grid-full" };
     }
     resolved.push(candidate);
   }
@@ -190,7 +200,12 @@ export function keyboardResize(
     ArrowUp: [0, -1],
     ArrowDown: [0, 1],
   }[key];
-  return resizeGridItem(placements, instanceId, { w: item.w + delta[0], h: item.h + delta[1] }, constraints);
+  return resizeGridItem(
+    placements,
+    instanceId,
+    { w: item.w + delta[0], h: item.h + delta[1] },
+    constraints,
+  );
 }
 
 export function byPosition(a: GridPlacementV1, b: GridPlacementV1): number {

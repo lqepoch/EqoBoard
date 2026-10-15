@@ -23,7 +23,9 @@ export type BuiltinProvenance = Readonly<{
 
 export interface WidgetRegistration<
   C = unknown,
-  TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition } = WidgetOperationMap,
+  TOperations extends {
+    readonly [K in keyof TOperations]: WidgetOperationDefinition;
+  } = WidgetOperationMap,
   TActions extends WidgetActionMap = WidgetNoActionMap,
   TMarketSnapshot = unknown,
 > {

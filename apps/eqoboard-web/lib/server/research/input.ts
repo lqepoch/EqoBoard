@@ -7,7 +7,18 @@ export type ResearchOperationInput =
   | Readonly<{ operation: "earnings-calendar"; symbols?: readonly string[] }>
   | Readonly<{ operation: "earnings-history"; symbol: string }>
   | Readonly<{ operation: "insider"; symbol: string }>
-  | Readonly<{ operation: "screener"; market: "us" | "eu"; sector?: string; marketCapMin?: number; changeMin?: number; changeMax?: number; volumeMin?: number; sort?: "marketCap" | "price" | "changePercent" | "volume"; direction?: "asc" | "desc"; limit?: number }>
+  | Readonly<{
+      operation: "screener";
+      market: "us" | "eu";
+      sector?: string;
+      marketCapMin?: number;
+      changeMin?: number;
+      changeMax?: number;
+      volumeMin?: number;
+      sort?: "marketCap" | "price" | "changePercent" | "volume";
+      direction?: "asc" | "desc";
+      limit?: number;
+    }>
   | Readonly<{ operation: "heatmap"; market: "us" | "eu" }>
   | Readonly<{ operation: "recap" }>
   | Readonly<{ operation: "symbol-search"; query: string }>
@@ -19,8 +30,18 @@ export type ResearchInputParseResult =
   | Readonly<{ ok: false; error: "unknown-operation" | "unknown-parameter" | "invalid-parameter" }>;
 
 const OPERATIONS: readonly ResearchOperationName[] = Object.freeze([
-  "news", "macro", "economic-calendar", "earnings-calendar", "earnings-history", "insider",
-  "screener", "heatmap", "recap", "symbol-search", "crypto", "crypto-global",
+  "news",
+  "macro",
+  "economic-calendar",
+  "earnings-calendar",
+  "earnings-history",
+  "insider",
+  "screener",
+  "heatmap",
+  "recap",
+  "symbol-search",
+  "crypto",
+  "crypto-global",
 ]);
 
 function exactKeys(params: URLSearchParams, allowed: readonly string[]): boolean {
@@ -43,7 +64,12 @@ function market(value: string | null): "us" | "eu" | null {
   return value === "us" || value === "eu" ? value : null;
 }
 
-function finite(params: URLSearchParams, name: string, min: number, max: number): number | undefined | null {
+function finite(
+  params: URLSearchParams,
+  name: string,
+  min: number,
+  max: number,
+): number | undefined | null {
   const value = single(params, name);
   if (value === null) return undefined;
   if (value === "" || !/^-?(?:\d+\.?\d*|\.\d+)$/u.test(value)) return null;
@@ -66,14 +92,17 @@ export function parseResearchOperationInput(
   operation: string,
   params: URLSearchParams,
 ): ResearchInputParseResult {
-  if (!OPERATIONS.includes(operation as ResearchOperationName)) return { ok: false, error: "unknown-operation" };
+  if (!OPERATIONS.includes(operation as ResearchOperationName))
+    return { ok: false, error: "unknown-operation" };
   switch (operation as ResearchOperationName) {
     case "news": {
       if (!exactKeys(params, ["symbol"])) return { ok: false, error: "unknown-parameter" };
       const raw = single(params, "symbol");
       if (raw === null) return { ok: true, value: { operation: "news" } };
       const parsed = symbol(raw);
-      return parsed ? { ok: true, value: { operation: "news", symbol: parsed } } : { ok: false, error: "invalid-parameter" };
+      return parsed
+        ? { ok: true, value: { operation: "news", symbol: parsed } }
+        : { ok: false, error: "invalid-parameter" };
     }
     case "macro": {
       if (!exactKeys(params, ["region"])) return { ok: false, error: "unknown-parameter" };
@@ -91,7 +120,10 @@ export function parseResearchOperationInput(
       const list = symbols(params);
       return list === null
         ? { ok: false, error: "invalid-parameter" }
-        : { ok: true, value: { operation: "earnings-calendar", ...(list ? { symbols: list } : {}) } };
+        : {
+            ok: true,
+            value: { operation: "earnings-calendar", ...(list ? { symbols: list } : {}) },
+          };
     }
     case "earnings-history":
     case "insider": {
@@ -102,7 +134,17 @@ export function parseResearchOperationInput(
         : { ok: false, error: "invalid-parameter" };
     }
     case "screener": {
-      const keys = ["market", "sector", "marketCapMin", "changeMin", "changeMax", "volumeMin", "sort", "direction", "limit"];
+      const keys = [
+        "market",
+        "sector",
+        "marketCapMin",
+        "changeMin",
+        "changeMax",
+        "volumeMin",
+        "sort",
+        "direction",
+        "limit",
+      ];
       if (!exactKeys(params, keys)) return { ok: false, error: "unknown-parameter" };
       const marketValue = market(single(params, "market"));
       const sectorRaw = single(params, "sector");
@@ -116,24 +158,32 @@ export function parseResearchOperationInput(
       const directionRaw = single(params, "direction");
       const sort = sortRaw === null ? undefined : sortRaw;
       const direction = directionRaw === null ? undefined : directionRaw;
-      if (!marketValue || sectorRaw === "" || (sector !== undefined && (sector.length === 0 || sector.length > 64 || /[\u0000-\u001f\u007f]/u.test(sector))) ||
-          [marketCapMin, changeMin, changeMax, volumeMin, limitValue].some((item) => item === null) ||
-          (sort !== undefined && !["marketCap", "price", "changePercent", "volume"].includes(sort)) ||
-          (direction !== undefined && direction !== "asc" && direction !== "desc") ||
-          (typeof changeMin === "number" && typeof changeMax === "number" && changeMin > changeMax) ||
-          (typeof limitValue === "number" && !Number.isInteger(limitValue))) {
+      if (
+        !marketValue ||
+        sectorRaw === "" ||
+        (sector !== undefined &&
+          (sector.length === 0 || sector.length > 64 || /[\u0000-\u001f\u007f]/u.test(sector))) ||
+        [marketCapMin, changeMin, changeMax, volumeMin, limitValue].some((item) => item === null) ||
+        (sort !== undefined && !["marketCap", "price", "changePercent", "volume"].includes(sort)) ||
+        (direction !== undefined && direction !== "asc" && direction !== "desc") ||
+        (typeof changeMin === "number" && typeof changeMax === "number" && changeMin > changeMax) ||
+        (typeof limitValue === "number" && !Number.isInteger(limitValue))
+      ) {
         return { ok: false, error: "invalid-parameter" };
       }
       return {
         ok: true,
         value: {
-          operation: "screener", market: marketValue,
+          operation: "screener",
+          market: marketValue,
           ...(sector === undefined ? {} : { sector }),
           ...(marketCapMin === undefined ? {} : { marketCapMin }),
           ...(changeMin === undefined ? {} : { changeMin }),
           ...(changeMax === undefined ? {} : { changeMax }),
           ...(volumeMin === undefined ? {} : { volumeMin }),
-          ...(sort === undefined ? {} : { sort: sort as "marketCap" | "price" | "changePercent" | "volume" }),
+          ...(sort === undefined
+            ? {}
+            : { sort: sort as "marketCap" | "price" | "changePercent" | "volume" }),
           ...(direction === undefined ? {} : { direction: direction as "asc" | "desc" }),
           ...(limitValue === undefined ? {} : { limit: limitValue }),
         },
@@ -142,7 +192,9 @@ export function parseResearchOperationInput(
     case "heatmap": {
       if (!exactKeys(params, ["market"])) return { ok: false, error: "unknown-parameter" };
       const marketValue = market(single(params, "market"));
-      return marketValue ? { ok: true, value: { operation: "heatmap", market: marketValue } } : { ok: false, error: "invalid-parameter" };
+      return marketValue
+        ? { ok: true, value: { operation: "heatmap", market: marketValue } }
+        : { ok: false, error: "invalid-parameter" };
     }
     case "recap":
       return params.size === 0
@@ -151,13 +203,18 @@ export function parseResearchOperationInput(
     case "symbol-search": {
       if (!exactKeys(params, ["query"])) return { ok: false, error: "unknown-parameter" };
       const query = single(params, "query");
-      return query !== null && query !== "" && query === query.trim() && query.length <= 64 &&
+      return query !== null &&
+        query !== "" &&
+        query === query.trim() &&
+        query.length <= 64 &&
         !/[\u0000-\u001f\u007f]/u.test(query)
         ? { ok: true, value: { operation: "symbol-search", query } }
         : { ok: false, error: "invalid-parameter" };
     }
     case "crypto":
     case "crypto-global":
-      return params.size === 0 ? { ok: true, value: { operation } } : { ok: false, error: "unknown-parameter" };
+      return params.size === 0
+        ? { ok: true, value: { operation } }
+        : { ok: false, error: "unknown-parameter" };
   }
 }

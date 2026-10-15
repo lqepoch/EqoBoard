@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildChartCsv, chartExportFilename, chartPngCaptionLines, MAX_CHART_EXPORT_ROWS } from "./export";
+import {
+  buildChartCsv,
+  chartExportFilename,
+  chartPngCaptionLines,
+  MAX_CHART_EXPORT_ROWS,
+} from "./export";
 import type { ChartDisplayEvidence, ChartPlotBar } from "./types";
 
 const evidence: ChartDisplayEvidence = {
@@ -18,7 +23,12 @@ const evidence: ChartDisplayEvidence = {
 
 function bar(time: number): ChartPlotBar<Readonly<{ source: string }>> {
   return {
-    time: time as ChartPlotBar["time"], open: 10, high: 12, low: 9, close: 11, volume: 100,
+    time: time as ChartPlotBar["time"],
+    open: 10,
+    high: 12,
+    low: 9,
+    close: 11,
+    volume: 100,
     sourceRow: { source: "validated" },
     exact: { open: "10.000", high: "12.000", low: "9.000", close: "11.000", volume: "100.00" },
   };
@@ -34,11 +44,13 @@ describe("loaded chart exports", () => {
     expect(result.csv).toContain("requested_window");
     expect(result.csv).toContain("partial");
     expect(result.csv).toContain("exact decimal tokens from validated source row");
-    expect(result.csv).toContain("\"10.000\"");
+    expect(result.csv).toContain('"10.000"');
   });
 
   it("bounds oversized exports to newest loaded rows and marks truncation", () => {
-    const rows = Array.from({ length: MAX_CHART_EXPORT_ROWS + 1 }, (_, index) => bar(1_720_000_000 + index));
+    const rows = Array.from({ length: MAX_CHART_EXPORT_ROWS + 1 }, (_, index) =>
+      bar(1_720_000_000 + index),
+    );
     const result = buildChartCsv(rows, evidence);
 
     expect(result.exportedRows).toBe(MAX_CHART_EXPORT_ROWS);
@@ -49,10 +61,10 @@ describe("loaded chart exports", () => {
   });
 
   it("guards metadata against spreadsheet formula evaluation and normalizes filenames", () => {
-    const result = buildChartCsv([], { ...evidence, provider: "=IMPORTXML(\"https://invalid\")" });
+    const result = buildChartCsv([], { ...evidence, provider: '=IMPORTXML("https://invalid")' });
     const filename = chartExportFilename("../spy:bad", "csv", new Date("2026-10-15T14:00:00.000Z"));
 
-    expect(result.csv).toContain("'=IMPORTXML(\"\"https://invalid\"\")");
+    expect(result.csv).toContain('\'=IMPORTXML(""https://invalid"")');
     expect(filename).toBe("SPY-BAD-loaded-chart-2026-10-15T14-00-00-000Z.csv");
   });
 
@@ -62,6 +74,8 @@ describe("loaded chart exports", () => {
     expect(captions[0]).toContain("not full history");
     expect(captions[1]).toContain("Source Core history · Provider Alpaca · Feed SIP");
     expect(captions[1]).toContain("As of 2026-10-15T14:00:00Z");
-    expect(captions[2]).toContain("Coverage 100 loaded observations; 1 explicit gap · partial · Precision exact-decimal");
+    expect(captions[2]).toContain(
+      "Coverage 100 loaded observations; 1 explicit gap · partial · Precision exact-decimal",
+    );
   });
 });

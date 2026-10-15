@@ -40,8 +40,12 @@ describe("theme preference", () => {
 
   it("falls back safely when storage is blocked", () => {
     const storage = {
-      getItem: () => { throw new Error("blocked"); },
-      setItem: () => { throw new Error("blocked"); },
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
     };
     expect(readThemePreference(storage)).toBe("system");
     expect(() => writeThemePreference(storage, "light")).not.toThrow();
