@@ -5,11 +5,7 @@ import { applyOptionEvents } from "../options/OptionsWidgets";
 import { applyGatewayUpdates, currentFeedStatus } from "./QuoteWidgets";
 import { marketWidgetRegistrations } from "./registry";
 
-function feedStatus(
-  feed: "stocks" | "options",
-  connectionEpoch: number,
-  localSequence: number,
-) {
+function feedStatus(feed: "stocks" | "options", connectionEpoch: number, localSequence: number) {
   return {
     kind: "feed_status",
     feed,
@@ -145,15 +141,9 @@ describe("native market widget registrations", () => {
       liveAsk: null,
       liveTradePrice: null,
     });
-    type StockGridRowFixture = Parameters<typeof applyGatewayUpdates>[1] extends Map<
-      string,
-      infer Row
-    >
-      ? Row
-      : never;
-    const rows = new Map<string, StockGridRowFixture>([
-      ["SPY", stockRow as StockGridRowFixture],
-    ]);
+    type StockGridRowFixture =
+      Parameters<typeof applyGatewayUpdates>[1] extends Map<string, infer Row> ? Row : never;
+    const rows = new Map<string, StockGridRowFixture>([["SPY", stockRow as StockGridRowFixture]]);
     const cursor = { current: { gatewayInstanceId: null, connectionEpoch: null } };
     const quoteSequences = new Map<string, number>();
     const tradeSequences = new Map<string, number>();
@@ -277,12 +267,8 @@ describe("native market widget registrations", () => {
       liveAt: null,
       snapshotEvidence: "chain snapshot source",
     });
-    type OptionGridRowFixture = Parameters<typeof applyOptionEvents>[1] extends Map<
-      string,
-      infer Row
-    >
-      ? Row
-      : never;
+    type OptionGridRowFixture =
+      Parameters<typeof applyOptionEvents>[1] extends Map<string, infer Row> ? Row : never;
     const rows = new Map<string, OptionGridRowFixture>([
       [symbol, optionRow as OptionGridRowFixture],
     ]);

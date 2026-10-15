@@ -443,8 +443,7 @@ export function createWorkspaceStore(
       const conflictRevisionIsNewer =
         now.remoteConflict !== null &&
         compareRevisions(now.remoteConflict.revision, result.snapshot.revision) > 0 &&
-        (now.revision === null ||
-          compareRevisions(now.remoteConflict.revision, now.revision) >= 0);
+        (now.revision === null || compareRevisions(now.remoteConflict.revision, now.revision) >= 0);
       if (conflictRevisionIsNewer) {
         clearSaveTimer();
         saveAgain = false;

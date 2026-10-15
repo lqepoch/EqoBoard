@@ -37,9 +37,9 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
 
   const workspaceSelector = page.getByLabel("Workspace");
   const previousWorkspaceId = await workspaceSelector.inputValue();
-  const previousWorkspaceIds = await workspaceSelector.locator("option").evaluateAll((options) =>
-    options.map((option) => (option as HTMLOptionElement).value),
-  );
+  const previousWorkspaceIds = await workspaceSelector
+    .locator("option")
+    .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
   const saveStartedAt = Date.now();
   await page.getByRole("button", { name: "New workspace" }).click();
   await expect(workspaceSelector.locator("option")).toHaveCount(previousWorkspaceIds.length + 1);

@@ -73,10 +73,7 @@ function fakeRepository(
   };
 }
 
-function clientSnapshot(
-  document: WorkspaceDocumentV1,
-  revision: string,
-): WorkspaceClientSnapshot {
+function clientSnapshot(document: WorkspaceDocumentV1, revision: string): WorkspaceClientSnapshot {
   return { schemaVersion: 1, revision, document, etag: `"${revision}"` };
 }
 
