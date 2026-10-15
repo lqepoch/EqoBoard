@@ -6,15 +6,15 @@ services:
       EQO_NATIVE_E2E: "1"
       EQO_OIDC_ISSUER: "http://native-mock-oidc:4450"
       EQO_OIDC_CLIENT_ID: "eqoboard-native-ci"
-      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_oidc_client_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_OIDC_CLIENT_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       EQO_SESSION_TTL_SECONDS: "3600"
       NEXTAUTH_URL: "http://127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440}"
       EQO_PUBLIC_ORIGIN: "http://127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440}"
-      NEXTAUTH_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_terminal_session_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      NEXTAUTH_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_TERMINAL_SESSION_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       EQO_RUST_URL: "http://native-mock-gateway:4451"
-      EQO_GATEWAY_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_gateway_terminal_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      EQO_GATEWAY_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_GATEWAY_TERMINAL_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       EQO_MDP_URL: "http://market-data-platform:4452"
-      MDP_TERMINAL_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_mdp_terminal_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      MDP_TERMINAL_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_MDP_TERMINAL_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       QUANT_TERMINAL_JWT_SECRET: ""
       ENGINE_TERMINAL_JWT_SECRET: ""
       EQO_QUANT_RESEARCH_URL: ""
@@ -37,15 +37,15 @@ services:
       EQO_NATIVE_E2E: "1"
       EQO_OIDC_ISSUER: "http://native-mock-oidc:4450"
       EQO_OIDC_CLIENT_ID: "eqoboard-native-ci"
-      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_oidc_client_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_OIDC_CLIENT_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       EQO_SESSION_TTL_SECONDS: "3600"
       NODE_ENV: "production"
       EQO_BFF_MODE: "research"
       NEXTAUTH_URL: "http://localhost:3441"
       EQO_PUBLIC_ORIGIN: "http://localhost:3441"
-      NEXTAUTH_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_research_session_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      NEXTAUTH_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_RESEARCH_SESSION_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       EQO_MDP_URL: "http://market-data-platform:4452"
-      MDP_RESEARCH_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_mdp_research_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      MDP_RESEARCH_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_MDP_RESEARCH_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
     depends_on:
       native-mock-oidc: {condition: service_healthy}
       market-data-platform: {condition: service_healthy}
@@ -68,7 +68,7 @@ services:
     environment:
       EQO_OIDC_ISSUER: "http://native-mock-oidc:4450"
       EQO_OIDC_CLIENT_ID: "eqoboard-native-ci"
-      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_oidc_client_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_OIDC_CLIENT_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
       EQO_PUBLIC_ORIGINS: "http://127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440},http://localhost:3441"
       FIXTURE_SERVICE: "oidc"
       PORT: "4450"
@@ -91,7 +91,7 @@ services:
     environment:
       FIXTURE_SERVICE: "gateway"
       PORT: "4451"
-      EQO_GATEWAY_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_gateway_terminal_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      EQO_GATEWAY_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_GATEWAY_TERMINAL_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:4451/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 3s
@@ -110,7 +110,7 @@ services:
     ports: ["127.0.0.1:0:4452"]
     environment:
       PORT: "4452"
-      MDP_RESEARCH_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_mdp_research_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      MDP_RESEARCH_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_MDP_RESEARCH_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:4452/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 3s

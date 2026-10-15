@@ -78,6 +78,7 @@ jobs:
         with:
           python-version: 3.12.15
       - name: Install committed dependency graph
+        id: install
         run: npm ci --no-audit --no-fund
       - name: Native source boundary and legacy preservation
         working-directory: .
@@ -85,13 +86,23 @@ jobs:
           git diff --check
           node tools/migration/legacy-integrity.mjs
           python3 tools/ci/run-contract-tests.py native
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run test:unit
+      - name: TypeScript contracts
+        if: always() && steps.install.outcome == 'success'
+        run: npm run typecheck
+      - name: Source lint
+        if: always() && steps.install.outcome == 'success'
+        run: npm run lint
+      - name: Source formatting
+        if: always() && steps.install.outcome == 'success'
+        run: npm run format:check
+      - name: Native unit and route contracts
+        if: always() && steps.install.outcome == 'success'
+        run: npm run test:unit
       - name: Dependency vulnerability audit
+        if: always() && steps.install.outcome == 'success'
         run: npm audit --audit-level=high
       - name: Dependency licenses and source attribution
+        if: always() && steps.install.outcome == 'success'
         working-directory: .
         run: node tools/ci/native-license-audit.mjs
       - name: Build independent production app
