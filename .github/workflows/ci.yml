@@ -67,6 +67,11 @@ jobs:
           cache-dependency-path: apps/openterminal/package-lock.json
       - name: Verify Node toolchain
         run: test "$(node --version)" = 'v22.23.3'
+      - name: Verify frozen migration source and preservation regressions
+        working-directory: .
+        run: |
+          node tools/migration/legacy-integrity.mjs
+          node --test tests/test_legacy_integrity.mjs
       - name: Test trusted auto-merge policy
         working-directory: .
         run: node --test tests/auto_merge_policy.test.cjs
