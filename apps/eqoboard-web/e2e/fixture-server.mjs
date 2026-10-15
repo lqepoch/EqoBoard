@@ -68,8 +68,7 @@ function sendHtml(response, status, html, { formActionSources = [] } = {}) {
   const formAction = ["'self'", ...new Set(formActionSources)].join(" ");
   response.writeHead(status, {
     "cache-control": "no-store",
-    "content-security-policy":
-      `default-src 'none'; style-src 'unsafe-inline'; form-action ${formAction}; base-uri 'none'; frame-ancestors 'none'`,
+    "content-security-policy": `default-src 'none'; style-src 'unsafe-inline'; form-action ${formAction}; base-uri 'none'; frame-ancestors 'none'`,
     "content-type": "text/html; charset=utf-8",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
