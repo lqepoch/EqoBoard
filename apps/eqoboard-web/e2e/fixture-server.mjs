@@ -45,11 +45,31 @@ function sendJson(response, status, body, headers = {}) {
   response.end(encoded);
 }
 
-function sendHtml(response, status, html) {
+function isExactFormActionSource(source) {
+  try {
+    const url = new URL(source);
+    return (
+      url.protocol === "http:" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.search === "" &&
+      url.hash === "" &&
+      source === `${url.origin}${url.pathname === "/" ? "" : url.pathname}`
+    );
+  } catch {
+    return false;
+  }
+}
+
+function sendHtml(response, status, html, { formActionSources = [] } = {}) {
+  if (!Array.isArray(formActionSources) || !formActionSources.every(isExactFormActionSource)) {
+    throw new Error("HTML fixture form-action sources must be exact HTTP origins or paths");
+  }
+  const formAction = ["'self'", ...new Set(formActionSources)].join(" ");
   response.writeHead(status, {
     "cache-control": "no-store",
     "content-security-policy":
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      `default-src 'none'; style-src 'unsafe-inline'; form-action ${formAction}; base-uri 'none'; frame-ancestors 'none'`,
     "content-type": "text/html; charset=utf-8",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
@@ -303,6 +323,8 @@ function createOidcServer() {
         requestState.codeChallengeMethod === "S256" &&
         validCallbackUrl(requestState.redirectUri, publicOrigins);
       if (!valid) return sendText(response, 400, "Invalid OIDC authorization request.");
+      const callbackUrl = new URL(requestState.redirectUri);
+      const callbackFormActionSource = `${callbackUrl.origin}${callbackUrl.pathname}`;
       prune(transactions, 5 * 60_000, MAX_AUTH_TRANSACTIONS);
       if (transactions.size >= MAX_AUTH_TRANSACTIONS)
         return sendText(response, 429, "Too many pending fixture sign-ins.");
@@ -320,6 +342,7 @@ function createOidcServer() {
 <button data-testid="mock-login-reader" name="identity" value="reader" type="submit">Sign in as reader</button>
 <button data-testid="mock-login-writer" name="identity" value="writer" type="submit">Sign in as writer</button>
 <button data-testid="mock-login-workspace-only" name="identity" value="workspace-only" type="submit">Sign in as workspace-only</button></form></main></body></html>`,
+        { formActionSources: [new URL(issuer).origin, callbackFormActionSource] },
       );
     }
     if (url.pathname === "/authorize/choose" && request.method === "POST") {

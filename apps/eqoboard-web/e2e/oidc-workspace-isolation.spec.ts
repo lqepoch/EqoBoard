@@ -47,7 +47,28 @@ async function gatewayCounters(request: APIRequestContext): Promise<CounterSnaps
 
 async function signIn(page: Page, role: "reader" | "writer"): Promise<void> {
   await page.goto(webOrigin(), { waitUntil: "domcontentloaded" });
+  const authorizeResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.origin === "http://native-mock-oidc:4450" &&
+      url.pathname === "/authorize" &&
+      response.request().method() === "GET"
+    );
+  });
   await page.getByTestId("sign-in-button").click();
+  const authorizeResponse = await authorizeResponsePromise;
+  const csp = await authorizeResponse.headerValue("content-security-policy");
+  expect(csp).toBeTruthy();
+  const formActionDirective = csp
+    ?.split(";")
+    .map((directive) => directive.trim())
+    .find((directive) => directive.startsWith("form-action "));
+  expect(formActionDirective?.split(/\s+/u)).toEqual([
+    "form-action",
+    "'self'",
+    "http://native-mock-oidc:4450",
+    `${new URL(webOrigin()).origin}/api/auth/callback/eqo-oidc`,
+  ]);
   const chooser = page.getByTestId(`mock-login-${role}`);
   await expect(chooser).toBeVisible();
   await chooser.click();
