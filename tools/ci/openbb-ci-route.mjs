@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const FULL = (reason) => ({ source: true, runtime: true, reason });
+const GIT_COMMAND_TIMEOUT_MS = 30_000;
 
 const ISOLATED_UI_PATHS = new Set([
   "apps/openterminal/web/components/Flash.tsx",
@@ -127,8 +128,18 @@ const RUNTIME_OPENBB_TOOL_PATHS = new Set([
 ]);
 
 function runGit(cwd, args) {
-  const result = spawnSync("git", args, { cwd, encoding: "buffer", maxBuffer: 8 * 1024 * 1024 });
-  if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) return { ok: false };
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "buffer",
+    maxBuffer: 8 * 1024 * 1024,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
+  });
+  // Git can exit successfully after rename/copy detection warnings while omitting path pairings.
+  if (result.error
+      || result.status !== 0
+      || !Buffer.isBuffer(result.stdout)
+      || !Buffer.isBuffer(result.stderr)
+      || result.stderr.length > 0) return { ok: false };
   return { ok: true, stdout: result.stdout };
 }
 
