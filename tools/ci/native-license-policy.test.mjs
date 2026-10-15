@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { enumerateNoticeArtifacts } from "./native-license-audit.mjs";
 import {
   compareRuntimeExcludedInventory,
   isRuntimeExcludedPackageName,
@@ -8,6 +13,43 @@ import {
   packageNameFromLockPath,
   parseSpdxExpression,
 } from "./native-license-policy.mjs";
+
+test("license audit includes nested notice files with content hashes and skips symlinks", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "native-license-notices-"));
+  const nested = path.join(root, "lib-vendor/d3-array");
+  const outside = path.join(root, "outside-license");
+  try {
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(path.join(root, "LICENSE"), "root license\n");
+    writeFileSync(path.join(nested, "LICENSE"), "nested license\n");
+    writeFileSync(outside, "external license\n");
+    symlinkSync(outside, path.join(nested, "NOTICE.txt"));
+
+    const artifacts = enumerateNoticeArtifacts(root);
+    assert.deepEqual(artifacts, [
+      {
+        path: "LICENSE",
+        sha256: createHash("sha256").update("root license\n").digest("hex"),
+        bytes: Buffer.byteLength("root license\n"),
+        symlink: false,
+      },
+      {
+        path: "lib-vendor/d3-array/LICENSE",
+        sha256: createHash("sha256").update("nested license\n").digest("hex"),
+        bytes: Buffer.byteLength("nested license\n"),
+        symlink: false,
+      },
+      {
+        path: "lib-vendor/d3-array/NOTICE.txt",
+        sha256: null,
+        bytes: null,
+        symlink: true,
+      },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("SPDX parser accepts identifiers and operator precedence", () => {
   assert.deepEqual(parseSpdxExpression("MIT"), { type: "license", id: "MIT" });

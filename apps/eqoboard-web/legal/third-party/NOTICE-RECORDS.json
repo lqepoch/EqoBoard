@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "kind": "native-third-party-license-text-record",
+  "acceptance": "pinned-upstream-license-texts-and-hashes-not-runtime-license-clearance-or-provider-data-rights",
+  "packages": [
+    {
+      "packagePath": "node_modules/@bufbuild/protobuf",
+      "packageName": "@bufbuild/protobuf",
+      "packageVersion": "2.16.0",
+      "packageIntegrity": "sha512-FWa0sPlqYGJgpTs6OxBRcL/AW4JT0OIO+W1ajerluoTVh8CV0B7XM1qsNCRgnkSCkRCgOICKHRQlY17jrsm0+Q==",
+      "originalSpdxExpression": "(Apache-2.0 AND BSD-3-Clause)",
+      "repository": "https://github.com/bufbuild/protobuf-es",
+      "sourceCommit": "b3b232f7f466eda27c66e8f63c82f930578b6cc6",
+      "sourceFiles": [
+        {
+          "spdxLicense": "Apache-2.0",
+          "sourcePath": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/bufbuild/protobuf-es/b3b232f7f466eda27c66e8f63c82f930578b6cc6/LICENSE",
+          "sourceSha256": "c04b4216f1cd4c5a4f7fb2f2a1b0ae70d847e9e0cac7c9dee9bf8cc03177c449",
+          "sourceRangeOrExtraction": null,
+          "textArtifact": {
+            "path": "LICENSE-BUF-PROTOBUF-2.16.0-APACHE-2.0.txt",
+            "sha256": "c04b4216f1cd4c5a4f7fb2f2a1b0ae70d847e9e0cac7c9dee9bf8cc03177c449",
+            "bytes": 11357
+          }
+        },
+        {
+          "spdxLicense": "BSD-3-Clause",
+          "sourcePath": "packages/protobuf/src/wire/varint.ts",
+          "sourceUrl": "https://raw.githubusercontent.com/bufbuild/protobuf-es/b3b232f7f466eda27c66e8f63c82f930578b6cc6/packages/protobuf/src/wire/varint.ts",
+          "sourceSha256": "794a4cffb99eb15483efa73ee038e493d28bea3d247c0be9f13740c546b0c259",
+          "sourceRangeOrExtraction": "varint.ts lines 1-27; comment prefixes removed, license wording retained",
+          "textArtifact": {
+            "path": "NOTICE-BUF-PROTOBUF-2.16.0-BSD-3-CLAUSE.txt",
+            "sha256": "28ae41226a843e7e745433648811778398fbc9b3cc5fd5edd845b650bb46835a",
+            "bytes": 1463
+          }
+        }
+      ],
+      "scope": "production dependency; final-image inclusion remains bound to image/SBOM evidence"
+    },
+    {
+      "packagePath": "node_modules/@next/env",
+      "packageName": "@next/env",
+      "packageVersion": "15.5.27",
+      "packageIntegrity": "sha512-WC5hvVqiuFOcRyz6gKPeJkiVvSMf3scNeAV49CdWtVqxmUlzh8UKR6YHt9yiNkh8LngtzqSlVz07/Ma3ZAzchA==",
+      "originalSpdxExpression": "MIT",
+      "repository": "https://github.com/vercel/next.js",
+      "sourceCommit": "def7eff9063f79cf58610c15fe58dd78b967c885",
+      "sourceFiles": [
+        {
+          "spdxLicense": "MIT",
+          "sourcePath": "license.md",
+          "sourceUrl": "https://raw.githubusercontent.com/vercel/next.js/def7eff9063f79cf58610c15fe58dd78b967c885/license.md",
+          "sourceSha256": "ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224",
+          "sourceRangeOrExtraction": null,
+          "textArtifact": {
+            "path": "LICENSE-NEXT-15.5.27-MIT.md",
+            "sha256": "ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224",
+            "bytes": 1079
+          }
+        }
+      ],
+      "scope": "production dependency; final-image inclusion remains bound to image/SBOM evidence"
+    },
+    {
+      "packagePath": "node_modules/@nodable/entities",
+      "packageName": "@nodable/entities",
+      "packageVersion": "2.2.0",
+      "packageIntegrity": "sha512-9uGyhaQavEUMC8AIddIjau4NsnsXhou+j5sBAGojCM1oxmQpVKTWR/9JxABD6UAv12vpIms55fPZKFQEhG6uBg==",
+      "originalSpdxExpression": "MIT",
+      "repository": "https://github.com/nodable/val-parsers",
+      "sourceCommit": "1a2c08a483b5b6428f1b3d01974875c97f3b3953",
+      "sourceFiles": [
+        {
+          "spdxLicense": "MIT",
+          "sourcePath": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/nodable/val-parsers/1a2c08a483b5b6428f1b3d01974875c97f3b3953/LICENSE",
+          "sourceSha256": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40",
+          "sourceRangeOrExtraction": null,
+          "textArtifact": {
+            "path": "LICENSE-NODABLE-ENTITIES-2.2.0-MIT",
+            "sha256": "750cb3fb6362804957ef52caaf9b5c824015be44d494637330d7cd8834d31d40",
+            "bytes": 1064
+          }
+        }
+      ],
+      "scope": "production dependency; final-image inclusion remains bound to image/SBOM evidence"
+    },
+    {
+      "packagePath": "node_modules/fancy-canvas",
+      "packageName": "fancy-canvas",
+      "packageVersion": "2.1.0",
+      "packageIntegrity": "sha512-nifxXJ95JNLFR2NgRV4/MxVP45G9909wJTEKz5fg/TZS20JJZA6hfgRVh/bC9bwl2zBtBNcYPjiBE4njQHVBwQ==",
+      "originalSpdxExpression": "MIT",
+      "repository": "https://github.com/tradingview/fancy-canvas",
+      "sourceCommit": "7ece7601f05b624496f485cee65789ad691427df",
+      "sourceCommitBasis": "peeled target of the upstream 2.1.0 tag; the npm version metadata does not publish gitHead, so this does not assert which commit built the npm tarball",
+      "registryMetadata": {
+        "url": "https://registry.npmjs.org/fancy-canvas/2.1.0",
+        "repository": null,
+        "repositoryFieldPresent": false,
+        "gitHead": null,
+        "gitHeadFieldPresent": false,
+        "distIntegrity": "sha512-nifxXJ95JNLFR2NgRV4/MxVP45G9909wJTEKz5fg/TZS20JJZA6hfgRVh/bC9bwl2zBtBNcYPjiBE4njQHVBwQ=="
+      },
+      "upstreamReleaseTag": {
+        "reference": "refs/tags/2.1.0",
+        "tagObjectSha": "df578d4ce5d3fad1ef045f731a54c18a82309b3d",
+        "tagObjectType": "tag",
+        "tagObjectUrl": "https://api.github.com/repos/tradingview/fancy-canvas/git/tags/df578d4ce5d3fad1ef045f731a54c18a82309b3d",
+        "targetType": "commit",
+        "targetCommit": "7ece7601f05b624496f485cee65789ad691427df",
+        "targetCommitUrl": "https://api.github.com/repos/tradingview/fancy-canvas/git/commits/7ece7601f05b624496f485cee65789ad691427df"
+      },
+      "sourceFiles": [
+        {
+          "spdxLicense": "MIT",
+          "sourcePath": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/tradingview/fancy-canvas/7ece7601f05b624496f485cee65789ad691427df/LICENSE",
+          "sourceSha256": "52d2ba0c8f8f4532bd524358d679693ff3dd9e40c56fe0c0c63061ed0733aa18",
+          "sourceRangeOrExtraction": null,
+          "textArtifact": {
+            "path": "LICENSE-FANCY-CANVAS-2.1.0-MIT",
+            "sha256": "52d2ba0c8f8f4532bd524358d679693ff3dd9e40c56fe0c0c63061ed0733aa18",
+            "bytes": 1060
+          }
+        }
+      ],
+      "scope": "production dependency; final-image inclusion remains bound to image/SBOM evidence"
+    },
+    {
+      "packagePath": "node_modules/next-auth",
+      "packageName": "next-auth",
+      "packageVersion": "4.24.15",
+      "packageIntegrity": "sha512-NnjYtjrSOAx/TIVFGTX4IfI/9yHnNpi4B7FuLUwuV20v2Zxgr2OGP/YN0ynJuI7y8QOnTBPitfOdEXZrVvhIuA==",
+      "originalSpdxExpression": "ISC",
+      "repository": "https://github.com/nextauthjs/next-auth",
+      "sourceCommit": "d857eec560fb99c8b18d3b22a2693b849a62d1c3",
+      "sourceFiles": [
+        {
+          "spdxLicense": "ISC",
+          "sourcePath": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/nextauthjs/next-auth/d857eec560fb99c8b18d3b22a2693b849a62d1c3/LICENSE",
+          "sourceSha256": "2b1f629505864a12008be8f161d20542ad5eca5be9464277fb8850820b584fd8",
+          "sourceRangeOrExtraction": null,
+          "textArtifact": {
+            "path": "LICENSE-NEXT-AUTH-4.24.15-ISC",
+            "sha256": "2b1f629505864a12008be8f161d20542ad5eca5be9464277fb8850820b584fd8",
+            "bytes": 790
+          }
+        }
+      ],
+      "scope": "production dependency; final-image inclusion remains bound to image/SBOM evidence"
+    }
+  ],
+  "runtimeNoticeGate": {
+    "status": "BLOCKED",
+    "basis": "These confirmed license texts do not prove the final image package set or close licenses embedded in native binaries.",
+    "blockers": [
+      {
+        "id": "next-swc-native-runtime-and-static-dependency-notices",
+        "status": "BLOCKED",
+        "packageCandidates": [
+          "@next/swc-linux-x64-gnu@15.5.27",
+          "@next/swc-linux-x64-musl@15.5.27"
+        ],
+        "reason": "Final-image inclusion is not yet evidenced, and Next SWC native binaries may contain statically linked third-party components whose full notice set is not represented by the Next.js MIT license.",
+        "requiredEvidence": [
+          "candidate image digest and runtime SBOM",
+          "binary-to-source or release notice inventory for any retained SWC binary",
+          "full applicable license texts with source hashes"
+        ]
+      },
+      {
+        "id": "runtime-native-binary-license-closure",
+        "status": "BLOCKED",
+        "scope": "Every native executable/module/shared library retained in the final runtime image, including statically linked components.",
+        "reason": "Package-level SPDX metadata and an image SBOM alone do not prove the license closure of statically linked code.",
+        "requiredEvidence": [
+          "candidate image digest",
+          "native-binary inventory bound to that image",
+          "versioned source/build provenance and full notices for embedded components"
+        ]
+      },
+      {
+        "id": "client-server-marker-license-texts-if-shipped",
+        "status": "BLOCKED",
+        "packageCandidates": [
+          "client-only@0.0.1",
+          "server-only@0.0.1"
+        ],
+        "reason": "The installed package metadata has no bundled license file or sufficiently pinned source attribution in the inspected package contents; resolve final-image presence and authoritative source text before claiming coverage.",
+        "requiredEvidence": [
+          "candidate image package inventory",
+          "authoritative source repository/ref and complete license text if package files are retained"
+        ]
+      }
+    ]
+  }
+}
