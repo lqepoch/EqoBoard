@@ -9,6 +9,7 @@ import {
   expectedYfinanceResearchRequest,
   isYfinanceResearchSymbol,
   YFINANCE_RESEARCH_MAX_PAGES,
+  YFINANCE_RESEARCH_MAX_RANGE_DAYS,
   validateYfinanceResearchResponse,
   type YfinanceResearchInput,
   type YfinanceResearchResponse,
@@ -18,6 +19,7 @@ export { YFINANCE_RESEARCH_MAX_PAGES };
 
 export const YFINANCE_RESEARCH_RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const;
 export type YfinanceResearchRange = (typeof YFINANCE_RESEARCH_RANGES)[number];
+const YFINANCE_RESEARCH_EARLIEST_SUPPORTED_MS = Date.UTC(1970, 0, 1);
 
 export type YfinanceResearchConfigV1 = Readonly<{
   schemaVersion: 1;
@@ -184,7 +186,7 @@ function rangeDays(range: YfinanceResearchRange): number {
     case "5Y":
       return 1_850;
     case "MAX":
-      return 36_500;
+      return YFINANCE_RESEARCH_MAX_RANGE_DAYS;
     case "YTD":
       return 1;
   }
@@ -202,10 +204,14 @@ export function buildYfinanceResearchInput(
   const now = new Date(nowMs);
   if (!Number.isFinite(now.getTime())) return null;
   const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const start =
+  const requestedStart =
     config.range === "YTD"
       ? Date.UTC(now.getUTCFullYear(), 0, 1)
       : end - rangeDays(config.range) * 86_400_000;
+  const start =
+    config.range === "MAX"
+      ? Math.max(requestedStart, YFINANCE_RESEARCH_EARLIEST_SUPPORTED_MS)
+      : requestedStart;
   if (start >= end) return null;
   return Object.freeze({
     symbol,
@@ -328,6 +334,12 @@ export function yfinanceResearchEvidence(
     paginationBlocked;
   const start = head.response.requested_range.start_utc;
   const end = head.response.requested_range.end_utc;
+  const firstPlottedRow = projection.bars[0]?.sourceRow.event_ts_utc;
+  const lastPlottedRow = projection.bars.at(-1)?.sourceRow.event_ts_utc;
+  const loadedObservationWindow =
+    firstPlottedRow && lastPlottedRow
+      ? `${firstPlottedRow} → ${lastPlottedRow}`
+      : "no chartable rows returned";
   const returned = [
     ...new Set(responses.flatMap((response) => response.observation.payload.returned_symbols)),
   ];
@@ -350,6 +362,10 @@ export function yfinanceResearchEvidence(
       ? version
       : "unrecognized adapter identifier (omitted)",
   );
+  const requestedRangeLabel =
+    config.range === "MAX"
+      ? "MAX (up to 100 years; Yahoo full-history availability not guaranteed)"
+      : config.range;
   return Object.freeze({
     mode: "yahoo-daily",
     source: "Yahoo Finance",
@@ -358,9 +374,15 @@ export function yfinanceResearchEvidence(
     asOf:
       singleProviderTime ??
       (providerTimes.length > 1 ? "mixed source observation times" : "unknown"),
-    requestedWindow: `${config.range} · ${start} → ${end}`,
+    requestedWindow: `${requestedRangeLabel} · ${start} → ${end}`,
     effectiveResolution: "1d",
-    coverage: `MDP coverage not asserted; ${projection.bars.length} plotted rows across ${pages.length} page(s); returned ${returned.join(", ") || "none"}; missing ${missing.join(", ") || "none"}${rejected ? `; ${rejected} rows omitted for invalid/missing OHLCV` : ""}${pendingCursor ? "; older cursor available by explicit request" : ""}${paginationBlocked ? "; pagination stopped after a repeated/invalid cursor" : ""}`,
+    coverage: [
+      `MDP coverage not asserted; ${projection.bars.length} plotted rows across ${pages.length} page(s); `,
+      `loaded observation window ${loadedObservationWindow}; returned ${returned.join(", ") || "none"}; missing ${missing.join(", ") || "none"}`,
+      rejected ? `; ${rejected} rows omitted for invalid/missing OHLCV` : "",
+      pendingCursor ? "; older cursor available by explicit request" : "",
+      paginationBlocked ? "; pagination stopped after a repeated/invalid cursor" : "",
+    ].join(""),
     completeness: partial ? "partial" : "unknown",
     precision: "provider-float",
     evidence: Object.freeze([

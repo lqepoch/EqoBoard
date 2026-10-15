@@ -62,9 +62,9 @@ test("@component Canvas chart export downloads a nonempty PNG with a valid signa
     );
     expect(canvasDimensions.some(({ width, height }) => width > 0 && height > 0)).toBe(true);
 
-    const downloadReady = page.waitForEvent("download");
     const pngExport = chart.getByTestId("native-chart-export-loaded-png");
     await expect(pngExport).toBeEnabled();
+    const downloadReady = page.waitForEvent("download");
     await pngExport.click();
     const download = await downloadReady;
     expect(download.suggestedFilename()).toMatch(/^SPY-loaded-chart-.+\.png$/u);

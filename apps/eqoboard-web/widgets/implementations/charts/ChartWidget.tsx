@@ -289,6 +289,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
   const activeCursorKeyRef = useRef<string | null>(null);
   const cursorHistoryRef = useRef(new Set<string>());
   const surfaceRef = useRef<ChartSurfaceHandle | null>(null);
+  const [surfaceReady, setSurfaceReady] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const diagnostic = useDiagnosticArchive(
     config.dataMode === "diagnostic-archive",
@@ -634,6 +635,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
   );
   const setSurface = useCallback((handle: ChartSurfaceHandle | null) => {
     surfaceRef.current = handle;
+    setSurfaceReady(handle !== null);
   }, []);
   const updateConfig = useCallback(
     (patch: Partial<NativeChartConfigV1>) => {
@@ -773,7 +775,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
           <button
             type="button"
             onClick={() => void exportPng()}
-            disabled={!activeEvidence || activeBars.length === 0 || !surfaceRef.current}
+            disabled={!activeEvidence || activeBars.length === 0 || !surfaceReady}
             data-testid="native-chart-export-loaded-png"
           >
             Export labeled chart PNG

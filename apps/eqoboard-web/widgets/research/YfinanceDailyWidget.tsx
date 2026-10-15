@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { calculateChartIndicators, ChartSurface } from "@/charts";
+import { calculateChartIndicators, ChartSurface, type ChartSurfaceHandle } from "@/charts";
+import { chartExportFilename, composeChartPngCanvas, downloadChartPng } from "@/charts/export";
 import { CHART_INDICATORS, type IndicatorId } from "@/charts/types";
 import type { NativeDataOperationMap } from "@/features/data/operations";
 import {
@@ -74,7 +75,10 @@ export function YfinanceDailyWidget({
   const [anchorNow, setAnchorNow] = useState(() => Date.now());
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [history, setHistory] = useState<HistoryState>(() => emptyState(""));
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [surfaceReady, setSurfaceReady] = useState(false);
   const historyRef = useRef(history);
+  const surfaceRef = useRef<ChartSurfaceHandle | null>(null);
   const requestGenerationRef = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
   const allowed =
@@ -247,6 +251,23 @@ export function YfinanceDailyWidget({
     () => calculateChartIndicators(projection.bars, config.indicators),
     [projection.bars, config.indicators],
   );
+  const setSurface = useCallback((handle: ChartSurfaceHandle | null) => {
+    surfaceRef.current = handle;
+    setSurfaceReady(handle !== null);
+  }, []);
+  const chartSymbol = request?.symbol ?? config.symbol;
+  const exportPng = useCallback(async () => {
+    const surface = surfaceRef.current;
+    if (!evidence || projection.bars.length === 0 || !surface) return;
+    try {
+      const chartCanvas = surface.takeScreenshot();
+      const labeledCanvas = composeChartPngCanvas(chartCanvas, chartSymbol || "Yahoo", evidence);
+      await downloadChartPng(chartExportFilename(chartSymbol || "Yahoo", "png"), labeledCanvas);
+      setExportError(null);
+    } catch {
+      setExportError("PNG export could not be created in this browser.");
+    }
+  }, [chartSymbol, evidence, projection.bars.length]);
 
   const updateConfig = useCallback(
     <K extends keyof YfinanceResearchConfigV1>(key: K, value: YfinanceResearchConfigV1[K]) => {
@@ -504,8 +525,24 @@ export function YfinanceDailyWidget({
       ) : null}
       {allowed ? (
         <div data-testid="yahoo-research-chart" data-history-status={current.status}>
+          <div className={styles.header}>
+            <p className={styles.notice}>Labeled export of loaded Yahoo rows only.</p>
+            <button
+              type="button"
+              onClick={() => void exportPng()}
+              disabled={!evidence || projection.bars.length === 0 || !surfaceReady}
+              data-testid="native-chart-export-loaded-png"
+            >
+              Export labeled chart PNG
+            </button>
+          </div>
+          {exportError ? (
+            <p role="alert" data-testid="yahoo-chart-export-error">
+              {exportError}
+            </p>
+          ) : null}
           <ChartSurface
-            symbol={(request?.symbol ?? config.symbol) || "Yahoo"}
+            symbol={chartSymbol || "Yahoo"}
             identity={selectionKey}
             bars={projection.bars}
             indicators={indicators}
@@ -531,6 +568,7 @@ export function YfinanceDailyWidget({
             olderPageAvailable={olderAvailable}
             olderPageLoading={current.loadingOlder}
             onRequestOlder={loadOlder}
+            onSurfaceReady={setSurface}
           />
         </div>
       ) : null}

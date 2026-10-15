@@ -43,6 +43,9 @@ describe("native chart widget surface", () => {
     expect(markup).toContain('data-testid="native-chart-indicator-RSI"');
     expect(markup).toContain('data-testid="native-chart-export-loaded-csv"');
     expect(markup).toContain('data-testid="native-chart-export-loaded-png"');
+    expect(markup).toMatch(
+      /<button(?=[^>]*data-testid="native-chart-export-loaded-png")(?=[^>]*disabled="")[^>]*>/u,
+    );
     expect(markup).toContain('data-chart-live="false"');
     expect(markup).toContain("no live bar corrections");
     expect(markup).toContain("finite-number display projection");

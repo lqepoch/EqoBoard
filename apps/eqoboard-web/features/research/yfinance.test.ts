@@ -19,6 +19,7 @@ import {
   type YfinanceResearchConfigV1,
   type YfinanceResearchPage,
 } from "./yfinance";
+import { YFINANCE_RESEARCH_MAX_RANGE_DAYS } from "./yfinance-contract";
 
 const row = {
   symbol: "AAPL",
@@ -270,6 +271,54 @@ describe("Yahoo daily research adapter", () => {
     expect(
       parseYfinanceResearchConfig({ ...DEFAULT_YFINANCE_RESEARCH_CONFIG, symbol: "../x" }).ok,
     ).toBe(false);
+  });
+
+  it("clamps MAX to the supported epoch while retaining its 100-year cap and reporting loaded rows", () => {
+    const maxConfig: YfinanceResearchConfigV1 = {
+      ...DEFAULT_YFINANCE_RESEARCH_CONFIG,
+      symbol: "AAPL",
+      range: "MAX",
+    };
+    const maxRequest = buildYfinanceResearchInput(
+      maxConfig,
+      undefined,
+      Date.parse("2026-10-15T12:30:00.000Z"),
+    );
+    expect(maxRequest).toMatchObject({
+      startUtc: "1970-01-01T00:00:00.000Z",
+      endUtc: "2026-10-15T00:00:00.000Z",
+    });
+    if (!maxRequest) return;
+
+    const laterRequest = buildYfinanceResearchInput(
+      maxConfig,
+      undefined,
+      Date.parse("2075-10-15T12:30:00.000Z"),
+    );
+    expect(laterRequest).not.toBeNull();
+    if (!laterRequest) return;
+    expect(Date.parse(laterRequest.endUtc) - Date.parse(laterRequest.startUtc)).toBe(
+      YFINANCE_RESEARCH_MAX_RANGE_DAYS * 86_400_000,
+    );
+
+    const maxPage = {
+      ...page,
+      request: maxRequest,
+      response: {
+        ...page.response,
+        requested_range: {
+          start_utc: maxRequest.startUtc,
+          end_utc: maxRequest.endUtc,
+        },
+      },
+    } as unknown as YfinanceResearchPage;
+    const projection = projectYfinanceResearchPages([maxPage]);
+    const evidence = yfinanceResearchEvidence(maxConfig, [maxPage], projection, false);
+    expect(evidence?.requestedWindow).toContain("1970-01-01T00:00:00.000Z");
+    expect(evidence?.requestedWindow).toContain("Yahoo full-history availability not guaranteed");
+    expect(evidence?.coverage).toContain(
+      "loaded observation window 2026-10-14T00:00:00.000Z → 2026-10-14T00:00:00.000Z",
+    );
   });
 
   it("surfaces the fixture marker and creates portal links only for a distinct server-authored origin", () => {
