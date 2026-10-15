@@ -50,7 +50,7 @@ def module_owners(filename: str) -> set[str]:
     if filename.startswith("test_openbb_"):
         return {"openbb"}
     if filename == "test_upstream_provenance.py":
-        return {"core", "openbb", "native"}
+        return {"core", "openbb"}
     return {"core"}
 
 

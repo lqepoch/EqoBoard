@@ -40,7 +40,11 @@ jobs:
             exit 0
           fi
           echo 'missing=true' >> "$GITHUB_OUTPUT"
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          # Git dependencies execute prepare even under --ignore-scripts.
+          # --package-lock-only propagates into Core prepare and prevents its
+          # nested npm ci from installing TypeScript, so resolve in this isolated
+          # Actions workspace without that flag. Nothing here is acceptance.
+          npm install --ignore-scripts --include=dev --no-audit --no-fund
           echo '::error::Bootstrap lock is a proposal artifact only. Commit and review it before acceptance.'
           exit 1
       - name: Preserve proposed lock without accepting generated dependencies
