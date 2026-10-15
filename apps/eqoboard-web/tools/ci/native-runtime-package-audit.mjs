@@ -4,14 +4,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 function isForbiddenRuntimePackage(name) {
-  return name === "sharp" || name.startsWith("@img/sharp-") || name === "lightningcss" || name.startsWith("lightningcss-");
+  return (
+    name === "sharp" ||
+    name.startsWith("@img/sharp-") ||
+    name === "lightningcss" ||
+    name.startsWith("lightningcss-")
+  );
 }
 
 function isKnownOptimizerNativeName(name) {
-  return /^sharp(?:[-.][A-Za-z0-9._-]+)?\.node$/iu.test(name) ||
+  return (
+    /^sharp(?:[-.][A-Za-z0-9._-]+)?\.node$/iu.test(name) ||
     /^lightningcss(?:[-.][A-Za-z0-9._-]+)?\.node$/iu.test(name) ||
     /^libvips(?:[-_.][A-Za-z0-9._-]+)?\.(?:so(?:\.[A-Za-z0-9._-]+)?|dylib|dll)$/iu.test(name) ||
-    /^libvips(?:[-_.][A-Za-z0-9._-]+)?$/iu.test(name);
+    /^libvips(?:[-_.][A-Za-z0-9._-]+)?$/iu.test(name)
+  );
 }
 
 function packageRootName(relativeParts) {
@@ -19,19 +26,24 @@ function packageRootName(relativeParts) {
   if (index < 0) return null;
   const remaining = relativeParts.length - index - 1;
   if (remaining === 1 && !relativeParts[index + 1].startsWith("@")) return relativeParts[index + 1];
-  if (remaining === 2 && relativeParts[index + 1].startsWith("@")) return `${relativeParts[index + 1]}/${relativeParts[index + 2]}`;
+  if (remaining === 2 && relativeParts[index + 1].startsWith("@"))
+    return `${relativeParts[index + 1]}/${relativeParts[index + 2]}`;
   return null;
 }
 
 function isWithinRoot(root, target) {
   const relative = path.relative(root, target);
-  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`));
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`))
+  );
 }
 
 /** Return known optimizer/build-transform package or native-artifact paths found under a runtime root. */
 export function findForbiddenRuntimeArtifacts(artifactRoot) {
   const root = path.resolve(artifactRoot);
-  if (!lstatSync(root).isDirectory()) throw new Error(`runtime artifact root is not a directory: ${root}`);
+  if (!lstatSync(root).isDirectory())
+    throw new Error(`runtime artifact root is not a directory: ${root}`);
   const pending = [{ absolute: root, relative: "" }];
   const findings = [];
 
@@ -39,19 +51,25 @@ export function findForbiddenRuntimeArtifacts(artifactRoot) {
     const current = pending.pop();
     const entries = readdirSync(current.absolute, { withFileTypes: true });
     for (const entry of entries) {
-      const relative = current.relative ? path.posix.join(current.relative, entry.name) : entry.name;
+      const relative = current.relative
+        ? path.posix.join(current.relative, entry.name)
+        : entry.name;
       // License archives deliberately retain source package notices, not executable package contents.
       if (relative === "legal") {
-        if (!entry.isDirectory() || entry.isSymbolicLink()) findings.push("legal (license archive must be a real directory)");
+        if (!entry.isDirectory() || entry.isSymbolicLink())
+          findings.push("legal (license archive must be a real directory)");
         continue;
       }
       const absolute = path.join(current.absolute, entry.name);
-      if (isKnownOptimizerNativeName(entry.name)) findings.push(`${relative} (known optimizer native filename)`);
+      if (isKnownOptimizerNativeName(entry.name))
+        findings.push(`${relative} (known optimizer native filename)`);
       if (entry.isSymbolicLink()) {
         try {
           const resolved = realpathSync(absolute);
-          if (!isWithinRoot(root, resolved)) findings.push(`${relative} (symlink escapes artifact root)`);
-          else if (path.relative(root, resolved).split(path.sep)[0] === "legal") findings.push(`${relative} (symlink targets license-only archive)`);
+          if (!isWithinRoot(root, resolved))
+            findings.push(`${relative} (symlink escapes artifact root)`);
+          else if (path.relative(root, resolved).split(path.sep)[0] === "legal")
+            findings.push(`${relative} (symlink targets license-only archive)`);
         } catch {
           findings.push(`${relative} (unresolved symlink)`);
         }
@@ -80,7 +98,9 @@ function runCli() {
   }
   const result = auditRuntimeArtifact(artifactRoot);
   if (!result.ok) {
-    console.error(`Forbidden optimizer/build-transform artifacts remain in runtime artifact ${result.artifactRoot}:`);
+    console.error(
+      `Forbidden optimizer/build-transform artifacts remain in runtime artifact ${result.artifactRoot}:`,
+    );
     for (const finding of result.findings) console.error(`- ${finding}`);
     process.exitCode = 1;
     return;

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WidgetJsonValueV1 } from "./contracts";
-import {
-  parseWidgetConfigData,
-  parseWidgetInstanceV1,
-  parseWidgetManifestV1,
-} from "./manifest";
+import { parseWidgetConfigData, parseWidgetInstanceV1, parseWidgetManifestV1 } from "./manifest";
 
 function isJsonObject(
   value: WidgetJsonValueV1,

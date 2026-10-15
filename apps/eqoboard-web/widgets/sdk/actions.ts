@@ -24,8 +24,10 @@ export type WidgetActionDefinition = Readonly<{
   output: unknown;
 }>;
 
-type WidgetActionPayload<TAction, TField extends "input" | "output"> =
-  TAction extends WidgetActionDefinition ? TAction[TField] : never;
+type WidgetActionPayload<
+  TAction,
+  TField extends "input" | "output",
+> = TAction extends WidgetActionDefinition ? TAction[TField] : never;
 
 export type WidgetActionInput<
   TActions extends WidgetActionMap,

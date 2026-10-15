@@ -139,11 +139,7 @@ function evidenceFor(
         : "partial";
   const precision = precisionForRows(response, precisionById);
   const source =
-    sources.length === 1
-      ? (sources[0] ?? "unknown")
-      : sources.length > 1
-        ? "mixed"
-        : "unknown";
+    sources.length === 1 ? (sources[0] ?? "unknown") : sources.length > 1 ? "mixed" : "unknown";
   return {
     mode: "core-bars",
     source,

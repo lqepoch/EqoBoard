@@ -50,9 +50,7 @@ function plainText(value: unknown, maxLength: number): string | null {
     .replace(/<[^>]{0,128}>/gu, "")
     .replace(/\s+/gu, " ")
     .trim();
-  return text.length > 0 && text.length <= maxLength && !hasControlCharacters(text)
-    ? text
-    : null;
+  return text.length > 0 && text.length <= maxLength && !hasControlCharacters(text) ? text : null;
 }
 
 function listingSymbol(value: unknown): string | null {

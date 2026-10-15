@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { projectChartRows, type ChartProjectionCandidate } from "./projection";
 
-type ExactCandidate = ChartProjectionCandidate<Readonly<{ id: string }>> & Readonly<{
-  exact: NonNullable<ChartProjectionCandidate<Readonly<{ id: string }>>["exact"]>;
-}>;
+type ExactCandidate = ChartProjectionCandidate<Readonly<{ id: string }>> &
+  Readonly<{
+    exact: NonNullable<ChartProjectionCandidate<Readonly<{ id: string }>>["exact"]>;
+  }>;
 
-function candidate(
-  timeSeconds: number,
-  close = "10.25",
-): ExactCandidate {
+function candidate(timeSeconds: number, close = "10.25"): ExactCandidate {
   const sourceRow = Object.freeze({ id: `row-${timeSeconds}-${close}` });
   return {
     sourceRow,

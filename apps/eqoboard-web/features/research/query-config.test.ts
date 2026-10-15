@@ -105,12 +105,7 @@ describe("native research saved queries", () => {
   });
 
   it("filters text observations case insensitively without coercing non-text values", () => {
-    const rows = [
-      { symbol: "SPY" },
-      { symbol: "QQQ" },
-      { symbol: null },
-      { symbol: 42 },
-    ];
+    const rows = [{ symbol: "SPY" }, { symbol: "QQQ" }, { symbol: null }, { symbol: 42 }];
     const filtered = filterResearchRows(rows, [
       { field: "symbol", operator: "contains", value: "sp" },
     ]);
