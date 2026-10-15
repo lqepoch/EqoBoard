@@ -401,3 +401,196 @@ test("wrong role, feed denial, invalid input, and unknown paths fail without fal
   expect(result.gateway.requests).toEqual({ "/openbb/v1/options": 1 });
   expect(result.research.requests).toEqual({});
 });
+
+test("Yahoo research daily BFF keeps a full 2010-2026 query stable across opaque older-page cursors", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+
+  const query = new URLSearchParams({
+    symbols: "AAPL",
+    asset_class: "stock",
+    start_utc: "2010-01-01T00:00:00Z",
+    end_utc: "2026-01-01T00:00:00Z",
+    adjustment: "unadjusted",
+  });
+  const firstResponse = await page.context().request.get(`${WEB_ORIGIN}/api/research/yfinance/daily?${query}`);
+  expect(firstResponse.status()).toBe(200);
+  expect(firstResponse.headers()["cache-control"]).toBe("no-store");
+  const first = await firstResponse.json();
+  expect(first).toMatchObject({
+    schema_version: "mdp-yfinance-research-observations-v1",
+    provider: "yfinance",
+    source: "Yahoo Finance",
+    resolution: "1d",
+    requested_adjustment: "unadjusted",
+    provider_adjustment_semantics: "unknown_or_provider_native",
+    adjustment_confirmed_raw: false,
+    numeric_encoding: "binary_float_projection",
+    canonical: false,
+    point_in_time: false,
+    executable: false,
+    display_only: true,
+    mdp_coverage_asserted: false,
+    requested_range: {
+      start_utc: "2010-01-01T00:00:00Z",
+      end_utc: "2026-01-01T00:00:00Z",
+      semantics: "start_inclusive_end_exclusive",
+    },
+  });
+  expect(first.page_range.start_utc).toBe("2016-01-04T00:00:00.000Z");
+  expect(first.page_range.end_utc).toBe("2026-01-01T00:00:00.000Z");
+  expect(first.next_cursor).toBe("older:1");
+  expect(first.observation.payload.bars.every((bar: Record<string, unknown>) => bar.resolution === "1d")).toBe(true);
+
+  const olderQuery = new URLSearchParams(query);
+  olderQuery.set("cursor", first.next_cursor);
+  const olderResponse = await page.context().request.get(`${WEB_ORIGIN}/api/research/yfinance/daily?${olderQuery}`);
+  expect(olderResponse.status()).toBe(200);
+  const older = await olderResponse.json();
+  expect(older.requested_range).toEqual(first.requested_range);
+  expect(older.page_range.end_utc).toBe(first.page_range.start_utc);
+  expect(older.next_cursor).toBeNull();
+  expect(older.observation.payload.bars.map((bar: Record<string, unknown>) => bar.event_ts_utc)).toEqual([
+    "2010-01-04T00:00:00.000Z",
+    "2015-12-31T00:00:00.000Z",
+  ]);
+  expect(older.observation.payload.bars.every((bar: Record<string, unknown>) =>
+    bar.symbol === "AAPL" && bar.resolution === "1d" && bar.adjustment === "unadjusted")).toBe(true);
+  expect(older.observation.payload.coverage.calendar_gaps_assessed).toBe(false);
+  expect(older.observation.payload.coverage.gaps).toContainEqual({ code: "DATE_GAPS_UNASSESSED" });
+
+  const calls = (await metrics(request)).mdpYfinanceResearch;
+  expect(calls).toHaveLength(2);
+  expect(calls.map((call: { query: Record<string, string> }) => call.query.cursor ?? "")).toEqual(["", "older:1"]);
+  for (const call of calls) {
+    expect(call).toMatchObject({
+      method: "GET",
+      path: "/v1/research/yfinance/daily",
+      bearer_present: true,
+      gateway_delegation_present: false,
+      kid: "mdp-research",
+      issuer: "openterminal-research",
+      audience: "lqepoch-market-data",
+      subject: "subject-e2e",
+      scope: ["market:read"],
+    });
+    expect(call.query).toMatchObject({
+      symbols: "AAPL",
+      asset_class: "stock",
+      start_utc: "2010-01-01T00:00:00Z",
+      end_utc: "2026-01-01T00:00:00Z",
+      adjustment: "unadjusted",
+    });
+    expect(call.query).not.toHaveProperty("provider_mode");
+    expect(call.query).not.toHaveProperty("resolution");
+  }
+  expect(JSON.stringify(calls)).not.toContain("q".repeat(64));
+});
+
+test("Yahoo research BFF canonicalizes explicit UTC offsets and preserves fractional range bounds", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+
+  const query = new URLSearchParams({
+    symbols: "AAPL",
+    asset_class: "stock",
+    start_utc: "2010-01-01T00:00:00.123000+00:00",
+    end_utc: "2026-01-01T00:00:00.000000+00:00",
+    adjustment: "unadjusted",
+  });
+  const response = await page.context().request.get(`${WEB_ORIGIN}/api/research/yfinance/daily?${query}`);
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  expect(body.requested_range).toEqual({
+    start_utc: "2010-01-01T00:00:00.123Z",
+    end_utc: "2026-01-01T00:00:00Z",
+    semantics: "start_inclusive_end_exclusive",
+  });
+  const [call] = (await metrics(request)).mdpYfinanceResearch;
+  expect(call.query).toMatchObject({
+    start_utc: "2010-01-01T00:00:00.123Z",
+    end_utc: "2026-01-01T00:00:00Z",
+  });
+});
+
+test("Yahoo chart page uses the shared widget, bounded MAX cursor pages, and float-only tooltip values", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+  await page.goto(`${WEB_ORIGIN}/research/yfinance/AAPL`);
+
+  await expect(page.getByTestId("yfinance-research-page")).toBeVisible();
+  await expect(page.getByTestId("yfinance-research-display-only")).toContainText("NOT POINT-IN-TIME");
+  await expect(page.getByTestId("chart-yfinance-research-mode")).toBeVisible();
+  await expect(page.getByTestId("chart-yfinance-source")).toContainText("Yahoo Finance · Provider yfinance");
+  await expect(page.getByTestId("chart-widget-history-status")).toContainText("basis unknown/provider-native");
+  await expect(page.getByTestId("chart-widget-history-status")).toContainText("MDP coverage asserted no");
+  await expect(page.getByTestId("chart-provider-mode")).toHaveCount(0);
+  await expect(page.getByTestId("chart-yfinance-adjustment")).toHaveValue("unadjusted");
+  await expect(page.getByTestId("chart-bar-count")).toContainText("1 bars");
+  await expect(page.getByTestId("chart-widget-legend")).toBeVisible();
+  await expect(page.getByTestId("chart-widget-legend")).not.toContainText("101.5000");
+
+  const initialCalls = (await metrics(request)).mdpYfinanceResearch;
+  expect(initialCalls).toHaveLength(1);
+  expect(initialCalls[0].query.start_utc).toBe("1970-01-01T00:00:00.000Z");
+  expect(initialCalls[0].query.adjustment).toBe("unadjusted");
+
+  await page.getByTestId("chart-load-older").click();
+  await expect(page.getByTestId("chart-bar-count")).toContainText("3 bars");
+  const pageCalls = (await metrics(request)).mdpYfinanceResearch;
+  expect(pageCalls).toHaveLength(2);
+  expect(pageCalls[1].query).toMatchObject({ cursor: "older:1", start_utc: initialCalls[0].query.start_utc, end_utc: initialCalls[0].query.end_utc });
+  await page.getByText("Research observation, unassessed coverage and provenance").click();
+  await expect(page.getByTestId("chart-yfinance-provenance")).toContainText("source_observation_sha256");
+  await expect(page.getByTestId("chart-yfinance-provenance")).toContainText("not a provider signature");
+
+  await page.getByTestId("chart-yfinance-adjustment").selectOption("adjusted");
+  await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.length).toBe(3);
+  const adjustedCall = (await metrics(request)).mdpYfinanceResearch[2];
+  expect(adjustedCall.query.adjustment).toBe("adjusted");
+  expect(adjustedCall.query.cursor).toBeUndefined();
+  await expect(page.getByTestId("chart-bar-count")).toContainText("1 bars");
+});
+
+test("Yahoo range buttons stay daily-only and use distinct UTC calendar windows", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+  await page.goto(`${WEB_ORIGIN}/research/yfinance/AAPL`);
+  await expect(page.getByTestId("chart-yfinance-source")).toBeVisible();
+
+  const starts: string[] = [];
+  for (const range of ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y"] as const) {
+    const before = (await metrics(request)).mdpYfinanceResearch.length;
+    await page.getByRole("button", { name: range, exact: true }).click();
+    await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.length).toBe(before + 1);
+    const call = (await metrics(request)).mdpYfinanceResearch[before];
+    expect(call.query).toMatchObject({ symbols: "AAPL", asset_class: "stock", adjustment: "unadjusted" });
+    expect(Date.parse(call.query.start_utc)).toBeLessThan(Date.parse(call.query.end_utc));
+    starts.push(call.query.start_utc);
+    expect(call.query).not.toHaveProperty("resolution");
+    await expect(page.getByTestId("chart-yfinance-source")).toBeVisible();
+    await expect(page.getByTestId("chart-widget-history-status")).toContainText("Resolution 1d · daily bars only");
+  }
+  expect(new Set(starts).size).toBe(starts.length);
+});
+
+test("Yahoo history route rejects non-research roles and malformed cursor queries before MDP", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-private-research-reader"]);
+  const denied = await page.context().request.get(
+    `${WEB_ORIGIN}/api/research/yfinance/daily?symbols=AAPL&asset_class=stock&start_utc=2010-01-01T00%3A00%3A00Z&end_utc=2026-01-01T00%3A00%3A00Z&adjustment=unadjusted`,
+  );
+  expect(denied.status()).toBe(403);
+  expect(await denied.json()).toEqual({ error: "action_forbidden" });
+  expect((await metrics(request)).mdpYfinanceResearch).toEqual([]);
+
+  await signIn(page, request, ["eqoboard-market-reader"]);
+  for (const url of [
+    `${WEB_ORIGIN}/api/research/yfinance/daily?symbols=aapl&asset_class=stock&start_utc=2010-01-01T00%3A00%3A00Z&end_utc=2026-01-01T00%3A00%3A00Z&adjustment=unadjusted`,
+    `${WEB_ORIGIN}/api/research/yfinance/daily?symbols=AAPL&symbols=SPY&asset_class=stock&start_utc=2010-01-01T00%3A00%3A00Z&end_utc=2026-01-01T00%3A00%3A00Z&adjustment=unadjusted`,
+    `${WEB_ORIGIN}/api/research/yfinance/daily?symbols=AAPL&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00Z&end_utc=2010-01-01T00%3A00%3A00Z&adjustment=unadjusted`,
+  ]) {
+    expect((await page.context().request.get(url)).status(), url).toBe(400);
+  }
+  expect((await metrics(request)).mdpYfinanceResearch).toEqual([]);
+});

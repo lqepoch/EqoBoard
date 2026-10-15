@@ -1,6 +1,10 @@
 const AUTH_ENDPOINT = /^(providers|csrf|session|signin(?:\/[A-Za-z0-9_-]+)?|callback\/[A-Za-z0-9_-]+|signout|verify-request|error)$/;
 const OPENBB_ENDPOINT = /^\/api\/openbb\/(?:widgets\.json|apps\.json|openbb\/v1\/(?:stocks|bars|options))$/;
 const MDP_BAR_ENDPOINT = /^\/api\/eqo\/market-data\/datasets\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\/bars$/;
+const YFINANCE_RESEARCH_ENDPOINT = "/api/research/yfinance/daily";
+const YFINANCE_RESEARCH_PAGE = /^\/research\/yfinance\/[A-Z0-9][A-Z0-9.-]{0,31}$/;
+const NEXT_STATIC_SEGMENT = "(?:[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}|\\[symbol\\]|%5[Bb]symbol%5[Dd])";
+const NEXT_STATIC_RESOURCE = new RegExp(`^/_next/static/(?:chunks|css|media|[A-Za-z0-9_-]{1,128})/${NEXT_STATIC_SEGMENT}(?:/${NEXT_STATIC_SEGMENT})*$`);
 const QUANT_PREDICTION_PREFIX = "/api/eqo/research/predictions/";
 const QUANT_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9_.:@+-]{0,254}$/;
 
@@ -24,6 +28,12 @@ export function isResearchRouteAllowed(rawUrl: string, pathname: string, method:
   }
 
   const normalizedMethod = method.toUpperCase();
+  if (YFINANCE_RESEARCH_PAGE.test(pathname)) {
+    return normalizedMethod === "GET" || normalizedMethod === "HEAD";
+  }
+  if (NEXT_STATIC_RESOURCE.test(pathname)) {
+    return normalizedMethod === "GET" || normalizedMethod === "HEAD";
+  }
   if (pathname === "/api/healthz" || pathname === "/api/readyz") {
     return normalizedMethod === "GET" || normalizedMethod === "HEAD";
   }
@@ -33,5 +43,6 @@ export function isResearchRouteAllowed(rawUrl: string, pathname: string, method:
     return AUTH_ENDPOINT.test(endpoint) && ["GET", "POST"].includes(normalizedMethod);
   }
   return (OPENBB_ENDPOINT.test(pathname) || MDP_BAR_ENDPOINT.test(pathname) ||
+    pathname === YFINANCE_RESEARCH_ENDPOINT ||
     isQuantPredictionPath(pathname)) && normalizedMethod === "GET";
 }
