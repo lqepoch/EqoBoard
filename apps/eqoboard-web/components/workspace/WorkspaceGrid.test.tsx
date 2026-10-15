@@ -24,7 +24,10 @@ import type {
   WidgetRefreshScheduler,
 } from "../../widgets/sdk/data";
 import { createWidgetEventBus } from "../../widgets/sdk/events";
-import { createWidgetLifecycleController } from "../../widgets/sdk/lifecycle";
+import {
+  createWidgetLifecycleController,
+  type WidgetLifecycleController,
+} from "../../widgets/sdk/lifecycle";
 import { createBudgetedWidgetDataClient } from "../../widgets/sdk/budgetedData";
 import {
   createWidgetPollBudget,
@@ -256,10 +259,28 @@ describe("WorkspaceGrid direct-read budget wiring", () => {
       hidden: true,
     });
 
+    const lifecycleInterface = hookMocks.directDataHook.mock.calls[0]?.[1];
+    if (!lifecycleInterface) throw new Error("The read client did not receive a widget lifecycle.");
+    const lifecycle = lifecycleInterface as WidgetLifecycleController;
+    const initialLifecycle = lifecycle.getSnapshot();
+    expect(initialLifecycle.phase).toBe("suspended");
+
     const signal = new AbortController().signal;
     await expect(
       host.data.read("market.quotes", { symbols: ["SPY"] }, { signal }),
     ).rejects.toMatchObject({ code: "suspended" });
+
+    expect(requests).toHaveLength(0);
+    expect(rawRead).not.toHaveBeenCalled();
+
+    lifecycle.resume();
+    const resumedLifecycle = lifecycle.getSnapshot();
+    expect(resumedLifecycle.phase).toBe("active");
+    expect(resumedLifecycle.generation).toBe(initialLifecycle.generation + 1);
+
+    await expect(
+      host.data.read("market.quotes", { symbols: ["SPY"] }, { signal }),
+    ).rejects.toMatchObject({ code: "hidden" });
     host.refresh.observe(
       "market.quotes",
       { symbols: ["SPY"] },
