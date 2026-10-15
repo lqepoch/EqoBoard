@@ -37,7 +37,7 @@ export default function ModernTerminal({
 
         {/* 中栏: 主图表与量化指标看板 (Flex 1) */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <MainChartPanel />
+          <MainChartPanel researchOrigin={researchOrigin ?? null} />
         </main>
 
         {/* 右栏: 盘口与交易执行 (~340px) */}

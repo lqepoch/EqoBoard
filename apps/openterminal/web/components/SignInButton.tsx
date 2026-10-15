@@ -2,11 +2,11 @@
 
 import { signIn } from "next-auth/react";
 
-export default function SignInButton() {
+export default function SignInButton({ callbackUrl = "/" }: { callbackUrl?: string } = {}) {
   return <button
     className="auth-sign-in"
     type="button"
-    onClick={() => void signIn("eqo-oidc", { callbackUrl: "/" })}
+    onClick={() => void signIn("eqo-oidc", { callbackUrl })}
   >
     Continue with your organization identity provider
   </button>;
