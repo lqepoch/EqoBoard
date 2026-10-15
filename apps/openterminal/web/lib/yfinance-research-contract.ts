@@ -205,10 +205,11 @@ function validPayload(
   pageEnd: bigint,
 ): value is YfinanceHistoryBridgePayload {
   if (!isRecord(value) || !hasExactFields(value, PAYLOAD_FIELDS)) return false;
-  const returnedSymbols = value.returned_symbols;
-  const missingSymbols = value.missing_symbols;
-  if (!isSymbolList(returnedSymbols, request.symbols) || !isSymbolList(missingSymbols, request.symbols) ||
-      returnedSymbols.some((symbol) => missingSymbols.includes(symbol))) return false;
+  const bridgeReturnedSymbols = value.returned_symbols;
+  const bridgeMissingSymbols = value.missing_symbols;
+  if (!isSymbolList(bridgeReturnedSymbols, request.symbols) ||
+      !isSymbolList(bridgeMissingSymbols, request.symbols) ||
+      bridgeReturnedSymbols.some((symbol) => bridgeMissingSymbols.includes(symbol))) return false;
 
   if (
       value.schema_version !== YFINANCE_BRIDGE_SCHEMA || !["ready", "partial"].includes(value.status as string) ||
@@ -220,7 +221,7 @@ function validPayload(
       value.volume_encoding !== YFINANCE_RESEARCH_VOLUME_ENCODING || value.canonical !== false ||
       value.point_in_time !== false || value.executable !== false || value.display_only !== true ||
       !symbolsEchoRequest(value.requested_symbols, request) ||
-      ((value.status === "partial") !== (missingSymbols.length > 0)) ||
+      ((value.status === "partial") !== (bridgeMissingSymbols.length > 0)) ||
       !["network", "fresh_cache", "stale_cache"].includes(value.cache_status as string) ||
       !["retrieved", "stale"].includes(value.freshness as string) ||
       ((value.cache_status === "stale_cache") !== (value.freshness === "stale")) ||
