@@ -49,8 +49,9 @@ unlisted Research API routes and order paths remain denied. The page has its own
 hostname.
 
 The Research E2E uses the real Next BFF/page with a bounded synthetic MDP HTTP fixture. It verifies signer claims,
-unchanged cursor windows, 2010–2026/pre-2016 pages, MAX chart pagination, adjustment query identity, unknown-basis
-labels, and float-only tooltips. Those synthetic tests validate routing and display behavior only. They do not verify
+unchanged cursor windows, 2010–2026/pre-2016 pages, MAX left-pan cursor pagination with viewport preservation,
+adjustment query identity, unknown-basis labels, and float-only tooltips. Those synthetic tests validate routing and
+display behavior only. They do not verify
 Yahoo availability, real provider adjustment behavior, historical completeness, exchange-calendar gaps, source
 freshness, or production Research ingress/OIDC deployment. Run the Research browser suite in public GitHub Actions after
 the workflow's normal web build; do not use its synthetic result as real-provider evidence.

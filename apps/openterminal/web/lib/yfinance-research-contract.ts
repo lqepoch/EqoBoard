@@ -204,6 +204,9 @@ function validPayload(
       !symbolsEchoRequest(value.requested_symbols, request) ||
       !isSymbolList(value.returned_symbols, request.symbols) || !isSymbolList(value.missing_symbols, request.symbols) ||
       value.returned_symbols.some((symbol) => value.missing_symbols.includes(symbol)) ||
+      !["network", "fresh_cache", "stale_cache"].includes(value.cache_status as string) ||
+      !["retrieved", "stale"].includes(value.freshness as string) ||
+      ((value.cache_status === "stale_cache") !== (value.freshness === "stale")) ||
       !isTimestampOrNull(value.available_at) || parseUtcTimestamp(value.fetched_at) === null ||
       !isTimestampOrNull(value.source_observed_at) || parseUtcTimestamp(value.request_started_at) === null ||
       !isRecord(value.coverage) || !hasExactFields(value.coverage, new Set([

@@ -526,7 +526,7 @@ test("Yahoo chart page uses the shared widget, bounded MAX cursor pages, and flo
   await expect(page.getByTestId("chart-widget-history-status")).toContainText("MDP coverage asserted no");
   await expect(page.getByTestId("chart-provider-mode")).toHaveCount(0);
   await expect(page.getByTestId("chart-yfinance-adjustment")).toHaveValue("unadjusted");
-  await expect(page.getByTestId("chart-bar-count")).toContainText("1 bars");
+  await expect(page.getByTestId("chart-bar-count")).toContainText("2 bars");
   await expect(page.getByTestId("chart-widget-legend")).toBeVisible();
   await expect(page.getByTestId("chart-widget-legend")).not.toContainText("101.5000");
 
@@ -536,7 +536,7 @@ test("Yahoo chart page uses the shared widget, bounded MAX cursor pages, and flo
   expect(initialCalls[0].query.adjustment).toBe("unadjusted");
 
   await page.getByTestId("chart-load-older").click();
-  await expect(page.getByTestId("chart-bar-count")).toContainText("3 bars");
+  await expect(page.getByTestId("chart-bar-count")).toContainText("4 bars");
   const pageCalls = (await metrics(request)).mdpYfinanceResearch;
   expect(pageCalls).toHaveLength(2);
   expect(pageCalls[1].query).toMatchObject({ cursor: "older:1", start_utc: initialCalls[0].query.start_utc, end_utc: initialCalls[0].query.end_utc });
@@ -549,7 +549,64 @@ test("Yahoo chart page uses the shared widget, bounded MAX cursor pages, and flo
   const adjustedCall = (await metrics(request)).mdpYfinanceResearch[2];
   expect(adjustedCall.query.adjustment).toBe("adjusted");
   expect(adjustedCall.query.cursor).toBeUndefined();
-  await expect(page.getByTestId("chart-bar-count")).toContainText("1 bars");
+  await expect(page.getByTestId("chart-bar-count")).toContainText("2 bars");
+});
+
+test("Yahoo MAX left-pan follows an opaque cursor and preserves the viewport while older bars arrive", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true, delayMs: 1_500 } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+  const historyResponses: URL[] = [];
+  page.on("response", (response) => {
+    const url = new URL(response.url());
+    if (url.pathname === "/api/research/yfinance/daily") historyResponses.push(url);
+  });
+  await page.goto(`${WEB_ORIGIN}/research/yfinance/AAPL`);
+
+  const widget = page.getByTestId("chart-widget");
+  const canvas = widget.getByTestId("chart-widget-canvas");
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
+  await expect.poll(() => canvas.getAttribute("data-visible-logical-range")).not.toBeNull();
+  const parseRange = (value: string | null) => {
+    const match = /^(-?\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?)$/.exec(value ?? "");
+    if (!match) throw new Error(`Invalid chart logical range: ${value}`);
+    return { from: Number(match[1]), to: Number(match[2]) };
+  };
+  const beforePan = parseRange(await canvas.getAttribute("data-visible-logical-range"));
+  const instanceGeneration = await canvas.getAttribute("data-chart-instance-generation");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Research chart canvas is not visible");
+  await page.mouse.move(bounds.x + bounds.width * 0.2, bounds.y + bounds.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.65, bounds.y + bounds.height * 0.55, { steps: 5 });
+  await page.mouse.up();
+
+  await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.some((call: {
+    query: { cursor?: string };
+  }) => call.query.cursor === "older:1"), { intervals: [50, 100, 250], timeout: 5_000 }).toBe(true);
+  const initialRequest = (await metrics(request)).mdpYfinanceResearch.find((call: {
+    query: { cursor?: string };
+  }) => !call.query.cursor);
+  const continuation = (await metrics(request)).mdpYfinanceResearch.find((call: {
+    query: { cursor?: string };
+  }) => call.query.cursor === "older:1");
+  expect(initialRequest).toBeTruthy();
+  expect(continuation?.query).toMatchObject({
+    cursor: "older:1",
+    start_utc: initialRequest.query.start_utc,
+    end_utc: initialRequest.query.end_utc,
+  });
+  await expect.poll(() => historyResponses.length, { intervals: [50, 100, 250], timeout: 500 }).toBe(1);
+  const whilePending = parseRange(await canvas.getAttribute("data-visible-logical-range"));
+  expect(whilePending.from).toBeLessThanOrEqual(12);
+  expect(whilePending.to - whilePending.from).toBeCloseTo(beforePan.to - beforePan.from, 1);
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("2 bars");
+
+  await expect.poll(() => historyResponses.length, { intervals: [50, 100, 250], timeout: 5_000 }).toBe(2);
+  await expect(widget.getByTestId("chart-bar-count")).toHaveText("4 bars");
+  expect(await canvas.getAttribute("data-chart-instance-generation")).toBe(instanceGeneration);
+  const afterPrepend = parseRange(await canvas.getAttribute("data-visible-logical-range"));
+  expect(afterPrepend.from).toBeCloseTo(whilePending.from + 2, 1);
+  expect(afterPrepend.to - afterPrepend.from).toBeCloseTo(whilePending.to - whilePending.from, 1);
 });
 
 test("Yahoo range buttons stay daily-only and use distinct UTC calendar windows", async ({ page, request }) => {

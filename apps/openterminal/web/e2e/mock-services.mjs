@@ -113,7 +113,7 @@ function syntheticYfinanceResearchResponse(url) {
   const rows = [];
   for (const symbol of symbols) {
     const candidateTimes = pageIndex === 0
-      ? [pageEndMs - dayMs]
+      ? [pageEndMs - 2 * dayMs, pageEndMs - dayMs]
       : pageIndex === 1
         ? [Date.parse("2010-01-04T00:00:00Z"), Date.parse("2015-12-31T00:00:00Z")]
         : [pageStartMs + dayMs];
@@ -166,7 +166,7 @@ function syntheticYfinanceResearchResponse(url) {
     source_observed_at: null,
     request_started_at: now,
     cache_status: "network",
-    freshness: "unknown",
+    freshness: "retrieved",
     coverage: {
       requested_start: pageStart,
       requested_end: pageEnd,
