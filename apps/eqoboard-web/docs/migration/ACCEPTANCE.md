@@ -387,3 +387,23 @@ provider proof exists. If any gate is `FAIL`, `NOT_RUN`, or `UNKNOWN`, retain
 the current production entrypoint and do not remove the legacy app. A synthetic
 test pass cannot establish live SIP/OPRA entitlement, real Futu availability,
 or order execution.
+
+
+## Historical chart refresh and cursor invariants
+
+Core and Yahoo views retain the exact original request window for their cursor
+chain separately from one latest head snapshot. A rolling head request does not
+replace the cursor anchor, discard loaded pages, or reset the viewport. New
+validated HTTP head rows replace overlapping displayed candles; rows outside that
+head remain from their original pages, with the source evidence retained. Quotes
+and trades are not converted into bars, and there is no live bar correction
+stream contract.
+
+Core head and older pages must have the same effective resolution throughout a
+chain. A mismatch is reported and rejected instead of merging daily and intraday
+rows. Selection or lifecycle changes invalidate in-flight old reads. Yahoo
+selection identity excludes rolling UTC bounds; each cursor request still uses
+the exact bounds of the page that supplied it. New selections reset the viewport,
+head refresh preserves it, and older-page prepend restores its timestamp anchor.
+These source changes and regressions require new exact-head Actions evidence;
+they are not real-provider or release acceptance.

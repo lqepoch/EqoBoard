@@ -7,7 +7,12 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChartSurface, calculateChartIndicators } from "../../../charts";
-import { mergeHeadRefresh, mergeOlderPage } from "../../../charts/history";
+import {
+  isCurrentHistoryGeneration,
+  historyPageMatchesResolution,
+  mergeOlderPage,
+  mergePagedHistoryHead,
+} from "../../../charts/history";
 import {
   buildChartCsv,
   chartExportFilename,
@@ -19,6 +24,7 @@ import { decodeCoreBarsPage, type DecodedCoreBarsPage } from "../../../charts/co
 import type { SnapshotBehavior } from "../../../charts/controller";
 import {
   buildCoreBarsReadInput,
+  buildCoreBarsOlderPageInput,
   chartRefreshIntervalMs,
   chartSelectionKey,
   coreBarsPageMatchesInput,
@@ -59,6 +65,7 @@ type ChartHistoryState = Readonly<{
   selectionKey: string | null;
   windowKey: string | null;
   pages: readonly HistoryPage[];
+  latestHead: HistoryPage | null;
   bars: readonly ChartPlotBar<BarRowV1>[];
   nextCursor: string | null;
   paginationBlocked: boolean;
@@ -73,6 +80,7 @@ const EMPTY_HISTORY: ChartHistoryState = Object.freeze({
   selectionKey: null,
   windowKey: null,
   pages: [],
+  latestHead: null,
   bars: [],
   nextCursor: null,
   paginationBlocked: false,
@@ -93,28 +101,36 @@ function mergePageEvidence(
   pages: readonly HistoryPage[],
   state: ChartHistoryState,
 ): ChartDisplayEvidence | null {
-  const head = pages[0];
+  const head = state.latestHead ?? pages[0];
   if (!head) return null;
 
+  // Keep the original head as cursor-chain evidence while also reporting the
+  // most recent dynamic head snapshot. Cursor continuation remains bound to
+  // pages[0]'s exact server-resolved window.
+  const evidencePages =
+    state.latestHead && pages[0] !== state.latestHead
+      ? [state.latestHead, ...pages]
+      : pages;
+
   const values = (select: (page: HistoryPage) => string): string[] => [
-    ...new Set(pages.map(select).filter((value) => value !== "unknown")),
+    ...new Set(evidencePages.map(select).filter((value) => value !== "unknown")),
   ];
   const combine = (items: string[]): string =>
     items.length === 0 ? "unknown" : items.length === 1 ? (items[0] ?? "unknown") : "mixed";
-  const responses = pages.map((page) => page.response as ChartPageResponse);
+  const responses = evidencePages.map((page) => page.response as ChartPageResponse);
   const anyUnknownCoverage = responses.some((response) => response.coverageStatus === "unknown");
   const incompleteCoverage =
     responses.some((response) => response.coverageStatus !== "complete") ||
-    pages.some((page) => page.projection.rejectedRows > 0);
+    evidencePages.some((page) => page.projection.rejectedRows > 0);
   const pageLimitReached = pages.length >= MAX_HISTORY_PAGES && state.nextCursor !== null;
   const completeness = anyUnknownCoverage
     ? "unknown"
     : incompleteCoverage || state.nextCursor !== null || state.paginationBlocked || pageLimitReached
       ? "partial"
       : "complete";
-  const precision = pages.every((page) => page.evidence.precision === "exact-decimal")
+  const precision = evidencePages.every((page) => page.evidence.precision === "exact-decimal")
     ? "exact-decimal"
-    : pages.every((page) => page.evidence.precision === "provider-float")
+    : evidencePages.every((page) => page.evidence.precision === "provider-float")
       ? "provider-float"
       : "unknown";
   const totalSegments = responses.reduce((sum, response) => sum + response.segments.length, 0);
@@ -141,14 +157,20 @@ function mergePageEvidence(
     completeness,
     precision,
     requestedWindow: `${request.range} · ${request.request_start} → ${request.request_end}`,
-    coverage: `${combine(responses.map((response) => response.coverageStatus))}; ${totalSegments} segments and ${totalGaps} gaps across ${pages.length} page(s); ${state.bars.length} distinct rows loaded; ${continuation}`,
+    coverage: `${combine(responses.map((response) => response.coverageStatus))}; ${totalSegments} segments and ${totalGaps} gaps across ${evidencePages.length} validated page snapshots; ${state.bars.length} distinct rows loaded; ${continuation}`,
     evidence: [
       ...head.evidence.evidence,
-      { label: "Loaded history pages", value: String(pages.length) },
+      { label: "Loaded cursor pages", value: String(pages.length) },
       { label: "Loaded distinct rows", value: String(state.bars.length) },
       {
+        label: "Cursor anchor window",
+        value: pages[0]
+          ? `${pages[0].envelope.request.request_start} → ${pages[0].envelope.request.request_end}`
+          : "unavailable",
+      },
+      {
         label: "History refresh",
-        value: "host-scheduled history snapshots; existing candle values are retained",
+        value: "latest validated head snapshot updates overlaps; no live bar stream",
       },
       { label: "Bar stream", value: "unavailable; no live bar update or correction contract" },
     ],
@@ -237,12 +259,34 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
   const [diagnosticRetryRevision, setDiagnosticRetryRevision] = useState(0);
   const [diagnosticFormError, setDiagnosticFormError] = useState<string | null>(null);
   const input = useMemo(
-    () => (validSymbol ? buildCoreBarsReadInput(symbol, config) : null),
-    [validSymbol, symbol, config],
+    () =>
+      validSymbol
+        ? buildCoreBarsReadInput(symbol, {
+            range: config.range,
+            resolution: config.resolution,
+            assetClass: config.assetClass,
+            sessionScope: config.sessionScope,
+            adjustment: config.adjustment,
+            providerPreference: config.providerPreference,
+            allowDailyDowngrade: config.allowDailyDowngrade,
+          })
+        : null,
+    [
+      validSymbol,
+      symbol,
+      config.range,
+      config.resolution,
+      config.assetClass,
+      config.sessionScope,
+      config.adjustment,
+      config.providerPreference,
+      config.allowDailyDowngrade,
+    ],
   );
   const selectionKey = input ? chartSelectionKey(input) : null;
   const [history, setHistory] = useState<ChartHistoryState>(EMPTY_HISTORY);
   const historyRef = useRef(history);
+  const historyGenerationRef = useRef(0);
   const activeRequestRef = useRef<AbortController | null>(null);
   const activeCursorKeyRef = useRef<string | null>(null);
   const cursorHistoryRef = useRef(new Set<string>());
@@ -278,6 +322,8 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
   }, []);
 
   useEffect(() => {
+    const generation = historyGenerationRef.current + 1;
+    historyGenerationRef.current = generation;
     cancelOlderRead();
     cursorHistoryRef.current = new Set();
     if (config.dataMode !== "core-bars") {
@@ -304,7 +350,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
       input,
       { refreshIntervalMs: chartRefreshIntervalMs(config.range) },
       (scheduled) => {
-        if (!active) return;
+        if (!active || historyGenerationRef.current !== generation) return;
         const current = historyRef.current;
         if (scheduled.status === "pending") {
           commitHistory({
@@ -339,16 +385,15 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
           return;
         }
 
-        const windowKey = coreBarsWindowKey(page.envelope.request);
-        const incomingCursor = responseCursor(page);
-        if (current.selectionKey !== selectionKey || current.windowKey === null) {
-          cancelOlderRead();
-          cursorHistoryRef.current = new Set();
+        if (current.selectionKey !== selectionKey || current.pages.length === 0) {
+          const windowKey = coreBarsWindowKey(page.envelope.request);
+          const incomingCursor = responseCursor(page);
           commitHistory({
             status: "ready",
             selectionKey,
             windowKey,
             pages: [page],
+            latestHead: page,
             bars: page.projection.bars,
             nextCursor: incomingCursor,
             paginationBlocked: Boolean(page.response.truncated && !incomingCursor),
@@ -363,43 +408,37 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
           return;
         }
 
-        const sameWindow = current.windowKey === windowKey;
-        const oldHeadCursor = current.pages[0] ? responseCursor(current.pages[0]) : null;
-        const cursorChainChanged =
-          sameWindow && current.pages.length > 1 && oldHeadCursor !== incomingCursor;
-        cancelOlderRead();
-        if (!sameWindow || cursorChainChanged) cursorHistoryRef.current = new Set();
-        const nextPages =
-          sameWindow && !cursorChainChanged ? uniquePages(current.pages, page) : [page];
-        const retainedRows = sameWindow && !cursorChainChanged ? current.bars : [];
-        const bars = mergeHeadRefresh(retainedRows, page.projection.bars);
-        const cursorResult = nextUnloadedCursor(
-          cursorChainChanged || !sameWindow || current.pages.length <= 1
-            ? incomingCursor
-            : current.nextCursor,
-          nextPages,
+        const headUpdate = mergePagedHistoryHead(
+          {
+            cursorPages: current.pages,
+            latestHead: current.latestHead,
+            bars: current.bars,
+          },
+          page,
+          page.projection.bars,
         );
-        const nextCursor = cursorResult.cursor;
+        if (!headUpdate.accepted) {
+          const message =
+            "The refreshed head uses a different effective resolution; the existing chart and cursor history were retained.";
+          commitHistory({
+            ...current,
+            status: current.bars.length ? "ready" : "error",
+            snapshotBehavior: current.bars.length ? "refresh" : current.snapshotBehavior,
+            error: message,
+            notice: message,
+          });
+          return;
+        }
+
         commitHistory({
+          ...current,
           status: "ready",
-          selectionKey,
-          windowKey,
-          pages: nextPages,
-          bars,
-          nextCursor,
-          paginationBlocked:
-            cursorResult.blocked || Boolean(page.response.truncated && !incomingCursor),
-          olderLoading: false,
-          snapshotBehavior: !sameWindow || cursorChainChanged ? "reset" : "refresh",
+          pages: headUpdate.snapshot.cursorPages,
+          latestHead: headUpdate.snapshot.latestHead,
+          bars: headUpdate.snapshot.bars,
+          snapshotBehavior: "refresh",
           error: null,
-          notice:
-            !sameWindow && current.pages.length > 1
-              ? "The server resolved a new history window; older cursor pages were cleared."
-              : cursorChainChanged
-                ? "The server refreshed its continuation cursor; pagination will continue from the newest page."
-                : page.response.truncated && !incomingCursor
-                  ? "The response is truncated but supplied no usable continuation cursor."
-                  : null,
+          notice: null,
         });
       },
     );
@@ -442,6 +481,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
     }
     const head = current.pages[0];
     if (!head) return;
+    const generation = historyGenerationRef.current;
     const cursor = current.nextCursor;
     const windowKey = current.windowKey;
     const cursorKey = `${windowKey}|${cursor}`;
@@ -456,12 +496,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
     cancelOlderRead();
     cursorHistoryRef.current.add(cursorKey);
 
-    const requestInput = {
-      ...input,
-      request_start: head.envelope.request.request_start,
-      request_end: head.envelope.request.request_end,
-      cursor,
-    } as const;
+    const requestInput = buildCoreBarsOlderPageInput(input, head.envelope.request, cursor);
     const abortController = new AbortController();
     const lifecycleSignal = host.lifecycle.getSnapshot().signal;
     const abortForLifecycle = () => abortController.abort();
@@ -476,7 +511,12 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
         signal: abortController.signal,
       });
       const afterRead = historyRef.current;
-      if (abortController.signal.aborted || afterRead.selectionKey !== selectionKey) return;
+      if (
+        abortController.signal.aborted ||
+        !isCurrentHistoryGeneration(historyGenerationRef.current, generation) ||
+        afterRead.selectionKey !== selectionKey
+      )
+        return;
       if (afterRead.windowKey !== windowKey || afterRead.nextCursor !== cursor) {
         commitHistory({ ...afterRead, olderLoading: false });
         return;
@@ -494,6 +534,24 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
       }
 
       const latest = historyRef.current;
+      if (
+        !historyPageMatchesResolution(
+          [...latest.pages, ...(latest.latestHead ? [latest.latestHead] : [])],
+          page,
+        )
+      ) {
+        const message =
+          "The older page uses a different effective resolution; pagination stopped to avoid mixing bar intervals.";
+        commitHistory({
+          ...latest,
+          status: latest.bars.length ? "ready" : "error",
+          olderLoading: false,
+          paginationBlocked: true,
+          error: message,
+          notice: message,
+        });
+        return;
+      }
       const pages = uniquePages(latest.pages, page);
       const bars = mergeOlderPage(latest.bars, page.projection.bars);
       const returnedCursor = responseCursor(page);
@@ -522,7 +580,10 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
             : null,
       });
     } catch {
-      if (!abortController.signal.aborted) {
+      if (
+        !abortController.signal.aborted &&
+        isCurrentHistoryGeneration(historyGenerationRef.current, generation)
+      ) {
         cursorHistoryRef.current.delete(cursorKey);
         const latest = historyRef.current;
         const message =
@@ -536,7 +597,12 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
         activeRequestRef.current = null;
         if (activeCursorKeyRef.current === cursorKey) activeCursorKeyRef.current = null;
       }
-      if (ownsRequest && historyRef.current.olderLoading && abortController.signal.aborted) {
+      if (
+        ownsRequest &&
+        historyRef.current.olderLoading &&
+        (abortController.signal.aborted ||
+          !isCurrentHistoryGeneration(historyGenerationRef.current, generation))
+      ) {
         cursorHistoryRef.current.delete(cursorKey);
         commitHistory({ ...historyRef.current, olderLoading: false });
       }
@@ -630,7 +696,9 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
     Boolean(
       displayedHistory.nextCursor && !displayedHistory.paginationBlocked && !pageLimitReached,
     );
-  const effectiveResolution = displayedHistory.pages[0]?.response.effectiveResolution;
+  const effectiveResolution =
+    displayedHistory.latestHead?.response.effectiveResolution ??
+    displayedHistory.pages[0]?.response.effectiveResolution;
   const effectiveTimeVisible = activeIsCore
     ? effectiveResolution
       ? effectiveResolution !== "1d"
@@ -656,7 +724,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
           : `${displayedHistory.bars.length.toLocaleString()} validated historical rows loaded.`))
     : diagnosticStatusMessage;
   const activeIdentity = activeIsCore
-    ? `${selectionKey ?? "no-symbol"}|${displayedHistory.windowKey ?? "unresolved-window"}`
+    ? (selectionKey ?? "no-symbol")
     : `mdp-diagnostic|${symbol || "no-symbol"}|${diagnosticDatasetId ?? "no-dataset"}`;
   const lastPlottedIdentityRef = useRef<string | null>(null);
   const activeSnapshotBehavior: SnapshotBehavior = activeIsCore

@@ -29,10 +29,71 @@ export function mergeHeadRefresh<TRow>(
   refreshedHead: readonly ChartPlotBar<TRow>[],
 ): readonly ChartPlotBar<TRow>[] {
   const byTime = new Map<number, ChartPlotBar<TRow>>();
-  // Core Bars V1 has no explicit correction/revision stream contract. Keep the
-  // first validated observation for an existing candle and append only new bars.
-  for (const row of [...refreshedHead, ...current]) byTime.set(row.time, row);
+  // A newer validated HTTP snapshot may update an overlapping candle. Rows
+  // outside its server-resolved window remain available from loaded history.
+  for (const row of [...current, ...refreshedHead]) byTime.set(row.time, row);
   return [...byTime.values()].sort((left, right) => left.time - right.time);
+}
+
+type EffectiveResolutionPage = Readonly<{
+  response: Readonly<{ effectiveResolution: string }>;
+}>;
+
+export type PagedHistorySnapshot<TPage extends EffectiveResolutionPage, TRow> = Readonly<{
+  /** Pages remain bound to the exact cursor window returned by the initial page. */
+  cursorPages: readonly TPage[];
+  /** The latest unbounded head read may have a newer server-resolved window. */
+  latestHead: TPage | null;
+  bars: readonly ChartPlotBar<TRow>[];
+}>;
+
+export type PagedHistoryHeadResult<TPage extends EffectiveResolutionPage, TRow> =
+  | Readonly<{ accepted: true; snapshot: PagedHistorySnapshot<TPage, TRow> }>
+  | Readonly<{ accepted: false; snapshot: PagedHistorySnapshot<TPage, TRow> }>;
+
+export function isCurrentHistoryGeneration(current: number, captured: number): boolean {
+  return current === captured;
+}
+
+export function historyPageMatchesResolution<TPage extends EffectiveResolutionPage>(
+  pages: readonly TPage[],
+  candidate: TPage,
+): boolean {
+  return pages.every(
+    (page) => page.response.effectiveResolution === candidate.response.effectiveResolution,
+  );
+}
+
+/**
+ * Accepts a changing first-page snapshot without replacing the cursor chain that
+ * was created for the prior exact request window. The current validated HTTP
+ * snapshot wins on overlapping timestamps; older rows outside that window stay.
+ */
+export function mergePagedHistoryHead<TPage extends EffectiveResolutionPage, TRow>(
+  current: PagedHistorySnapshot<TPage, TRow>,
+  nextHead: TPage,
+  nextBars: readonly ChartPlotBar<TRow>[],
+): PagedHistoryHeadResult<TPage, TRow> {
+  const knownPages = [
+    ...current.cursorPages,
+    ...(current.latestHead ? [current.latestHead] : []),
+  ];
+  if (!historyPageMatchesResolution(knownPages, nextHead)) {
+    return { accepted: false, snapshot: current };
+  }
+
+  const cursorPages = current.cursorPages.length > 0 ? current.cursorPages : [nextHead];
+  return {
+    accepted: true,
+    snapshot: {
+      cursorPages,
+      latestHead: nextHead,
+      bars:
+        current.cursorPages.length > 0
+          ? mergeHeadRefresh(current.bars, nextBars)
+          : nextBars,
+    },
+  };
 }
 
 export function saveViewport<TRow>(

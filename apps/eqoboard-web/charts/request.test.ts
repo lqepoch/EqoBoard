@@ -6,6 +6,7 @@ import {
 import type { DecodedCoreBarsPage } from "./core-bars";
 import {
   buildCoreBarsReadInput,
+  buildCoreBarsOlderPageInput,
   chartRefreshIntervalMs,
   coreBarsPageMatchesInput,
   coreBarsWindowKey,
@@ -97,5 +98,40 @@ describe("Core Bars chart request selection", () => {
     expect(usableContinuationCursor("bad\ncursor")).toBe(false);
     expect(withinCoreBarsWindow(Date.parse("2022-01-01T00:00:00Z") / 1_000, request)).toBe(true);
     expect(withinCoreBarsWindow(Date.parse("2027-01-01T00:00:00Z") / 1_000, request)).toBe(false);
+  });
+
+  it("continues with the original cursor bounds after a later head snapshot advances the window", () => {
+    const selection = buildCoreBarsReadInput("SPY", {
+      ...createDefaultChartConfig(),
+      range: "MAX",
+      assetClass: "etf",
+    });
+    const originalAnchor = page().envelope.request;
+    const laterHead = {
+      ...request,
+      request_start: "2020-01-01T00:01:00Z",
+      request_end: "2026-10-15T00:01:00Z",
+    };
+    const olderInput = buildCoreBarsOlderPageInput(selection, originalAnchor, "cursor-next");
+
+    expect(laterHead.request_end).not.toBe(originalAnchor.request_end);
+    expect(olderInput).toMatchObject({
+      request_start: originalAnchor.request_start,
+      request_end: originalAnchor.request_end,
+      cursor: "cursor-next",
+    });
+    expect(coreBarsPageMatchesInput(page("cursor-next"), olderInput)).toBe(true);
+    expect(
+      coreBarsPageMatchesInput(
+        {
+          ...page("cursor-next"),
+          envelope: {
+            ...page("cursor-next").envelope,
+            request: { ...request, ...laterHead, cursor: "cursor-next" },
+          },
+        },
+        olderInput,
+      ),
+    ).toBe(false);
   });
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  historyPageMatchesResolution,
+  isCurrentHistoryGeneration,
+  mergePagedHistoryHead,
   mergeHeadRefresh,
   mergeOlderPage,
   remapViewportAfterPrepend,
@@ -37,15 +40,103 @@ describe("chart history pagination and viewport", () => {
     expect(merged[1]?.close).toBe(10);
   });
 
-  it("appends new history observations without applying uncontracted candle corrections", () => {
-    const current = bars([10, 20, 30]);
-    const refreshRows = bars([30, 40]);
-    const refreshed = [{ ...rowAt(refreshRows, 0), close: 99 }, rowAt(refreshRows, 1)];
+  it("lets a newer validated head snapshot update overlapping OHLC and source rows", () => {
+    const current: ChartPlotBar<Readonly<{ source: string }>>[] = bars([10, 20, 30]).map(
+      (bar) => ({ ...bar, sourceRow: { source: "futu" } }),
+    );
+    const refreshRows: ChartPlotBar<Readonly<{ source: string }>>[] = bars([30, 40]).map(
+      (bar) => ({ ...bar, sourceRow: { source: "alpaca" } }),
+    );
+    const refreshed = [
+      { ...rowAt(refreshRows, 0), close: 99 },
+      rowAt(refreshRows, 1),
+    ];
     const merged = mergeHeadRefresh(current, refreshed);
 
     expect(merged.map((bar) => Number(bar.time))).toEqual([10, 20, 30, 40]);
-    expect(merged[2]?.close).toBe(10);
+    expect(merged[2]?.close).toBe(99);
+    expect(merged[2]?.sourceRow).toEqual({ source: "alpaca" });
+    expect(merged[0]?.sourceRow).toEqual({ source: "futu" });
     expect(merged[3]?.close).toBe(10);
+  });
+
+  it("advances a head snapshot without replacing the exact-window cursor chain", () => {
+    type Page = Readonly<{
+      response: Readonly<{ effectiveResolution: string }>;
+      envelope: Readonly<{
+        request: Readonly<{ request_start: string; request_end: string; cursor: string | null }>;
+      }>;
+    }>;
+    const originalHead: Page = {
+      response: { effectiveResolution: "1m" },
+      envelope: {
+        request: {
+          request_start: "2026-10-15T13:00:00Z",
+          request_end: "2026-10-15T14:00:00Z",
+          cursor: null,
+        },
+      },
+    };
+    const olderPage: Page = {
+      response: { effectiveResolution: "1m" },
+      envelope: {
+        request: {
+          request_start: "2026-10-15T13:00:00Z",
+          request_end: "2026-10-15T14:00:00Z",
+          cursor: "cursor-1",
+        },
+      },
+    };
+    const refreshedHead: Page = {
+      response: { effectiveResolution: "1m" },
+      envelope: {
+        request: {
+          request_start: "2026-10-15T13:01:00Z",
+          request_end: "2026-10-15T14:01:00Z",
+          cursor: null,
+        },
+      },
+    };
+    const cursorPages = [originalHead, olderPage];
+    const currentRows = bars([10, 20, 30]);
+    const advancedRows = bars([30, 40]);
+    const latestAtOverlap = { ...rowAt(advancedRows, 0), close: 99 };
+    const result = mergePagedHistoryHead(
+      { cursorPages, latestHead: originalHead, bars: currentRows },
+      refreshedHead,
+      [latestAtOverlap, rowAt(advancedRows, 1)],
+    );
+
+    expect(result.accepted).toBe(true);
+    if (!result.accepted) return;
+    expect(result.snapshot.cursorPages).toBe(cursorPages);
+    expect(result.snapshot.cursorPages[0]?.envelope.request.request_end).toBe(
+      "2026-10-15T14:00:00Z",
+    );
+    expect(result.snapshot.latestHead).toBe(refreshedHead);
+    expect(result.snapshot.bars.map((bar) => Number(bar.time))).toEqual([10, 20, 30, 40]);
+    expect(result.snapshot.bars[2]?.close).toBe(99);
+  });
+
+  it("rejects mixed effective resolutions for head and older pages", () => {
+    const head = { response: { effectiveResolution: "1m" } };
+    const older = { response: { effectiveResolution: "1d" } };
+    const result = mergePagedHistoryHead(
+      { cursorPages: [head], latestHead: head, bars: bars([10, 20]) },
+      older,
+      bars([1]),
+    );
+
+    expect(result.accepted).toBe(false);
+    expect(historyPageMatchesResolution([head], older)).toBe(false);
+    expect(historyPageMatchesResolution([head], { response: { effectiveResolution: "1m" } })).toBe(
+      true,
+    );
+  });
+
+  it("rejects a response captured before the active selection generation", () => {
+    expect(isCurrentHistoryGeneration(8, 7)).toBe(false);
+    expect(isCurrentHistoryGeneration(8, 8)).toBe(true);
   });
 
   it("remaps a historical viewport by anchor candle after prepending an older page", () => {

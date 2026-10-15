@@ -27,7 +27,7 @@ const AUTO_RESOLUTION: Readonly<
 };
 
 export function resolveChartResolution(
-  config: NativeChartConfigV1,
+  config: Pick<NativeChartConfigV1, "range" | "resolution">,
 ): NonNullable<CoreBarsReadInput["resolution"]> {
   return config.resolution === "auto" ? AUTO_RESOLUTION[config.range] : config.resolution;
 }
@@ -39,7 +39,16 @@ export function chartRefreshIntervalMs(range: NativeChartConfigV1["range"]): num
 /** Fully specifies the bounded same-origin history operation; never provides a URL/provider name. */
 export function buildCoreBarsReadInput(
   symbol: string,
-  config: NativeChartConfigV1,
+  config: Pick<
+    NativeChartConfigV1,
+    | "range"
+    | "resolution"
+    | "assetClass"
+    | "sessionScope"
+    | "adjustment"
+    | "providerPreference"
+    | "allowDailyDowngrade"
+  >,
 ): CoreBarsReadInput {
   return {
     symbol,
@@ -50,6 +59,20 @@ export function buildCoreBarsReadInput(
     adjustment: config.adjustment,
     provider_mode: config.providerPreference,
     allow_daily_downgrade: config.allowDailyDowngrade,
+  };
+}
+
+/** Builds a continuation request from the exact page that established its cursor window. */
+export function buildCoreBarsOlderPageInput(
+  selection: CoreBarsReadInput,
+  cursorAnchor: CoreBarsPageRequest,
+  cursor: string,
+): CoreBarsReadInput {
+  return {
+    ...selection,
+    request_start: cursorAnchor.request_start,
+    request_end: cursorAnchor.request_end,
+    cursor,
   };
 }
 

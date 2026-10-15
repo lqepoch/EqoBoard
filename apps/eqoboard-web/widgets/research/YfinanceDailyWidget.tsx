@@ -6,15 +6,21 @@ import { CHART_INDICATORS, type IndicatorId } from "@/charts/types";
 import type { NativeDataOperationMap } from "@/features/data/operations";
 import {
   buildYfinanceResearchInput,
+  buildYfinanceOlderPageInput,
   buildYahooResearchPageHref,
   canLoadOlderPages,
   isYfinanceCursorLoop,
   parseYfinanceResearchResponse,
+  yfinancePagesForProjection,
+  yfinancePagesForEvidence,
   projectYfinanceResearchPages,
+  yfinanceSelectionKey,
+  yfinanceSnapshotBehavior,
   YFINANCE_RESEARCH_RANGES,
   yfinanceResearchEvidence,
   type YfinanceResearchConfigV1,
   type YfinanceResearchPage,
+  type YfinanceSnapshotBehavior,
 } from "@/features/research/yfinance";
 import type { YfinanceResearchInput } from "@/features/research/yfinance-contract";
 import type { WidgetProps } from "@/widgets/sdk/contracts";
@@ -29,22 +35,32 @@ export type YfinanceDailyWidgetProps = Pick<Props, "config" | "inputs" | "onConf
   Readonly<{ host: RequiredHost }>;
 
 type HistoryState = Readonly<{
-  requestKey: string;
+  selectionKey: string;
   status: "idle" | "loading" | "ready" | "error";
-  pages: readonly YfinanceResearchPage[];
+  /** Immutable cursor chain from the first request's exact UTC window. */
+  cursorPages: readonly YfinanceResearchPage[];
+  /** Single moving first-page snapshot; never added to the cursor chain. */
+  latestHead: YfinanceResearchPage | null;
   loadingOlder: boolean;
   paginationBlocked: boolean;
   error: string | null;
+  snapshotBehavior: YfinanceSnapshotBehavior;
 }>;
 
-function emptyState(requestKey: string, status: HistoryState["status"] = "idle"): HistoryState {
+function emptyState(
+  selectionKey: string,
+  status: HistoryState["status"] = "idle",
+  snapshotBehavior: YfinanceSnapshotBehavior = yfinanceSnapshotBehavior("new-request"),
+): HistoryState {
   return {
-    requestKey,
+    selectionKey,
     status,
-    pages: [],
+    cursorPages: [],
+    latestHead: null,
     loadingOlder: false,
     paginationBlocked: false,
     error: null,
+    snapshotBehavior,
   };
 }
 
@@ -56,7 +72,10 @@ export function YfinanceDailyWidget({
 }: YfinanceDailyWidgetProps) {
   const fullAuth = useFullAuth();
   const [anchorNow, setAnchorNow] = useState(() => Date.now());
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const [history, setHistory] = useState<HistoryState>(() => emptyState(""));
+  const historyRef = useRef(history);
+  const requestGenerationRef = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
   const allowed =
     fullAuth.runtimeMode === "research" &&
@@ -65,52 +84,123 @@ export function YfinanceDailyWidget({
     host.auth.authenticated &&
     host.auth.permissions.includes("research:read");
   const request = useMemo(
-    () => buildYfinanceResearchInput(config, inputs.symbol, anchorNow),
-    [config, inputs.symbol, anchorNow],
+    () =>
+      buildYfinanceResearchInput(
+        {
+          symbol: config.symbol,
+          assetClass: config.assetClass,
+          range: config.range,
+          adjustment: config.adjustment,
+        },
+        inputs.symbol,
+        anchorNow,
+      ),
+    [config.symbol, config.assetClass, config.range, config.adjustment, inputs.symbol, anchorNow],
   );
-  const requestKey = request ? JSON.stringify(request) : "invalid-request";
+  const selectionKey =
+    request
+      ? yfinanceSelectionKey(config, inputs.symbol)
+      : `invalid:${yfinanceSelectionKey(config, inputs.symbol)}`;
   const current =
-    history.requestKey === requestKey
+    history.selectionKey === selectionKey
       ? history
-      : emptyState(requestKey, request ? "loading" : "idle");
+      : emptyState(selectionKey, request ? "loading" : "idle");
+
+  const commitHistory = useCallback((next: HistoryState) => {
+    historyRef.current = next;
+    setHistory(next);
+  }, []);
+  const updateHistory = useCallback(
+    (update: (current: HistoryState) => HistoryState) => {
+      setHistory((current) => {
+        const next = update(current);
+        historyRef.current = next;
+        return next;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
+    const generation = requestGenerationRef.current + 1;
+    requestGenerationRef.current = generation;
     if (!allowed || !request) {
-      setHistory(emptyState(requestKey));
+      activeRequest.current?.abort();
+      commitHistory(emptyState(selectionKey));
       return;
     }
     const lifecycle = host.lifecycle.getSnapshot();
     if (lifecycle.phase !== "active" || lifecycle.signal.aborted) {
-      setHistory(emptyState(requestKey));
+      activeRequest.current?.abort();
+      commitHistory(emptyState(selectionKey));
       return;
     }
+    const previous = historyRef.current;
+    const preserveLoadedPages =
+      previous.selectionKey === selectionKey && previous.cursorPages.length > 0;
     const controller = new AbortController();
     const abort = () => controller.abort();
     lifecycle.signal.addEventListener("abort", abort, { once: true });
     activeRequest.current?.abort();
     activeRequest.current = controller;
-    setHistory(emptyState(requestKey, "loading"));
+    commitHistory(
+      preserveLoadedPages
+        ? {
+            ...previous,
+            selectionKey,
+            status: "loading",
+            loadingOlder: false,
+            error: null,
+            snapshotBehavior: yfinanceSnapshotBehavior("refresh"),
+          }
+        : emptyState(selectionKey, "loading", yfinanceSnapshotBehavior("new-request")),
+    );
     void host.data
       .read("research.yahoo.daily", request, { signal: controller.signal })
       .then((value) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || requestGenerationRef.current !== generation) return;
         const response = parseYfinanceResearchResponse(value, request);
         if (!response) {
-          setHistory({
-            ...emptyState(requestKey, "error"),
+          const latest = historyRef.current;
+          commitHistory({
+            ...(preserveLoadedPages && latest.selectionKey === selectionKey
+              ? latest
+              : emptyState(selectionKey, "error")),
+            status: preserveLoadedPages ? "ready" : "error",
             error: "Yahoo returned a response outside the validated daily research contract.",
           });
           return;
         }
-        setHistory({
-          ...emptyState(requestKey, "ready"),
-          pages: Object.freeze([{ request, response }]),
+        const latest = historyRef.current;
+        const headPage: YfinanceResearchPage = { request, response };
+        const retainCursorPages =
+          latest.selectionKey === selectionKey && preserveLoadedPages
+            ? latest.cursorPages
+            : Object.freeze([headPage]);
+        commitHistory({
+          ...emptyState(
+            selectionKey,
+            "ready",
+            preserveLoadedPages
+              ? yfinanceSnapshotBehavior("refresh")
+              : yfinanceSnapshotBehavior("new-request"),
+          ),
+          cursorPages: retainCursorPages,
+          latestHead: headPage,
+          paginationBlocked:
+            preserveLoadedPages && latest.selectionKey === selectionKey
+              ? latest.paginationBlocked
+              : false,
         });
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setHistory({
-            ...emptyState(requestKey, "error"),
+        if (!controller.signal.aborted && requestGenerationRef.current === generation) {
+          const latest = historyRef.current;
+          commitHistory({
+            ...(preserveLoadedPages && latest.selectionKey === selectionKey
+              ? latest
+              : emptyState(selectionKey, "error")),
+            status: preserveLoadedPages ? "ready" : "error",
             error: "Yahoo daily observations are unavailable for this request.",
           });
         }
@@ -124,14 +214,25 @@ export function YfinanceDailyWidget({
       controller.abort();
       if (activeRequest.current === controller) activeRequest.current = null;
     };
-  }, [allowed, host.data, host.lifecycle, request, requestKey]);
+  }, [allowed, commitHistory, host.data, host.lifecycle, refreshRevision, request, selectionKey]);
 
   useEffect(() => () => activeRequest.current?.abort(), []);
 
-  const projection = useMemo(() => projectYfinanceResearchPages(current.pages), [current.pages]);
+  const projectionPages = useMemo(
+    () => yfinancePagesForProjection(current.cursorPages, current.latestHead),
+    [current.cursorPages, current.latestHead],
+  );
+  const projection = useMemo(
+    () => projectYfinanceResearchPages(projectionPages),
+    [projectionPages],
+  );
+  const evidencePages = useMemo(
+    () => yfinancePagesForEvidence(current.cursorPages, current.latestHead),
+    [current.cursorPages, current.latestHead],
+  );
   const evidence = useMemo(
-    () => yfinanceResearchEvidence(config, current.pages, projection, current.paginationBlocked),
-    [config, current.pages, projection, current.paginationBlocked],
+    () => yfinanceResearchEvidence(config, evidencePages, projection, current.paginationBlocked),
+    [config, evidencePages, projection, current.paginationBlocked],
   );
   const indicators = useMemo(
     () => calculateChartIndicators(projection.bars, config.indicators),
@@ -156,32 +257,36 @@ export function YfinanceDailyWidget({
   );
 
   const loadOlder = useCallback(() => {
-    const lastPage = current.pages.at(-1);
+    const lastPage = current.cursorPages.at(-1);
     const cursor = lastPage?.response.next_cursor ?? null;
     if (
       !request ||
+      !lastPage ||
       !cursor ||
-      !canLoadOlderPages(current.pages, current.paginationBlocked) ||
+      !canLoadOlderPages(current.cursorPages, current.paginationBlocked) ||
       current.loadingOlder
     )
       return;
     const lifecycle = host.lifecycle.getSnapshot();
     if (lifecycle.phase !== "active" || lifecycle.signal.aborted) return;
+    const generation = requestGenerationRef.current;
     const controller = new AbortController();
     const abort = () => controller.abort();
     lifecycle.signal.addEventListener("abort", abort, { once: true });
     activeRequest.current?.abort();
     activeRequest.current = controller;
-    const pageRequest: YfinanceResearchInput = Object.freeze({ ...request, cursor });
-    setHistory({ ...current, loadingOlder: true, error: null });
+    // A cursor is bound to the exact original page window, even if the head
+    // snapshot has since moved to a newer server-resolved daily window.
+    const pageRequest: YfinanceResearchInput = buildYfinanceOlderPageInput(lastPage, cursor);
+    commitHistory({ ...current, loadingOlder: true, error: null });
     void host.data
       .read("research.yahoo.daily", pageRequest, { signal: controller.signal })
       .then((value) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || requestGenerationRef.current !== generation) return;
         const response = parseYfinanceResearchResponse(value, pageRequest);
         if (!response) {
-          setHistory((state) =>
-            state.requestKey === requestKey
+          updateHistory((state) =>
+            state.selectionKey === selectionKey
               ? {
                   ...state,
                   loadingOlder: false,
@@ -195,24 +300,25 @@ export function YfinanceDailyWidget({
         const page: YfinanceResearchPage = { request: pageRequest, response };
         const loop =
           response.next_cursor !== null &&
-          isYfinanceCursorLoop([...current.pages, page], response.next_cursor);
-        setHistory((state) =>
-          state.requestKey === requestKey
+          isYfinanceCursorLoop([...current.cursorPages, page], response.next_cursor);
+        updateHistory((state) =>
+          state.selectionKey === selectionKey
             ? {
                 ...state,
                 status: "ready",
-                pages: Object.freeze([...state.pages, page]),
+                cursorPages: Object.freeze([...state.cursorPages, page]),
                 loadingOlder: false,
                 paginationBlocked: loop,
                 error: null,
+                snapshotBehavior: yfinanceSnapshotBehavior("prepend"),
               }
             : state,
         );
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
-          setHistory((state) =>
-            state.requestKey === requestKey
+        if (!controller.signal.aborted && requestGenerationRef.current === generation) {
+          updateHistory((state) =>
+            state.selectionKey === selectionKey
               ? { ...state, loadingOlder: false, error: "The older Yahoo page is unavailable." }
               : state,
           );
@@ -222,9 +328,9 @@ export function YfinanceDailyWidget({
         lifecycle.signal.removeEventListener("abort", abort);
         if (activeRequest.current === controller) activeRequest.current = null;
       });
-  }, [current, host.data, host.lifecycle, request, requestKey]);
+  }, [commitHistory, current, host.data, host.lifecycle, request, selectionKey, updateHistory]);
 
-  const olderAvailable = canLoadOlderPages(current.pages, current.paginationBlocked);
+  const olderAvailable = canLoadOlderPages(current.cursorPages, current.paginationBlocked);
 
   if (fullAuth.runtimeMode !== "research") {
     const symbol = request?.symbol ?? config.symbol;
@@ -274,7 +380,10 @@ export function YfinanceDailyWidget({
         </div>
         <button
           type="button"
-          onClick={() => setAnchorNow(Date.now())}
+          onClick={() => {
+            setAnchorNow(Date.now());
+            setRefreshRevision((revision) => revision + 1);
+          }}
           disabled={!request || current.status === "loading"}
         >
           Refresh
@@ -388,7 +497,7 @@ export function YfinanceDailyWidget({
         <div data-testid="yahoo-research-chart" data-history-status={current.status}>
           <ChartSurface
             symbol={(request?.symbol ?? config.symbol) || "Yahoo"}
-            identity={requestKey}
+            identity={selectionKey}
             bars={projection.bars}
             indicators={indicators}
             style={config.style}
@@ -408,7 +517,8 @@ export function YfinanceDailyWidget({
             statusMessage={current.error ?? undefined}
             notice="Yahoo daily only · provider adjustment semantics are unconfirmed · binary-float display projection."
             emptyMessage="No validated Yahoo daily bars are available for this window."
-            snapshotBehavior="reset"
+            snapshotBehavior={current.snapshotBehavior}
+            olderPageTestId="yahoo-research-load-older"
             olderPageAvailable={olderAvailable}
             olderPageLoading={current.loadingOlder}
             onRequestOlder={loadOlder}

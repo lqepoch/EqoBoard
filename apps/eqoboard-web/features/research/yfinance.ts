@@ -192,7 +192,7 @@ function rangeDays(range: YfinanceResearchRange): number {
 
 /** Builds a UTC midnight-exclusive daily window; the current incomplete UTC day is excluded. */
 export function buildYfinanceResearchInput(
-  config: YfinanceResearchConfigV1,
+  config: Pick<YfinanceResearchConfigV1, "symbol" | "assetClass" | "range" | "adjustment">,
   activeSymbol: string | undefined,
   nowMs: number,
   cursor?: string,
@@ -217,6 +217,19 @@ export function buildYfinanceResearchInput(
   });
 }
 
+/** Stable view identity; rolling UTC bounds belong to individual request pages. */
+export function yfinanceSelectionKey(
+  config: Pick<YfinanceResearchConfigV1, "symbol" | "assetClass" | "range" | "adjustment">,
+  activeSymbol: string | undefined,
+): string {
+  return JSON.stringify([
+    config.symbol || activeSymbol || "",
+    config.assetClass,
+    config.range,
+    config.adjustment,
+  ]);
+}
+
 export function parseYfinanceResearchResponse(
   value: unknown,
   input: YfinanceResearchInput,
@@ -229,6 +242,23 @@ export type YfinanceResearchPage = Readonly<{
   request: YfinanceResearchInput;
   response: YfinanceResearchResponse;
 }>;
+
+/** Continues a cursor from the exact page/window that supplied it. */
+export function buildYfinanceOlderPageInput(
+  cursorAnchor: YfinanceResearchPage,
+  cursor: string,
+): YfinanceResearchInput {
+  return Object.freeze({ ...cursorAnchor.request, cursor });
+}
+
+export type YfinanceSnapshotBehavior = "reset" | "refresh" | "prepend";
+export type YfinanceSnapshotTransition = "new-request" | "refresh" | "prepend";
+
+export function yfinanceSnapshotBehavior(
+  transition: YfinanceSnapshotTransition,
+): YfinanceSnapshotBehavior {
+  return transition === "new-request" ? "reset" : transition;
+}
 
 export type YfinanceResearchProjection = Readonly<{
   bars: readonly ChartPlotBar<YfinanceResearchResponse["observation"]["payload"]["bars"][number]>[];
@@ -252,6 +282,25 @@ export function projectYfinanceResearchPages(
   );
   const projection = projectChartRows(candidates);
   return { bars: projection.bars, rejectedRows: projection.rejectedRows };
+}
+
+/** Orders loaded cursor history oldest-first and overlays only the latest head snapshot. */
+export function yfinancePagesForProjection(
+  cursorPages: readonly YfinanceResearchPage[],
+  latestHead: YfinanceResearchPage | null,
+): readonly YfinanceResearchPage[] {
+  const oldestFirst = [...cursorPages].reverse();
+  if (latestHead && latestHead !== cursorPages[0]) oldestFirst.push(latestHead);
+  return oldestFirst;
+}
+
+/** Keeps current provenance first while retaining the complete original cursor-page evidence. */
+export function yfinancePagesForEvidence(
+  cursorPages: readonly YfinanceResearchPage[],
+  latestHead: YfinanceResearchPage | null,
+): readonly YfinanceResearchPage[] {
+  if (!latestHead || latestHead === cursorPages[0]) return cursorPages;
+  return [latestHead, ...cursorPages];
 }
 
 export function yfinanceResearchEvidence(

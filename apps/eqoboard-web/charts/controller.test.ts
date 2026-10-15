@@ -148,7 +148,7 @@ describe("Lightweight Charts controller", () => {
     expect(chart.takeScreenshot).not.toHaveBeenCalled();
   });
 
-  it("translates the viewport by the anchored candle when older rows are prepended", () => {
+  it("appends an older Yahoo cursor page without fitting or losing the anchored viewport", () => {
     const { chart, timeScale } = fakeChart();
     const controller = new LightweightChartController<string>(
       { clientWidth: 640, clientHeight: 320 } as HTMLElement,
@@ -183,17 +183,66 @@ describe("Lightweight Charts controller", () => {
       panes: { rsi: null, macd: null },
     } as const;
 
-    controller.setSnapshot("SPY|1d|core", bars([30, 40, 50, 60, 70]), indicators, "reset");
+    const yahooSelection = "AAPL|stock|1M|unadjusted";
+    controller.setSnapshot(yahooSelection, bars([30, 40, 50, 60, 70]), indicators, "reset");
+    timeScale.fitContent.mockClear();
     timeScale.setVisibleLogicalRange({ from: 2, to: 4 });
     timeScale.setVisibleLogicalRange.mockClear();
     controller.setSnapshot(
-      "SPY|1d|core",
+      yahooSelection,
       bars([10, 20, 30, 40, 50, 60, 70]),
       indicators,
       "prepend",
     );
 
+    expect(timeScale.fitContent).not.toHaveBeenCalled();
     expect(timeScale.setVisibleLogicalRange).toHaveBeenCalledWith({ from: 4, to: 6 });
+    controller.dispose();
+  });
+
+  it("preserves an away-from-tail viewport when a newer head snapshot updates bars", () => {
+    const { chart, timeScale } = fakeChart();
+    const controller = new LightweightChartController<string>(
+      { clientWidth: 640, clientHeight: 320 } as HTMLElement,
+      {
+        style: "candles",
+        indicators: [],
+        showVolume: false,
+        timeVisible: true,
+        createChart: vi.fn(() => chart as unknown as IChartApi) as never,
+        resizeObserverFactory: vi.fn(() => null) as never,
+      },
+    );
+    const rows = (updated = false): ChartPlotBar<string>[] =>
+      Array.from({ length: 100 }, (_, index) => ({
+        time: (1_720_000_000 + index * 60) as ChartPlotBar["time"],
+        open: 10,
+        high: 11,
+        low: 9,
+        close: updated && index === 50 ? 12 : 10,
+        volume: 10,
+        sourceRow: String(index),
+      }));
+    const indicators = {
+      overlays: {
+        SMA20: null,
+        SMA50: null,
+        SMA200: null,
+        EMA20: null,
+        VWAP: null,
+        bollinger: null,
+      },
+      panes: { rsi: null, macd: null },
+    } as const;
+
+    controller.setSnapshot("SPY|daily-research", rows(), indicators, "reset");
+    timeScale.fitContent.mockClear();
+    timeScale.setVisibleLogicalRange({ from: 20, to: 35 });
+    timeScale.setVisibleLogicalRange.mockClear();
+    controller.setSnapshot("SPY|daily-research", rows(true), indicators, "refresh");
+
+    expect(timeScale.fitContent).not.toHaveBeenCalled();
+    expect(timeScale.setVisibleLogicalRange).toHaveBeenCalledWith({ from: 20, to: 35 });
     controller.dispose();
   });
 

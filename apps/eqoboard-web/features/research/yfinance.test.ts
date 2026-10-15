@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildYfinanceResearchInput,
+  buildYfinanceOlderPageInput,
   buildYahooResearchPageHref,
   canLoadOlderPages,
   DEFAULT_YFINANCE_RESEARCH_CONFIG,
@@ -9,6 +10,10 @@ import {
   parseYfinanceResearchConfig,
   parseYfinanceResearchResponse,
   projectYfinanceResearchPages,
+  yfinancePagesForProjection,
+  yfinancePagesForEvidence,
+  yfinanceSelectionKey,
+  yfinanceSnapshotBehavior,
   YFINANCE_RESEARCH_MAX_PAGES,
   yfinanceResearchEvidence,
   type YfinanceResearchConfigV1,
@@ -57,6 +62,178 @@ const page = {
 } as unknown as YfinanceResearchPage;
 
 describe("Yahoo daily research adapter", () => {
+  it("resets only a new request and uses viewport-aware refresh and prepend transitions", () => {
+    expect(yfinanceSnapshotBehavior("new-request")).toBe("reset");
+    expect(yfinanceSnapshotBehavior("refresh")).toBe("refresh");
+    expect(yfinanceSnapshotBehavior("prepend")).toBe("prepend");
+    expect(yfinancePagesForProjection([page], page)).toEqual([page]);
+  });
+
+  it("keeps a stable Yahoo selection identity while head bounds advance and cursor bounds stay anchored", () => {
+    const config: YfinanceResearchConfigV1 = {
+      ...DEFAULT_YFINANCE_RESEARCH_CONFIG,
+      symbol: "AAPL",
+      range: "1M",
+    };
+    const firstRequest = buildYfinanceResearchInput(
+      config,
+      undefined,
+      Date.parse("2026-10-15T12:30:00.000Z"),
+    );
+    const advancedRequest = buildYfinanceResearchInput(
+      config,
+      undefined,
+      Date.parse("2026-10-16T12:30:00.000Z"),
+    );
+    expect(firstRequest).not.toBeNull();
+    expect(advancedRequest).not.toBeNull();
+    if (!firstRequest || !advancedRequest) return;
+
+    expect(yfinanceSelectionKey(config, undefined)).toBe(
+      yfinanceSelectionKey({ ...config, style: "line" }, undefined),
+    );
+    expect(yfinanceSelectionKey(config, undefined)).not.toBe(
+      yfinanceSelectionKey({ ...config, range: "5D" }, undefined),
+    );
+    expect(advancedRequest.endUtc).not.toBe(firstRequest.endUtc);
+
+    const originalPage = {
+      ...page,
+      request: firstRequest,
+      response: {
+        ...page.response,
+        requested_range: {
+          start_utc: firstRequest.startUtc,
+          end_utc: firstRequest.endUtc,
+        },
+      },
+    } as unknown as YfinanceResearchPage;
+    const olderInput = buildYfinanceOlderPageInput(originalPage, "cursor-from-original-window");
+    expect(olderInput).toEqual({ ...firstRequest, cursor: "cursor-from-original-window" });
+    expect(olderInput.startUtc).not.toBe(advancedRequest.startUtc);
+    expect(olderInput.endUtc).toBe(firstRequest.endUtc);
+  });
+
+  it("retains the original Yahoo head window across refresh and overlays only the latest head", () => {
+    const originalEarliestRow = {
+      ...row,
+      event_ts_utc: "2026-09-01T00:00:00.000Z",
+      close: "88.8",
+    };
+    const cursorOlderRow = {
+      ...row,
+      event_ts_utc: "2026-08-31T00:00:00.000Z",
+      close: "87.7",
+    };
+    const originalOverlapRow = { ...row, close: "102.4" };
+    const latestOverlapRow = { ...row, close: "105.5" };
+    const latestNewRow = {
+      ...row,
+      event_ts_utc: "2026-10-15T00:00:00.000Z",
+      close: "106.6",
+    };
+    const originalRequest = {
+      ...page.request,
+      startUtc: "2026-08-01T00:00:00.000Z",
+      endUtc: "2026-10-15T00:00:00.000Z",
+    };
+    const originalHead = {
+      ...page,
+      request: originalRequest,
+      response: {
+        ...page.response,
+        requested_range: {
+          start_utc: originalRequest.startUtc,
+          end_utc: originalRequest.endUtc,
+        },
+        observation: {
+          ...page.response.observation,
+          payload: {
+            ...page.response.observation.payload,
+            bars: [originalEarliestRow, originalOverlapRow],
+          },
+        },
+      },
+    } as unknown as YfinanceResearchPage;
+    const olderPage = {
+      ...page,
+      request: { ...originalRequest, cursor: "cursor-1" },
+      response: {
+        ...page.response,
+        requested_range: {
+          start_utc: originalRequest.startUtc,
+          end_utc: originalRequest.endUtc,
+        },
+        observation: {
+          ...page.response.observation,
+          payload: { ...page.response.observation.payload, bars: [cursorOlderRow] },
+        },
+        next_cursor: null,
+      },
+    } as unknown as YfinanceResearchPage;
+    const refreshedHead = {
+      ...page,
+      request: {
+        ...originalRequest,
+        startUtc: "2026-09-02T00:00:00.000Z",
+        endUtc: "2026-10-16T00:00:00.000Z",
+      },
+      response: {
+        ...page.response,
+        requested_range: {
+          start_utc: "2026-09-02T00:00:00.000Z",
+          end_utc: "2026-10-16T00:00:00.000Z",
+        },
+        observation: {
+          ...page.response.observation,
+          payload: {
+            ...page.response.observation.payload,
+            bars: [latestOverlapRow, latestNewRow],
+          },
+        },
+      },
+    } as unknown as YfinanceResearchPage;
+    const cursorPages = [originalHead, olderPage];
+
+    const orderedPages = yfinancePagesForProjection(cursorPages, refreshedHead);
+    const projection = projectYfinanceResearchPages(orderedPages);
+    const evidencePages = yfinancePagesForEvidence(cursorPages, refreshedHead);
+    const subsequentHead = {
+      ...refreshedHead,
+      response: {
+        ...refreshedHead.response,
+        observation: {
+          ...refreshedHead.response.observation,
+          payload: {
+            ...refreshedHead.response.observation.payload,
+            bars: [latestNewRow],
+          },
+        },
+      },
+    } as unknown as YfinanceResearchPage;
+    const olderInput = buildYfinanceOlderPageInput(olderPage, "cursor-2");
+    expect(orderedPages).toEqual([olderPage, originalHead, refreshedHead]);
+    expect(yfinancePagesForProjection(cursorPages, subsequentHead)).toEqual([
+      olderPage,
+      originalHead,
+      subsequentHead,
+    ]);
+    expect(projection.bars.map((bar) => bar.sourceRow.event_ts_utc)).toEqual([
+      "2026-08-31T00:00:00.000Z",
+      "2026-09-01T00:00:00.000Z",
+      "2026-10-14T00:00:00.000Z",
+      "2026-10-15T00:00:00.000Z",
+    ]);
+    expect(projection.bars[2]?.close).toBe(105.5);
+    expect(projection.bars[2]?.sourceRow.close).toBe("105.5");
+    expect(evidencePages).toEqual([refreshedHead, originalHead, olderPage]);
+    expect(olderInput).toMatchObject({
+      startUtc: olderPage.request.startUtc,
+      endUtc: olderPage.request.endUtc,
+      cursor: "cursor-2",
+    });
+  });
+
   it("bounds saved chart configuration and derives a daily UTC-exclusive request window", () => {
     const parsed = parseYfinanceResearchConfig({
       ...DEFAULT_YFINANCE_RESEARCH_CONFIG,
