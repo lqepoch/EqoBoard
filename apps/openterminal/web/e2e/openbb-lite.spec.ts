@@ -282,6 +282,16 @@ test("research origin gates Lite, isolates terminal cookies, and exposes only su
   const anonymousUi = await request.get(`${RESEARCH_ORIGIN}/app/widgets`, { maxRedirects: 0 });
   expect(anonymousUi.status()).toBe(302);
   expect(anonymousUi.headers().location).toContain("/api/auth/signin/eqo-oidc");
+  const anonymousYahooPage = await request.get(`${RESEARCH_ORIGIN}/research/yfinance/AAPL`, { maxRedirects: 0 });
+  expect(anonymousYahooPage.status()).toBe(302);
+  const yahooSignIn = new URL(anonymousYahooPage.headers().location!, RESEARCH_ORIGIN);
+  expect(yahooSignIn.pathname).toBe("/api/auth/signin/eqo-oidc");
+  expect(yahooSignIn.searchParams.get("callbackUrl")).toBe("/research/yfinance/AAPL");
+  const anonymousYahooDaily = await request.get(
+    `${RESEARCH_ORIGIN}/api/research/yfinance/daily?symbols=AAPL&asset_class=stock&start_utc=2025-01-01T00%3A00%3A00Z&end_utc=2025-02-01T00%3A00%3A00Z&adjustment=unadjusted`,
+  );
+  expect(anonymousYahooDaily.status()).toBe(401);
+  expect(await anonymousYahooDaily.json()).toEqual({ error: "authentication_required" });
 
   await signIn(page, MAIN_OIDC_ORIGIN, TERMINAL_ORIGIN, "/api/healthz", MAIN_OIDC_CONTROL_TOKEN);
   const terminalSession = await page.evaluate(async () => {
@@ -322,6 +332,16 @@ test("research origin gates Lite, isolates terminal cookies, and exposes only su
   const researchSession = await page.request.get(`${RESEARCH_ORIGIN}/api/auth/session`);
   expect(researchSession.status()).toBe(200);
   expect(await researchSession.json()).toMatchObject({ user: { roles: ["eqoboard-market-reader"] } });
+  await page.goto(`${RESEARCH_ORIGIN}/research/yfinance/AAPL`);
+  await expect(page).toHaveURL(`${RESEARCH_ORIGIN}/research/yfinance/AAPL`);
+  const chartScripts = await page.locator('script[src*="/_next/static/"]').evaluateAll((scripts) =>
+    scripts.map((script) => new URL((script as HTMLScriptElement).src).pathname),
+  );
+  expect(chartScripts.length).toBeGreaterThan(0);
+  const unauthenticatedChartScript = await request.get(`${RESEARCH_ORIGIN}${chartScripts[0]}`);
+  expect(unauthenticatedChartScript.status()).toBe(200);
+  expect(unauthenticatedChartScript.headers()["content-type"]).toMatch(/javascript/);
+  expect(unauthenticatedChartScript.headers()["set-cookie"]).toBeUndefined();
   expect((await page.request.get(`${RESEARCH_ORIGIN}/api/openbb/widgets.json`)).status()).toBe(200);
   expect((await page.request.fetch(`${RESEARCH_ORIGIN}/api/openbb/widgets.json`, { method: "OPTIONS" })).status()).toBe(404);
   expect((await page.request.fetch(`${RESEARCH_ORIGIN}/api/openbb/widgets.json`, { method: "HEAD" })).status()).toBe(404);

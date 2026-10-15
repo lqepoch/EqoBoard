@@ -53,8 +53,9 @@ The page has its own host-only OIDC session on the separate hostname.
 
 The Research E2E uses the real Next BFF/page with a bounded synthetic MDP HTTP fixture. It verifies signer claims,
 unchanged cursor windows, 2010–2026/pre-2016 pages, MAX left-pan cursor pagination with viewport preservation,
-adjustment query identity, unknown-basis labels, and float-only tooltips. Those synthetic tests validate routing and
-display behavior only. They do not verify
+adjustment query identity, unknown-basis labels, and float-only tooltips. The OpenBB profile E2E also traverses the
+Research Nginx ingress for the Yahoo page's anonymous callback, daily API authentication gate, and an unauthenticated
+static Next.js chunk. These bounded synthetic tests validate routing and display behavior only. They do not verify
 Yahoo availability, real provider adjustment behavior, historical completeness, exchange-calendar gaps, source
-freshness, or production Research ingress/OIDC deployment. Run the Research browser suite in public GitHub Actions after
+freshness, or production Research identity configuration. Run the Research browser suite in public GitHub Actions after
 the workflow's normal web build; do not use its synthetic result as real-provider evidence.
