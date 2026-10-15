@@ -127,6 +127,24 @@ assertions do not count as a passed Actions run or production rollback proof.
 
 ## Source-declared request and resource caps
 
+Actions runs the pinned Next.js `typegen` command before TypeScript checking.
+The committed `next-env.d.ts` matches that version's generated App Router
+declarations, including the ignored `.next/types/routes.d.ts` reference. The
+SBOM helper still rejects any tracked or untracked app-source drift; its
+diagnostic lists at most 32 paths/statuses and no file contents. Generated
+declarations are attributed in the source-provenance inventory. A generator
+change requires review rather than a dirty-source exception.
+
+Native BFF authorization has an absolute lifetime from the OIDC sign-in, unlike
+the legacy terminal's rolling session. `EQO_SESSION_TTL_SECONDS` defaults to
+3,600 seconds (allowed range 5–86,400). The initial callback captures
+`nativeExpiresAt` at sign-in plus that limit, or the earlier provider expiry;
+each BFF authorization also respects the current JWT expiry. Rolling the
+NextAuth cookie expiry does not extend `nativeExpiresAt`. Issuer roles are
+captured at sign-in, without per-request issuer introspection; a changed or
+revoked role may remain authorized until this bound or an earlier expiry.
+This source-level bound is not evidence of production issuer/revocation testing.
+
 These values are read from the current native source and are evidence inputs,
 not adopted production budgets. They have not been load-tested or qualified
 across multiple web instances. The per-process server limiters require a shared

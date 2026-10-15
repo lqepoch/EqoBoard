@@ -1,5 +1,35 @@
 # Native implementation and acceptance status
 
+## Later evidence, 2026-10-15
+
+The table below remains a frozen `2fcd4b0` observation. Later source adds the
+dedicated terminal-only `eqoboard-research-ai-reader` role granting only
+`research:ai`; market-reader does not grant it and Research mode filters it.
+Production role assignment and Anthropic access remain unverified. The earlier
+license-auditor race was repaired and subsequent CodeQL checks passed; its old
+failure is retained below as historical evidence.
+
+Candidate `e5ac22d7936335158ef2f48625928f410bed5b12` completed
+[Native Actions 38721584166](https://github.com/lqepoch/EqoBoard/actions/runs/38721584166).
+Source boundary, all 233 protected legacy files, types, lint, format, unit/route
+contracts, dependency audits, Next production build and runtime image build
+passed. Container browser acceptance was **17 PASS / 9 FAIL**. The source SBOM
+guard then rejected tracked source drift before image inspection, immutable
+Syft scanning or receipt generation. No image identity or license closure is
+claimed for that run. The earlier `429c6d4` browser result remains **11 PASS /
+15 FAIL**; neither candidate's passing results certify later edits.
+
+Follow-up source repairs address Workspace response races, stale stream columns
+after feed-epoch changes, hidden-widget cancellation, cross-tab logout ordering,
+the supported Yahoo MAX start date, and actual labeled PNG export. Their tests
+must pass on the resulting exact head. Paired legacy/native performance,
+deployment rollback, real Provider paths and complete runtime notices remain
+unqualified. Core history head-refresh retention also remains a known capacity
+gap: the cursor page cap does not itself bound continuously accumulated bars.
+The legacy default deployment stays in place and PR #64 remains Draft.
+
+## Frozen observation
+
 This records a source and Actions observation at candidate
 `2fcd4b0cf4c8b053853e4dcdb3f96f71c27168d6`, compared with protected legacy source
 `fea1e952add7a11e799d6f9f198ddcee47fd12b6`. It supplements the frozen legacy
