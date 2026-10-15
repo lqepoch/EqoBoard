@@ -81,6 +81,7 @@ export function YfinanceDailyWidget({
   const surfaceRef = useRef<ChartSurfaceHandle | null>(null);
   const requestGenerationRef = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
+  const activeReadKindRef = useRef<"head" | "older" | null>(null);
   const allowed =
     fullAuth.runtimeMode === "research" &&
     fullAuth.authenticated &&
@@ -139,12 +140,16 @@ export function YfinanceDailyWidget({
     requestGenerationRef.current = generation;
     if (!allowed || !request) {
       activeRequest.current?.abort();
+      activeRequest.current = null;
+      activeReadKindRef.current = null;
       commitHistory(emptyState(selectionKey));
       return;
     }
     const lifecycle = host.lifecycle.getSnapshot();
     if (lifecycle.phase !== "active" || lifecycle.signal.aborted) {
       activeRequest.current?.abort();
+      activeRequest.current = null;
+      activeReadKindRef.current = null;
       commitHistory(emptyState(selectionKey));
       return;
     }
@@ -156,6 +161,7 @@ export function YfinanceDailyWidget({
     lifecycle.signal.addEventListener("abort", abort, { once: true });
     activeRequest.current?.abort();
     activeRequest.current = controller;
+    activeReadKindRef.current = "head";
     commitHistory(
       preserveLoadedPages
         ? {
@@ -220,12 +226,18 @@ export function YfinanceDailyWidget({
       })
       .finally(() => {
         lifecycle.signal.removeEventListener("abort", abort);
-        if (activeRequest.current === controller) activeRequest.current = null;
+        if (activeRequest.current === controller) {
+          activeRequest.current = null;
+          activeReadKindRef.current = null;
+        }
       });
     return () => {
       lifecycle.signal.removeEventListener("abort", abort);
       controller.abort();
-      if (activeRequest.current === controller) activeRequest.current = null;
+      if (activeRequest.current === controller) {
+        activeRequest.current = null;
+        activeReadKindRef.current = null;
+      }
     };
   }, [allowed, commitHistory, host.data, host.lifecycle, requestIntent, selectionKey]);
 
@@ -287,14 +299,19 @@ export function YfinanceDailyWidget({
   );
 
   const loadOlder = useCallback(() => {
-    const lastPage = current.cursorPages.at(-1);
+    const latest = historyRef.current;
+    const lastPage = latest.cursorPages.at(-1);
     const cursor = lastPage?.response.next_cursor ?? null;
     if (
       !request ||
+      latest.selectionKey !== selectionKey ||
+      latest.status !== "ready" ||
       !lastPage ||
       !cursor ||
-      !canLoadOlderPages(current.cursorPages, current.paginationBlocked) ||
-      current.loadingOlder
+      !canLoadOlderPages(latest.cursorPages, latest.paginationBlocked) ||
+      latest.loadingOlder ||
+      activeRequest.current !== null ||
+      activeReadKindRef.current !== null
     )
       return;
     const lifecycle = host.lifecycle.getSnapshot();
@@ -303,12 +320,12 @@ export function YfinanceDailyWidget({
     const controller = new AbortController();
     const abort = () => controller.abort();
     lifecycle.signal.addEventListener("abort", abort, { once: true });
-    activeRequest.current?.abort();
     activeRequest.current = controller;
+    activeReadKindRef.current = "older";
     // A cursor is bound to the exact original page window, even if the head
     // snapshot has since moved to a newer server-resolved daily window.
     const pageRequest: YfinanceResearchInput = buildYfinanceOlderPageInput(lastPage, cursor);
-    commitHistory({ ...current, loadingOlder: true, error: null });
+    commitHistory({ ...latest, loadingOlder: true, error: null });
     void host.data
       .read("research.yahoo.daily", pageRequest, { signal: controller.signal })
       .then((value) => {
@@ -330,7 +347,7 @@ export function YfinanceDailyWidget({
         const page: YfinanceResearchPage = { request: pageRequest, response };
         const loop =
           response.next_cursor !== null &&
-          isYfinanceCursorLoop(current.cursorPages, response.next_cursor);
+          isYfinanceCursorLoop(latest.cursorPages, response.next_cursor);
         updateHistory((state) =>
           state.selectionKey === selectionKey
             ? {
@@ -356,11 +373,18 @@ export function YfinanceDailyWidget({
       })
       .finally(() => {
         lifecycle.signal.removeEventListener("abort", abort);
-        if (activeRequest.current === controller) activeRequest.current = null;
+        if (activeRequest.current === controller) {
+          activeRequest.current = null;
+          activeReadKindRef.current = null;
+        }
       });
-  }, [commitHistory, current, host.data, host.lifecycle, request, selectionKey, updateHistory]);
+  }, [commitHistory, host.data, host.lifecycle, request, selectionKey, updateHistory]);
 
-  const olderAvailable = canLoadOlderPages(current.cursorPages, current.paginationBlocked);
+  const olderAvailable = canLoadOlderPages(
+    current.cursorPages,
+    current.paginationBlocked,
+    current.status === "loading",
+  );
 
   if (fullAuth.runtimeMode !== "research") {
     const symbol = request?.symbol ?? config.symbol;

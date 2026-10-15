@@ -416,8 +416,10 @@ export function yfinanceResearchEvidence(
 export function canLoadOlderPages(
   pages: readonly YfinanceResearchPage[],
   blocked: boolean,
+  headReadInFlight = false,
 ): boolean {
   return (
+    !headReadInFlight &&
     pages.length > 0 &&
     pages.length < YFINANCE_RESEARCH_MAX_PAGES &&
     !blocked &&

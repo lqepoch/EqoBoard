@@ -381,6 +381,7 @@ describe("Yahoo daily research adapter", () => {
 
   it("limits cursor pagination and detects a repeated continuation", () => {
     expect(canLoadOlderPages([page], false)).toBe(true);
+    expect(canLoadOlderPages([page], false, true)).toBe(false);
     expect(isYfinanceCursorLoop([page], "older-1")).toBe(true);
     expect(canLoadOlderPages([page], true)).toBe(false);
     expect(
