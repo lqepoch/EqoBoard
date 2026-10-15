@@ -10,3 +10,5 @@ coverage/
 # Source module named data is not a generated market-data directory.
 !features/data/
 !features/data/**
+!app/api/research/data/
+!app/api/research/data/**
