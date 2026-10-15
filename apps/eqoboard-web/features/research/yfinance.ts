@@ -425,6 +425,7 @@ export function canLoadOlderPages(
   );
 }
 
+/** Checks a proposed continuation against pages that were already accepted. */
 export function isYfinanceCursorLoop(
   pages: readonly YfinanceResearchPage[],
   nextCursor: string,

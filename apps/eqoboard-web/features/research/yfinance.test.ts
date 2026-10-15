@@ -391,6 +391,18 @@ describe("Yahoo daily research adapter", () => {
     ).toBe(false);
   });
 
+  it("allows a new continuation and rejects one already seen in accepted pages", () => {
+    const nextPage: YfinanceResearchPage = {
+      ...page,
+      request: { ...page.request, cursor: "older-1" },
+      response: { ...page.response, next_cursor: "older-2" },
+    };
+
+    expect(nextPage.response.next_cursor).toBe("older-2");
+    expect(isYfinanceCursorLoop([page], nextPage.response.next_cursor ?? "")).toBe(false);
+    expect(isYfinanceCursorLoop([page, nextPage], "older-1")).toBe(true);
+  });
+
   it("rejects absent or mismatched provider envelopes without guessing source data", () => {
     const config: YfinanceResearchConfigV1 = {
       ...DEFAULT_YFINANCE_RESEARCH_CONFIG,

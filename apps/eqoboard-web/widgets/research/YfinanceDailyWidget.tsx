@@ -330,7 +330,7 @@ export function YfinanceDailyWidget({
         const page: YfinanceResearchPage = { request: pageRequest, response };
         const loop =
           response.next_cursor !== null &&
-          isYfinanceCursorLoop([...current.cursorPages, page], response.next_cursor);
+          isYfinanceCursorLoop(current.cursorPages, response.next_cursor);
         updateHistory((state) =>
           state.selectionKey === selectionKey
             ? {
