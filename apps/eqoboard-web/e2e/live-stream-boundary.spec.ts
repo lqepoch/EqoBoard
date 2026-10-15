@@ -55,7 +55,7 @@ test("@api signed OIDC opens the fixed stream route with a bounded delegation an
   const response = await streamResponse;
   expect(response.status()).toBe(200);
   expect(response.headers()["content-type"]).toMatch(/^text\/event-stream(?:;|$)/iu);
-  expect(response.headers()["cache-control"]).toMatch(/no-cache/u);
+  expect(response.headers()["cache-control"]).toBe("no-store");
   expect(response.headers()["x-accel-buffering"]).toBe("no");
 
   const countersResponse = await request.get(new URL("/__test/counters", controlOrigin).toString());

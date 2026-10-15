@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
@@ -36,13 +35,22 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   await signInAsWriter(page);
   const firstUsableWorkspaceMs = Date.now() - authenticationStartedAt;
 
-  const workspaceName = `Acceptance ${randomUUID().slice(0, 8)}`;
+  const workspaceSelector = page.getByLabel("Workspace");
+  const previousWorkspaceId = await workspaceSelector.inputValue();
+  const previousWorkspaceIds = await workspaceSelector.locator("option").evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  );
   const saveStartedAt = Date.now();
   await page.getByRole("button", { name: "New workspace" }).click();
-  await expect(
-    page.getByLabel("Workspace").locator("option", { hasText: workspaceName }),
-  ).toHaveCount(1);
-  await page.getByLabel("Workspace").selectOption({ label: workspaceName });
+  await expect(workspaceSelector.locator("option")).toHaveCount(previousWorkspaceIds.length + 1);
+  const workspaceId = await workspaceSelector.inputValue();
+  expect(workspaceId).not.toBe(previousWorkspaceId);
+  expect(previousWorkspaceIds).not.toContain(workspaceId);
+  const selectedWorkspaceName = await workspaceSelector.locator("option:checked").textContent();
+  if (!selectedWorkspaceName?.trim()) {
+    throw new Error("The new workspace was not selected after creation.");
+  }
+  const workspaceName = selectedWorkspaceName.trim();
   const tabs = page.getByRole("tablist", { name: "Workspace tabs" });
   await expect(tabs.getByRole("tab")).toHaveCount(1);
   await expect(tabs.getByRole("tab", { name: "Overview" })).toHaveAttribute(
@@ -77,12 +85,7 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
     "All changes saved",
   );
   const workspaceReloadUsableMs = Date.now() - reloadStartedAt;
-  await expect(page.getByLabel("Workspace")).toHaveValue(
-    (await page
-      .getByLabel("Workspace")
-      .locator("option", { hasText: workspaceName })
-      .getAttribute("value")) ?? "",
-  );
+  await expect(page.getByLabel("Workspace")).toHaveValue(workspaceId);
   const reloadedTabs = page.getByRole("tablist", { name: "Workspace tabs" }).getByRole("tab");
   await expect(reloadedTabs).toHaveCount(3);
   await expect(reloadedTabs.nth(0)).toHaveText("Overview");

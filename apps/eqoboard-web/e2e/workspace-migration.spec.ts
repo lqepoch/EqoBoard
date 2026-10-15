@@ -114,7 +114,9 @@ test("@api legacy storage is preview-only anonymously and imports by explicit co
   await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
     "All changes saved",
   );
-  await expect(page.locator("body")).toContainText("Imported as a new workspace");
+  await expect(page.locator(".workspace-status-message")).toHaveText(
+    "Import staged as a new workspace with fresh IDs. Check workspace sync status for server confirmation; the original legacy layout remains in this browser.",
+  );
 
   const importedResponse = await page.request.get(
     new URL("/api/workspaces", webOrigin()).toString(),

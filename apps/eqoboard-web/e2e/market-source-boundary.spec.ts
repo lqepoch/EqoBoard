@@ -54,7 +54,7 @@ test("@component order-book depth remains unsupported with no source rows or pro
 
   const orderbook = page.getByTestId("market-orderbook-widget");
   await expect(orderbook).toBeVisible();
-  await expect(orderbook.getByRole("group", { name: "Depth data: Unsupported" })).toBeVisible();
+  await expect(orderbook.getByText("Unsupported", { exact: true })).toBeVisible();
   await expect(orderbook).toContainText(
     "No typed depth source is available; depth is not displayed.",
   );

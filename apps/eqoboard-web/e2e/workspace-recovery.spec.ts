@@ -41,10 +41,11 @@ test("@component workspace recovery restores a tab after deletion and persists t
   );
 
   const deleteDialog = page.waitForEvent("dialog");
-  await page.getByRole("button", { name: "Close New tab tab" }).click();
+  const deleteClick = page.getByRole("button", { name: "Close New tab tab" }).click();
   const confirmation = await deleteDialog;
   expect(confirmation.message()).toContain("A local recovery copy will be written first");
   await confirmation.accept();
+  await deleteClick;
   await expect(workspaceTabs.getByRole("tab")).toHaveCount(1);
   await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
     "All changes saved",
@@ -71,10 +72,11 @@ test("@component workspace recovery restores a tab after deletion and persists t
   await recoverySelector.selectOption(deletedWorkspacePoint.value);
 
   const restoreDialog = page.waitForEvent("dialog");
-  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  const restoreClick = page.getByRole("button", { name: "Restore", exact: true }).click();
   const restoreConfirmation = await restoreDialog;
   expect(restoreConfirmation.message()).toContain("The current workspace will be backed up first");
   await restoreConfirmation.accept();
+  await restoreClick;
 
   await expect(workspaceTabs.getByRole("tab")).toHaveCount(2);
   await expect(workspaceTabs.getByRole("tab", { name: "Overview" })).toBeVisible();
