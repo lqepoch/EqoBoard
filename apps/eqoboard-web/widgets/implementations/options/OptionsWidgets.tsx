@@ -40,6 +40,11 @@ type OptionGridRow = Readonly<
   }
 >;
 
+type OptionsFeedCursor = {
+  gatewayInstanceId: string | null;
+  connectionEpoch: number | null;
+};
+
 const DEFAULT_COL_DEF: ColDef<OptionGridRow> = Object.freeze({
   sortable: true,
   resizable: true,
@@ -180,25 +185,66 @@ function nullableNumber(
     : undefined;
 }
 
-function applyOptionEvents(
+export function applyOptionEvents(
   api: GridApi<OptionGridRow> | null,
   rows: Map<string, OptionGridRow>,
   snapshot: MarketHostSnapshot,
   selectedSymbols: readonly string[],
   sequences: Map<string, number>,
-  gatewayInstance: { current: string | null },
+  feedCursor: { current: OptionsFeedCursor },
 ): void {
-  if (gatewayInstance.current !== snapshot.gatewayInstanceId) {
+  const rawGatewayInstanceId: unknown = snapshot.gatewayInstanceId;
+  const rawConnectionEpoch: unknown = snapshot.feeds?.options?.connectionEpoch;
+  const gatewayInstanceId =
+    typeof rawGatewayInstanceId === "string" &&
+    rawGatewayInstanceId.length > 0 &&
+    rawGatewayInstanceId.length <= 160 &&
+    !hasControlCharacters(rawGatewayInstanceId)
+      ? rawGatewayInstanceId
+      : null;
+  const connectionEpoch =
+    typeof rawConnectionEpoch === "number" &&
+    Number.isSafeInteger(rawConnectionEpoch) &&
+    rawConnectionEpoch > 0
+      ? rawConnectionEpoch
+      : null;
+  const feedChanged =
+    feedCursor.current.gatewayInstanceId !== gatewayInstanceId ||
+    feedCursor.current.connectionEpoch !== connectionEpoch;
+  const updatesBySymbol = new Map<string, OptionGridRow>();
+
+  if (feedChanged) {
     sequences.clear();
-    gatewayInstance.current = snapshot.gatewayInstanceId;
+    feedCursor.current = { gatewayInstanceId, connectionEpoch };
+    for (const [symbol, row] of rows) {
+      const cleared = Object.freeze({
+        ...row,
+        liveBid: null,
+        liveAsk: null,
+        liveBidSize: null,
+        liveAskSize: null,
+        liveSource: "unknown",
+        liveEntitlement: "unknown",
+        liveAt: null,
+      });
+      rows.set(symbol, cleared);
+      updatesBySymbol.set(symbol, cleared);
+    }
   }
-  if (!api || selectedSymbols.length === 0) return;
+
+  if (gatewayInstanceId === null || connectionEpoch === null || selectedSymbols.length === 0) {
+    if (api && updatesBySymbol.size > 0)
+      api.applyTransactionAsync({ update: [...updatesBySymbol.values()] });
+    return;
+  }
+
   const selected = new Set(selectedSymbols);
-  const updates: OptionGridRow[] = [];
   for (const [symbol, event] of Object.entries(snapshot.optionQuotes)) {
     if (
       !selected.has(symbol) ||
       event.kind !== "option_quote" ||
+      event.gateway_instance_id !== gatewayInstanceId ||
+      event.connection_epoch !== connectionEpoch ||
       typeof event.local_sequence !== "number" ||
       event.local_sequence <= (sequences.get(symbol) ?? 0)
     )
@@ -236,9 +282,10 @@ function applyOptionEvents(
     });
     sequences.set(symbol, event.local_sequence);
     rows.set(symbol, next);
-    updates.push(next);
+    updatesBySymbol.set(symbol, next);
   }
-  if (updates.length) api.applyTransactionAsync({ update: updates });
+  if (api && updatesBySymbol.size > 0)
+    api.applyTransactionAsync({ update: [...updatesBySymbol.values()] });
 }
 
 function ExpiryInput({
@@ -270,7 +317,10 @@ export function OptionsChainWidget({
   const apiRef = useRef<GridApi<OptionGridRow> | null>(null);
   const rowsRef = useRef(new Map<string, OptionGridRow>());
   const eventSequences = useRef(new Map<string, number>());
-  const eventGatewayInstance = useRef<string | null>(null);
+  const eventFeedCursor = useRef<OptionsFeedCursor>({
+    gatewayInstanceId: null,
+    connectionEpoch: null,
+  });
   const [rows, setRows] = useState<OptionGridRow[]>([]);
   const selectedSymbols = useMemo(
     () => [...resource.selectedLeaseSymbols],
@@ -299,7 +349,7 @@ export function OptionsChainWidget({
     const next = chain.contracts.map((contract) => rowFromContract(contract, evidence));
     rowsRef.current = new Map(next.map((row) => [row.symbol, row]));
     eventSequences.current.clear();
-    eventGatewayInstance.current = null;
+    eventFeedCursor.current = { gatewayInstanceId: null, connectionEpoch: null };
     setRows(next);
     apiRef.current?.setGridOption("rowData", next);
     applyOptionEvents(
@@ -308,7 +358,7 @@ export function OptionsChainWidget({
       host.market.getSnapshot(),
       selectedSymbols,
       eventSequences.current,
-      eventGatewayInstance,
+      eventFeedCursor,
     );
   }, [chain, evidence, host.market, resource.state.status, selectedSymbols]);
 
@@ -322,7 +372,7 @@ export function OptionsChainWidget({
         host.market.getSnapshot(),
         selectedSymbols,
         eventSequences.current,
-        eventGatewayInstance,
+        eventFeedCursor,
       );
     },
     [host.market, selectedSymbols],
@@ -337,7 +387,7 @@ export function OptionsChainWidget({
           host.market.getSnapshot(),
           selectedSymbols,
           eventSequences.current,
-          eventGatewayInstance,
+          eventFeedCursor,
         ),
       ),
     [host.market, selectedSymbols],

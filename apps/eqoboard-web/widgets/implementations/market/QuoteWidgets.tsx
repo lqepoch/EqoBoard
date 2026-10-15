@@ -49,10 +49,17 @@ type StockGridRow = Readonly<{
   snapshotEvidence: string;
   liveQuoteEvidence: string;
   liveTradeEvidence: string;
+  liveQuoteAt: string | null;
+  liveTradeAt: string | null;
   liveBid: number | null;
   liveAsk: number | null;
   liveTradePrice: number | null;
 }>;
+
+type GatewayFeedCursor = {
+  gatewayInstanceId: string | null;
+  connectionEpoch: number | null;
+};
 
 const DEFAULT_COL_DEF: ColDef<StockGridRow> = Object.freeze({
   sortable: true,
@@ -99,6 +106,8 @@ const COLUMN_DEFS: readonly ColDef<StockGridRow>[] = Object.freeze([
     valueFormatter: ({ value }) => formatNumber(value),
     minWidth: 120,
   },
+  { field: "liveQuoteAt", headerName: "Stream quote time", minWidth: 190 },
+  { field: "liveTradeAt", headerName: "Stream trade time", minWidth: 190 },
   {
     field: "changePercent",
     headerName: "Change %",
@@ -140,6 +149,8 @@ function emptyRow(symbol: string): StockGridRow {
     snapshotEvidence: "unavailable",
     liveQuoteEvidence: "unknown",
     liveTradeEvidence: "unknown",
+    liveQuoteAt: null,
+    liveTradeAt: null,
     liveBid: null,
     liveAsk: null,
     liveTradePrice: null,
@@ -164,6 +175,8 @@ function rowFromSnapshot(
     snapshotEvidence: evidence,
     liveQuoteEvidence: "unknown",
     liveTradeEvidence: "unknown",
+    liveQuoteAt: null,
+    liveTradeAt: null,
     liveBid: null,
     liveAsk: null,
     liveTradePrice: null,
@@ -193,21 +206,68 @@ function eventEvidence(record: Readonly<Record<string, unknown>>): string {
   return `${source} · entitlement ${entitlement}`;
 }
 
-function applyGatewayUpdates(
+function eventTime(record: Readonly<Record<string, unknown>>): string | null {
+  const value = record.event_time;
+  return typeof value === "string" && value.length <= 128 && !hasControlCharacters(value)
+    ? value
+    : null;
+}
+
+export function applyGatewayUpdates(
   api: GridApi<StockGridRow> | null,
   rowMap: Map<string, StockGridRow>,
   snapshot: MarketHostSnapshot,
   symbols: readonly string[],
   quoteSequences: Map<string, number>,
   tradeSequences: Map<string, number>,
-  gatewayInstance: { current: string | null },
+  feedCursor: { current: GatewayFeedCursor },
 ): void {
-  if (gatewayInstance.current !== snapshot.gatewayInstanceId) {
+  const rawGatewayInstanceId: unknown = snapshot.gatewayInstanceId;
+  const rawConnectionEpoch: unknown = snapshot.feeds?.stocks?.connectionEpoch;
+  const gatewayInstanceId =
+    typeof rawGatewayInstanceId === "string" &&
+    rawGatewayInstanceId.length > 0 &&
+    rawGatewayInstanceId.length <= 160 &&
+    !hasControlCharacters(rawGatewayInstanceId)
+      ? rawGatewayInstanceId
+      : null;
+  const connectionEpoch =
+    typeof rawConnectionEpoch === "number" &&
+    Number.isSafeInteger(rawConnectionEpoch) &&
+    rawConnectionEpoch > 0
+      ? rawConnectionEpoch
+      : null;
+  const feedChanged =
+    feedCursor.current.gatewayInstanceId !== gatewayInstanceId ||
+    feedCursor.current.connectionEpoch !== connectionEpoch;
+  const updatesBySymbol = new Map<string, StockGridRow>();
+
+  if (feedChanged) {
     quoteSequences.clear();
     tradeSequences.clear();
-    gatewayInstance.current = snapshot.gatewayInstanceId;
+    feedCursor.current = { gatewayInstanceId, connectionEpoch };
+    for (const [symbol, row] of rowMap) {
+      const cleared = Object.freeze({
+        ...row,
+        liveBid: null,
+        liveAsk: null,
+        liveTradePrice: null,
+        liveQuoteAt: null,
+        liveTradeAt: null,
+        liveQuoteEvidence: "unknown",
+        liveTradeEvidence: "unknown",
+      });
+      rowMap.set(symbol, cleared);
+      updatesBySymbol.set(symbol, cleared);
+    }
   }
-  if (!api || symbols.length === 0) return;
+
+  if (gatewayInstanceId === null || connectionEpoch === null || symbols.length === 0) {
+    if (api && updatesBySymbol.size > 0)
+      api.applyTransactionAsync({ update: [...updatesBySymbol.values()] });
+    return;
+  }
+
   const updates: StockGridRow[] = [];
   const targets = new Set(symbols);
 
@@ -215,6 +275,8 @@ function applyGatewayUpdates(
     if (
       !targets.has(symbol) ||
       event.kind !== "stock_quote" ||
+      event.gateway_instance_id !== gatewayInstanceId ||
+      event.connection_epoch !== connectionEpoch ||
       typeof event.local_sequence !== "number" ||
       event.local_sequence <= (quoteSequences.get(symbol) ?? 0)
     )
@@ -227,7 +289,7 @@ function applyGatewayUpdates(
       ...previous,
       liveBid: bid,
       liveAsk: ask,
-      quoteAt: typeof event.event_time === "string" ? event.event_time : previous.quoteAt,
+      liveQuoteAt: eventTime(event),
       liveQuoteEvidence: eventEvidence(event),
     });
     quoteSequences.set(symbol, event.local_sequence);
@@ -238,6 +300,8 @@ function applyGatewayUpdates(
   for (const event of snapshot.stockTrades) {
     if (
       event.kind !== "stock_trade" ||
+      event.gateway_instance_id !== gatewayInstanceId ||
+      event.connection_epoch !== connectionEpoch ||
       typeof event.symbol !== "string" ||
       !targets.has(event.symbol) ||
       typeof event.local_sequence !== "number" ||
@@ -250,7 +314,7 @@ function applyGatewayUpdates(
     const next = Object.freeze({
       ...previous,
       liveTradePrice: event.price,
-      tradeAt: typeof event.event_time === "string" ? event.event_time : previous.tradeAt,
+      liveTradeAt: eventTime(event),
       liveTradeEvidence: eventEvidence(event),
     });
     tradeSequences.set(event.symbol, event.local_sequence);
@@ -258,7 +322,9 @@ function applyGatewayUpdates(
     updates.push(next);
   }
 
-  if (updates.length > 0) api.applyTransactionAsync({ update: updates });
+  for (const row of updates) updatesBySymbol.set(row.symbol, row);
+  if (api && updatesBySymbol.size > 0)
+    api.applyTransactionAsync({ update: [...updatesBySymbol.values()] });
 }
 
 type QuoteViewProps = Readonly<{
@@ -277,7 +343,10 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
   const rowsRef = useRef(new Map(requested.map((symbol) => [symbol, emptyRow(symbol)])));
   const quoteSequences = useRef(new Map<string, number>());
   const tradeSequences = useRef(new Map<string, number>());
-  const gatewayInstance = useRef<string | null>(null);
+  const feedCursor = useRef<GatewayFeedCursor>({
+    gatewayInstanceId: null,
+    connectionEpoch: null,
+  });
   const columns = useMemo(() => [...COLUMN_DEFS], []);
   const leaseSymbols = useMemo(() => symbols.slice(0, 1_000), [symbols]);
 
@@ -288,7 +357,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
     rowsRef.current = new Map(next.map((row) => [row.symbol, row]));
     quoteSequences.current.clear();
     tradeSequences.current.clear();
-    gatewayInstance.current = null;
+    feedCursor.current = { gatewayInstanceId: null, connectionEpoch: null };
     setRows(next);
     apiRef.current?.setGridOption("rowData", next);
   }, [requested]);
@@ -302,6 +371,9 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
     const bySymbol = new Map(response.value.snapshots.map((row) => [row.symbol, row]));
     const next = requested.map((symbol) => rowFromSnapshot(symbol, bySymbol.get(symbol), evidence));
     rowsRef.current = new Map(next.map((row) => [row.symbol, row]));
+    quoteSequences.current.clear();
+    tradeSequences.current.clear();
+    feedCursor.current = { gatewayInstanceId: null, connectionEpoch: null };
     setRows(next);
     if (apiRef.current) apiRef.current.setGridOption("rowData", next);
     applyGatewayUpdates(
@@ -311,7 +383,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
       requested,
       quoteSequences.current,
       tradeSequences.current,
-      gatewayInstance,
+      feedCursor,
     );
   }, [host.market, requested, response]);
 
@@ -329,7 +401,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
         requested,
         quoteSequences.current,
         tradeSequences.current,
-        gatewayInstance,
+        feedCursor,
       );
     },
     [host.market, requested, rows],
@@ -344,7 +416,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
         requested,
         quoteSequences.current,
         tradeSequences.current,
-        gatewayInstance,
+        feedCursor,
       );
     return host.market.subscribe(update);
   }, [host.market, requested]);
@@ -484,6 +556,23 @@ function StockFeedState({ host }: Readonly<{ host: QuoteWidgetHost }>) {
   );
 }
 
+export function currentFeedStatus(
+  snapshot: MarketHostSnapshot,
+  feedName: "stocks" | "options",
+): Readonly<Record<string, unknown>> | null {
+  const feed = snapshot.feeds[feedName];
+  const status = feed.rawStatus;
+  if (
+    !status ||
+    snapshot.gatewayInstanceId === null ||
+    feed.connectionEpoch === null ||
+    status.gateway_instance_id !== snapshot.gatewayInstanceId ||
+    status.connection_epoch !== feed.connectionEpoch
+  )
+    return null;
+  return status;
+}
+
 function field(record: Readonly<Record<string, unknown>> | null, key: string, max = 128): string {
   const value = record?.[key];
   return typeof value === "string" &&
@@ -500,7 +589,7 @@ function FeedRow({
 }: Readonly<{ snapshot: MarketHostSnapshot; feedName: "stocks" | "options" }>) {
   const feed = snapshot.feeds[feedName];
   const lease = snapshot.leases[feedName];
-  const raw = feed.rawStatus;
+  const raw = currentFeedStatus(snapshot, feedName);
   const error = raw?.last_error;
   const errorRecord =
     error && typeof error === "object" && !Array.isArray(error)
