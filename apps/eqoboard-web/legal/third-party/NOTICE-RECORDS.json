@@ -186,10 +186,7 @@
       {
         "id": "client-server-marker-license-texts-if-shipped",
         "status": "BLOCKED",
-        "packageCandidates": [
-          "client-only@0.0.1",
-          "server-only@0.0.1"
-        ],
+        "packageCandidates": ["client-only@0.0.1", "server-only@0.0.1"],
         "reason": "The installed package metadata has no bundled license file or sufficiently pinned source attribution in the inspected package contents; resolve final-image presence and authoritative source text before claiming coverage.",
         "requiredEvidence": [
           "candidate image package inventory",
