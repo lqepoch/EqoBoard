@@ -96,6 +96,10 @@ def native_compose_security_fixture() -> dict[str, object]:
         "services": {
             "native-web": {
                 "image": "eqoboard-native-web:candidate",
+                "read_only": True,
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "tmpfs": ["/tmp:rw,noexec,nosuid,size=64m"],
                 "environment": {
                     "NEXTAUTH_URL": web_origin,
                     "EQO_PUBLIC_ORIGIN": web_origin,
@@ -105,6 +109,10 @@ def native_compose_security_fixture() -> dict[str, object]:
             },
             "native-research": {
                 "image": "eqoboard-native-web:candidate",
+                "read_only": True,
+                "cap_drop": ["ALL"],
+                "security_opt": ["no-new-privileges:true"],
+                "tmpfs": ["/tmp:rw,noexec,nosuid,size=64m"],
                 "environment": {
                     "NEXTAUTH_URL": research_origin,
                     "EQO_PUBLIC_ORIGIN": research_origin,
@@ -428,6 +436,14 @@ export const provenance = Object.freeze({
         accepted = run_validator(valid)
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
+        reordered_options = json.loads(json.dumps(valid))
+        for service_name in ("native-web", "native-research"):
+            reordered_options["services"][service_name]["tmpfs"] = [
+                "/tmp:size=64m,nosuid,noexec,rw"
+            ]
+        accepted_reordered = run_validator(reordered_options)
+        self.assertEqual(accepted_reordered.returncode, 0, accepted_reordered.stderr)
+
         invalid_cases: list[tuple[str, dict[str, object], str]] = []
         for name in (
             "EQO_RUST_URL",
@@ -500,6 +516,48 @@ export const provenance = Object.freeze({
                 "MDP fixture verifies the Research signer",
                 candidate,
                 "research app and MDP fixture must share only the MDP delegation secret",
+            )
+        )
+
+        candidate = json.loads(json.dumps(valid))
+        candidate["services"]["native-web"]["tmpfs"].append("/var/tmp:rw")
+        invalid_cases.append(
+            (
+                "terminal rejects multiple tmpfs mounts",
+                candidate,
+                "native-web must have exactly one /tmp tmpfs mount",
+            )
+        )
+
+        candidate = json.loads(json.dumps(valid))
+        candidate["services"]["native-research"]["tmpfs"].append("/var/tmp:rw")
+        invalid_cases.append(
+            (
+                "research rejects multiple tmpfs mounts",
+                candidate,
+                "native-research must have exactly one /tmp tmpfs mount",
+            )
+        )
+
+        candidate = json.loads(json.dumps(valid))
+        candidate["services"]["native-research"]["tmpfs"] = [
+            "/tmp:rw,nosuid,size=64m"
+        ]
+        invalid_cases.append(
+            (
+                "research tmpfs requires noexec",
+                candidate,
+                "native-research /tmp tmpfs must use rw,noexec,nosuid,size=64m",
+            )
+        )
+
+        candidate = json.loads(json.dumps(valid))
+        candidate["services"]["native-web"]["security_opt"] = []
+        invalid_cases.append(
+            (
+                "terminal requires no-new-privileges",
+                candidate,
+                "native-web must enable no-new-privileges",
             )
         )
 

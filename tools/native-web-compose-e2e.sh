@@ -111,6 +111,35 @@ config = json.load(sys.stdin)
 expected_web, expected_research, expected_oidc = sys.argv[1:4]
 services = config.get("services", {})
 
+def validate_app_container_sandbox(service_name):
+    service = services.get(service_name, {})
+    if not isinstance(service, dict):
+        raise SystemExit(f"{service_name} Compose service must be an object")
+
+    mounts = service.get("tmpfs")
+    if not isinstance(mounts, list) or len(mounts) != 1 or not isinstance(mounts[0], str):
+        raise SystemExit(f"{service_name} must have exactly one /tmp tmpfs mount")
+    target, separator, raw_options = mounts[0].partition(":")
+    required_options = {"rw", "noexec", "nosuid", "size=64m"}
+    options = raw_options.split(",") if separator else []
+    if (
+        target != "/tmp"
+        or len(options) != len(required_options)
+        or set(options) != required_options
+    ):
+        raise SystemExit(f"{service_name} /tmp tmpfs must use rw,noexec,nosuid,size=64m")
+
+    if service.get("read_only") is not True:
+        raise SystemExit(f"{service_name} must use a read-only root filesystem")
+    if "ALL" not in service.get("cap_drop", []):
+        raise SystemExit(f"{service_name} must drop all Linux capabilities")
+    if "no-new-privileges:true" not in service.get("security_opt", []):
+        raise SystemExit(f"{service_name} must enable no-new-privileges")
+
+
+for app_service_name in ("native-web", "native-research"):
+    validate_app_container_sandbox(app_service_name)
+
 def environment(service_name):
     value = services.get(service_name, {}).get("environment", {})
     if isinstance(value, list):
