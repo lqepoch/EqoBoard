@@ -47,18 +47,10 @@ describe("budgeted widget direct reads", () => {
     const budget = createWidgetPollBudget(config);
     const read = vi.fn(async () => "decoded");
     const data = testData(read);
-    const hidden = createBudgetedWidgetDataClient(
-      data,
-      budget,
-      scope(undefined, { hidden: true }),
-    );
+    const hidden = createBudgetedWidgetDataClient(data, budget, scope(undefined, { hidden: true }));
     const suspendedLifecycle = createWidgetLifecycleController();
     suspendedLifecycle.suspend();
-    const suspended = createBudgetedWidgetDataClient(
-      data,
-      budget,
-      scope(suspendedLifecycle),
-    );
+    const suspended = createBudgetedWidgetDataClient(data, budget, scope(suspendedLifecycle));
     const signal = new AbortController().signal;
 
     await expect(
@@ -89,9 +81,13 @@ describe("budgeted widget direct reads", () => {
       },
     );
     const data = createBudgetedWidgetDataClient(testData(read), budget, scope(lifecycle));
-    const result = data.read("market.quotes", { symbols: ["SPY"] }, {
-      signal: new AbortController().signal,
-    });
+    const result = data.read(
+      "market.quotes",
+      { symbols: ["SPY"] },
+      {
+        signal: new AbortController().signal,
+      },
+    );
     await Promise.resolve();
     lifecycle.suspend();
     lifecycle.resume();
@@ -133,9 +129,9 @@ describe("budgeted widget direct reads", () => {
     await expect(first).resolves.toBe("first");
 
     now = 500;
-    await expect(
-      data.read("market.quotes", { symbols: ["QQQ"] }, { signal }),
-    ).resolves.toBe("first");
+    await expect(data.read("market.quotes", { symbols: ["QQQ"] }, { signal })).resolves.toBe(
+      "first",
+    );
     now = 750;
     await expect(
       data.read("market.quotes", { symbols: ["IWM"] }, { signal }),
@@ -176,28 +172,18 @@ describe("budgeted widget direct reads", () => {
       manual.read("portfolio.transactions", { portfolioId: 1 }, { signal }),
     ];
     await Promise.resolve();
-    expect(dispatched).toEqual([
-      "portfolio.list",
-      "portfolio.positions",
-      "portfolio.transactions",
-    ]);
+    expect(dispatched).toEqual(["portfolio.list", "portfolio.positions", "portfolio.transactions"]);
     await expect(manual.read("market.quotes", {}, { signal })).rejects.toMatchObject({
       code: "concurrency-limited",
     });
     expect(dispatched).toHaveLength(3);
     for (const [index, resolve] of pendingResolvers.entries()) resolve(`result-${index}`);
-    await expect(Promise.all(initialReads)).resolves.toEqual([
-      "result-0",
-      "result-1",
-      "result-2",
-    ]);
+    await expect(Promise.all(initialReads)).resolves.toEqual(["result-0", "result-1", "result-2"]);
 
     let now = 0;
     const pollBudget = createWidgetPollBudget(config, () => now);
     let resolvePoll: (value: string) => void = () => undefined;
-    const pollRead = testData(
-      () => new Promise<string>((resolve) => (resolvePoll = resolve)),
-    );
+    const pollRead = testData(() => new Promise<string>((resolve) => (resolvePoll = resolve)));
     const poll = createBudgetedWidgetDataClient(
       pollRead,
       pollBudget,
@@ -233,9 +219,9 @@ describe("budgeted widget direct reads", () => {
     );
     const signal = new AbortController().signal;
 
-    await expect(
-      data.read("market.quotes", { symbols: ["SPY"] }, { signal }),
-    ).resolves.toBe("decoded");
+    await expect(data.read("market.quotes", { symbols: ["SPY"] }, { signal })).resolves.toBe(
+      "decoded",
+    );
     now = 500;
     await expect(
       data.read("market.quotes", { symbols: ["QQQ"] }, { signal }),
@@ -259,12 +245,12 @@ describe("budgeted widget direct reads", () => {
     );
     const signal = new AbortController().signal;
 
-    await expect(
-      userA.read("market.quotes", { symbols: ["SPY"] }, { signal }),
-    ).resolves.toBe("decoded");
-    await expect(
-      userB.read("market.quotes", { symbols: ["SPY"] }, { signal }),
-    ).resolves.toBe("decoded");
+    await expect(userA.read("market.quotes", { symbols: ["SPY"] }, { signal })).resolves.toBe(
+      "decoded",
+    );
+    await expect(userB.read("market.quotes", { symbols: ["SPY"] }, { signal })).resolves.toBe(
+      "decoded",
+    );
     await expect(
       userA.read("market.quotes", { symbols: ["QQQ"] }, { signal }),
     ).rejects.toMatchObject({ code: "rate-limited" });

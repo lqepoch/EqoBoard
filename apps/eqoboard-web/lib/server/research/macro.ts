@@ -173,9 +173,7 @@ export async function loadMacro(region: "us" | "eu"): Promise<ProviderResult<Mac
     specs.map((spec) => {
       if (region === "us") return fredLatest(spec.id);
       const ecbSeries = EU_SERIES.find((entry) => entry.id === spec.id);
-      return ecbSeries
-        ? readEcbLatest(ecbSeries.flow, ecbSeries.seriesId)
-        : Promise.resolve(null);
+      return ecbSeries ? readEcbLatest(ecbSeries.flow, ecbSeries.seriesId) : Promise.resolve(null);
     }),
   );
   let failedItems = 0;

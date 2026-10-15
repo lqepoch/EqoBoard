@@ -69,7 +69,14 @@ class NativeSecretScanContractTests(unittest.TestCase):
         self.assertIn('--volume "$repo_root:/repo:ro"', self.helper)
         self.assertIn('--volume "$fixture_root:/probe:ro"', self.helper)
         self.assertIn('--volume "$wrong_fixture_root:/probe:ro"', self.helper)
-        self.assertNotIn("safe.directory", self.helper)
+        executable_lines = "\n".join(
+            line for line in self.helper.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertNotIn(
+            "safe.directory",
+            executable_lines,
+            "scanner commands must not weaken Git's ownership checks",
+        )
         self.assertIn('positive_log="$work_root/positive.log"', self.helper)
         self.assertIn('wrong_path_log="$work_root/wrong-path.log"', self.helper)
         self.assertIn('negative_log="$work_root/negative.log"', self.helper)

@@ -69,11 +69,7 @@ describe("workspace per-widget host join", () => {
       allowedReadOperations: ["allowed.read"] as const,
       allowedActions: ["research.ai"] as const,
     };
-    const host = createWorkspaceWidgetHostContext(
-      services,
-      lifecycle,
-      registrationCapabilities,
-    );
+    const host = createWorkspaceWidgetHostContext(services, lifecycle, registrationCapabilities);
     const signal = new AbortController().signal;
 
     await expect(host.data.read("allowed.read", { symbol: "SPY" }, { signal })).resolves.toBe(

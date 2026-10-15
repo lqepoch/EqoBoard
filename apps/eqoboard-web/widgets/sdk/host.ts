@@ -257,8 +257,7 @@ export function scopeWidgetHostContext<
       options: Readonly<{ signal: AbortSignal }>,
     ): Promise<TOperations[K]["output"]> {
       if (!readOperations.has(operationId)) throw new WidgetDataReadError("request-failed");
-      if (!isBudgetedWidgetDataClient(host.data))
-        throw new WidgetDataReadError("request-failed");
+      if (!isBudgetedWidgetDataClient(host.data)) throw new WidgetDataReadError("request-failed");
       return runWithinActiveGeneration(host.lifecycle, options.signal, (signal) =>
         host.data.read(operationId, input, { signal }),
       );

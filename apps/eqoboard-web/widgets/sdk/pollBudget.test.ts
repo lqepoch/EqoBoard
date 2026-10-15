@@ -83,7 +83,7 @@ describe("widget poll budget", () => {
         maxRequestsPerMinute: 10,
         maxConcurrentRequests: 2,
         whenHidden: "pause",
-      } as WidgetPollRequest["policy"],
+      } as unknown as WidgetPollRequest["policy"],
     });
     await expect(budget.run(malformed, operation)).rejects.toMatchObject({
       code: "request-failed",

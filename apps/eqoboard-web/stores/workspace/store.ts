@@ -802,7 +802,8 @@ export function createWorkspaceStore(
       const tab = activeTab(workspace, tabId);
       const widget = tab?.widgets.find((candidate) => candidate.instanceId === instanceId);
       if (!document || !workspace || !tab || !widget) return false;
-      if (registry.get(widget.manifestId)?.manifest.symbolBinding !== "active-or-fixed") return false;
+      if (registry.get(widget.manifestId)?.manifest.symbolBinding !== "active-or-fixed")
+        return false;
       if (binding?.mode === "fixed" && !validSymbol(binding.symbol)) return false;
       const widgets = tab.widgets.map((candidate) => {
         if (candidate.instanceId !== instanceId) return candidate;

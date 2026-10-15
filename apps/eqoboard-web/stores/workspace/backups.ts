@@ -130,11 +130,7 @@ function transactionComplete(transaction: IDBTransaction): Promise<void> {
 export class IndexedDbWorkspaceBackupStore implements WorkspaceBackupStore {
   async save(partition: string, workspace: WorkspaceV1, reason: RecoveryReason): Promise<void> {
     const validated = validatedWorkspace(workspace);
-    if (
-      !isValidPartition(partition) ||
-      !validated ||
-      !RECOVERY_REASONS.has(reason)
-    ) {
+    if (!isValidPartition(partition) || !validated || !RECOVERY_REASONS.has(reason)) {
       throw new Error("A valid cache partition and bounded workspace are required for recovery.");
     }
     const db = await openDatabase();
@@ -228,8 +224,7 @@ export class IndexedDbWorkspaceBackupStore implements WorkspaceBackupStore {
   }
 
   async get(partition: string, recoveryPointId: string): Promise<WorkspaceRecoveryPoint | null> {
-    if (!isValidPartition(partition) || !recoveryPointId)
-      return null;
+    if (!isValidPartition(partition) || !recoveryPointId) return null;
     const db = await openDatabase();
     try {
       const transaction = db.transaction(STORE_NAME, "readonly");

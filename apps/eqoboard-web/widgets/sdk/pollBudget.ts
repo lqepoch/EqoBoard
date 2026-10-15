@@ -254,9 +254,7 @@ export function createWidgetPollBudget(
         nextLifecycleId += 1;
         lifecycleIds.set(request.lifecycle, lifecycleId);
       }
-      const dedupeKey = request.signal
-        ? null
-        : `${lifecycleId}:${snapshot.generation}:${inputKey}`;
+      const dedupeKey = request.signal ? null : `${lifecycleId}:${snapshot.generation}:${inputKey}`;
       const existing = dedupeKey === null ? undefined : inFlight.get(dedupeKey);
       if (existing) return existing as Promise<T>;
 
@@ -356,11 +354,7 @@ export function createWidgetPollBudget(
           }
           return result;
         } catch (error) {
-          if (
-            controller.signal.aborted ||
-            snapshot.signal.aborted ||
-            request.signal?.aborted
-          )
+          if (controller.signal.aborted || snapshot.signal.aborted || request.signal?.aborted)
             throw new WidgetDataReadError("cancelled");
           throw error;
         } finally {

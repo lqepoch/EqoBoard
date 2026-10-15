@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
-import type { AuthUiSnapshot } from "../../lib/contracts/auth";
+import type { AuthUiSnapshot, Permission } from "../../lib/contracts/auth";
 import type { NativeActionMap, NativeDataOperationMap } from "../../features/data/operations";
 import type { MarketHostSnapshot } from "../../stores/market/market-store";
 import type { WorkspaceStoreHook } from "../../stores/workspace/store";
-import type { AnyWidgetRegistration, WidgetRegistry } from "../../widgets/registry/types";
 import type {
+  AnyWidgetRegistration,
+  BuiltinProvenance,
+  WidgetRegistry,
+} from "../../widgets/registry/types";
+import type {
+  ConfigParseResult,
   WidgetInstanceV1,
   WidgetLifecycle,
   WidgetManifestV1,
@@ -90,23 +95,25 @@ function ProbeWidget({ host }: ProbeWidgetProps) {
   return <output>Budget probe mounted</output>;
 }
 
+const PROVENANCE = Object.freeze({
+  provenanceId: "test.budget-probe",
+  origin: "first-party",
+  sourceRepository: "EqoBoard",
+  sourcePath: "components/workspace/WorkspaceGrid.test.tsx",
+  sourceCommit: null,
+  license: null,
+  noticePath: null,
+  auditReference: "workspace direct-read host wiring test",
+} satisfies BuiltinProvenance);
+
 const REGISTRATION: AnyWidgetRegistration = Object.freeze({
   manifest: MANIFEST,
   Component: ProbeWidget,
   allowedReadOperations: ["market.quotes"],
   allowedActions: [],
-  parseConfig: (value: unknown) => ({ ok: true, value }),
+  parseConfig: (value: unknown): ConfigParseResult<unknown> => ({ ok: true, value }),
   createDefaultConfig: () => ({}),
-  provenance: {
-    provenanceId: "test.budget-probe",
-    origin: "first-party",
-    sourceRepository: "EqoBoard",
-    sourcePath: "components/workspace/WorkspaceGrid.test.tsx",
-    sourceCommit: null,
-    license: null,
-    noticePath: null,
-    auditReference: "workspace direct-read host wiring test",
-  },
+  provenance: PROVENANCE,
 });
 
 const INSTANCE: WidgetInstanceV1 = Object.freeze({
@@ -133,11 +140,13 @@ const WORKSPACE: WorkspaceV1 = Object.freeze({
   tabs: [TAB],
 });
 
+const TEST_PERMISSIONS: readonly Permission[] = Object.freeze(["market:read"]);
+
 const AUTH: AuthUiSnapshot = Object.freeze({
   status: "authenticated",
   authenticated: true,
   displayName: "Test reader",
-  permissions: ["market:read"],
+  permissions: TEST_PERMISSIONS,
   storagePartition: "opaque-test-partition",
 });
 

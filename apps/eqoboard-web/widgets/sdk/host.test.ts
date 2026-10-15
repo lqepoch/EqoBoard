@@ -192,9 +192,14 @@ describe("per-registration host capability scope", () => {
     const readPending = new Promise<string>((resolve) => {
       resolveRead = resolve;
     });
+    let markReadDispatchStarted: () => void = () => undefined;
+    const readDispatchStarted = new Promise<void>((resolve) => {
+      markReadDispatchStarted = resolve;
+    });
     const readDispatch = vi.fn(
       (_operationId: string, _input: unknown, options: { signal: AbortSignal }) => {
         readSignal = options.signal;
+        markReadDispatchStarted();
         return readPending;
       },
     );
@@ -204,9 +209,14 @@ describe("per-registration host capability scope", () => {
     const actionPending = new Promise<string>((resolve) => {
       resolveAction = resolve;
     });
+    let markActionDispatchStarted: () => void = () => undefined;
+    const actionDispatchStarted = new Promise<void>((resolve) => {
+      markActionDispatchStarted = resolve;
+    });
     const actionDispatch = vi.fn(
       (_actionId: string, _input: unknown, options: { signal: AbortSignal }) => {
         actionSignal = options.signal;
+        markActionDispatchStarted();
         return actionPending;
       },
     );
@@ -236,7 +246,7 @@ describe("per-registration host capability scope", () => {
       { prompt: "summary" },
       { signal },
     );
-    await Promise.resolve();
+    await Promise.all([readDispatchStarted, actionDispatchStarted]);
     readLifecycle.suspend();
     actionLifecycle.suspend();
     readLifecycle.resume();

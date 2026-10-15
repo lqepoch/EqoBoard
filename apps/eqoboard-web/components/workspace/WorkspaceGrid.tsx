@@ -275,10 +275,7 @@ function WidgetCard({
           <h3>{title}</h3>
           <span className="workspace-widget__kind">{manifestId}</span>
         </div>
-        <section
-          aria-label={`${title} controls`}
-          className="workspace-widget__actions"
-        >
+        <section aria-label={`${title} controls`} className="workspace-widget__actions">
           {canEdit && (
             <>
               <button
@@ -356,12 +353,10 @@ function WidgetCard({
           className="workspace-widget__binding"
           onSubmit={(event) => {
             event.preventDefault();
-            store
-              .getState()
-              .setSymbolBinding(activeWorkspaceId, tabId, instance.instanceId, {
-                mode: "fixed",
-                symbol: fixedSymbol.trim().toUpperCase(),
-              });
+            store.getState().setSymbolBinding(activeWorkspaceId, tabId, instance.instanceId, {
+              mode: "fixed",
+              symbol: fixedSymbol.trim().toUpperCase(),
+            });
           }}
         >
           <span>Symbol:</span>

@@ -316,8 +316,7 @@ export function attachSipSnapshots(
   const snapshots = new Map<string, Record<string, unknown>>();
   for (const raw of batch.snapshots) {
     const value = record(raw);
-    if (value && typeof value.symbol === "string")
-      snapshots.set(value.symbol.toUpperCase(), value);
+    if (value && typeof value.symbol === "string") snapshots.set(value.symbol.toUpperCase(), value);
   }
   let priced = 0;
   let timed = 0;
