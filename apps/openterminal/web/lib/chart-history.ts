@@ -68,7 +68,7 @@ const MAX_CURSOR_PAGES = MAX_HISTORY_PAGES - 1;
 const LIVE_HEAD_REFRESH_INTERVAL_MS = 8_000;
 const DECIMAL = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const UTC_RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$/;
-const HISTORY_CACHE_SCOPE = createBrowserCacheScope();
+export const CHART_HISTORY_CACHE_SCOPE = createBrowserCacheScope();
 
 function createBrowserCacheScope(): string {
   try {
@@ -146,6 +146,12 @@ function projectBar(row: HistoryBar): ChartHistoryCandle | null {
   if ([open, high, low, close, volume].some((value) => value === null) || time === null || volume! < 0) return null;
   if (high! < Math.max(open!, close!, low!) || low! > Math.min(open!, close!, high!)) return null;
   return { time, open: open!, high: high!, low: low!, close: close!, volume: volume!, ...(exact ? { exact } : {}) };
+}
+
+/** Shared bounded float projection for source adapters with provider-native values. */
+export function projectChartHistoryBar(row: unknown): ChartHistoryCandle | null {
+  if (row === null || typeof row !== "object" || Array.isArray(row)) return null;
+  return projectBar(row as HistoryBar);
 }
 
 function assertResponseShape(payload: unknown): ChartHistoryResponse {
@@ -260,7 +266,7 @@ export function useChartHistory(
   const queryClient = useQueryClient();
   const queryKey = [
     "chart-history",
-    HISTORY_CACHE_SCOPE,
+    CHART_HISTORY_CACHE_SCOPE,
     symbol,
     range,
     resolution,
