@@ -35,7 +35,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if test -f package-lock.json; then
+          if test -f package-lock.json && node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+            const normalized = (value) => JSON.stringify(Object.entries(value ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+            const fields = ["dependencies", "devDependencies", "optionalDependencies"];
+            process.exit(fields.every((field) => normalized(manifest[field]) === normalized(lock.packages?.[""]?.[field])) ? 0 : 1);
+          '; then
             echo 'missing=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -43,7 +50,8 @@ jobs:
           # Git dependencies execute prepare even under --ignore-scripts.
           # --package-lock-only propagates into Core prepare and prevents its
           # nested npm ci from installing TypeScript, so resolve in this isolated
-          # Actions workspace without that flag. Nothing here is acceptance.
+          # Actions workspace without that flag. Retain an existing lock as the
+          # resolution input when pruning removed dependencies. Nothing here is acceptance.
           npm install --ignore-scripts --include=dev --no-audit --no-fund
           echo '::error::Bootstrap lock is a proposal artifact only. Commit and review it before acceptance.'
           exit 1
