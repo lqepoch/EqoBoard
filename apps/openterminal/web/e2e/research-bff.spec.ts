@@ -685,7 +685,7 @@ test("Yahoo chart page uses the shared widget, bounded MAX cursor pages, and flo
 
   const initialCalls = (await metrics(request)).mdpYfinanceResearch;
   expect(initialCalls).toHaveLength(1);
-  expect(initialCalls[0].query.start_utc).toBe("1970-01-01T00:00:00.000Z");
+  expect(initialCalls[0].query.start_utc).toBe("1970-01-01T00:00:00Z");
   expect(initialCalls[0].query.adjustment).toBe("unadjusted");
 
   await page.getByTestId("chart-load-older").click();
@@ -795,8 +795,8 @@ test("Yahoo range windows use UTC calendar boundaries and show only returned dai
     await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.length).toBe(before + 1);
     const call = (await metrics(request)).mdpYfinanceResearch[before];
     expect(call.query).toMatchObject({ symbols: "AAPL", asset_class: "stock", adjustment: "unadjusted" });
-    expect(call.query.start_utc).toBe(start);
-    expect(call.query.end_utc).toBe(end);
+    expect(call.query.start_utc).toBe(start.replace(/\.000Z$/, "Z"));
+    expect(call.query.end_utc).toBe(end.replace(/\.000Z$/, "Z"));
     expect(call.query).not.toHaveProperty("resolution");
     const rangeWindow = page.getByTestId("chart-yfinance-range-window");
     await expect(rangeWindow).toHaveAttribute("data-range", range);
@@ -827,7 +827,10 @@ test("Yahoo yearly windows clamp leap day to the last day of February", async ({
     await page.getByRole("button", { name: range, exact: true }).click();
     await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.length).toBe(before + 1);
     const call = (await metrics(request)).mdpYfinanceResearch[before];
-    expect(call.query).toMatchObject({ start_utc: start, end_utc: end });
+    expect(call.query).toMatchObject({
+      start_utc: start.replace(/\.000Z$/, "Z"),
+      end_utc: end.replace(/\.000Z$/, "Z"),
+    });
     await expect(page.getByTestId("chart-yfinance-range-window")).toHaveAttribute("data-start-utc", start);
     await expect(page.getByTestId("chart-yfinance-range-window")).toHaveAttribute("data-end-utc", end);
   }
