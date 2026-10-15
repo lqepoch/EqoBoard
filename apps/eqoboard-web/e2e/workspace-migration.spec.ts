@@ -1,6 +1,21 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const LEGACY_KEY = "eqoboard-open-terminal-v1";
+type LegacyStorageAudit = Readonly<{
+  reads: readonly string[];
+  readUntracked(key: string): string | null;
+}>;
+
+async function inspectLegacyStorage(
+  page: Page,
+  key: string,
+): Promise<Readonly<{ readCount: number; value: string | null }>> {
+  return page.evaluate((storageKey) => {
+    const audit = (window as unknown as { __nativeLegacyStorageAudit: LegacyStorageAudit })
+      .__nativeLegacyStorageAudit;
+    return { readCount: audit.reads.length, value: audit.readUntracked(storageKey) };
+  }, key);
+}
 
 function webOrigin(): string {
   const origin = process.env.E2E_WEB_ORIGIN;
@@ -45,8 +60,11 @@ test("@api legacy storage is preview-only anonymously and imports by explicit co
     ({ key, raw }) => {
       const reads: string[] = [];
       const originalGetItem = Storage.prototype.getItem;
-      Object.defineProperty(window, "__nativeLegacyStorageReads", {
-        value: reads,
+      Object.defineProperty(window, "__nativeLegacyStorageAudit", {
+        value: {
+          reads,
+          readUntracked: (name: string) => originalGetItem.call(window.localStorage, name),
+        },
         configurable: true,
       });
       Storage.prototype.getItem = function getItem(name: string): string | null {
@@ -60,14 +78,9 @@ test("@api legacy storage is preview-only anonymously and imports by explicit co
 
   await page.goto(webOrigin(), { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("access-state")).toContainText("Sign in to open your workspace");
-  expect(
-    await page.evaluate(
-      () =>
-        (window as unknown as { __nativeLegacyStorageReads: string[] }).__nativeLegacyStorageReads
-          .length,
-    ),
-  ).toBe(0);
-  expect(await page.evaluate((key) => localStorage.getItem(key), LEGACY_KEY)).toBe(rawLegacyLayout);
+  const beforePreview = await inspectLegacyStorage(page, LEGACY_KEY);
+  expect(beforePreview.readCount).toBe(0);
+  expect(beforePreview.value).toBe(rawLegacyLayout);
 
   await page.getByTestId("workspace-legacy-import-preview").click();
   await expect(page.getByTestId("workspace-legacy-import-preview-result")).toContainText(
@@ -75,14 +88,9 @@ test("@api legacy storage is preview-only anonymously and imports by explicit co
   );
   const anonymousConfirm = page.getByTestId("workspace-legacy-import-confirm");
   await expect(anonymousConfirm).toBeDisabled();
-  expect(
-    await page.evaluate(
-      () =>
-        (window as unknown as { __nativeLegacyStorageReads: string[] }).__nativeLegacyStorageReads
-          .length,
-    ),
-  ).toBe(1);
-  expect(await page.evaluate((key) => localStorage.getItem(key), LEGACY_KEY)).toBe(rawLegacyLayout);
+  const afterPreview = await inspectLegacyStorage(page, LEGACY_KEY);
+  expect(afterPreview.readCount).toBe(1);
+  expect(afterPreview.value).toBe(rawLegacyLayout);
 
   await signInAsWriter(page);
   const beforeExplicitImport = await page.request.get(
@@ -95,7 +103,7 @@ test("@api legacy storage is preview-only anonymously and imports by explicit co
   expect(JSON.stringify(await beforeExplicitImport.json())).not.toContain(
     "Imported OpenTerminal layout",
   );
-  expect(await page.evaluate((key) => localStorage.getItem(key), LEGACY_KEY)).toBe(rawLegacyLayout);
+  expect((await inspectLegacyStorage(page, LEGACY_KEY)).value).toBe(rawLegacyLayout);
 
   await page.getByTestId("workspace-legacy-import-preview").click();
   await expect(page.getByTestId("workspace-legacy-import-preview-result")).toContainText(
@@ -164,7 +172,7 @@ test("@api legacy storage is preview-only anonymously and imports by explicit co
   });
   expect(imported?.tabs[0]?.widgets[0]?.symbolBinding).toEqual({ mode: "fixed", symbol: "AAPL" });
   expect(JSON.stringify(saved.document)).not.toMatch(/commandOpen|optionLegs|QQQ261016C00500000/u);
-  expect(await page.evaluate((key) => localStorage.getItem(key), LEGACY_KEY)).toBe(rawLegacyLayout);
+  expect((await inspectLegacyStorage(page, LEGACY_KEY)).value).toBe(rawLegacyLayout);
 
   const quoteInstance = importedTab?.widgets.find(
     ({ manifestId }) => manifestId === "market.quote",

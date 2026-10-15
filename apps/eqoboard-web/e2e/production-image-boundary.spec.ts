@@ -15,17 +15,18 @@ test("@api standalone production image optimizer returns the disabled response",
 }) => {
   const imageOptimizerUrl = new URL("/_next/image", terminalWebOrigin());
   imageOptimizerUrl.search = new URLSearchParams({
-    url: "/acceptance-image-optimizer-probe.png",
+    url: "https://acceptance-image-optimizer.invalid/probe.png",
     w: "64",
     q: "75",
   }).toString();
 
   const response = await request.get(imageOptimizerUrl.toString());
 
-  // Next 15.5.27 standalone returns 400 for the disabled optimizer endpoint.
-  // The Actions production-image run is the acceptance evidence for this contract.
-  expect(response.status()).toBe(400);
-  expect(await response.text()).toBe("Bad Request");
+  // The production standalone image leaves the optimizer route unhandled. The
+  // reserved .invalid host ensures an enabled optimizer cannot fetch an image.
+  expect(response.status()).toBe(404);
+  expect(response.headers()["content-type"]).toMatch(/^text\/html(?:;|$)/iu);
+  expect(await response.text()).toContain("404: This page could not be found.");
 });
 
 test("@component Canvas chart export downloads a nonempty PNG with a valid signature", async ({
