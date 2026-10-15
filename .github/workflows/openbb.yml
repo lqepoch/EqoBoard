@@ -248,11 +248,16 @@ jobs:
           name: openbb-native-runtime-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/eqoboard-openbb-runtime-e2e/
+            apps/openterminal/web/test-results/
             !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/openbb-lite-compose-image.docker.tar
             !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/openbb-lite-compose-image.oci.tar
             !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/native-user-storage-state.json
             !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/trace.zip
             !${{ runner.temp }}/eqoboard-openbb-runtime-e2e/**/*.webm
+            !apps/openterminal/web/test-results/**/.env*
+            !apps/openterminal/web/test-results/**/*.env
+            !apps/openterminal/web/test-results/**/*storage-state*.json
+            !apps/openterminal/web/test-results/**/auth.json
           if-no-files-found: warn
           retention-days: 30
           overwrite: false
