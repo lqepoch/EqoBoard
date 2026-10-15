@@ -36,7 +36,7 @@ function AuthScopedProviders({ auth, children }: AuthScopedProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthCacheBoundary>
+      <AuthCacheBoundary storagePartition={auth.storagePartition}>
         <AuthProvider snapshot={auth}>
           <WorkspaceCommandProvider>
             <MarketDataHost auth={auth}>{children}</MarketDataHost>

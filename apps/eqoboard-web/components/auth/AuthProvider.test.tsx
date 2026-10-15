@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
 import type { AuthUiSnapshot } from "@/lib/contracts/auth";
-import { AuthProvider, useAuth } from "./AuthProvider";
+import { AuthProvider, handleSignedOutMessage, useAuth } from "./AuthProvider";
 
 const snapshot: AuthUiSnapshot = {
   status: "authenticated",
@@ -43,5 +43,47 @@ describe("AuthProvider safe projection", () => {
       return <output>{JSON.stringify(auth)}</output>;
     }
     expect(() => renderToString(<SnapshotReader />)).toThrow(/AuthProvider/u);
+  });
+});
+
+describe("AuthCacheBoundary partitioned logout", () => {
+  it("ignores another user's partition and invalidates only the matching partition", () => {
+    const invalidations: string[] = [];
+    const invalidate = () => {
+      invalidations.push("query-cache-cleared");
+      invalidations.push("document-reloaded");
+    };
+
+    expect(
+      handleSignedOutMessage(
+        { type: "signed-out", storagePartition: "native-research-v1-other-user" },
+        "native-research-v1-current-user",
+        invalidate,
+      ),
+    ).toBe(false);
+    expect(invalidations).toEqual([]);
+
+    expect(
+      handleSignedOutMessage(
+        { type: "signed-out", storagePartition: "native-research-v1-current-user" },
+        "native-research-v1-current-user",
+        invalidate,
+      ),
+    ).toBe(true);
+    expect(invalidations).toEqual(["query-cache-cleared", "document-reloaded"]);
+  });
+
+  it("does not treat an anonymous or malformed event as a signed-out identity", () => {
+    let invalidated = false;
+    const invalidate = () => {
+      invalidated = true;
+    };
+    expect(
+      handleSignedOutMessage({ type: "signed-out", storagePartition: null }, null, invalidate),
+    ).toBe(false);
+    expect(
+      handleSignedOutMessage({ type: "signed-out" }, "native-terminal-v1-user", invalidate),
+    ).toBe(false);
+    expect(invalidated).toBe(false);
   });
 });

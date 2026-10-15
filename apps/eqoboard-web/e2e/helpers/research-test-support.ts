@@ -103,11 +103,17 @@ export async function signInAt(
   origin: string,
   identity: MockIdentity,
   path: string,
+  expectedUi: "authenticated" | "policy-rejected" = "authenticated",
 ): Promise<void> {
   await page.goto(new URL(path, origin).toString(), { waitUntil: "domcontentloaded" });
   await page.getByTestId("sign-in-button").click();
   const selector =
     identity === "workspace-only" ? "mock-login-workspace-only" : `mock-login-${identity}`;
   await page.getByTestId(selector).click();
+  if (expectedUi === "policy-rejected") {
+    await expect(page.getByTestId("account-access-state")).toHaveText("Access unavailable");
+    await expect(page.getByTestId("access-state")).toContainText("Access is restricted");
+    return;
+  }
   await expect(page.getByTestId("account-menu")).toBeVisible();
 }

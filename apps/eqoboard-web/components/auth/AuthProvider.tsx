@@ -18,6 +18,25 @@ export type AuthActions = Readonly<{
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_CHANNEL = "eqoboard-auth-v1";
 
+export function handleSignedOutMessage(
+  value: unknown,
+  storagePartition: string | null,
+  onSignedOut: () => void,
+): boolean {
+  if (
+    storagePartition === null ||
+    value === null ||
+    typeof value !== "object" ||
+    (value as { type?: unknown }).type !== "signed-out" ||
+    (value as { storagePartition?: unknown }).storagePartition !== storagePartition
+  ) {
+    return false;
+  }
+
+  onSignedOut();
+  return true;
+}
+
 export function AuthProvider({
   snapshot,
   children,
@@ -37,37 +56,38 @@ export function useAuth(): AuthUiSnapshot {
 
 export function useAuthActions(): AuthActions {
   const queryClient = useQueryClient();
+  const auth = useAuth();
   const signIn = useCallback(async () => {
     await nextAuthSignIn("eqo-oidc", { callbackUrl: "/" });
   }, []);
   const signOut = useCallback(async () => {
+    await nextAuthSignOut({ callbackUrl: "/", redirect: false });
     queryClient.clear();
-    if (typeof BroadcastChannel !== "undefined") {
+    if (auth.storagePartition !== null && typeof BroadcastChannel !== "undefined") {
       const channel = new BroadcastChannel(AUTH_CHANNEL);
-      channel.postMessage({ type: "signed-out" });
+      channel.postMessage({ type: "signed-out", storagePartition: auth.storagePartition });
       channel.close();
     }
-    await nextAuthSignOut({ callbackUrl: "/" });
-  }, [queryClient]);
+    window.location.replace("/");
+  }, [auth.storagePartition, queryClient]);
   return useMemo(() => ({ signIn, signOut }), [signIn, signOut]);
 }
 
-export function AuthCacheBoundary({ children }: Readonly<{ children: ReactNode }>) {
+export function AuthCacheBoundary({
+  children,
+  storagePartition,
+}: Readonly<{ children: ReactNode; storagePartition: string | null }>) {
   const queryClient = useQueryClient();
   useEffect(() => {
-    if (typeof BroadcastChannel === "undefined") return;
+    if (storagePartition === null || typeof BroadcastChannel === "undefined") return;
     const channel = new BroadcastChannel(AUTH_CHANNEL);
     channel.onmessage = (event: MessageEvent<unknown>) => {
-      if (
-        event.data &&
-        typeof event.data === "object" &&
-        (event.data as { type?: unknown }).type === "signed-out"
-      ) {
+      handleSignedOutMessage(event.data, storagePartition, () => {
         queryClient.clear();
         window.location.replace("/");
-      }
+      });
     };
     return () => channel.close();
-  }, [queryClient]);
+  }, [queryClient, storagePartition]);
   return children;
 }

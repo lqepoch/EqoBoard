@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
+  YFINANCE_RESEARCH_MAX_PAGE_DAYS,
+  YFINANCE_RESEARCH_MAX_PAGES,
+} from "../features/research/yfinance-contract";
+import {
   YFINANCE_DAILY_QUERY,
   readGatewayFixtureCounters,
   readMdpFixtureCounters,
@@ -171,7 +175,7 @@ test("@api Yahoo history is isolated to the signed research mode and fails befor
   try {
     // The route-level assertion deliberately signs in at the shared shell so
     // it remains independent of the separately accepted Research chart page.
-    await signInAt(workspaceOnlyPage, researchOrigin, "workspace-only", "/");
+    await signInAt(workspaceOnlyPage, researchOrigin, "workspace-only", "/", "policy-rejected");
     const forbidden = await workspaceOnlyPage.request.get(
       new URL(yahooPath, researchOrigin).toString(),
       {
@@ -322,6 +326,8 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     // Indicator changes are local display projections; widening the requested window is an explicit read.
     await researchPage.getByTestId("yahoo-indicator-sma20").uncheck();
     await researchPage.getByTestId("yahoo-indicator-sma20").check();
+    const expectedMaxEnd = new Date();
+    expectedMaxEnd.setUTCHours(0, 0, 0, 0);
     const maxRangeReadPromise = researchPage.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -331,11 +337,47 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     await researchPage.getByLabel("Daily window").selectOption("MAX");
     const maxRangeRead = await maxRangeReadPromise;
     expect(maxRangeRead.status()).toBe(200);
+    const maxRange = (await maxRangeRead.json()) as PagedYfinanceObservation;
+    const supportedStartUtc = "1970-01-01T00:00:00.000Z";
+    expect(maxRange.requested_range).toEqual({
+      start_utc: supportedStartUtc,
+      end_utc: expectedMaxEnd.toISOString(),
+      semantics: "start_inclusive_end_exclusive",
+    });
+    const maxStartMs = Date.parse(maxRange.requested_range.start_utc);
+    const maxEndMs = Date.parse(maxRange.requested_range.end_utc);
+    const pageDurationMs = YFINANCE_RESEARCH_MAX_PAGE_DAYS * 86_400_000;
+    const expectedPageCount = Math.ceil((maxEndMs - maxStartMs) / pageDurationMs);
+    expect(expectedPageCount).toBeGreaterThan(0);
+    expect(expectedPageCount).toBeLessThanOrEqual(YFINANCE_RESEARCH_MAX_PAGES);
+    expect(maxRange.page_range).toEqual({
+      start_utc: new Date(Math.max(maxStartMs, maxEndMs - pageDurationMs)).toISOString(),
+      end_utc: maxRange.requested_range.end_utc,
+      semantics: "start_inclusive_end_exclusive",
+    });
+    expect(maxRange.next_cursor).toBe(expectedPageCount > 1 ? "older:1" : null);
+    expect(maxRange).toMatchObject({
+      source: "Yahoo Finance",
+      provider: "yfinance",
+      canonical: false,
+      point_in_time: false,
+      executable: false,
+      display_only: true,
+      mdp_coverage_asserted: false,
+      observation: {
+        payload: {
+          provenance: { adapter_version: expect.stringContaining("bounded-synthetic-e2e") },
+        },
+      },
+    });
+    expect(maxRange.observation.payload.bars).toHaveLength(25);
 
-    const olderPageButton = chart.getByTestId("native-chart-load-older");
-    await expect(olderPageButton).toBeVisible();
-    for (let pageNumber = 2; pageNumber <= 10; pageNumber += 1) {
-      const cursor = `older:${pageNumber - 1}`;
+    const olderPageButton = chart.getByTestId("yahoo-research-load-older");
+    if (expectedPageCount > 1) await expect(olderPageButton).toBeVisible();
+    let previousPage = maxRange;
+    for (let pageNumber = 2; pageNumber <= expectedPageCount; pageNumber += 1) {
+      const cursor = previousPage.next_cursor;
+      expect(cursor).toBe(`older:${pageNumber - 1}`);
       const olderRead = researchPage.waitForResponse((response) => {
         const url = new URL(response.url());
         return (
@@ -344,15 +386,44 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
         );
       });
       await olderPageButton.click();
-      expect((await olderRead).status(), `Research page ${pageNumber}`).toBe(200);
-      if (pageNumber < 10) await expect(olderPageButton).toBeEnabled();
+      const olderResponse = await olderRead;
+      expect(olderResponse.status(), `Research page ${pageNumber}`).toBe(200);
+      const olderPage = (await olderResponse.json()) as PagedYfinanceObservation;
+      const expectedPageEnd = Date.parse(previousPage.page_range.start_utc);
+      const expectedPageStart = Math.max(maxStartMs, expectedPageEnd - pageDurationMs);
+      expect(olderPage.requested_range).toEqual(maxRange.requested_range);
+      expect(olderPage.page_range).toEqual({
+        start_utc: new Date(expectedPageStart).toISOString(),
+        end_utc: new Date(expectedPageEnd).toISOString(),
+        semantics: "start_inclusive_end_exclusive",
+      });
+      expect(olderPage.next_cursor).toBe(
+        pageNumber < expectedPageCount ? `older:${pageNumber}` : null,
+      );
+      expect(olderPage).toMatchObject({
+        source: "Yahoo Finance",
+        provider: "yfinance",
+        canonical: false,
+        point_in_time: false,
+        executable: false,
+        display_only: true,
+        mdp_coverage_asserted: false,
+        observation: {
+          payload: {
+            provenance: { adapter_version: expect.stringContaining("bounded-synthetic-e2e") },
+          },
+        },
+      });
+      expect(olderPage.observation.payload.bars).toHaveLength(25);
+      previousPage = olderPage;
+      if (pageNumber < expectedPageCount) await expect(olderPageButton).toBeEnabled();
     }
 
     await expect(olderPageButton).toHaveCount(0);
-    await expect(evidence).toContainText("10 page(s)");
+    await expect(evidence).toContainText(`${expectedPageCount} page(s)`);
     const counters = await readMdpFixtureCounters(request);
-    expect(counters.calls[MDP_RESEARCH_ROUTE]).toBe(11); // initial 1M, MAX head, and nine explicit older pages
-    expect(counters.acceptedDelegations).toBe(11);
+    expect(counters.calls[MDP_RESEARCH_ROUTE]).toBe(1 + expectedPageCount);
+    expect(counters.acceptedDelegations).toBe(1 + expectedPageCount);
     expect(counters.rejectedDelegations).toBe(0);
     expect(counters.fixture).toBe("native-e2e synthetic fixture; not provider data");
 
