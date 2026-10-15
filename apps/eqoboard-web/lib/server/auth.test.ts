@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const { ownerKeyForPrincipal, principalFromClaims } = await import("./auth");
-const { authCookieName } = await vi.importActual<typeof import("../../auth")>("../../auth");
+const { authCookieName, authOptions } = await vi.importActual<typeof import("../../auth")>(
+  "../../auth",
+);
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -77,5 +79,37 @@ describe("server principal projection", () => {
 
     vi.stubEnv("EQO_BFF_MODE", "research");
     expect(authCookieName()).toBe("__Host-eqoboard-research.session-token");
+  });
+
+  it("requires PKCE, state, and nonce with realm-isolated nonce cookies", async () => {
+    const oidcProvider = authOptions.providers.find(
+      (provider) =>
+        typeof provider === "object" && "id" in provider && provider.id === "eqo-oidc",
+    );
+    expect(oidcProvider).toMatchObject({ checks: ["pkce", "state", "nonce"] });
+
+    vi.stubEnv("EQO_OIDC_ISSUER", "https://id.example.test/native");
+    vi.stubEnv("EQO_OIDC_CLIENT_ID", "native-client");
+    vi.stubEnv("EQO_OIDC_CLIENT_SECRET", "oidc-client-secret");
+    vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
+    vi.stubEnv("EQO_BFF_MODE", "terminal");
+    vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://terminal.example.test");
+    vi.stubEnv("NEXTAUTH_URL", "https://terminal.example.test");
+    vi.resetModules();
+    const { authOptions: terminalOptions } = await import("../../auth");
+    expect(terminalOptions.cookies?.nonce).toMatchObject({
+      name: "__Host-eqoboard.nonce",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: true },
+    });
+
+    vi.stubEnv("EQO_BFF_MODE", "research");
+    vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://research.example.test");
+    vi.stubEnv("NEXTAUTH_URL", "https://research.example.test");
+    vi.resetModules();
+    const { authOptions: researchOptions } = await import("../../auth");
+    expect(researchOptions.cookies?.nonce).toMatchObject({
+      name: "__Host-eqoboard-research.nonce",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: true },
+    });
   });
 });

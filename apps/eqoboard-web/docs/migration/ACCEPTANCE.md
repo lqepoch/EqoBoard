@@ -225,6 +225,11 @@ provider expiry and `EQO_SESSION_TTL_SECONDS` (default one hour, configured
 maximum 24 hours). This is a bounded stale-role window, not immediate
 revocation.
 
+Native OIDC authorization requests require PKCE, state, and nonce validation.
+The short-lived nonce cookie is HttpOnly, SameSite=Lax, host-only, Secure on
+HTTPS, and uses separate terminal and Research names. The CI issuer fixture's
+nonce requirement is part of this boundary and must not be relaxed.
+
 Terminal AI access requires the trusted OIDC issuer to explicitly assign
 `eqoboard-research-ai-reader`, which grants only `research:ai`. The ordinary
 market-reader role does not imply AI access, and the AI role grants no market,

@@ -136,7 +136,7 @@ const provider: OAuthConfig<OidcProfile> = {
   clientSecret: process.env.EQO_OIDC_CLIENT_SECRET ?? "unconfigured",
   authorization: { params: { scope: "openid profile email" } },
   idToken: true,
-  checks: ["pkce", "state"],
+  checks: ["pkce", "state", "nonce"],
   profile(profile) {
     if (typeof profile.sub !== "string" || profile.sub.length === 0 || profile.sub.length > 255) {
       throw new Error("OIDC subject is invalid");
