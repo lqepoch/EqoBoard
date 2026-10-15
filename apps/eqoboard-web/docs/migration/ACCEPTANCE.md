@@ -138,7 +138,7 @@ deployment limiter before horizontal scaling is considered verified.
 | Widget poll scheduler | 8 global concurrent, 3 per operation, 1 per widget; 120 global, 90 per user, 30 per operation and widget per minute; 1 second minimum interval | `NOT_RUN` under candidate Actions |
 | Core Bars | 60 requests per principal and 600 per process per minute; 1,000 rows/page; 4,096-byte query, 2,048-byte cursor, 4 MiB response, 30-second upstream deadline | `NOT_RUN`; provider-generation and entitlement evidence separate |
 | Research data | Per-principal per-minute caps: news 30, macro/calendar/earnings-calendar 12, earnings-history 8, insider 6, screener/heatmap 4, crypto 20, crypto-global 10 | `NOT_RUN`; provider calls are not made by the CI fixture |
-| Research AI | 10 requests per principal per minute; 16 KiB request body and 64 KiB provider response | `NOT_RUN`; CI role fixture lacks `research:ai` |
+| Research AI | 10 requests per principal per minute; 16 KiB request body and 64 KiB provider response | `NOT_RUN`; the current CI issuer fixture lacks `eqoboard-research-ai-reader`, and production issuer assignment plus Anthropic provider access remain unverified |
 | Workspace | 120 requests per principal per minute; 64 KiB document | `NOT_RUN` under candidate Actions |
 | Manual portfolio | 120 requests per principal and 1,200 per process per minute; 100 portfolios per owner and 10,000 transactions per portfolio | `NOT_RUN` under candidate Actions |
 | Live stream | 20 connects per principal and 600 per process per minute; 2 open streams per principal, 100 per process; 5-second connect deadline | `NOT_RUN` beyond the one-stream transport assertion; process-local caps are not deployment-wide |
@@ -208,9 +208,31 @@ observe zero broker/order endpoint dispatches.
 The server verifies the current issuer, subject, expiry, role, and required
 permission on every BFF request. The browser receives only the closed
 `AuthUiSnapshot` projection. It never receives access tokens, raw roles,
-issuer/subject identifiers, owner hashes, or provider/broker keys. The opaque
-`storagePartition` partitions client recovery state only; changing or forging
-it cannot authenticate or select server-owned data.
+issuer/subject identifiers, database owner hashes, or provider/broker keys.
+`storagePartition` is an HMAC derived with HKDF from the server-only
+`NEXTAUTH_SECRET`, with fixed versioned purpose, runtime mode, issuer, and
+subject inputs. It partitions client recovery state only; it cannot
+authenticate or select server-owned data. Rotating `NEXTAUTH_SECRET` changes
+the partition and resets identity-scoped in-memory UI state. Existing local
+recovery data remains under its old partition and is not adopted or migrated;
+the database owner key remains the existing issuer-plus-subject SHA-256 value.
+
+OIDC roles are copied from the verified issuer claims into the encrypted
+NextAuth session at sign-in. Each BFF request revalidates that session, its
+issuer, and expiry, but does not introspect the issuer for role changes. A role
+revocation therefore takes effect when the session expires, capped by the
+provider expiry and `EQO_SESSION_TTL_SECONDS` (default one hour, configured
+maximum 24 hours). This is a bounded stale-role window, not immediate
+revocation.
+
+Terminal AI access requires the trusted OIDC issuer to explicitly assign
+`eqoboard-research-ai-reader`, which grants only `research:ai`. The ordinary
+market-reader role does not imply AI access, and the AI role grants no market,
+workspace, order, or execution permission. Users who need workspace or market
+features must receive those separate roles. Research runtime filters
+`research:ai` from its UI snapshot and does not expose the terminal AI route.
+Production issuer assignment and Anthropic provider access remain unverified
+and are not Native acceptance.
 
 The route/API lane must cover every published route and method with its exact
 permission, input bounds, same-origin write checks, response schema, cache

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, createHmac, hkdfSync } from "node:crypto";
 import { headers } from "next/headers";
 import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
@@ -130,7 +130,31 @@ function cleanDisplayName(value: unknown): string | null {
 }
 
 function storagePartition(principal: ServerPrincipal, mode: NativeRuntimeMode): string {
-  return `native-${mode}-v1-${ownerKeyForPrincipal(principal)}`;
+  const sessionSecret = process.env.NEXTAUTH_SECRET;
+  if (!sessionSecret || sessionSecret.length < 32) {
+    throw new Error("Native UI storage partition secret is unavailable.");
+  }
+
+  // Derive a purpose-specific key so a browser-visible partition cannot be
+  // guessed from the public issuer/subject pair or reused as the DB owner key.
+  const partitionKey = Buffer.from(
+    hkdfSync(
+      "sha256",
+      Buffer.from(sessionSecret, "utf8"),
+      Buffer.from("eqoboard.native.ui-storage-partition.salt.v1", "utf8"),
+      Buffer.from("eqoboard.native.ui-storage-partition.key.v1", "utf8"),
+      32,
+    ),
+  );
+  const digest = createHmac("sha256", partitionKey)
+    .update("eqoboard.native.ui-storage-partition.identity.v1\0", "utf8")
+    .update(mode, "utf8")
+    .update("\0", "utf8")
+    .update(principal.identityIssuer, "utf8")
+    .update("\0", "utf8")
+    .update(principal.subject, "utf8")
+    .digest("hex");
+  return `native-${mode}-v1-${digest}`;
 }
 
 function anonymousSnapshot(

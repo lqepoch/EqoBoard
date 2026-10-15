@@ -2,7 +2,7 @@ import "server-only";
 
 import { isPermission, type Permission } from "../contracts/auth";
 
-/** This role map intentionally mirrors the existing verified OIDC policy. */
+/** Native OIDC role-to-permission allowlist; access is granted only by explicit role mapping. */
 const ROLE_PERMISSIONS: Readonly<Record<string, readonly Permission[]>> = Object.freeze({
   "eqoboard-market-reader": [
     "market:read",
@@ -11,6 +11,7 @@ const ROLE_PERMISSIONS: Readonly<Record<string, readonly Permission[]>> = Object
     "research:read",
     "workspace:read",
   ],
+  "eqoboard-research-ai-reader": ["research:ai"],
   "eqoboard-workspace-editor": ["workspace:write"],
   "eqoboard-private-research-reader": ["research:private-read", "workspace:read"],
   "eqoboard-engine-offline-reader": ["engine:offline-read"],
