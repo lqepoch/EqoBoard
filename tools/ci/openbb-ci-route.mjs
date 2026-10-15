@@ -268,13 +268,13 @@ export function classifyOpenbbCi({ eventName, baseSha, headSha, cwd = REPO_ROOT,
     if (output === null) return FULL("invalid-merge-base-output");
     const bases = output.trim().split(/\s+/).filter(Boolean);
     if (bases.length !== 1 || !validSha.test(bases[0])) return FULL("ambiguous-merge-base");
-    const diff = git(cwd, ["diff", "--name-status", "-z", "--find-renames", bases[0], headSha]);
+    const diff = git(cwd, ["diff", "--name-status", "-z", "--find-renames", "--find-copies-harder", bases[0], headSha]);
     if (!diff.ok) return FULL("diff-unavailable");
     return classifyNameStatus(diff.stdout);
   }
 
   if (eventName === "push") {
-    const diff = git(cwd, ["diff", "--name-status", "-z", "--find-renames", baseSha, headSha]);
+    const diff = git(cwd, ["diff", "--name-status", "-z", "--find-renames", "--find-copies-harder", baseSha, headSha]);
     if (!diff.ok) return FULL("diff-unavailable");
     return classifyNameStatus(diff.stdout);
   }
