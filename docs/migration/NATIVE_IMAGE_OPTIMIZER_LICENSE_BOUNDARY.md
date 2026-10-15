@@ -12,6 +12,8 @@ The current receipt explicitly reports the runtime notice gate as `BLOCKED`: the
 
 The runtime-exclusion inventory is coupled to the committed package lock by exact `integrity` values. A dependency update that changes its version, bytes, license expression, or package family requires a deliberate inventory review and a new runtime-image check. SPDX `WITH` expressions remain syntactically parsed but are rejected by the current license policy because no exception identifier is separately reviewed. Do not resolve license failures by adding LGPL/MPL to the general permissive allowlist or deleting source notices.
 
+The Actions image step labels the candidate revision and passes its config ID and build digest to the SBOM helper. The helper verifies the inspected config ID and revision, scans the immutable Docker config ID, and emits `native-image-identity.json` binding the candidate commit/tree, app lock hash, image digests and both SPDX file hashes. Existing receipt files cannot be overwritten. This binding is not a claim that the three runtime-notice conditions above have been closed; it must first pass the exact-head Actions run.
+
 The Next.js settings follow the [Next.js 15 output tracing configuration](https://nextjs.org/docs/15/app/api-reference/config/next-config-js/output) and the [Image component's `unoptimized` option](https://nextjs.org/docs/app/api-reference/components/image#unoptimized). Those docs describe configuration behavior; CI's standalone and final-image checks establish whether the locked candidate actually omits the packages.
 
 ## Required validation commands

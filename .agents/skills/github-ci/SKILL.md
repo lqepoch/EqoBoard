@@ -39,3 +39,5 @@ GitHub `combined status` 默认每页 30 条，不可作为完整状态集合。
 `Native Web CI` (`.github/workflows/native-web.yml`) 独立验证 `apps/eqoboard-web`，app-only Docker context，不拉取旧应用运行时。`Native web validation gate` 汇总 lock bootstrap 与 package/runtime 检查，任何失败、缺失或跳过都阻止合并。缺少已提交 lock 或其根依赖与 package 声明不匹配时，只上传待审核 bootstrap lock并失败；已有 lock 作为依赖裁剪输入，避免无关版本重解，不将临时生成依赖计入验收。终端/Research使用同一个原生镜像、独立hostname与密钥，CI仅标准OIDC合成fixture。旧 core/OpenBB required checks与CodeQL继续保留；未完成迁移不得移除旧可用部署或降低已有门槛。
 
 原生 lane 使用 Gitleaks 8.30.1 的固定 linux/amd64 镜像 digest 扫描原生工作树及候选提交范围，关闭网络、只读挂载并脱敏日志。只在 GitHub Actions 启动该容器；不向扫描器传递任何组织凭据，不因测试 fixture 而全局排除密钥规则。依赖许可证检查同时核对 SPDX 语法、精确锁定的运行时排除清单、standalone/final image 文件边界与镜像 SBOM；源码依赖的许可证审计不等于 Provider 数据许可或生产发布验收。
+
+原生镜像构建写入候选 revision label。SBOM helper 接收 build action 的 config ID 与 build digest，核对实际镜像 ID/label，按不可变 config ID 扫描；身份收据绑定候选 SHA/Tree、app lock 与两份 SBOM 的 SHA-256。源码库存与运行镜像库存分类保留，既有收据不得覆盖。浏览器失败后仍独立采集已成功构建镜像的 SBOM，但整个验收 gate 继续失败；身份绑定不代表运行时许可闭合或 RELEASE_ACCEPTED。
