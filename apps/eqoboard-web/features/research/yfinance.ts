@@ -1,11 +1,13 @@
 import { projectChartRows, type ChartDisplayEvidence, type ChartPlotBar, type ChartStyle, type IndicatorId } from "@/charts";
 import {
   expectedYfinanceResearchRequest,
+  isYfinanceResearchSymbol,
   YFINANCE_RESEARCH_MAX_PAGES,
   validateYfinanceResearchResponse,
   type YfinanceResearchInput,
   type YfinanceResearchResponse,
 } from "./yfinance-contract";
+export { isYfinanceResearchSymbol } from "./yfinance-contract";
 
 export const YFINANCE_RESEARCH_RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const;
 export type YfinanceResearchRange = (typeof YFINANCE_RESEARCH_RANGES)[number];
@@ -35,6 +37,21 @@ export const DEFAULT_YFINANCE_RESEARCH_CONFIG: YfinanceResearchConfigV1 = Object
 const SYMBOL = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 const INDICATORS = new Set<IndicatorId>(["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "RSI", "MACD", "BOLL"]);
 const STYLES = new Set<ChartStyle>(["candles", "bars", "line", "area"]);
+
+/** Use only the server-authored distinct-host origin for the Research portal link. */
+export function buildYahooResearchPageHref(origin: string | null | undefined, symbol: string, currentHostname: string): string | null {
+  if (!isYfinanceResearchSymbol(symbol) || !origin) return null;
+  try {
+    const url = new URL(origin);
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (url.origin !== origin || url.username || url.password || url.pathname !== "/" || url.search || url.hash ||
+        (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) ||
+        url.hostname.toLowerCase() === currentHostname.toLowerCase()) return null;
+    return new URL(`/research/yfinance/${encodeURIComponent(symbol)}`, url.origin).toString();
+  } catch {
+    return null;
+  }
+}
 
 function plainRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -171,6 +188,13 @@ export function yfinanceResearchEvidence(
   const end = head.response.requested_range.end_utc;
   const returned = [...new Set(responses.flatMap((response) => response.observation.payload.returned_symbols))];
   const missing = [...new Set(responses.flatMap((response) => response.observation.payload.missing_symbols))];
+  const adapterVersions = [...new Set(responses
+    .map((response) => response.observation.payload.provenance.adapter_version)
+    .filter((version): version is string => typeof version === "string" && version.length > 0))];
+  const hasSyntheticFixtureMarker = adapterVersions.some((version) => version.startsWith("bounded-synthetic-e2e"));
+  const safeAdapterVersions = adapterVersions.map((version) =>
+    /^[A-Za-z0-9][A-Za-z0-9._:+/-]{0,119}$/u.test(version) ? version : "unrecognized adapter identifier (omitted)",
+  );
   return Object.freeze({
     mode: "yahoo-daily",
     source: "Yahoo Finance",
@@ -186,6 +210,10 @@ export function yfinanceResearchEvidence(
       { label: "Adjustment", value: `${config.adjustment}; provider semantics unconfirmed` },
       { label: "Source observed at", value: providerTimes.length === 1 ? providerTimes[0]! : "mixed / unknown" },
       { label: "Provider fetch", value: responses.map((response) => response.observation.fetched_at_utc).join(", ") },
+      { label: "Adapter provenance", value: safeAdapterVersions.join(", ") || "unknown" },
+      ...(hasSyntheticFixtureMarker
+        ? [{ label: "Fixture provenance", value: "Synthetic acceptance fixture · bounded-synthetic-e2e marker" }]
+        : []),
       { label: "Coverage assertion", value: "MDP does not assert coverage; calendar gaps are not assessed" },
       { label: "Authority", value: "Display only · non-canonical · non-PIT · non-executable" },
     ]),

@@ -1,8 +1,9 @@
 /*
- * Adapted from the MIT-licensed EqoBoard OpenTerminal contract at
- * apps/openterminal/web/lib/yfinance-research-contract.ts.
- * Source commit: aed097c680cd8ec1c391ae06966babe7d6d91fc6.
- * See native07-provenance.json for the file-level attribution.
+ * Adapted from EqoBoard's MIT-licensed PR59 validator at
+ * apps/openterminal/web/lib/yfinance-research-contract.ts, frozen at
+ * EqoBoard source commit fea1e952add7a11e799d6f9f198ddcee47fd12b6.
+ * That validator is not attributed to the separate OpenTerminal reference
+ * commit aed097c680cd8ec1c391ae06966babe7d6d91fc6. See native07-provenance.json.
  */
 
 export const YFINANCE_RESEARCH_SCHEMA = "mdp-yfinance-research-observations-v1" as const;
@@ -124,6 +125,11 @@ export type YfinanceResearchInput = Readonly<{
   adjustment: YfinanceResearchAdjustment;
   cursor?: string;
 }>;
+
+/** Small server-safe ticker guard for the dedicated Research page route. */
+export function isYfinanceResearchSymbol(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Z][A-Z0-9.-]{0,11}$/u.test(value);
+}
 
 export function expectedYfinanceResearchRequest(input: YfinanceResearchInput): ExpectedYfinanceResearchRequest {
   return Object.freeze({

@@ -47,10 +47,12 @@ dispatch boundaries. The anonymous browser lane checks each protected
 operation path and every recognized Gateway dispatch path. Do not add a
 test-auth bypass or public reset route.
 
-The candidate-only browser sample records observed navigation and usable-shell
-timings and transfer sizes. Signed-in workspace acceptance also observes tab
-save/reload and the layout-only export payload. These are candidate telemetry,
-not latency gates. Until the old deployment is available in the same Actions
+The candidate-only browser samples record observed navigation, usable-shell,
+first validated Yahoo chart render, and workspace save/reload timings and
+transfer sizes. The Yahoo sample is bound to the supplied candidate source SHA,
+browser version, fixture response size, and response SHA-256. Signed-in
+workspace acceptance also observes the layout-only export payload. These are
+candidate telemetry, not latency gates. Until the old deployment is available in the same Actions
 job, same-runner paired performance is `NOT_RUN`; that status blocks cutover.
 Auth, route, ownership, workspace, migration, and browser assertions now have
 source tests, but execution on the frozen candidate head remains `NOT_RUN`.
@@ -89,7 +91,10 @@ they are not Yahoo data, provider validation, or a source-quality claim. The
 fixture control API is exposed to the runner only on an ephemeral loopback
 port. Terminal-mode Yahoo calls must return 404 before MDP dispatch; anonymous
 and insufficient-scope Research calls must return 401/403 with zero MDP
-dispatch and zero delegation. A Research reader may reach the fixture with
+dispatch and zero delegation. The signed Research reader also requests
+terminal-only quote, status, stream, order-preview, Engine, and workspace
+routes; they must return 404 before the Gateway dispatch counter changes. A
+Research reader may reach the fixture with
 only `market:read`, and the observed payload must preserve its
 noncanonical/non-PIT/non-executable/display-only flags and unknown adjustment
 semantics. These assertions are source-only until the production Compose lane
@@ -107,11 +112,16 @@ prediction and Engine routes. The workspace-only fixture identity is also used
 to test the 403-before-MDP Research boundary. The browser recovery assertion
 restores a partition-scoped pre-delete snapshot; a source unit test separately
 proves that failed replacement backup leaves the current document unchanged.
-Browser checks must
-assert cookie/session isolation between the terminal and Research hostnames,
-Yahoo pagination and chart provenance in Research mode, and absence of provider
-or broker browser requests once those UI controls land. These source assertions
-do not count as a passed Actions run or production rollback proof.
+The current host-isolation browser test checks cookie/session isolation between
+the terminal and Research hostnames. The route-level Yahoo API test verifies
+three cursor-linked pages and adjacent window bounds using the marked synthetic
+MDP fixture. The visible Research chart now has browser source assertions for
+anonymous zero-dispatch, visible source and synthetic-fixture provenance,
+display-only/noncanonical/non-PIT/nonexecutable facts, non-live chart mode,
+local SMA projection, ten-page explicit cursor loading, and absence of
+provider or broker browser requests. The existing order-book browser check
+also asserts no provider/broker requests for unsupported depth. These source
+assertions do not count as a passed Actions run or production rollback proof.
 
 ## Source-declared request and resource caps
 
@@ -303,8 +313,11 @@ different owner must never observe or alter that document.
 Local recovery snapshots are partitioned by the opaque auth snapshot. They are
 not credentials. Anonymous legacy layouts remain in their original storage
 until the user previews and explicitly confirms import. Import creates fresh
-IDs, validates the full document, and does not claim server ownership before
-the signed-in server save succeeds. Export is a strict workspace envelope and
+IDs, validates the full document, rechecks unchanged source bytes at
+confirmation, and does not claim server ownership before the signed-in server
+save succeeds. E2E covers both a successful explicit import and a source change
+between preview and confirmation; the latter must leave the owner document
+unchanged. Export is a strict workspace envelope and
 contains no auth/session, account, order, broker, or market-data payload.
 Tests must cover interrupted import, failed CAS, reload/recovery, and a second
 identity in a separate tab/profile.

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireRuntimeMode } from "@/lib/server/runtime-mode";
 import { authorizeRequest } from "@/lib/server/bff-security";
 import { consumePrincipalRateLimit } from "@/lib/server/rate-limit";
 import { authorizeMarketDelegation, readSipDailyBarsWithDelegation, readSipSnapshotsWithDelegation } from "@/lib/server/research/gateway";
@@ -193,6 +194,8 @@ async function dispatch(input: ResearchOperationInput, principal: Parameters<typ
 }
 
 export async function GET(request: Request, context: Readonly<{ params: Promise<{ operation: string }> }>): Promise<NextResponse> {
+  const modeError = requireRuntimeMode("terminal", request);
+  if (modeError) return modeError;
   const { operation } = await context.params;
   if (!ALLOWED_OPERATIONS.has(operation as ResearchOperationName)) return errorResponse("unknown_research_operation", 404);
   const authorization = await authorizeRequest(request, "research:read");

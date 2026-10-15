@@ -10,6 +10,8 @@ export type MdpFixtureCounters = Readonly<{
   fixture: string;
 }>;
 
+export type GatewayFixtureCounters = Readonly<{ calls: Readonly<Record<string, number>> }>;
+
 export type MockIdentity = "reader" | "writer" | "workspace-only";
 
 function requiredOrigin(name: string): string {
@@ -40,6 +42,23 @@ export function researchWebOrigin(): string {
 
 function mdpControlOrigin(): string {
   return requiredOrigin("E2E_MDP_FIXTURE_CONTROL_ORIGIN");
+}
+
+function gatewayControlOrigin(): string {
+  return requiredOrigin("E2E_FIXTURE_CONTROL_ORIGIN");
+}
+
+export async function resetGatewayFixtureCounters(request: APIRequestContext): Promise<void> {
+  const response = await request.post(new URL("/__test/counters/reset", gatewayControlOrigin()).toString());
+  expect(response.status()).toBe(200);
+}
+
+export async function readGatewayFixtureCounters(request: APIRequestContext): Promise<GatewayFixtureCounters> {
+  const response = await request.get(new URL("/__test/counters", gatewayControlOrigin()).toString());
+  expect(response.status()).toBe(200);
+  const value = await response.json() as unknown;
+  expect(value).toMatchObject({ calls: expect.any(Object) });
+  return value as GatewayFixtureCounters;
 }
 
 export async function resetMdpFixtureCounters(request: APIRequestContext): Promise<void> {

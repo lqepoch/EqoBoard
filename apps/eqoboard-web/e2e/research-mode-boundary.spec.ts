@@ -1,8 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { createHash } from "node:crypto";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import {
   YFINANCE_DAILY_QUERY,
+  readGatewayFixtureCounters,
   readMdpFixtureCounters,
   researchWebOrigin,
+  resetGatewayFixtureCounters,
   resetMdpFixtureCounters,
   signInAt,
   terminalWebOrigin,
@@ -10,6 +13,47 @@ import {
 
 const MDP_RESEARCH_ROUTE = "/v1/research/yfinance/daily";
 const SECRET_SENTINEL_PREFIX = "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_";
+
+function candidateSha(): string {
+  const sha = process.env.E2E_CANDIDATE_SHA;
+  if (!sha || !/^[0-9a-f]{40}$/iu.test(sha)) {
+    throw new Error("E2E_CANDIDATE_SHA must be the frozen native source-head SHA supplied by the Compose helper.");
+  }
+  return sha.toLowerCase();
+}
+
+async function attachResearchChartCandidateSample(
+  page: Page,
+  testInfo: TestInfo,
+  chartReadyMs: number,
+  apiBodyBytes: number,
+  fixtureResponseSha256: string,
+) {
+  const navigationMetrics = await page.evaluate(() => {
+    const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    return {
+      responseStartMs: entry?.responseStart ?? null,
+      domContentLoadedMs: entry?.domContentLoadedEventEnd ?? null,
+      transferBytes: entry?.transferSize ?? null,
+      encodedBodyBytes: entry?.encodedBodySize ?? null,
+      decodedBodyBytes: entry?.decodedBodySize ?? null,
+    };
+  });
+  await testInfo.attach("yahoo-research-candidate-sample", {
+    body: JSON.stringify({
+      evidenceStatus: "candidate-sample-only; paired-legacy-baseline-not-run",
+      candidateSha: candidateSha(),
+      origin: new URL(page.url()).origin,
+      browserVersion: page.context().browser()?.version() ?? null,
+      chartReadyMs,
+      firstValidatedApiResponseBytes: apiBodyBytes,
+      fixtureResponseSha256,
+      fixtureLabel: "native-e2e synthetic fixture; not provider data",
+      ...navigationMetrics,
+    }, null, 2),
+    contentType: "application/json",
+  });
+}
 
 type YfinanceObservation = Readonly<{
   schema_version: string;
@@ -33,8 +77,15 @@ type YfinanceObservation = Readonly<{
       display_only: boolean;
       coverage: Readonly<{ calendar_gaps_assessed: boolean }>;
       provenance: Readonly<{ adapter_version: string }>;
+      bars: readonly Readonly<{ event_ts_utc: string }>[];
     }>;
   }>;
+}>;
+
+type PagedYfinanceObservation = YfinanceObservation & Readonly<{
+  requested_range: Readonly<{ start_utc: string; end_utc: string; semantics: string }>;
+  page_range: Readonly<{ start_utc: string; end_utc: string; semantics: string }>;
+  next_cursor: string | null;
 }>;
 
 test("@api Yahoo history is isolated to the signed research mode and fails before MDP on authz errors", async ({
@@ -45,6 +96,7 @@ test("@api Yahoo history is isolated to the signed research mode and fails befor
   const terminalOrigin = terminalWebOrigin();
   const researchOrigin = researchWebOrigin();
   const yahooPath = `/api/research/yfinance/daily?${YFINANCE_DAILY_QUERY}`;
+  await resetGatewayFixtureCounters(request);
   await resetMdpFixtureCounters(request);
 
   const terminalResponse = await page.request.get(new URL(yahooPath, terminalOrigin).toString(), {
@@ -62,6 +114,40 @@ test("@api Yahoo history is isolated to the signed research mode and fails befor
   expect(anonymousResearch.headers()["cache-control"]).toMatch(/no-store/u);
   expect(await anonymousResearch.json()).toEqual({ error: "unauthenticated" });
   expect((await readMdpFixtureCounters(request)).calls[MDP_RESEARCH_ROUTE] ?? 0).toBe(0);
+
+  const researchReaderContext = await browser.newContext();
+  const researchReaderPage = await researchReaderContext.newPage();
+  try {
+    await signInAt(researchReaderPage, researchOrigin, "reader", "/");
+    const terminalOnlyPaths = [
+      "/api/quotes?symbols=SPY",
+      "/api/status",
+      "/api/eqo/live",
+      "/api/eqo/orders/preview",
+      "/api/eqo/engine/status",
+      "/api/workspaces",
+    ];
+    for (const path of terminalOnlyPaths) {
+      const response = await researchReaderPage.request.fetch(new URL(path, researchOrigin).toString(), {
+        method: path.endsWith("/preview") ? "POST" : "GET",
+        ...(path.endsWith("/preview") ? { headers: { "Content-Type": "application/json", Origin: researchOrigin }, data: {} } : {}),
+      });
+      expect(response.status(), path).toBe(404);
+      expect(await response.json(), path).toEqual({ error: "not_found" });
+    }
+    const dispatches = await readGatewayFixtureCounters(request);
+    for (const path of [
+      "/api/v1/stocks/snapshots",
+      "/api/v1/status",
+      "/api/v1/stream/sse",
+      "/api/v1/orders/preview",
+    ]) {
+      expect(dispatches.calls[path] ?? 0, `Research runtime must not dispatch terminal route ${path}`).toBe(0);
+    }
+    expect((await readMdpFixtureCounters(request)).calls[MDP_RESEARCH_ROUTE] ?? 0).toBe(0);
+  } finally {
+    await researchReaderContext.close();
+  }
 
   const workspaceOnlyContext = await browser.newContext();
   const workspaceOnlyPage = await workspaceOnlyContext.newPage();
@@ -136,6 +222,195 @@ test("@api a research reader receives only the validated Yahoo observation and a
     expect(counters.acceptedDelegations).toBe(1);
     expect(counters.rejectedDelegations).toBe(0);
     expect(counters.fixture).toContain("synthetic fixture");
+  } finally {
+    await context.close();
+  }
+});
+
+test("@component Yahoo Research chart stays display-only, source-labelled, and explicitly paginated", async ({
+  browser,
+  page,
+  request,
+}, testInfo) => {
+  const researchOrigin = researchWebOrigin();
+  const researchPath = "/research/yfinance/SPY";
+
+  await resetMdpFixtureCounters(request);
+  await page.goto(new URL(researchPath, researchOrigin).toString(), { waitUntil: "networkidle" });
+  await expect(page.getByTestId("yahoo-research-page")).toBeVisible();
+  await expect(page.getByText("Sign in with research:read to load Yahoo daily observations.")).toBeVisible();
+  await expect(page.getByTestId("yahoo-research-chart")).toHaveCount(0);
+  expect((await readMdpFixtureCounters(request)).calls[MDP_RESEARCH_ROUTE] ?? 0).toBe(0);
+
+  const context = await browser.newContext();
+  const researchPage = await context.newPage();
+  const browserRequests: string[] = [];
+  try {
+    await signInAt(researchPage, researchOrigin, "reader", "/");
+    await resetMdpFixtureCounters(request);
+    researchPage.on("request", (browserRequest) => browserRequests.push(browserRequest.url()));
+
+    const chartStartedAt = Date.now();
+    const initialRead = researchPage.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/research/yfinance/daily",
+    );
+    await researchPage.goto(new URL(researchPath, researchOrigin).toString(), { waitUntil: "domcontentloaded" });
+    const initialResponse = await initialRead;
+    expect(initialResponse.status()).toBe(200);
+    const firstApiBody = await initialResponse.body();
+    const firstApiBodyBytes = firstApiBody.byteLength;
+    const fixtureResponseSha256 = createHash("sha256").update(firstApiBody).digest("hex");
+
+    const chart = researchPage.getByTestId("yahoo-research-chart");
+    const evidence = chart.getByTestId("native-chart-provenance");
+    await expect(chart).toBeVisible();
+    await expect(chart).toHaveAttribute("data-history-status", "ready");
+    await expect(researchPage.getByTestId("yahoo-indicator-sma20")).toBeChecked();
+    await expect(evidence).toHaveAttribute("data-chart-mode", "yahoo-daily");
+    await expect(evidence).toContainText("Yahoo Finance");
+    await expect(evidence).toContainText("yfinance");
+    await expect(evidence).toContainText("provider-float");
+    await expect(evidence).toContainText("MDP coverage not asserted");
+    await expect(evidence).toContainText("Display only · non-canonical · non-PIT · non-executable");
+    await expect(evidence).toContainText("Synthetic acceptance fixture · bounded-synthetic-e2e");
+    await expect(chart.getByTestId("native-chart-surface")).toHaveAttribute("data-chart-live", "false");
+    await expect(chart).toContainText("provider adjustment semantics are unconfirmed");
+    await expect(researchPage.getByTestId("native-chart-tradingview-attribution")).toContainText("TradingView Lightweight Charts");
+    await expect(chart.getByTestId("native-chart-crosshair")).toContainText("25 loaded bars");
+    const chartReadyMs = Date.now() - chartStartedAt;
+    await expect(researchPage.locator("body")).not.toContainText(/PAPER_READY|FILLED|simulator-fallback/iu);
+    expect((await readMdpFixtureCounters(request)).calls[MDP_RESEARCH_ROUTE]).toBe(1);
+    await attachResearchChartCandidateSample(
+      researchPage,
+      testInfo,
+      chartReadyMs,
+      firstApiBodyBytes,
+      fixtureResponseSha256,
+    );
+
+    // Indicator changes are local display projections; widening the requested window is an explicit read.
+    await researchPage.getByTestId("yahoo-indicator-sma20").uncheck();
+    await researchPage.getByTestId("yahoo-indicator-sma20").check();
+    const maxRangeReadPromise = researchPage.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/research/yfinance/daily" && url.searchParams.get("cursor") === null;
+    });
+    await researchPage.getByLabel("Daily window").selectOption("MAX");
+    const maxRangeRead = await maxRangeReadPromise;
+    expect(maxRangeRead.status()).toBe(200);
+
+    const olderPageButton = chart.getByTestId("native-chart-load-older");
+    await expect(olderPageButton).toBeVisible();
+    for (let pageNumber = 2; pageNumber <= 10; pageNumber += 1) {
+      const cursor = `older:${pageNumber - 1}`;
+      const olderRead = researchPage.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === "/api/research/yfinance/daily" && url.searchParams.get("cursor") === cursor;
+      });
+      await olderPageButton.click();
+      expect((await olderRead).status(), `Research page ${pageNumber}`).toBe(200);
+      if (pageNumber < 10) await expect(olderPageButton).toBeEnabled();
+    }
+
+    await expect(olderPageButton).toHaveCount(0);
+    await expect(evidence).toContainText("10 page(s)");
+    const counters = await readMdpFixtureCounters(request);
+    expect(counters.calls[MDP_RESEARCH_ROUTE]).toBe(11); // initial 1M, MAX head, and nine explicit older pages
+    expect(counters.acceptedDelegations).toBe(11);
+    expect(counters.rejectedDelegations).toBe(0);
+    expect(counters.fixture).toBe("native-e2e synthetic fixture; not provider data");
+
+    const externalProviderRequests = browserRequests.filter((rawUrl) =>
+      /(?:^|\.)yahoo(?:apis)?\.|finance\.yahoo|futu|alpaca|interactivebrokers|schwab/iu.test(new URL(rawUrl).hostname),
+    );
+    expect(externalProviderRequests).toEqual([]);
+    expect(browserRequests.filter((rawUrl) => new URL(rawUrl).origin !== researchOrigin)).toEqual([]);
+    const terminalMarketRequests = browserRequests.filter((rawUrl) =>
+      ["/api/eqo/live", "/api/eqo/stocks/subscribe", "/api/eqo/options/subscribe"].includes(new URL(rawUrl).pathname),
+    );
+    expect(terminalMarketRequests).toEqual([]);
+    const serializedClientState = await researchPage.evaluate(() => JSON.stringify({
+      markup: document.documentElement.outerHTML,
+      localStorage: Object.entries(localStorage),
+      sessionStorage: Object.entries(sessionStorage),
+      cookies: document.cookie,
+    }));
+    expect(serializedClientState).not.toContain(SECRET_SENTINEL_PREFIX);
+    expect(serializedClientState).not.toMatch(/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u);
+  } finally {
+    await context.close();
+  }
+});
+
+test("@api Yahoo pagination preserves adjacent page bounds, explicit cursors, and source flags", async ({
+  browser,
+  request,
+}) => {
+  const researchOrigin = researchWebOrigin();
+  const query = new URLSearchParams({
+    symbols: "SPY",
+    asset_class: "stock",
+    start_utc: "2000-01-01T00:00:00.000Z",
+    end_utc: "2026-01-01T00:00:00.000Z",
+    adjustment: "adjusted",
+  });
+  const firstPageUrl = new URL(`/api/research/yfinance/daily?${query.toString()}`, researchOrigin).toString();
+  await resetMdpFixtureCounters(request);
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await signInAt(page, researchOrigin, "reader", "/");
+    await resetMdpFixtureCounters(request);
+    const firstResponse = await page.request.get(firstPageUrl, { headers: { Accept: "application/json" } });
+    expect(firstResponse.status()).toBe(200);
+    const first = await firstResponse.json() as PagedYfinanceObservation;
+    expect(first.next_cursor).toBe("older:1");
+    if (first.next_cursor === null) throw new Error("The first page must expose an explicit older cursor for this range.");
+    expect(first.page_range.semantics).toBe("start_inclusive_end_exclusive");
+    expect(first.page_range.end_utc).toBe(first.requested_range.end_utc);
+
+    const secondUrl = new URL(firstPageUrl);
+    secondUrl.searchParams.set("cursor", first.next_cursor);
+    const secondResponse = await page.request.get(secondUrl.toString(), { headers: { Accept: "application/json" } });
+    expect(secondResponse.status()).toBe(200);
+    const second = await secondResponse.json() as PagedYfinanceObservation;
+    expect(second.requested_range).toEqual(first.requested_range);
+    expect(second.page_range.end_utc).toBe(first.page_range.start_utc);
+    expect(second.next_cursor).toBe("older:2");
+    if (second.next_cursor === null) throw new Error("The second page must expose an explicit older cursor for this range.");
+
+    const thirdUrl = new URL(firstPageUrl);
+    thirdUrl.searchParams.set("cursor", second.next_cursor);
+    const thirdResponse = await page.request.get(thirdUrl.toString(), { headers: { Accept: "application/json" } });
+    expect(thirdResponse.status()).toBe(200);
+    const third = await thirdResponse.json() as PagedYfinanceObservation;
+    expect(third.requested_range).toEqual(first.requested_range);
+    expect(third.page_range.end_utc).toBe(second.page_range.start_utc);
+    expect(third.page_range.start_utc).toBe(first.requested_range.start_utc);
+    expect(third.next_cursor).toBeNull();
+
+    for (const observation of [first, second, third]) {
+      expect(observation).toMatchObject({
+        source: "Yahoo Finance",
+        canonical: false,
+        point_in_time: false,
+        executable: false,
+        display_only: true,
+        mdp_coverage_asserted: false,
+      });
+      expect(observation.observation.payload.coverage.calendar_gaps_assessed).toBe(false);
+      expect(observation.observation.payload.provenance.adapter_version).toContain("bounded-synthetic-e2e");
+      for (const bar of observation.observation.payload.bars) {
+        expect(Date.parse(bar.event_ts_utc)).toBeGreaterThanOrEqual(Date.parse(observation.page_range.start_utc));
+        expect(Date.parse(bar.event_ts_utc)).toBeLessThan(Date.parse(observation.page_range.end_utc));
+      }
+    }
+
+    const counters = await readMdpFixtureCounters(request);
+    expect(counters.calls[MDP_RESEARCH_ROUTE]).toBe(3);
+    expect(counters.acceptedDelegations).toBe(3);
+    expect(counters.rejectedDelegations).toBe(0);
   } finally {
     await context.close();
   }

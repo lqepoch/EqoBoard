@@ -40,6 +40,8 @@ describe("legacy-to-native static registry parity", () => {
     ];
     expect(new Set(accountedTypes).size).toBe(accountedTypes.length);
     expect([...accountedTypes].sort()).toEqual([...LEGACY_WIDGET_TYPES].sort());
+    const mappedManifestIds = LEGACY_NATIVE_WIDGET_BINDINGS.map(({ manifestId }) => manifestId);
+    expect(new Set(mappedManifestIds).size).toBe(mappedManifestIds.length);
 
     for (const { legacyType, manifestId } of LEGACY_NATIVE_WIDGET_BINDINGS) {
       const registration = builtinWidgetRegistry.get(manifestId);

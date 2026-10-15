@@ -129,3 +129,48 @@ test("@api legacy storage is preview-only anonymously and imports by explicit co
     await expect(inertCard).toContainText("This widget type is not installed in the native registry.");
   }
 });
+
+test("@api a changed legacy source cannot commit a stale preview to the signed-in owner", async ({ page }) => {
+  const original = legacyLayout();
+  const changed = JSON.stringify({
+    version: 0,
+    state: {
+      activeSymbol: "DIA",
+      widgets: [{ id: "changed-legacy-quote", type: "quote", linked: true }],
+      layout: [{ i: "changed-legacy-quote", x: 0, y: 0, w: 4, h: 4 }],
+      watchlist: ["DIA"],
+      commandOpen: false,
+      optionLegs: [],
+    },
+  });
+  await page.addInitScript(({ key, raw }) => window.localStorage.setItem(key, raw), {
+    key: LEGACY_KEY,
+    raw: original,
+  });
+  await page.goto(webOrigin(), { waitUntil: "domcontentloaded" });
+  await signInAsWriter(page);
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  const beforeResponse = await page.request.get(new URL("/api/workspaces", webOrigin()).toString(), {
+    headers: { Accept: "application/json" },
+  });
+  expect(beforeResponse.status()).toBe(200);
+  const before = await beforeResponse.json() as { document: unknown };
+
+  await page.getByTestId("workspace-legacy-import-preview").click();
+  await expect(page.getByTestId("workspace-legacy-import-preview-result")).toContainText("2 widgets");
+  await page.evaluate(({ key, raw }) => window.localStorage.setItem(key, raw), {
+    key: LEGACY_KEY,
+    raw: changed,
+  });
+  await page.getByTestId("workspace-legacy-import-confirm").click();
+  await expect(page.locator("body")).toContainText("The saved legacy layout changed after preview.");
+  await expect(page.getByTestId("workspace-legacy-import-preview-result")).toHaveCount(0);
+
+  const response = await page.request.get(new URL("/api/workspaces", webOrigin()).toString(), {
+    headers: { Accept: "application/json" },
+  });
+  expect(response.status()).toBe(200);
+  const saved = await response.json() as { document: unknown };
+  expect(saved.document).toEqual(before.document);
+  expect(await page.evaluate((key) => localStorage.getItem(key), LEGACY_KEY)).toBe(changed);
+});

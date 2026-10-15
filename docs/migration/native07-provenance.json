@@ -2,49 +2,93 @@
   "schemaVersion": 1,
   "auditDate": "2026-10-15",
   "sourceRepository": "https://github.com/lqepoch/EqoBoard",
-  "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+  "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
   "sourceLicense": "MIT",
   "noticePath": "apps/openterminal/LICENSE",
+  "openTerminalReference": {
+    "repository": "https://github.com/lqepoch/EqoBoard",
+    "pathPrefix": "apps/openterminal",
+    "commit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+    "license": "MIT",
+    "noticePath": "apps/openterminal/LICENSE"
+  },
   "records": [
     {
       "nativePath": "apps/eqoboard-web/features/research/yfinance-contract.ts",
-      "sourcePaths": ["apps/openterminal/web/lib/yfinance-research-contract.ts"],
-      "relationship": "targeted-validator-adaptation",
-      "changes": "Adapts the provider-native Yahoo daily response validation to the native Research feature boundary; preserves the validated MDP/Yahoo DTO and does not convert it into Core/SIP bars."
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourcePath": "apps/openterminal/web/lib/yfinance-research-contract.ts",
+      "sourceSha256": "d45d0001670b133308aaab604d89be4b43912082e59f08bc2d4cde3b43874aca",
+      "relationship": "targeted-adaptation-of-eqoboard-pr59-validator",
+      "changes": "Adapts EqoBoard PR59's provider-native Yahoo daily response validator. This validator is not attributed to the separate OpenTerminal reference commit; preserves the MDP/Yahoo DTO without conversion to Core/SIP bars."
     },
     {
       "nativePath": "apps/eqoboard-web/lib/server/research/news.ts",
-      "sourcePaths": ["apps/openterminal/server/src/providers/news.ts", "apps/openterminal/server/src/routes/market.ts"],
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/news.ts", "sha256": "5fbcf5cdf924935dbd16acd8e874f51beb391741346f3af9ebb548ef7365c616" },
+        { "path": "apps/openterminal/server/src/routes/market.ts", "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
       "relationship": "provider-behavior-adaptation",
-      "changes": "Keeps fixed Yahoo Finance and Google News RSS sources and headline-only projection; adds bounded XML parsing, safe links, native partial/unavailable envelopes, deadlines, and explicit terms warning."
+      "changes": "Keeps fixed Yahoo Finance and Google News RSS sources and headline-only projection; adds bounded XML parsing, safe links, native partial/unavailable envelopes, deadlines and explicit terms warning."
     },
     {
       "nativePath": "apps/eqoboard-web/lib/server/research/macro.ts",
-      "sourcePaths": ["apps/openterminal/server/src/providers/fred.ts", "apps/openterminal/server/src/providers/ecb.ts", "apps/openterminal/server/src/routes/market.ts"],
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/fred.ts", "sha256": "38076119c097f224668f87bfae9a87d51cfa677c752dce172a044d2dc66460a2" },
+        { "path": "apps/openterminal/server/src/providers/ecb.ts", "sha256": "ba39dfa64a7484aadaae77424760c9637677d321738b3079c3ce8677e01151cb" },
+        { "path": "apps/openterminal/server/src/routes/market.ts", "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
       "relationship": "provider-behavior-adaptation",
       "changes": "Retains fixed FRED and ECB series/provider origins and per-series observation dates; uses separately labeled existing Gateway SIP snapshot reads for index proxies, with no fabricated as-of."
     },
     {
       "nativePath": "apps/eqoboard-web/lib/server/research/calendar.ts",
-      "sourcePaths": ["apps/openterminal/server/src/providers/econcalendar.ts", "apps/openterminal/server/src/providers/tradingview.ts", "apps/openterminal/server/src/providers/nasdaq.ts", "apps/openterminal/server/src/routes/market.ts"],
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/econcalendar.ts", "sha256": "b455eaaba05b169a587f54e7e633306c605cec94e8a5d1061095a642ee38c76f" },
+        { "path": "apps/openterminal/server/src/providers/tradingview.ts", "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3" },
+        { "path": "apps/openterminal/server/src/providers/nasdaq.ts", "sha256": "849c235487aef9bb30184c60505bbdea913b3c3a542d460b90ba955c7a667e9a" },
+        { "path": "apps/openterminal/server/src/routes/market.ts", "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
       "relationship": "provider-behavior-adaptation",
-      "changes": "Retains fixed economic schedule, earnings estimate, and history source paths; keeps event/report/source time fields distinct and returns bounded partial outcomes for source failures."
+      "changes": "Retains fixed economic schedule, earnings estimate and history source paths; keeps event/report/source time fields distinct and returns bounded partial outcomes for source failures."
     },
     {
       "nativePath": "apps/eqoboard-web/lib/server/research/insider.ts",
-      "sourcePaths": ["apps/openterminal/server/src/providers/secedgar.ts", "apps/openterminal/server/src/routes/market.ts"],
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/secedgar.ts", "sha256": "6e43420c231baecd64374113650b4b8b40cdb5c8244ca2d1a5557a1dac147d2e" },
+        { "path": "apps/openterminal/server/src/routes/market.ts", "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
       "relationship": "provider-behavior-adaptation",
-      "changes": "Retains SEC company ticker, submissions, and Form 4 source path; applies a server-configured contact, serialized rate spacing, bounded requests/XML parsing, and partial filing-failure evidence."
+      "changes": "Retains SEC company ticker, submissions and Form 4 source path; applies a server-configured contact, serialized rate spacing, bounded requests/XML parsing and partial filing-failure evidence."
     },
     {
       "nativePath": "apps/eqoboard-web/lib/server/research/screener.ts",
-      "sourcePaths": ["apps/openterminal/server/src/providers/tradingview.ts", "apps/openterminal/server/src/routes/market.ts"],
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/tradingview.ts", "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3" },
+        { "path": "apps/openterminal/server/src/routes/market.ts", "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
       "relationship": "provider-behavior-adaptation",
       "changes": "Retains fixed TradingView security scans and existing Gateway SIP snapshot join semantics; separates metadata and market prices, preserves per-field source/time evidence, and reports coverage/truncation."
     },
     {
       "nativePath": "apps/eqoboard-web/lib/server/research/crypto.ts",
-      "sourcePaths": ["apps/openterminal/server/src/providers/coingecko.ts", "apps/openterminal/server/src/providers/binance.ts", "apps/openterminal/server/src/routes/market.ts"],
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/coingecko.ts", "sha256": "a53721a2fc3c191bf4020b85ff55a4d5375b0d41be0106e4f595af9710b638e5" },
+        { "path": "apps/openterminal/server/src/providers/binance.ts", "sha256": "cf61698bd7a7333c1797cd07b7b50d09e15fd873dd37db7d21edd55b71e3aa89" },
+        { "path": "apps/openterminal/server/src/routes/market.ts", "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
       "relationship": "provider-behavior-adaptation",
       "changes": "Retains the existing CoinGecko market/global and Binance public-market source paths/fallback role; preserves actual source timestamps where supplied and does not claim streaming freshness."
     }
@@ -52,6 +96,9 @@
   "independentlyAuthoredNativePaths": [
     "apps/eqoboard-web/app/api/research/data/[operation]/route.ts",
     "apps/eqoboard-web/app/api/research/ai/route.ts",
+    "apps/eqoboard-web/app/api/research/yfinance/daily/route.ts",
+    "apps/eqoboard-web/app/research/yfinance/[symbol]/page.tsx",
+    "apps/eqoboard-web/features/research/YahooResearchPage.tsx",
     "apps/eqoboard-web/lib/server/research/cache.ts",
     "apps/eqoboard-web/lib/server/research/gateway.ts",
     "apps/eqoboard-web/lib/server/research/input.ts",
@@ -66,7 +113,8 @@
     "apps/eqoboard-web/widgets/research/"
   ],
   "notes": [
-    "Relationship labels describe limited behavior adaptation, not a wholesale source copy.",
+    "Relationship labels describe limited behavior adaptation, not wholesale source copying.",
+    "The Yahoo contract validator was added in EqoBoard PR59 and is attributed to the frozen EqoBoard source baseline, not the separate OpenTerminal reference commit.",
     "OpenBB Workspace product code is not a source for these native files.",
     "Provider terms and data redistribution rights are separate from the MIT source license and remain individually unverified.",
     "Provider data is never synthesized to fill missing responses or values."

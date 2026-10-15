@@ -11,6 +11,30 @@
   font-size: 0.82rem;
 }
 
+.researchPage {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 112rem;
+  margin: 0 auto;
+  padding: 1rem;
+  color: var(--eqo-fg, #e8edf4);
+}
+
+.researchPageHeader {
+  padding: 0.25rem 0.2rem;
+}
+
+.researchPageHeader p {
+  margin: 0 0 0.3rem;
+  color: var(--eqo-muted, #9ca8b7);
+  font-size: 0.75rem;
+}
+
+.researchPageHeader h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
 .header {
   display: flex;
   align-items: flex-start;

@@ -6,6 +6,7 @@ import { CHART_INDICATORS, type IndicatorId } from "@/charts/types";
 import type { NativeDataOperationMap } from "@/features/data/operations";
 import {
   buildYfinanceResearchInput,
+  buildYahooResearchPageHref,
   canLoadOlderPages,
   isYfinanceCursorLoop,
   parseYfinanceResearchResponse,
@@ -18,10 +19,13 @@ import {
 import type { YfinanceResearchInput } from "@/features/research/yfinance-contract";
 import type { WidgetProps } from "@/widgets/sdk/contracts";
 import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
+import { useAuth as useFullAuth } from "@/components/auth/AuthProvider";
 import styles from "./research-widgets.module.css";
 
 type YahooDailyOperationMap = Pick<NativeDataOperationMap, "research.yahoo.daily">;
 type Props = WidgetProps<YfinanceResearchConfigV1, YahooDailyOperationMap, WidgetNoActionMap>;
+type RequiredHost = Pick<Props["host"], "auth" | "data" | "lifecycle">;
+export type YfinanceDailyWidgetProps = Pick<Props, "config" | "inputs" | "onConfigChange"> & Readonly<{ host: RequiredHost }>;
 
 type HistoryState = Readonly<{
   requestKey: string;
@@ -36,11 +40,13 @@ function emptyState(requestKey: string, status: HistoryState["status"] = "idle")
   return { requestKey, status, pages: [], loadingOlder: false, paginationBlocked: false, error: null };
 }
 
-export function YfinanceDailyWidget({ config, inputs, host, onConfigChange }: Props) {
+export function YfinanceDailyWidget({ config, inputs, host, onConfigChange }: YfinanceDailyWidgetProps) {
+  const fullAuth = useFullAuth();
   const [anchorNow, setAnchorNow] = useState(() => Date.now());
   const [history, setHistory] = useState<HistoryState>(() => emptyState(""));
   const activeRequest = useRef<AbortController | null>(null);
-  const allowed = host.auth.authenticated && host.auth.permissions.includes("research:read");
+  const allowed = fullAuth.runtimeMode === "research" && fullAuth.authenticated &&
+    fullAuth.permissions.includes("research:read") && host.auth.authenticated && host.auth.permissions.includes("research:read");
   const request = useMemo(
     () => buildYfinanceResearchInput(config, inputs.symbol, anchorNow),
     [config.symbol, config.assetClass, config.range, config.adjustment, inputs.symbol, anchorNow],
@@ -158,6 +164,29 @@ export function YfinanceDailyWidget({ config, inputs, host, onConfigChange }: Pr
 
   const olderAvailable = canLoadOlderPages(current.pages, current.paginationBlocked);
 
+  if (fullAuth.runtimeMode !== "research") {
+    const symbol = request?.symbol ?? config.symbol;
+    const researchHref = typeof window === "undefined"
+      ? null
+      : buildYahooResearchPageHref(fullAuth.researchOrigin, symbol, window.location.hostname);
+    return (
+      <section className={styles.widget} aria-label="Yahoo daily research history" data-testid="yahoo-daily-research-widget">
+        <header className={styles.header}>
+          <div><h2>Yahoo daily research</h2><p>Yahoo history is served by a separately isolated Research runtime.</p></div>
+        </header>
+        {researchHref ? (
+          <p className={styles.empty}>
+            <a href={researchHref} data-testid="yahoo-research-portal-link">Open isolated Research chart for {symbol}</a>
+          </p>
+        ) : (
+          <p className={styles.empty} data-testid="yahoo-research-portal-unavailable">
+            The isolated Research hostname is not configured for this terminal session.
+          </p>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className={styles.widget} aria-label="Yahoo daily research history" data-testid="yahoo-daily-research-widget">
       <header className={styles.header}>
@@ -204,6 +233,7 @@ export function YfinanceDailyWidget({ config, inputs, host, onConfigChange }: Pr
           {CHART_INDICATORS.map((indicator) => (
             <label key={indicator}>
               <input type="checkbox" checked={config.indicators.includes(indicator)}
+                data-testid={`yahoo-indicator-${indicator.toLowerCase()}`}
                 onChange={(event) => toggleIndicator(indicator, event.currentTarget.checked)} />
               {indicator}
             </label>
@@ -214,6 +244,7 @@ export function YfinanceDailyWidget({ config, inputs, host, onConfigChange }: Pr
       {allowed && !request ? <p className={styles.empty}>Enter a supported symbol or bind this widget to the active symbol.</p> : null}
       {allowed && current.error ? <p className={styles.error} role="alert">{current.error}</p> : null}
       {allowed ? (
+        <div data-testid="yahoo-research-chart" data-history-status={current.status}>
         <ChartSurface
           symbol={(request?.symbol ?? config.symbol) || "Yahoo"}
           identity={requestKey}
@@ -233,6 +264,7 @@ export function YfinanceDailyWidget({ config, inputs, host, onConfigChange }: Pr
           olderPageLoading={current.loadingOlder}
           onRequestOlder={loadOlder}
         />
+        </div>
       ) : null}
     </section>
   );

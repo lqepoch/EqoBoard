@@ -176,7 +176,8 @@ function syntheticObservation(input) {
     bars,
     provenance: {
       acquired_at: offsetNow,
-      adapter_version: "bounded-synthetic-e2e; derived from accepted OpenTerminal fixture contract",
+      // Stable identifier for the visibly synthetic fixture, based on the accepted OpenTerminal DTO contract.
+      adapter_version: "bounded-synthetic-e2e-v1",
       adjustment: input.adjustment,
       cache_status: "network",
       config_fingerprint: "a".repeat(64),

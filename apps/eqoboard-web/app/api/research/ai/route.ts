@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { parseResearchAiRequest, type ResearchAiResponse } from "@/features/research/ai";
 import { authorizeRequest, readBoundedJson } from "@/lib/server/bff-security";
 import { consumePrincipalRateLimit } from "@/lib/server/rate-limit";
+import { requireRuntimeMode } from "@/lib/server/runtime-mode";
 import { readProviderJson } from "@/lib/server/research/transport";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const modeError = requireRuntimeMode("terminal", request);
+  if (modeError) return modeError;
   const authorization = await authorizeRequest(request, "research:ai");
   if (!authorization.ok) return authorization.response;
   const limited = await consumePrincipalRateLimit(authorization.principal, {

@@ -6,10 +6,12 @@ import { authorizeMarketDelegation } from "@/lib/server/research/gateway";
 import { loadMacro } from "@/lib/server/research/macro";
 import { loadNews } from "@/lib/server/research/news";
 import { clearResearchCacheForTests } from "@/lib/server/research/cache";
+import { requireRuntimeMode } from "@/lib/server/runtime-mode";
 import { GET } from "./route";
 
 vi.mock("@/lib/server/bff-security", () => ({ authorizeRequest: vi.fn() }));
 vi.mock("@/lib/server/rate-limit", () => ({ consumePrincipalRateLimit: vi.fn() }));
+vi.mock("@/lib/server/runtime-mode", () => ({ requireRuntimeMode: vi.fn() }));
 vi.mock("@/lib/server/research/gateway", () => ({
   authorizeMarketDelegation: vi.fn(),
   readSipSnapshotsWithDelegation: vi.fn(),
@@ -36,10 +38,21 @@ function context(operation: string) {
 beforeEach(() => {
   vi.resetAllMocks();
   clearResearchCacheForTests();
+  vi.mocked(requireRuntimeMode).mockReturnValue(null);
   vi.mocked(consumePrincipalRateLimit).mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
 });
 
 describe("closed native research data route", () => {
+  it("hides the terminal-only provider route before authorization in Research mode", async () => {
+    vi.mocked(requireRuntimeMode).mockReturnValue(new Response(JSON.stringify({ error: "not_found" }), { status: 404 }) as never);
+    const response = await GET(routeRequest("news"), context("news"));
+
+    expect(response.status).toBe(404);
+    expect(requireRuntimeMode).toHaveBeenCalledWith("terminal", expect.any(Request));
+    expect(authorizeRequest).not.toHaveBeenCalled();
+    expect(loadNews).not.toHaveBeenCalled();
+  });
+
   it("rejects unknown operations before authorization or provider dispatch", async () => {
     const response = await GET(routeRequest("arbitrary"), context("arbitrary"));
 

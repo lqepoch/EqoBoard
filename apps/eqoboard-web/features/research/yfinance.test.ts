@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildYfinanceResearchInput,
+  buildYahooResearchPageHref,
   canLoadOlderPages,
   DEFAULT_YFINANCE_RESEARCH_CONFIG,
   isYfinanceCursorLoop,
@@ -40,7 +41,7 @@ const page = {
   },
   response: {
     requested_range: { start_utc: "2026-10-01T00:00:00.000Z", end_utc: "2026-10-15T00:00:00.000Z" },
-    observation: { payload: { bars: [row], status: "ready", returned_symbols: ["AAPL"], missing_symbols: [], source_observed_at: "2026-10-15T01:00:00.000Z", fetched_at: "2026-10-15T01:00:01.000Z" } },
+    observation: { payload: { bars: [row], status: "ready", returned_symbols: ["AAPL"], missing_symbols: [], source_observed_at: "2026-10-15T01:00:00.000Z", fetched_at: "2026-10-15T01:00:01.000Z", provenance: { adapter_version: "bounded-synthetic-e2e-v1" } } },
     next_cursor: "older-1",
   },
 } as unknown as YfinanceResearchPage;
@@ -59,6 +60,19 @@ describe("Yahoo daily research adapter", () => {
     });
     expect(parseYfinanceResearchConfig({ ...DEFAULT_YFINANCE_RESEARCH_CONFIG, indicators: ["SMA20", "SMA20"] }).ok).toBe(false);
     expect(parseYfinanceResearchConfig({ ...DEFAULT_YFINANCE_RESEARCH_CONFIG, symbol: "../x" }).ok).toBe(false);
+  });
+
+  it("surfaces the fixture marker and creates portal links only for a distinct server-authored origin", () => {
+    const projection = projectYfinanceResearchPages([page]);
+    const evidence = yfinanceResearchEvidence(DEFAULT_YFINANCE_RESEARCH_CONFIG, [page], projection, false);
+    expect(evidence?.evidence).toContainEqual({
+      label: "Fixture provenance",
+      value: "Synthetic acceptance fixture · bounded-synthetic-e2e marker",
+    });
+    expect(buildYahooResearchPageHref("https://research.example/", "AAPL", "terminal.example"))
+      .toBe("https://research.example/research/yfinance/AAPL");
+    expect(buildYahooResearchPageHref("https://terminal.example/", "AAPL", "terminal.example")).toBeNull();
+    expect(buildYahooResearchPageHref("https://user:secret@research.example/", "AAPL", "terminal.example")).toBeNull();
   });
 
   it("keeps provider floats distinct and omits rows with missing OHLCV rather than filling values", () => {

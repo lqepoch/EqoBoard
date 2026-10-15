@@ -197,7 +197,9 @@ const yahooDailyManifest: WidgetManifestV1 = {
   configSchemaId: `${yahooDailyId}.config.v1`,
   defaultSize: { w: 8, h: 7, minW: 4, minH: 5, maxW: 12, maxH: 12 },
   inputs: symbolInput(),
-  requiredPermissions: ["research:read"],
+  // The terminal widget is a navigation card; the isolated Research runtime
+  // rechecks research:read before returning provider observations.
+  requiredPermissions: [],
   refresh: { mode: "none" },
   symbolBinding: "active-or-fixed",
   provenanceId: `${yahooDailyId}.provenance.v1`,
@@ -217,7 +219,7 @@ const yahooDailyRegistration: WidgetRegistration<YfinanceResearchConfigV1, Yahoo
     origin: "adapted-upstream",
     sourceRepository: SOURCE_REPOSITORY,
     sourcePath: "apps/openterminal/web/lib/yfinance-research-contract.ts",
-    sourceCommit: "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+    sourceCommit: "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
     license: "MIT",
     noticePath: "apps/openterminal/LICENSE",
     auditReference: AUDIT_REFERENCE,
