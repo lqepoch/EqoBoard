@@ -10,9 +10,11 @@ import {
   type YfinanceResearchInput,
 } from "@/features/research/yfinance-contract";
 import { authorizeRequest, noStoreJson, signMdpResearchReadDelegation } from "./bff-security";
+import { copyBytesToArrayBuffer } from "./http-body";
 import { requireRuntimeMode } from "./runtime-mode";
 import { consumePrincipalRateLimit, consumeServiceRateLimit } from "./rate-limit";
 import { createUpstreamDeadline, mdpBaseUrl, readJsonResponseBounded } from "./service-http";
+import { containsControlCharacters } from "./text-validation";
 import type { ServerPrincipal } from "./auth";
 
 const MAX_QUERY_BYTES = 32_768;
@@ -96,7 +98,7 @@ export function parseYfinanceDailyInput(request: Request): YfinanceDailyInputRes
     cursor !== null &&
     (new TextEncoder().encode(cursor).byteLength > YFINANCE_RESEARCH_MAX_CURSOR_BYTES ||
       cursor.length === 0 ||
-      /[\u0000-\u001f\u007f]/u.test(cursor))
+      containsControlCharacters(cursor))
   ) {
     return { ok: false, status: 400, error: "invalid_query" };
   }
@@ -219,7 +221,7 @@ export async function getYfinanceDaily(request: Request): Promise<NextResponse> 
     if (!validateYfinanceResearchResponse(body.value, expected)) {
       return noStoreJson({ error: "invalid_research_observation_response" }, 502);
     }
-    return new NextResponse(body.bytes, {
+    return new NextResponse(copyBytesToArrayBuffer(body.bytes), {
       status: 200,
       headers: {
         "Cache-Control": "no-store",

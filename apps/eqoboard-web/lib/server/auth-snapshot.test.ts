@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 const authMocks = vi.hoisted(() => ({ getToken: vi.fn() }));
 
@@ -46,6 +47,9 @@ describe("server auth UI snapshot", () => {
 
     setOidcEnvironment("terminal");
     const terminal = await getAuthUiSnapshot();
+    expect(authMocks.getToken).toHaveBeenCalledWith(
+      expect.objectContaining({ req: expect.any(NextRequest) }),
+    );
     expect(terminal).toMatchObject({
       authenticated: true,
       runtimeMode: "terminal",

@@ -157,14 +157,14 @@
   border: 1px solid var(--market-line);
   border-radius: 0.35rem;
 }
-.tapeList li > span:nth-last-child(2),
-.tapeList li > strong {
-  grid-column: 1 / -1;
-}
 .tapeList time,
 .tapeList strong {
   color: var(--market-muted);
   font-size: 0.68rem;
+}
+.tapeList li > span:nth-last-child(2),
+.tapeList li > strong {
+  grid-column: 1 / -1;
 }
 .tapeList code {
   overflow-wrap: anywhere;

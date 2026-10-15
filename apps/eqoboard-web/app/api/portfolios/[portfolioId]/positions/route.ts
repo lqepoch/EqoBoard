@@ -36,6 +36,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (result.kind === "not-found") return noStoreJson({ error: "portfolio_not_found" }, 404);
     if (result.kind === "too-many")
       return noStoreJson({ error: "transaction_history_limit_exceeded" }, 413);
+    if (result.kind === "conflict") return noStoreJson({ error: "portfolio_state_conflict" }, 409);
     return noStoreJson(result.value);
   } catch {
     return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);

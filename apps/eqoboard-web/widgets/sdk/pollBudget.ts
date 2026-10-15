@@ -108,23 +108,23 @@ function stableKey(
       if (Object.getPrototypeOf(value) !== Array.prototype) return null;
       const keys = Reflect.ownKeys(value);
       if (keys.length > 4_097) return null;
-      const descriptors = Object.getOwnPropertyDescriptors(value);
+      const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(value as object);
       const lengthDescriptor = descriptors.length;
       if (
         !lengthDescriptor ||
-        !("value" in lengthDescriptor) ||
+        typeof lengthDescriptor.value !== "number" ||
         !Number.isSafeInteger(lengthDescriptor.value) ||
         lengthDescriptor.value > 4_096
       )
         return null;
-      const length = lengthDescriptor.value as number;
+      const length = lengthDescriptor.value;
       if (keys.length !== length + 1) return null;
       for (const key of keys) {
         if (key === "length") continue;
         if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length)
           return null;
         const descriptor = descriptors[key];
-        if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return null;
+        if (!descriptor?.enumerable || !("value" in descriptor)) return null;
       }
       const parts: string[] = [];
       for (let index = 0; index < length; index += 1) {
@@ -146,8 +146,8 @@ function stableKey(
     const parts: string[] = [];
     for (const key of (keys as string[]).sort()) {
       if (key.length > 256 || ["__proto__", "constructor", "prototype"].includes(key)) return null;
-      const descriptor = descriptors[key];
-      if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return null;
+        const descriptor = descriptors[key];
+        if (!descriptor?.enumerable || !("value" in descriptor)) return null;
       const part = stableKey(descriptor.value, depth + 1, budget);
       if (part === null) return null;
       const encodedKey = JSON.stringify(key);
@@ -249,13 +249,6 @@ export function createWidgetPollBudget(
       const operationKey = request.operationId;
       const widgetKey = stableKey({ scopeKey: request.scopeKey, instanceId: request.instanceId });
       if (widgetKey === null) throw new WidgetDataReadError("request-failed");
-      const rateLimit = Math.min(
-        request.policy.maxRequestsPerMinute,
-        config.maxRequestsPerMinuteGlobal,
-        config.maxRequestsPerMinutePerUser,
-        config.maxRequestsPerMinutePerOperation,
-        config.maxRequestsPerMinutePerWidget,
-      );
       const global = prune(globalTimes, time);
       const user = prune(scopedUserTimes.get(request.scopeKey) ?? [], time);
       const perOperation = prune(operationTimes.get(operationKey) ?? [], time);
@@ -268,8 +261,11 @@ export function createWidgetPollBudget(
       const rateCeilings = [
         [global, config.maxRequestsPerMinuteGlobal],
         [user, config.maxRequestsPerMinutePerUser],
-        [perOperation, Math.min(config.maxRequestsPerMinutePerOperation, rateLimit)],
-        [perWidget, Math.min(config.maxRequestsPerMinutePerWidget, rateLimit)],
+        [perOperation, config.maxRequestsPerMinutePerOperation],
+        [
+          perWidget,
+          Math.min(config.maxRequestsPerMinutePerWidget, request.policy.maxRequestsPerMinute),
+        ],
       ] as const;
       for (const [timestamps, limit] of rateCeilings) {
         if (timestamps.length >= limit)

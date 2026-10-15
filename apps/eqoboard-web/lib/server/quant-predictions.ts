@@ -6,7 +6,8 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { parsePredictionEnvelopeProtoJsonText } from "@lqepoch/trading-core-contracts";
 import type {
   RegisteredPredictionView,

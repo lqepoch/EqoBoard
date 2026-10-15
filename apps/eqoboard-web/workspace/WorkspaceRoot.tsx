@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { useStore } from "zustand";
 import {
   useWidgetActionClient,
   useWidgetDataClient,
@@ -10,7 +9,11 @@ import {
 } from "../features/data/MarketDataHost";
 import { useWorkspaceCommandRegistration } from "../components/shell/WorkspaceCommandContext";
 import type { AuthUiSnapshot } from "../lib/contracts/auth";
-import { createWorkspaceStore, type WorkspaceStoreHook } from "../stores/workspace/store";
+import {
+  createWorkspaceStore,
+  type WorkspaceStoreHook,
+  type WorkspaceStoreState,
+} from "../stores/workspace/store";
 import {
   WORKSPACE_LIMITS,
   type WorkspaceDocumentV1,
@@ -46,32 +49,19 @@ function activeTab(workspace: WorkspaceV1 | null): WorkspaceTabV1 | null {
 }
 
 function useAuthScopedStore(auth: AuthUiSnapshot, registry: WidgetRegistry): WorkspaceStoreHook {
-  const permissions = auth.permissions.join("|");
-  return useMemo(
-    () => createWorkspaceStore(auth, registry),
-    [
-      auth.status,
-      auth.authenticated,
-      auth.displayName,
-      auth.storagePartition,
-      permissions,
-      registry,
-    ],
-  );
+  return useMemo(() => createWorkspaceStore(auth, registry), [auth, registry]);
 }
 
 function useHydrateStore(store: WorkspaceStoreHook): void {
-  const hydratedStores = useRef<WeakSet<WorkspaceStoreHook> | null>(null);
-  const disposalTokens = useRef<WeakMap<WorkspaceStoreHook, number> | null>(null);
-  if (!hydratedStores.current) hydratedStores.current = new WeakSet();
-  if (!disposalTokens.current) disposalTokens.current = new WeakMap();
+  const hydratedStores = useRef(new WeakSet<WorkspaceStoreHook>());
+  const disposalTokens = useRef(new WeakMap<WorkspaceStoreHook, number>());
 
   useEffect(() => {
-    if (!hydratedStores.current!.has(store)) {
-      hydratedStores.current!.add(store);
+    if (!hydratedStores.current.has(store)) {
+      hydratedStores.current.add(store);
       void store.getState().hydrate();
     }
-    const tokens = disposalTokens.current!;
+    const tokens = disposalTokens.current;
     const current = (tokens.get(store) ?? 0) + 1;
     tokens.set(store, current);
     return () => {
@@ -100,7 +90,7 @@ function SymbolControls({
   useEffect(() => {
     setSymbolDraft(workspace.marketContext.activeSymbol);
     setWatchlistDraft(workspace.marketContext.watchlist.join(", "));
-  }, [workspace.id, workspace.marketContext.activeSymbol, workspace.marketContext.watchlist]);
+  }, [workspace.marketContext.activeSymbol, workspace.marketContext.watchlist]);
 
   function updateSymbol(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -156,13 +146,7 @@ function SymbolControls({
   );
 }
 
-function WorkspaceSyncControls({
-  store,
-  state,
-}: {
-  store: WorkspaceStoreHook;
-  state: ReturnType<WorkspaceStoreHook>;
-}) {
+function WorkspaceSyncControls({ state }: { state: WorkspaceStoreState }) {
   const [recovery, setRecovery] = useState<
     readonly { id: string; createdAt: number; reason: string }[]
   >([]);
@@ -216,8 +200,9 @@ function WorkspaceSyncControls({
 
   return (
     <div
-      aria-label="Workspace sync status"
       className={`workspace-sync workspace-sync--${state.syncStatus}`}
+      role="group"
+      aria-label="Workspace sync status"
     >
       <span aria-live="polite">{statusLabel[state.syncStatus]}</span>
       {state.error && (
@@ -342,7 +327,7 @@ function WidgetPalette({
 export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
   const store = useAuthScopedStore(auth, registry);
   useHydrateStore(store);
-  const state = useStore(store);
+  const state = store();
   const data = useWidgetDataClient();
   const actions = useWidgetActionClient();
   const market = useMarketDataReader();
@@ -354,14 +339,16 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
 
   const workspace = activeWorkspace(state.document);
   const tab = activeTab(workspace);
+  const workspaceId = workspace?.id ?? null;
+  const tabId = tab?.id ?? null;
   const canEdit = state.canEdit;
   const activeSymbol = workspace?.marketContext.activeSymbol ?? null;
-  const activeWorkspaceIdRef = useRef(workspace?.id ?? null);
-  const activeTabIdRef = useRef(tab?.id ?? null);
+  const activeWorkspaceIdRef = useRef(workspaceId);
+  const activeTabIdRef = useRef(tabId);
   const eventBusRef = useRef<ReturnType<typeof createWidgetEventBus> | null>(null);
   const lastPublishedSymbol = useRef<string | null>(null);
-  activeWorkspaceIdRef.current = workspace?.id ?? null;
-  activeTabIdRef.current = tab?.id ?? null;
+  activeWorkspaceIdRef.current = workspaceId;
+  activeTabIdRef.current = tabId;
 
   const handleWidgetError = useCallback((errorCode: string) => {
     setWidgetError(
@@ -403,28 +390,25 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
     }
   }, [activeSymbol, eventBus]);
 
-  const permissionKey = auth.permissions.join("|");
   const authReady = auth.status === "authenticated" && auth.authenticated;
   const hasWorkspaceWritePermission = auth.permissions.includes("workspace:write");
   useEffect(() => {
     if (
-      !workspace ||
-      !tab ||
+      !workspaceId ||
+      !tabId ||
       !canRegisterActiveWorkspaceSymbolSelector({
         authReady,
         hasWorkspaceWritePermission,
         canEdit,
         loadStatus: state.loadStatus,
-        workspaceId: workspace.id,
-        tabId: tab.id,
+        workspaceId,
+        tabId,
       })
     )
       return;
-    const registeredWorkspaceId = workspace.id;
-    const registeredTabId = tab.id;
     return registerActiveSymbolSelector(
       bindActiveWorkspaceSymbolSelector(
-        { workspaceId: registeredWorkspaceId, tabId: registeredTabId },
+        { workspaceId, tabId },
         () => ({ workspaceId: activeWorkspaceIdRef.current, tabId: activeTabIdRef.current }),
         (symbol) => {
           setActiveSymbol(symbol, null);
@@ -433,13 +417,11 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
     );
   }, [
     authReady,
-    auth.storagePartition,
-    permissionKey,
     hasWorkspaceWritePermission,
     canEdit,
     state.loadStatus,
-    workspace?.id,
-    tab?.id,
+    workspaceId,
+    tabId,
     registerActiveSymbolSelector,
     setActiveSymbol,
   ]);
@@ -496,6 +478,9 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
     );
   }
 
+  const workspaceDocument = state.document;
+  const nextWorkspaceName = `Workspace ${workspaceDocument.workspaces.length + 1}`;
+
   return (
     <div className="workspace-root" data-testid="workspace-root">
       <header className="workspace-topbar">
@@ -511,7 +496,7 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
             onChange={(event) => store.getState().selectWorkspace(event.currentTarget.value)}
             value={workspace.id}
           >
-            {state.document.workspaces.map((candidate) => (
+            {workspaceDocument.workspaces.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>
                 {candidate.name}
               </option>
@@ -519,16 +504,16 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
           </select>
         </label>
         <button
-          disabled={!canEdit || state.document.workspaces.length >= WORKSPACE_LIMITS.maxWorkspaces}
-          onClick={() =>
-            store.getState().createWorkspace(`Workspace ${state.document!.workspaces.length + 1}`)
+          disabled={
+            !canEdit || workspaceDocument.workspaces.length >= WORKSPACE_LIMITS.maxWorkspaces
           }
+          onClick={() => store.getState().createWorkspace(nextWorkspaceName)}
           type="button"
         >
           New workspace
         </button>
         <button
-          disabled={!canEdit || state.document.workspaces.length <= 1}
+          disabled={!canEdit || workspaceDocument.workspaces.length <= 1}
           onClick={() => {
             if (
               window.confirm(
@@ -541,7 +526,7 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
         >
           Delete workspace
         </button>
-        <WorkspaceSyncControls state={state} store={store} />
+        <WorkspaceSyncControls state={state} />
       </header>
 
       {state.loadStatus === "error" && (

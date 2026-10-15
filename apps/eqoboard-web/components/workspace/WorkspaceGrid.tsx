@@ -17,19 +17,13 @@ import {
   createWidgetLifecycleController,
   type WidgetLifecycleController,
 } from "../../widgets/sdk/lifecycle";
-import type { WidgetHostContext, WidgetInstanceV1, WidgetProps } from "../../widgets/sdk/contracts";
+import type { WidgetInstanceV1, WidgetProps } from "../../widgets/sdk/contracts";
 import type { WidgetActionClient } from "../../widgets/sdk/actions";
 import type { WidgetDataClient, WidgetMarketReader } from "../../widgets/sdk/data";
 import type { WidgetEventBusHost } from "../../widgets/sdk/events";
 import { toRglLayout } from "../../workspace/grid";
 import { createWorkspaceWidgetHostContext } from "../../workspace/widget-host";
 import { WORKSPACE_LIMITS } from "../../workspace/model";
-
-type NativeHostContext = WidgetHostContext<
-  NativeDataOperationMap,
-  NativeActionMap,
-  MarketHostSnapshot
->;
 
 export type WorkspaceGridProps = Readonly<{
   auth: AuthUiSnapshot;
@@ -185,12 +179,20 @@ function WidgetRenderer({
     workspace.marketContext.activeSymbol,
     workspace.marketContext.watchlist,
   );
-  const Component = resolution.registration.Component as ComponentType<WidgetProps<unknown>>;
-  const props: WidgetProps<unknown> = {
+  type NativeWidgetProps = WidgetProps<
+    WidgetInstanceV1["config"],
+    NativeDataOperationMap,
+    NativeActionMap,
+    MarketHostSnapshot
+  >;
+  const Component = resolution.registration.Component as unknown as ComponentType<
+    NativeWidgetProps
+  >;
+  const props: NativeWidgetProps = {
     instance,
-    config: resolution.config,
+    config: resolution.config as WidgetInstanceV1["config"],
     inputs,
-    host: host as NativeHostContext as WidgetProps<unknown>["host"],
+    host,
     onConfigChange,
   };
   return (
@@ -264,14 +266,17 @@ function WidgetCard({
       className="workspace-widget"
       data-widget-instance-id={instance.instanceId}
       onKeyDown={onKeyDown}
-      tabIndex={0}
     >
       <header className="workspace-widget__header workspace-widget__handle">
         <div className="workspace-widget__heading">
           <h3>{title}</h3>
           <span className="workspace-widget__kind">{manifestId}</span>
         </div>
-        <div aria-label={`${title} controls`} className="workspace-widget__actions">
+        <div
+          aria-label={`${title} controls`}
+          className="workspace-widget__actions"
+          role="group"
+        >
           {canEdit && (
             <>
               <button
@@ -306,7 +311,11 @@ function WidgetCard({
         </div>
       </header>
       {canEdit && (
-        <div aria-label={`${title} layout controls`} className="workspace-widget__layout-controls">
+        <div
+          aria-label={`${title} layout controls`}
+          className="workspace-widget__layout-controls"
+          role="group"
+        >
           <button aria-label={`Move ${title} left`} onClick={() => move("ArrowLeft")} type="button">
             ←
           </button>
@@ -425,7 +434,7 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
   const isStacked = width > 0 && width < 720;
   const layout = useMemo(() => toRglLayout(props.tab.placements), [props.tab.placements]);
 
-  function commitLayout(next: Layout): void {
+  function commitLayout(next: Layout[]): void {
     const current = props.store.getState().document;
     const workspace = current?.workspaces.find((candidate) => candidate.id === props.workspace.id);
     const tab = workspace?.tabs.find((candidate) => candidate.id === props.tab.id);

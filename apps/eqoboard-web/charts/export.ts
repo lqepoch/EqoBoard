@@ -28,8 +28,10 @@ export function buildChartCsv<TRow>(
 ): ChartCsvExport {
   const selected = bars.slice(-MAX_CHART_EXPORT_ROWS);
   const truncated = selected.length < bars.length;
-  const loadedStart = selected[0] ? isoTime(Number(selected[0].time)) : "unavailable";
-  const loadedEnd = selected.at(-1) ? isoTime(Number(selected.at(-1)!.time)) : "unavailable";
+  const firstSelected = selected[0];
+  const lastSelected = selected.at(-1);
+  const loadedStart = firstSelected ? isoTime(Number(firstSelected.time)) : "unavailable";
+  const loadedEnd = lastSelected ? isoTime(Number(lastSelected.time)) : "unavailable";
   const lines: string[] = [];
   const header = [
     "record_type",
@@ -119,11 +121,11 @@ export function chartExportFilename(
 }
 
 function boundedCaption(value: string): string {
-  return value
-    .replace(/[\u0000-\u001f\u007f]/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, 220);
+  const withoutControls = Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f ? " " : character;
+  }).join("");
+  return withoutControls.replace(/\s+/gu, " ").trim().slice(0, 220);
 }
 
 /** The PNG image carries the same source/window caveats as the accompanying CSV. */
@@ -157,9 +159,9 @@ export function composeChartPngCanvas(
   context.drawImage(chartCanvas, 0, captionHeight);
   context.fillStyle = "#d9e2ef";
   context.font = "12px system-ui, sans-serif";
-  captions.forEach((line, index) =>
-    context.fillText(line, 12, 17 + index * 17, Math.max(0, output.width - 24)),
-  );
+  for (const [index, line] of captions.entries()) {
+    context.fillText(line, 12, 17 + index * 17, Math.max(0, output.width - 24));
+  }
   return output;
 }
 

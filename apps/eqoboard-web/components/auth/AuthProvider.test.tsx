@@ -11,6 +11,17 @@ const snapshot: AuthUiSnapshot = {
   storagePartition: "native-v1-opaque",
 };
 
+function escapeHtmlText(value: string): string {
+  const entities: Readonly<Record<string, string>> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#x27;",
+  };
+  return value.replace(/[&<>"']/gu, (character) => entities[character] ?? character);
+}
+
 describe("AuthProvider safe projection", () => {
   it("exposes only the immutable UI snapshot", () => {
     function SnapshotReader() {
@@ -22,7 +33,7 @@ describe("AuthProvider safe projection", () => {
         <SnapshotReader />
       </AuthProvider>,
     );
-    expect(html).toContain(JSON.stringify(snapshot));
+    expect(html).toContain(escapeHtmlText(JSON.stringify(snapshot)));
     expect(html).not.toMatch(/issuer|subject|role|token|secret/i);
   });
 

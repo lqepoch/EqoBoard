@@ -59,12 +59,17 @@ select:focus-visible,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  :root {
+    scroll-behavior: auto;
+  }
+
+  :root .eq-app-shell,
+  :root .eq-app-shell *,
+  :root .eq-app-shell *::before,
+  :root .eq-app-shell *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
   }
 }

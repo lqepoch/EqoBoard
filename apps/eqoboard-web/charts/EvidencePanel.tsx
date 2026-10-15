@@ -34,8 +34,8 @@ export function ChartEvidencePanel({
       data-chart-completeness={evidence.completeness}
       data-chart-precision={evidence.precision}
     >
-      {entries.map(({ label, value }, index) => (
-        <div className="native-chart-evidence__entry" key={`${label}-${index}`}>
+      {entries.map(({ label, value }) => (
+        <div className="native-chart-evidence__entry" key={`${label}-${value}`}>
           <dt>{label}</dt>
           <dd>{value}</dd>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   buildMdpDiagnosticChartData,
   type MdpDiagnosticChartData,
@@ -44,10 +44,13 @@ export function useDiagnosticArchive(
   retryRevision: number,
   host: ChartHost,
 ): DiagnosticArchiveView {
-  const validInput = SYMBOL.test(symbol) && isDiagnosticDatasetId(datasetId);
-  const key = validInput ? requestKey(symbol, datasetId) : "";
+  const requestedDatasetId = isDiagnosticDatasetId(datasetId) ? datasetId : null;
+  const validInput = SYMBOL.test(symbol) && requestedDatasetId !== null;
+  const key = validInput && requestedDatasetId ? requestKey(symbol, requestedDatasetId) : "";
   const [state, setState] = useState<DiagnosticState | null>(null);
   const [lifecycleRevision, setLifecycleRevision] = useState(0);
+  const readAttemptKey = `${lifecycleRevision}:${retryRevision}`;
+  const readAttemptRef = useRef(readAttemptKey);
 
   useEffect(
     () =>
@@ -58,7 +61,11 @@ export function useDiagnosticArchive(
   );
 
   useEffect(() => {
-    if (!enabled || !validInput) return undefined;
+    readAttemptRef.current = readAttemptKey;
+  }, [readAttemptKey]);
+
+  useEffect(() => {
+    if (!enabled || !validInput || !requestedDatasetId) return undefined;
 
     const lifecycleSnapshot = host.lifecycle.getSnapshot();
     if (lifecycleSnapshot.phase !== "active") return undefined;
@@ -69,6 +76,8 @@ export function useDiagnosticArchive(
     else lifecycleSignal.addEventListener("abort", abortForLifecycle, { once: true });
 
     let active = true;
+    const isCurrentAttempt = () =>
+      active && !controller.signal.aborted && readAttemptRef.current === readAttemptKey;
     const failRead = (message: string) => {
       setState((current) => {
         const retained = current?.key === key ? current.data : null;
@@ -83,12 +92,12 @@ export function useDiagnosticArchive(
     void host.data
       .read(
         "market.archive.diagnostic-bars",
-        { datasetId: datasetId!, symbol },
+        { datasetId: requestedDatasetId, symbol },
         { signal: controller.signal },
       )
       .then((raw) => {
-        if (!active || controller.signal.aborted) return;
-        const response = decodeMdpBarsResponse(raw, { datasetId: datasetId!, symbol });
+        if (!isCurrentAttempt()) return;
+        const response = decodeMdpBarsResponse(raw, { datasetId: requestedDatasetId, symbol });
         if (!response) {
           failRead(
             "The diagnostic archive response did not match the requested dataset, symbol, or MDP Bars V1 contract.",
@@ -104,7 +113,7 @@ export function useDiagnosticArchive(
         });
       })
       .catch(() => {
-        if (!active || controller.signal.aborted) return;
+        if (!isCurrentAttempt()) return;
         failRead(
           "The diagnostic archive could not be loaded. It is a bounded diagnostic read, not a live feed.",
         );
@@ -116,13 +125,12 @@ export function useDiagnosticArchive(
       controller.abort();
     };
   }, [
-    datasetId,
     enabled,
     host.data,
     host.lifecycle,
     key,
-    lifecycleRevision,
-    retryRevision,
+    readAttemptKey,
+    requestedDatasetId,
     symbol,
     validInput,
   ]);

@@ -87,7 +87,9 @@ describe("diagnostic MDP archive validation", () => {
       }),
     ).toBeNull();
     const changedSource = response();
-    changedSource.rows[0]!.source_provider = "alpaca";
+    const firstChangedSourceRow = changedSource.rows[0];
+    if (!firstChangedSourceRow) throw new Error("The fixture must include one diagnostic bar.");
+    firstChangedSourceRow.source_provider = "alpaca";
     expect(
       validateMdpBarsResponse(changedSource, {
         datasetId: "archive-1",

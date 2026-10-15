@@ -9,7 +9,9 @@ import {
   isWidgetActionId,
   type WidgetActionClient,
   type WidgetActionId,
+  type WidgetActionInput,
   type WidgetActionMap,
+  type WidgetActionOutput,
   type WidgetNoActionMap,
 } from "./actions";
 import { toWidgetRuntimeError } from "./errors";
@@ -61,17 +63,17 @@ function readCapabilityList(
   try {
     if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return new Set();
     const ownKeys = Reflect.ownKeys(value);
-    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(value as object);
     const lengthDescriptor = descriptors.length;
     if (
       !lengthDescriptor ||
-      !("value" in lengthDescriptor) ||
+      typeof lengthDescriptor.value !== "number" ||
       !Number.isSafeInteger(lengthDescriptor.value) ||
       lengthDescriptor.value > 96 ||
       ownKeys.length !== lengthDescriptor.value + 1
     )
       return new Set();
-    const length = lengthDescriptor.value as number;
+    const length = lengthDescriptor.value;
     const ids: string[] = [];
     for (const key of ownKeys) {
       if (key === "length") continue;
@@ -79,8 +81,7 @@ function readCapabilityList(
         return new Set();
       const descriptor = descriptors[key];
       if (
-        !descriptor ||
-        !descriptor.enumerable ||
+        !descriptor?.enumerable ||
         !("value" in descriptor) ||
         typeof descriptor.value !== "string" ||
         !isValidId(descriptor.value)
@@ -211,9 +212,9 @@ export function scopeWidgetHostContext<
   const actionClient: WidgetActionClient<TActions> = Object.freeze({
     async invoke<K extends keyof TActions & WidgetActionId>(
       actionId: K,
-      input: TActions[K]["input"],
+      input: WidgetActionInput<TActions, K>,
       options: Readonly<{ signal: AbortSignal }>,
-    ): Promise<TActions[K]["output"]> {
+    ): Promise<WidgetActionOutput<TActions, K>> {
       if (!allowedActions.has(actionId)) throw new WidgetDataReadError("request-failed");
       return host.actions.invoke(actionId, input, options);
     },

@@ -14,6 +14,7 @@ import {
   type YfinanceResearchResponse,
 } from "./yfinance-contract";
 export { isYfinanceResearchSymbol } from "./yfinance-contract";
+export { YFINANCE_RESEARCH_MAX_PAGES };
 
 export const YFINANCE_RESEARCH_RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const;
 export type YfinanceResearchRange = (typeof YFINANCE_RESEARCH_RANGES)[number];
@@ -37,7 +38,7 @@ export const DEFAULT_YFINANCE_RESEARCH_CONFIG: YfinanceResearchConfigV1 = Object
   adjustment: "unadjusted",
   style: "candles",
   showVolume: true,
-  indicators: Object.freeze(["SMA20"]),
+  indicators: Object.freeze<IndicatorId[]>(["SMA20"]),
 });
 
 const SYMBOL = /^[A-Z][A-Z0-9.-]{0,11}$/u;

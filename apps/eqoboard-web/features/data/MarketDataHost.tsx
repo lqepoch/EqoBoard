@@ -62,10 +62,6 @@ export type MarketDataHostServices = Readonly<{
 
 const MarketDataContext = createContext<MarketDataHostServices | null>(null);
 
-function permissionsKey(auth: AuthUiSnapshot): string {
-  return `${auth.runtimeMode ?? "terminal"}:${auth.authenticated}:${auth.status}:${auth.storagePartition ?? "anonymous"}:${[...auth.permissions].sort().join(",")}`;
-}
-
 function hasPermission(auth: AuthUiSnapshot, permission: string): boolean {
   return auth.authenticated && auth.permissions.includes(permission as never);
 }
@@ -192,9 +188,11 @@ export function MarketDataHost({ auth, children }: MarketDataHostProps) {
   const [runtime] = useState(() => new MarketDataRuntime(auth));
   runtime.updateAuth(auth);
   const services = runtime.getServices();
-  const authKey = permissionsKey(auth);
 
-  useEffect(() => runtime.start(), [runtime, authKey]);
+  useEffect(() => {
+    runtime.updateAuth(auth);
+    return runtime.start();
+  }, [runtime, auth]);
 
   return <MarketDataContext.Provider value={services}>{children}</MarketDataContext.Provider>;
 }
@@ -249,8 +247,7 @@ export function useWidgetRefreshScheduler(
       services.pollBudget,
       policy,
       lifecycle,
-      scope.instanceId,
-      scope.hidden,
+      scope,
       scopeKey,
     ],
   );
@@ -263,8 +260,7 @@ export function useMarketLease(
   symbols: readonly string[],
   lifecycle: WidgetLifecycle,
 ): void {
-  const { leaseCoordinator, canSubscribe, auth } = useMarketDataHost();
-  const symbolsKey = JSON.stringify(symbols);
+  const { leaseCoordinator, canSubscribe } = useMarketDataHost();
   useEffect(() => {
     const sync = () => {
       if (canSubscribe && lifecycle.getSnapshot().phase === "active") {
@@ -282,10 +278,9 @@ export function useMarketLease(
   }, [
     leaseCoordinator,
     canSubscribe,
-    auth.storagePartition,
     instanceId,
     feed,
-    symbolsKey,
+    symbols,
     lifecycle,
   ]);
 }

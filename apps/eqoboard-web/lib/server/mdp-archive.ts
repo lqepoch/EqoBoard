@@ -6,8 +6,10 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { authorizeRequest, noStoreJson, signMdpMarketReadDelegation } from "./bff-security";
+import { copyBytesToArrayBuffer } from "./http-body";
 import { consumePrincipalRateLimit, consumeServiceRateLimit } from "./rate-limit";
 import { createUpstreamDeadline, mdpBaseUrl, readJsonResponseBounded } from "./service-http";
 import type { ServerPrincipal } from "./auth";
@@ -642,7 +644,7 @@ export async function proxyMdpBars(request: NextRequest, datasetId: string): Pro
     });
     if (!validated) return jsonError(502, "invalid_market_data_response");
 
-    return new NextResponse(body.bytes, {
+    return new NextResponse(copyBytesToArrayBuffer(body.bytes), {
       status: 200,
       headers: {
         "Cache-Control": "no-store",

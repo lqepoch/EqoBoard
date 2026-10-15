@@ -52,7 +52,7 @@ describe("native research saved queries", () => {
       queries: [
         {
           ...queryA,
-          filters: [{ field: "url", operator: "equals", value: "https://provider.invalid" }],
+          filters: [{ field: "range", operator: "equals", value: "1Y" }],
         },
       ],
       selectedQueryId: null,
@@ -106,12 +106,13 @@ describe("native research saved queries", () => {
 
   it("filters text observations case insensitively without coercing non-text values", () => {
     const rows = [
-      { symbol: "SPY", range: "1Y", changePercent: 0.7 },
-      { symbol: "QQQ", range: "5Y", changePercent: 1.2 },
-      { symbol: "IWM", range: null, changePercent: 0.3 },
+      { symbol: "SPY" },
+      { symbol: "QQQ" },
+      { symbol: null },
+      { symbol: 42 },
     ];
     const filtered = filterResearchRows(rows, [
-      { field: "range", operator: "contains", value: "1y" },
+      { field: "symbol", operator: "contains", value: "sp" },
     ]);
     expect(filtered.map((row) => row.symbol)).toEqual(["SPY"]);
   });

@@ -36,14 +36,29 @@ function validVerticalIntent(
 ): VerticalPreviewIntent | null {
   const buy = OCC.exec(buySymbol);
   const sell = OCC.exec(sellSymbol);
+  if (!buy || !sell) return null;
+  const buyRoot = buy[1];
+  const buyExpiration = buy[2];
+  const buyRight = buy[3];
+  const buyStrikeText = buy[4];
+  const sellRoot = sell[1];
+  const sellExpiration = sell[2];
+  const sellRight = sell[3];
+  const sellStrikeText = sell[4];
   if (
-    !buy ||
-    !sell ||
+    !buyRoot ||
+    !buyExpiration ||
+    !buyRight ||
+    !buyStrikeText ||
+    !sellRoot ||
+    !sellExpiration ||
+    !sellRight ||
+    !sellStrikeText ||
     buySymbol === sellSymbol ||
-    buy[1] !== sell[1] ||
-    buy[2] !== sell[2] ||
-    buy[3] !== sell[3] ||
-    buy[4] === sell[4]
+    buyRoot !== sellRoot ||
+    buyExpiration !== sellExpiration ||
+    buyRight !== sellRight ||
+    buyStrikeText === sellStrikeText
   )
     return null;
   const limitPrice = Number(limitPriceInput);
@@ -60,23 +75,23 @@ function validVerticalIntent(
     return null;
   const expiry = new Date(
     Date.UTC(
-      2000 + Number(buy[2]!.slice(0, 2)),
-      Number(buy[2]!.slice(2, 4)) - 1,
-      Number(buy[2]!.slice(4, 6)),
+      2000 + Number(buyExpiration.slice(0, 2)),
+      Number(buyExpiration.slice(2, 4)) - 1,
+      Number(buyExpiration.slice(4, 6)),
     ),
   );
   if (
     !Number.isFinite(expiry.getTime()) ||
-    expiry.toISOString().slice(2, 10).replaceAll("-", "") !== buy[2] ||
+    expiry.toISOString().slice(2, 10).replaceAll("-", "") !== buyExpiration ||
     expiry.getTime() <= Date.now()
   )
     return null;
-  const buyStrike = BigInt(buy[4]!);
-  const sellStrike = BigInt(sell[4]!);
+  const buyStrike = BigInt(buyStrikeText);
+  const sellStrike = BigInt(sellStrikeText);
   const width = buyStrike > sellStrike ? buyStrike - sellStrike : sellStrike - buyStrike;
   if (BigInt(Math.round(limitPrice * 100)) * 10n >= width) return null;
   const expectedEffect =
-    buy[3] === "C"
+    buyRight === "C"
       ? buyStrike < sellStrike
         ? "debit"
         : "credit"

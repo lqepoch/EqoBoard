@@ -14,6 +14,12 @@ function closeBars(closes: readonly number[], volumes?: readonly number[]): Char
   }));
 }
 
+function rowAt<TRow>(rows: readonly TRow[], index: number): TRow {
+  const row = rows[index];
+  if (row === undefined) throw new Error(`Expected indicator fixture row at index ${index}.`);
+  return row;
+}
+
 describe("chart indicators", () => {
   it("computes 20-row SMA and starts it at the twentieth observed bar", () => {
     const values = calculateChartIndicators(
@@ -43,9 +49,9 @@ describe("chart indicators", () => {
 
   it("labels cumulative loaded-window VWAP semantics in its title contract and volume-weights points", () => {
     const rows = [
-      { ...closeBars([10])[0]!, high: 12, low: 8, volume: 1 },
+      { ...rowAt(closeBars([10]), 0), high: 12, low: 8, volume: 1 },
       {
-        ...closeBars([20])[0]!,
+        ...rowAt(closeBars([20]), 0),
         time: 1_720_000_060 as ChartPlotBar["time"],
         high: 22,
         low: 18,

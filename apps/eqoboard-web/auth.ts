@@ -3,6 +3,7 @@ import "server-only";
 import type { NextAuthOptions } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { allowlistedRoles } from "@/lib/server/permissions";
+import { containsControlCharacters } from "@/lib/server/text-validation";
 
 type OidcProfile = Record<string, unknown> & {
   sub: string;
@@ -95,7 +96,7 @@ export function isOidcConfigured(): boolean {
 function safeDisplayName(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const name = value.trim();
-  if (!name || name.length > 120 || /[\u0000-\u001f\u007f]/u.test(name)) return null;
+  if (!name || name.length > 120 || containsControlCharacters(name)) return null;
   return name;
 }
 
@@ -120,7 +121,9 @@ function secureCookies(): NonNullable<NextAuthOptions["cookies"]> {
 }
 
 export function authCookieName(): string {
-  return secureCookies().sessionToken.name;
+  const sessionToken = secureCookies().sessionToken;
+  if (!sessionToken?.name) throw new Error("NextAuth session cookie is not configured.");
+  return sessionToken.name;
 }
 
 const issuer = currentOidcIssuer();

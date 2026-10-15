@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { projectChartRows, type ChartProjectionCandidate } from "./projection";
 
+type ExactCandidate = ChartProjectionCandidate<Readonly<{ id: string }>> & Readonly<{
+  exact: NonNullable<ChartProjectionCandidate<Readonly<{ id: string }>>["exact"]>;
+}>;
+
 function candidate(
   timeSeconds: number,
   close = "10.25",
-): ChartProjectionCandidate<Readonly<{ id: string }>> {
+): ExactCandidate {
   const sourceRow = Object.freeze({ id: `row-${timeSeconds}-${close}` });
   return {
     sourceRow,
@@ -35,12 +39,12 @@ describe("chart coordinate projection", () => {
     const invalidOhlc = {
       ...invalidOhlcRow,
       high: "8.00",
-      exact: { ...invalidOhlcRow.exact!, high: "8.00" },
+      exact: { ...invalidOhlcRow.exact, high: "8.00" },
     };
     const invalidVolume = {
       ...invalidVolumeRow,
       volume: "-1",
-      exact: { ...invalidVolumeRow.exact!, volume: "-1" },
+      exact: { ...invalidVolumeRow.exact, volume: "-1" },
     };
     const result = projectChartRows([
       candidate(1_720_000_000, "10.00"),

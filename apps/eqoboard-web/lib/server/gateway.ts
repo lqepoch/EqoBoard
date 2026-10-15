@@ -2,6 +2,7 @@ import "server-only";
 
 import { isIP } from "node:net";
 import { NextResponse } from "next/server";
+import { copyBytesToArrayBuffer } from "./http-body";
 
 export const GATEWAY_PATHS = [
   "/api/v1/status",
@@ -89,11 +90,13 @@ export async function fetchGateway(
 ): Promise<GatewayFetchResult> {
   const url = gatewayUrl(path, options.query);
   if (!url) return { ok: false, error: "gateway_unavailable" };
+  const configuredTimeoutMs = options.timeoutMs;
   const timeoutMs =
-    Number.isSafeInteger(options.timeoutMs) &&
-    options.timeoutMs! >= 1_000 &&
-    options.timeoutMs! <= 60_000
-      ? options.timeoutMs!
+    typeof configuredTimeoutMs === "number" &&
+    Number.isSafeInteger(configuredTimeoutMs) &&
+    configuredTimeoutMs >= 1_000 &&
+    configuredTimeoutMs <= 60_000
+      ? configuredTimeoutMs
       : 12_000;
   const timeout = AbortSignal.timeout(timeoutMs);
   const signal = options.signal
@@ -117,7 +120,7 @@ export async function fetchGateway(
       return { ok: false, error: "gateway_redirect_rejected" };
     }
     return { ok: true, response };
-  } catch (error) {
+  } catch {
     const timeoutHit = timeout.aborted && !request.signal.aborted && !options.signal?.aborted;
     return { ok: false, error: timeoutHit ? "gateway_timeout" : "gateway_unavailable" };
   }
@@ -202,7 +205,7 @@ export async function relayGatewayJson(
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
-  return new NextResponse(body.bytes, {
+  return new NextResponse(copyBytesToArrayBuffer(body.bytes), {
     status: response.status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",

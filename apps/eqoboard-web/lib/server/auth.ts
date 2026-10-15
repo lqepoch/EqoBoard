@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
+import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { isPermission, type AuthUiSnapshot, type Permission } from "../contracts/auth";
 import { authCookieName, currentOidcIssuer, isOidcConfigured, publicAppOrigin } from "../../auth";
@@ -12,6 +13,7 @@ import {
   nativeRuntimeReadiness,
   type NativeRuntimeMode,
 } from "./runtime-mode";
+import { containsControlCharacters } from "./text-validation";
 
 export type ServerPrincipal = Readonly<{
   identityIssuer: string;
@@ -47,7 +49,7 @@ export function principalFromClaims(
     typeof claims.nativeSubject !== "string" ||
     claims.nativeSubject.length === 0 ||
     claims.nativeSubject.length > 255 ||
-    /[\u0000-\u001f\u007f]/u.test(claims.nativeSubject) ||
+    containsControlCharacters(claims.nativeSubject) ||
     typeof claims.nativeExpiresAt !== "number" ||
     !Number.isSafeInteger(claims.nativeExpiresAt) ||
     typeof claims.exp !== "number" ||
@@ -77,15 +79,23 @@ export function principalFromClaims(
   };
 }
 
-function requestForServerComponent(headerValues: Headers): Request {
+function requestForServerComponent(headerValues: Headers): NextRequest {
   const origin = publicAppOrigin() ?? "http://localhost";
-  return new Request(origin, { headers: headerValues });
+  return new NextRequest(origin, { headers: headerValues });
+}
+
+function requestForNextAuth(request: Request): NextRequest {
+  if (request instanceof NextRequest) return request;
+  return new NextRequest(request.url, {
+    method: request.method,
+    headers: request.headers,
+  });
 }
 
 async function getSessionClaims(request?: Request): Promise<PrincipalClaims | null> {
   if (!isOidcConfigured() || !process.env.NEXTAUTH_SECRET) return null;
   try {
-    const req = request ?? requestForServerComponent(await headers());
+    const req = request ? requestForNextAuth(request) : requestForServerComponent(await headers());
     const token = await getToken({
       req,
       secret: process.env.NEXTAUTH_SECRET,
@@ -116,7 +126,7 @@ export function ownerKeyForPrincipal(
 function cleanDisplayName(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const name = value.trim();
-  return name.length > 0 && name.length <= 120 && !/[\u0000-\u001f\u007f]/u.test(name)
+  return name.length > 0 && name.length <= 120 && !containsControlCharacters(name)
     ? name
     : null;
 }

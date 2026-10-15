@@ -100,7 +100,7 @@ function mergePageEvidence(
     ...new Set(pages.map(select).filter((value) => value !== "unknown")),
   ];
   const combine = (items: string[]): string =>
-    items.length === 0 ? "unknown" : items.length === 1 ? items[0]! : "mixed";
+    items.length === 0 ? "unknown" : items.length === 1 ? (items[0] ?? "unknown") : "mixed";
   const responses = pages.map((page) => page.response as ChartPageResponse);
   const anyUnknownCoverage = responses.some((response) => response.coverageStatus === "unknown");
   const incompleteCoverage =
@@ -238,17 +238,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
   const [diagnosticFormError, setDiagnosticFormError] = useState<string | null>(null);
   const input = useMemo(
     () => (validSymbol ? buildCoreBarsReadInput(symbol, config) : null),
-    [
-      validSymbol,
-      symbol,
-      config.range,
-      config.resolution,
-      config.assetClass,
-      config.sessionScope,
-      config.adjustment,
-      config.providerPreference,
-      config.allowDailyDowngrade,
-    ],
+    [validSymbol, symbol, config],
   );
   const selectionKey = input ? chartSelectionKey(input) : null;
   const [history, setHistory] = useState<ChartHistoryState>(EMPTY_HISTORY);
@@ -725,8 +715,9 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
         </div>
       </header>
 
-      <div className="native-chart-widget__controls" aria-label="Chart settings">
-        <div className="native-chart-widget__range" role="group" aria-label="Chart data mode">
+      <div className="native-chart-widget__controls">
+        <fieldset className="native-chart-widget__range">
+          <legend>Chart data mode</legend>
           <button
             type="button"
             aria-pressed={activeIsCore}
@@ -743,10 +734,11 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
           >
             MDP diagnostic
           </button>
-        </div>
+        </fieldset>
 
         {activeIsCore ? (
-          <div className="native-chart-widget__range" role="group" aria-label="History range">
+          <fieldset className="native-chart-widget__range">
+            <legend>History range</legend>
             {(["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const).map((range) => (
               <button
                 type="button"
@@ -758,7 +750,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
                 {range}
               </button>
             ))}
-          </div>
+          </fieldset>
         ) : (
           <form
             className="native-chart-widget__diagnostic-form"

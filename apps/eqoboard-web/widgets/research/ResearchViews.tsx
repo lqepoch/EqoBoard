@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
 import {
   parseResearchEnvelope,
   projectResearchTable,
+  researchTableRowsWithKeys,
   readResearchRequest,
   type ResearchReadOperation,
   type ResearchReadRequest,
@@ -15,6 +16,7 @@ import {
 import type { WidgetProps } from "@/widgets/sdk/contracts";
 import type { ResearchMarketData } from "@/lib/server/research/screener";
 import { layoutMarketCapTreemap, type MarketCapTreemapCell } from "@/features/research/treemap";
+import { hasControlCharacters } from "@/features/research/text";
 import styles from "./research-widgets.module.css";
 
 export type ResearchViewId =
@@ -146,7 +148,6 @@ const VIEW_FIELD_KEYS: Readonly<Record<ResearchViewId, readonly string[]>> = Obj
 });
 
 const SYMBOL = /^[A-Z][A-Z0-9.^-]{0,15}$/u;
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const NUMBER_TEXT = /^-?(?:\d+\.?\d*|\.\d+)$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -171,7 +172,7 @@ function configString(value: unknown, max: number, allowEmpty = false): value is
     typeof value === "string" &&
     value === value.trim() &&
     value.length <= max &&
-    !CONTROL.test(value) &&
+    !hasControlCharacters(value) &&
     (allowEmpty || value.length > 0)
   );
 }
@@ -375,11 +376,11 @@ type ReadState =
 function useReadResearch(
   host: ResearchViewProps["host"],
   request: ResearchReadRequest | null,
-  refreshVersion: number,
-): ReadState {
-  const requestKey = request ? `${request.operation}:${JSON.stringify(request.input)}` : "none";
+): Readonly<{ state: ReadState; refresh: () => void }> {
   const [state, setState] = useState<ReadState>({ status: "idle" });
-  useEffect(() => {
+  const activeController = useRef<AbortController | null>(null);
+  const refresh = useCallback(() => {
+    activeController.current?.abort();
     if (!request) {
       setState({ status: "idle" });
       return;
@@ -390,6 +391,7 @@ function useReadResearch(
       return;
     }
     const controller = new AbortController();
+    activeController.current = controller;
     const abort = () => controller.abort();
     lifecycle.signal.addEventListener("abort", abort, { once: true });
     setState({ status: "loading" });
@@ -417,13 +419,19 @@ function useReadResearch(
       .catch(() => {
         if (!controller.signal.aborted)
           setState({ status: "error", message: "Research data is unavailable for this request." });
+      })
+      .finally(() => {
+        lifecycle.signal.removeEventListener("abort", abort);
+        if (activeController.current === controller) activeController.current = null;
       });
-    return () => {
-      lifecycle.signal.removeEventListener("abort", abort);
-      controller.abort();
-    };
-  }, [host.data, host.lifecycle, request, requestKey, refreshVersion]);
-  return state;
+  }, [host.data, host.lifecycle, request]);
+
+  useEffect(() => {
+    refresh();
+    return () => activeController.current?.abort();
+  }, [refresh]);
+
+  return { state, refresh };
 }
 
 function updateConfig(
@@ -443,7 +451,7 @@ function ResearchControls({
   const fields = definition.configFields;
   if (fields.length === 0) return null;
   return (
-    <div className={styles.controls} aria-label={`${definition.title} filters`}>
+    <div className={styles.controls} role="group" aria-label={`${definition.title} filters`}>
       {fields.map((field) => {
         if (field === "region" || field === "market") {
           const value = config[field] ?? "us";
@@ -556,7 +564,7 @@ function Evidence({
 }) {
   const { source, status, asOf, retrievedAt, completeness, cache, warning } = envelope;
   return (
-    <div className={styles.evidence} aria-label="Research source evidence">
+    <div className={styles.evidence} role="region" aria-label="Research source evidence">
       <span>{source.provider}</span>
       <span>{status === "available" ? "Complete response" : "Partial response"}</span>
       <span>Provider as of: {asOf ?? "unknown"}</span>
@@ -573,6 +581,7 @@ function Evidence({
 
 function Table({ table, emptyMessage }: { table: ResearchTableProjection; emptyMessage: string }) {
   if (table.rows.length === 0) return <p className={styles.empty}>{emptyMessage}</p>;
+  const rows = researchTableRowsWithKeys(table.rows);
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table}>
@@ -586,8 +595,8 @@ function Table({ table, emptyMessage }: { table: ResearchTableProjection; emptyM
           </tr>
         </thead>
         <tbody>
-          {table.rows.map((row, rowIndex) => (
-            <tr key={typeof row.symbol === "string" ? `${row.symbol}-${rowIndex}` : rowIndex}>
+          {rows.map(({ row, key }) => (
+            <tr key={key}>
               {table.columns.map((column) => {
                 const value = row[column.key];
                 if (column.key === "link" && typeof value === "string") {
@@ -648,7 +657,7 @@ function Heatmap({
 }) {
   const layout = useMemo(() => layoutMarketCapTreemap(data), [data]);
   return (
-    <div
+    <section
       className={styles.heatmap}
       aria-label="Market-cap-weighted research heatmap"
       data-testid="research-heatmap"
@@ -723,20 +732,19 @@ function Heatmap({
         Excluded from tile area: {layout.excludedRows} listings without a positive known market cap.
         Select a tile to focus the workspace symbol.
       </p>
-    </div>
+    </section>
   );
 }
 
 export function ResearchViewWidget(props: ResearchViewProps) {
   const { definition, config, inputs, host, onConfigChange } = props;
-  const [refreshVersion, setRefreshVersion] = useState(0);
   const request = useMemo(
     () => buildResearchViewRequest(definition.id, config, inputs.symbol),
     [definition.id, config, inputs.symbol],
   );
   const hasReadPermission =
     host.auth.authenticated && host.auth.permissions.includes("research:read");
-  const state = useReadResearch(host, hasReadPermission ? request : null, refreshVersion);
+  const { state, refresh } = useReadResearch(host, hasReadPermission ? request : null);
   const selectSymbol = (symbol: string) =>
     host.events.dispatch({ type: "active-symbol.select.v1", symbol });
 
@@ -749,7 +757,7 @@ export function ResearchViewWidget(props: ResearchViewProps) {
         </div>
         <button
           type="button"
-          onClick={() => setRefreshVersion((value) => value + 1)}
+          onClick={refresh}
           disabled={!hasReadPermission || !request || state.status === "loading"}
         >
           Refresh

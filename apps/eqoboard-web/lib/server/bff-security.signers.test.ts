@@ -40,8 +40,14 @@ async function verifyDelegation(
   });
   expect(payload.scope).toEqual([expected.scope]);
   expect(payload.sub).toBe("subject-1");
-  expect(payload.exp! - payload.iat!).toBeGreaterThan(0);
-  expect(payload.exp! - payload.iat!).toBeLessThanOrEqual(60);
+  const expiration = payload.exp;
+  const issuedAt = payload.iat;
+  if (typeof expiration !== "number" || typeof issuedAt !== "number") {
+    throw new Error("Delegation token must include numeric iat and exp claims.");
+  }
+  const lifetimeSeconds = expiration - issuedAt;
+  expect(lifetimeSeconds).toBeGreaterThan(0);
+  expect(lifetimeSeconds).toBeLessThanOrEqual(60);
 }
 
 describe("mode-isolated service signers", () => {

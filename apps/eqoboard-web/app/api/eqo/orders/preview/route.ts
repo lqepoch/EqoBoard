@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { authorizeGatewayRequest, noStoreJson, readBoundedJson } from "@/lib/server/bff-security";
 import { fetchGateway, readBoundedResponse } from "@/lib/server/gateway";
+import { copyBytesToArrayBuffer } from "@/lib/server/http-body";
 import { isOrderPreviewResponse, parseVerticalPreviewIntent } from "@/lib/server/order-intent";
 
 export const runtime = "nodejs";
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   ) {
     return noStoreJson({ error: "invalid_gateway_response" }, 502);
   }
-  return new NextResponse(responseBody.bytes, {
+  return new NextResponse(copyBytesToArrayBuffer(responseBody.bytes), {
     status: upstream.response.status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",

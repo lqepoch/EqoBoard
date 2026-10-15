@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { parseWidgetConfigData, parseWidgetInstanceV1, parseWidgetManifestV1 } from "./manifest";
+import type { WidgetJsonValueV1 } from "./contracts";
+import {
+  parseWidgetConfigData,
+  parseWidgetInstanceV1,
+  parseWidgetManifestV1,
+} from "./manifest";
+
+function isJsonObject(
+  value: WidgetJsonValueV1,
+): value is Readonly<Record<string, WidgetJsonValueV1>> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 
 const validManifest = () => ({
   manifestVersion: 1,
@@ -78,11 +89,7 @@ describe("widget manifest runtime validation", () => {
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
       expect(Object.isFrozen(parsed.value)).toBe(true);
-      if (
-        parsed.value !== null &&
-        typeof parsed.value === "object" &&
-        !Array.isArray(parsed.value)
-      ) {
+      if (isJsonObject(parsed.value)) {
         expect(Object.isFrozen(parsed.value.nested)).toBe(true);
       }
     }

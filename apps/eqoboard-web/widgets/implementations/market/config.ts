@@ -1,4 +1,7 @@
-const CONTROL = /[\u0000-\u001f\u007f]/u;
+import {
+  hasControlCharacters,
+  hasOnlyEnumerableDataProperties,
+} from "../../../features/data/validation";
 
 export type EmptyMarketConfigV1 = Readonly<{ schemaVersion: 1 }>;
 export type OptionExpiryConfigV1 = Readonly<{ schemaVersion: 1; expiry: string }>;
@@ -10,17 +13,7 @@ function plainRecord(value: unknown): Record<string, unknown> | null {
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (
-      Reflect.ownKeys(value).some(
-        (key) =>
-          typeof key !== "string" ||
-          !descriptors[key] ||
-          !descriptors[key]!.enumerable ||
-          !("value" in descriptors[key]!),
-      )
-    )
-      return null;
+    if (!hasOnlyEnumerableDataProperties(value)) return null;
     return value as Record<string, unknown>;
   } catch {
     return null;
@@ -57,7 +50,7 @@ export function parseOptionExpiryConfig(
     typeof row.expiry !== "string" ||
     row.expiry.length > 10 ||
     row.expiry.trim() !== row.expiry ||
-    CONTROL.test(row.expiry) ||
+    hasControlCharacters(row.expiry) ||
     (row.expiry !== "" && !validDate(row.expiry))
   )
     return { ok: false, code: "config-invalid", field: "expiry" };

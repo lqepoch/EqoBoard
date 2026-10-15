@@ -1,3 +1,5 @@
+import { hasControlCharacters } from "./text";
+
 export type ResearchAiMessage = Readonly<{
   role: "user" | "assistant";
   content: string;
@@ -52,7 +54,7 @@ export function parseResearchAiRequest(input: unknown): ResearchAiRequestResult 
       typeof message.content !== "string" ||
       message.content.trim() === "" ||
       message.content.length > 4_000 ||
-      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(message.content)
+      hasControlCharacters(message.content, { allowTextWhitespace: true })
     ) {
       return { ok: false, code: "invalid-message" };
     }

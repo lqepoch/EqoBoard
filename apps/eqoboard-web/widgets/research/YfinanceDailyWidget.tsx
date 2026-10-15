@@ -66,7 +66,7 @@ export function YfinanceDailyWidget({
     host.auth.permissions.includes("research:read");
   const request = useMemo(
     () => buildYfinanceResearchInput(config, inputs.symbol, anchorNow),
-    [config.symbol, config.assetClass, config.range, config.adjustment, inputs.symbol, anchorNow],
+    [config, inputs.symbol, anchorNow],
   );
   const requestKey = request ? JSON.stringify(request) : "invalid-request";
   const current =
@@ -280,7 +280,7 @@ export function YfinanceDailyWidget({
           Refresh
         </button>
       </header>
-      <div className={styles.controls} aria-label="Yahoo daily history controls">
+      <div className={styles.controls} role="group" aria-label="Yahoo daily history controls">
         <label className={styles.control}>
           <span>Symbol</span>
           <input

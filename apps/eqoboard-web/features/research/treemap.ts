@@ -75,11 +75,13 @@ export function layoutMarketCapTreemap(
         (right.value ?? 0) - (left.value ?? 0) ||
         (left.data.row?.symbol ?? "").localeCompare(right.data.row?.symbol ?? ""),
     );
-  treemap<TreemapNode>().tile(treemapSquarify).size([width, height]).round(false).paddingInner(0)(
-    root,
-  );
+  const layout = treemap<TreemapNode>()
+    .tile(treemapSquarify)
+    .size([width, height])
+    .round(false)
+    .paddingInner(0)(root);
 
-  const cells = root.leaves().flatMap((node): MarketCapTreemapCell[] => {
+  const cells = layout.leaves().flatMap((node): MarketCapTreemapCell[] => {
     const row = node.data.row;
     const marketCap = node.data.value;
     if (!row || typeof marketCap !== "number" || !Number.isFinite(marketCap) || marketCap <= 0)

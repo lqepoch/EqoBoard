@@ -2,6 +2,7 @@ import type {
   EngineStatusResponseV1,
   SyntheticOfflinePreviewV1,
 } from "@lqepoch/trading-core-contracts";
+import { hasControlCharacters } from "./text";
 
 function record(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -19,7 +20,7 @@ function label(value: unknown, maximum = 128): value is string {
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= maximum &&
-    !/[\u0000-\u001f\u007f]/u.test(value)
+    !hasControlCharacters(value)
   );
 }
 

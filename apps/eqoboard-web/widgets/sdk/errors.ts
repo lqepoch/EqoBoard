@@ -16,7 +16,7 @@ const SAFE_CODES = new Set<WidgetRuntimeError["code"]>([
 
 function ownDataValue(value: object, key: string): unknown {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
-  return descriptor && descriptor.enumerable && "value" in descriptor
+  return descriptor?.enumerable && "value" in descriptor
     ? descriptor.value
     : undefined;
 }

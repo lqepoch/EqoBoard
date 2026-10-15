@@ -1,6 +1,6 @@
 import type { VerticalPreviewIntent } from "../data/operations";
+import { hasControlCharacters, hasOnlyEnumerableDataProperties } from "../data/validation";
 
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const TICKER = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 const OCC = /^([A-Z0-9.]{1,10})(\d{6})([CP])(\d{8})$/u;
 
@@ -94,17 +94,7 @@ function record(value: unknown): Record<string, unknown> | null {
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (
-      Reflect.ownKeys(value).some(
-        (key) =>
-          typeof key !== "string" ||
-          !descriptors[key] ||
-          !descriptors[key]!.enumerable ||
-          !("value" in descriptors[key]!),
-      )
-    )
-      return null;
+    if (!hasOnlyEnumerableDataProperties(value)) return null;
     return value as Record<string, unknown>;
   } catch {
     return null;
@@ -117,7 +107,7 @@ function string(value: unknown, max = 256): value is string {
     value.length > 0 &&
     value.length <= max &&
     value === value.trim() &&
-    !CONTROL.test(value)
+    !hasControlCharacters(value)
   );
 }
 
@@ -245,12 +235,17 @@ export function parseOccContractSymbol(
 }> | null {
   const match = OCC.exec(value);
   if (!match) return null;
-  const strikeUnits = Number(match[4]);
+  const underlyingRoot = match[1];
+  const yymmdd = match[2];
+  const rightCode = match[3];
+  const strikeText = match[4];
+  if (!underlyingRoot || !yymmdd || !rightCode || !strikeText) return null;
+  const strikeUnits = Number(strikeText);
   if (!Number.isSafeInteger(strikeUnits)) return null;
   return Object.freeze({
-    underlyingRoot: match[1]!,
-    yymmdd: match[2]!,
-    right: match[3] === "C" ? "call" : "put",
+    underlyingRoot,
+    yymmdd,
+    right: rightCode === "C" ? "call" : "put",
     strike: strikeUnits / 1_000,
   });
 }
@@ -335,8 +330,7 @@ export function decodeOptionChainResponse(
 ): OptionChainResponse | null {
   const row = record(value);
   if (
-    !row ||
-    row.source !== "alpaca" ||
+    row?.source !== "alpaca" ||
     row.underlying !== expectedUnderlying ||
     row.expiration !== expectedExpiration ||
     !string(row.feed, 64) ||
@@ -388,7 +382,8 @@ function previewIntent(value: unknown): VerticalPreviewIntent | null {
     row.legs.length !== 2
   )
     return null;
-  const legs = row.legs.map((value) => {
+  const legs: VerticalPreviewIntent["legs"][number][] = [];
+  for (const value of row.legs) {
     const leg = record(value);
     if (
       !leg ||
@@ -398,12 +393,19 @@ function previewIntent(value: unknown): VerticalPreviewIntent | null {
       (leg.side !== "buy" && leg.side !== "sell")
     )
       return null;
-    return Object.freeze({ symbol: leg.symbol, side: leg.side });
-  });
-  if (!legs[0] || !legs[1] || legs[0].side === legs[1].side || legs[0].symbol === legs[1].symbol)
+    legs.push(Object.freeze({ symbol: leg.symbol, side: leg.side }));
+  }
+  const firstLeg = legs[0];
+  const secondLeg = legs[1];
+  if (
+    !firstLeg ||
+    !secondLeg ||
+    firstLeg.side === secondLeg.side ||
+    firstLeg.symbol === secondLeg.symbol
+  )
     return null;
-  const first = OCC.exec(legs[0].symbol);
-  const second = OCC.exec(legs[1].symbol);
+  const first = OCC.exec(firstLeg.symbol);
+  const second = OCC.exec(secondLeg.symbol);
   if (
     !first ||
     !second ||
@@ -419,8 +421,11 @@ function previewIntent(value: unknown): VerticalPreviewIntent | null {
   const buyContract = OCC.exec(buy.symbol);
   const sellContract = OCC.exec(sell.symbol);
   if (!buyContract || !sellContract) return null;
-  const buyStrike = BigInt(buyContract[4]!);
-  const sellStrike = BigInt(sellContract[4]!);
+  const buyStrikeText = buyContract[4];
+  const sellStrikeText = sellContract[4];
+  if (!buyStrikeText || !sellStrikeText) return null;
+  const buyStrike = BigInt(buyStrikeText);
+  const sellStrike = BigInt(sellStrikeText);
   const width = buyStrike > sellStrike ? buyStrike - sellStrike : sellStrike - buyStrike;
   if (BigInt(Math.round(row.limit_price * 100)) * 10n >= width) return null;
   const expectedEffect =

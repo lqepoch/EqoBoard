@@ -1,3 +1,5 @@
+import { hasControlCharacters } from "./text";
+
 /**
  * Bounded, versioned saved-query intent for native Research widgets.
  * This is workspace UI configuration, not a market or provider wire contract.
@@ -104,7 +106,6 @@ export type ResearchQueryConfigResult =
   | Readonly<{ ok: false; errors: readonly ResearchQueryConfigError[] }>;
 
 const QUERY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -190,7 +191,7 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
         raw.name.trim() === "" ||
         raw.name.trim() !== raw.name ||
         raw.name.length > RESEARCH_QUERY_LIMITS.maxNameLength ||
-        CONTROL.test(raw.name)
+        hasControlCharacters(raw.name)
       ) {
         reject(`${path}.name`, "invalid-value");
       }
@@ -203,6 +204,7 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
       }
 
       const viewId = isViewId(raw.viewId) ? raw.viewId : null;
+      const id = raw.id;
       const filters: ResearchFilterV1[] = [];
       if (
         Array.isArray(raw.filters) &&
@@ -227,7 +229,7 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
             typeof filter.value !== "string" ||
             filter.value.trim() === "" ||
             filter.value.length > RESEARCH_QUERY_LIMITS.maxFilterValueLength ||
-            CONTROL.test(filter.value)
+            hasControlCharacters(filter.value)
           ) {
             reject(`${filterPath}.value`, "invalid-value");
           }
@@ -241,7 +243,7 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
             typeof filter.value === "string" &&
             filter.value.trim() !== "" &&
             filter.value.length <= RESEARCH_QUERY_LIMITS.maxFilterValueLength &&
-            !CONTROL.test(filter.value)
+            !hasControlCharacters(filter.value)
           ) {
             filters.push({
               field: filter.field as ResearchFilterField,
@@ -252,19 +254,19 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
         });
       }
       if (
-        typeof raw.id === "string" &&
-        QUERY_ID.test(raw.id) &&
+        typeof id === "string" &&
+        QUERY_ID.test(id) &&
         typeof raw.name === "string" &&
         raw.name.trim() === raw.name &&
         raw.name.trim() !== "" &&
         raw.name.length <= RESEARCH_QUERY_LIMITS.maxNameLength &&
-        !CONTROL.test(raw.name) &&
+        !hasControlCharacters(raw.name) &&
         viewId !== null &&
         Array.isArray(raw.filters) &&
         raw.filters.length === filters.length &&
         raw.filters.length <= RESEARCH_QUERY_LIMITS.maxFiltersPerQuery
       ) {
-        queries.push({ id: raw.id.toLowerCase(), name: raw.name, viewId, filters });
+        queries.push({ id: id.toLowerCase(), name: raw.name, viewId, filters });
       }
     });
   }

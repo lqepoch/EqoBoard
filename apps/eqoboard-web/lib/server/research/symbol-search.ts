@@ -1,6 +1,7 @@
 import { readProviderJson } from "./transport";
 import type { ProviderResult } from "./types";
 import { SOURCE_LICENSES } from "./types";
+import { hasControlCharacters } from "@/features/research/text";
 
 export type ResearchSymbolSearchResult = Readonly<{
   symbol: string;
@@ -49,7 +50,7 @@ function plainText(value: unknown, maxLength: number): string | null {
     .replace(/<[^>]{0,128}>/gu, "")
     .replace(/\s+/gu, " ")
     .trim();
-  return text.length > 0 && text.length <= maxLength && !/[\u0000-\u001f\u007f]/u.test(text)
+  return text.length > 0 && text.length <= maxLength && !hasControlCharacters(text)
     ? text
     : null;
 }
@@ -110,7 +111,7 @@ export async function loadTradingViewSymbolSearch(
     query !== query.trim() ||
     query.length < 1 ||
     query.length > 64 ||
-    /[\u0000-\u001f\u007f]/u.test(query)
+    hasControlCharacters(query)
   ) {
     throw new TypeError("invalid-symbol-search-query");
   }

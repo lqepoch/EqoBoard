@@ -98,7 +98,7 @@ export function parseNativeChartConfig(
     if (
       keys.some((key) => {
         const descriptor = descriptors[key as string];
-        return !descriptor || !descriptor.enumerable || !("value" in descriptor);
+        return !descriptor?.enumerable || !("value" in descriptor);
       })
     )
       return { ok: false, code: "config-invalid" };

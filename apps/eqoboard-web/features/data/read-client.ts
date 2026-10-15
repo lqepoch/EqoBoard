@@ -275,12 +275,21 @@ export function createNativeDataReadClient(
         >;
 
       const time = now();
-      while (requestTimes.length > 0 && time - requestTimes[0]! >= RATE_WINDOW_MS)
-        requestTimes.shift();
+      while (requestTimes.length > 0) {
+        const oldestRequest = requestTimes[0];
+        if (oldestRequest === undefined || time - oldestRequest >= RATE_WINDOW_MS) {
+          requestTimes.shift();
+          continue;
+        }
+        break;
+      }
       if (requestTimes.length >= MAX_REQUESTS_PER_WINDOW) {
+        const oldestRequest = requestTimes[0];
         throw new WidgetDataReadError(
           "rate-limited",
-          Math.max(1, requestTimes[0]! + RATE_WINDOW_MS - time),
+          oldestRequest === undefined
+            ? RATE_WINDOW_MS
+            : Math.max(1, oldestRequest + RATE_WINDOW_MS - time),
         );
       }
       if (

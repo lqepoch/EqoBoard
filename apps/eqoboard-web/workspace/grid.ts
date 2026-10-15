@@ -87,7 +87,8 @@ export function moveGridItem(
   const queue = [anchor];
   let pushes = 0;
   while (queue.length > 0) {
-    const current = queue.shift()!;
+    const current = queue.shift();
+    if (!current) break;
     const collided = rest
       .filter((item) => item.i !== current.i && placementsOverlap(current, item))
       .sort((a, b) => a.y - b.y || a.x - b.x || a.i.localeCompare(b.i));
@@ -150,7 +151,8 @@ export function fromGridCallback(
   }
   const normalized: GridPlacementV1[] = [];
   for (const item of proposed) {
-    const widget = widgetById.get(item.i)!;
+    const widget = widgetById.get(item.i);
+    if (!widget) return { ok: false, reason: "unknown-item" };
     const constraints = constraintsForManifest(registry, widget.manifestId);
     const placement = clampSize(item, constraints);
     if (!isWithinBounds(placement, constraints)) return { ok: false, reason: "invalid-size" };

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const { ownerKeyForPrincipal, principalFromClaims } = await import("./auth");
-const { authCookieName } = await import("../../auth");
+const { authCookieName } = await vi.importActual<typeof import("../../auth")>("../../auth");
 
 afterEach(() => vi.unstubAllEnvs());
 

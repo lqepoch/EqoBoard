@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextRequest } from "next/server";
 import { authOptions, isOidcConfigured } from "@/auth";
 import { noStoreJson, readBoundedBody, validateSameOriginWrite } from "@/lib/server/bff-security";
+import { copyBytesToArrayBuffer } from "@/lib/server/http-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ async function dispatch(request: NextRequest, context: RouteContext): Promise<Re
     boundedRequest = new NextRequest(request.url, {
       method: request.method,
       headers: request.headers,
-      body: bounded.bytes,
+      body: copyBytesToArrayBuffer(bounded.bytes),
       signal: request.signal,
     });
   }

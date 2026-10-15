@@ -6,7 +6,8 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from "ag-grid-communi
 import type { ColDef, GridApi, GridReadyEvent } from "ag-grid-community";
 
 import { ResourceState } from "@/components/shell/ResourceState";
-import { useMarketLease } from "@/features/data/MarketDataHost";
+import { useMarketLease, useMarketSnapshot } from "@/features/data/MarketDataHost";
+import { hasControlCharacters } from "@/features/data/validation";
 import type { MarketHostSnapshot } from "@/stores/market/market-store";
 import type { WidgetProps } from "@/widgets/sdk/contracts";
 import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
@@ -19,6 +20,8 @@ import type { EmptyMarketConfigV1 } from "./config";
 import styles from "./market-widgets.module.css";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
+
+const EMPTY_SYMBOLS: readonly string[] = Object.freeze([]);
 
 export type QuoteWidgetProps = WidgetProps<
   EmptyMarketConfigV1,
@@ -267,8 +270,7 @@ type QuoteViewProps = Readonly<{
 }>;
 
 function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps) {
-  const symbolsKey = JSON.stringify(symbols);
-  const requested = useMemo(() => [...new Set(symbols)].slice(0, 50), [symbolsKey]);
+  const requested = useMemo(() => [...new Set(symbols)].slice(0, 50), [symbols]);
   const response = useQuoteSnapshots(host, requested);
   const [rows, setRows] = useState<StockGridRow[]>(() => requested.map(emptyRow));
   const apiRef = useRef<GridApi<StockGridRow> | null>(null);
@@ -276,9 +278,10 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
   const quoteSequences = useRef(new Map<string, number>());
   const tradeSequences = useRef(new Map<string, number>());
   const gatewayInstance = useRef<string | null>(null);
-  const columns = useMemo(() => COLUMN_DEFS, []);
+  const columns = useMemo(() => [...COLUMN_DEFS], []);
+  const leaseSymbols = useMemo(() => symbols.slice(0, 1_000), [symbols]);
 
-  useMarketLease(instanceId, "stocks", symbols.slice(0, 1_000), host.lifecycle);
+  useMarketLease(instanceId, "stocks", leaseSymbols, host.lifecycle);
 
   useEffect(() => {
     const next = requested.map(emptyRow);
@@ -373,7 +376,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
           Snapshot request is capped at 50 symbols; stream targets remain shared by the host.
         </p>
       ) : null}
-      <div className={styles.marketGrid} role="region" aria-label={`${title} data grid`}>
+      <section className={styles.marketGrid} aria-label={`${title} data grid`}>
         <AgGridReact<StockGridRow>
           columnDefs={columns}
           defaultColDef={DEFAULT_COL_DEF}
@@ -382,7 +385,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
           rowData={rows}
           theme={themeQuartz}
         />
-      </div>
+      </section>
       <p className={styles.marketFootnote}>
         Snapshot `as_of` and per-event source/entitlement fields are preserved. A stream print is
         not inferred to be a buy or sell.
@@ -393,10 +396,11 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
 
 export function QuoteWidget({ host, instance, inputs }: QuoteWidgetProps) {
   const symbol = inputs.symbol ?? "";
+  const symbols = useMemo(() => (symbol ? [symbol] : EMPTY_SYMBOLS), [symbol]);
   return (
     <QuoteTable
       title="Quote"
-      symbols={symbol ? [symbol] : []}
+      symbols={symbols}
       host={host}
       instanceId={instance.instanceId}
       testId="market-quote-widget"
@@ -405,7 +409,7 @@ export function QuoteWidget({ host, instance, inputs }: QuoteWidgetProps) {
 }
 
 export function WatchlistWidget({ host, instance, inputs }: QuoteWidgetProps) {
-  const symbols = inputs.watchlist ?? [];
+  const symbols = inputs.watchlist ?? EMPTY_SYMBOLS;
   return (
     <QuoteTable
       title="Watchlist"
@@ -485,7 +489,7 @@ function field(record: Readonly<Record<string, unknown>> | null, key: string, ma
   return typeof value === "string" &&
     value.length > 0 &&
     value.length <= max &&
-    !/[\u0000-\u001f\u007f]/u.test(value)
+    !hasControlCharacters(value)
     ? value
     : "unknown";
 }

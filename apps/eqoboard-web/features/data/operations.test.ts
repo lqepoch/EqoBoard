@@ -18,9 +18,8 @@ describe("fixed recap and symbol-search read operations", () => {
     const searchRequest = buildNativeReadRequest("research.symbolSearch", { query: "AAPL" });
     expect(searchRequest?.path).toBe("/api/research/data/symbol-search?query=AAPL");
     expect(searchRequest?.path).not.toContain("limit");
-    expect(
-      buildNativeReadRequest("research.symbolSearch", { query: "AAPL", limit: 20 }),
-    ).toBeNull();
+    const inputWithCallerLimit = { query: "AAPL", limit: 20 };
+    expect(buildNativeReadRequest("research.symbolSearch", inputWithCallerLimit)).toBeNull();
   });
 
   it("rejects empty, untrimmed, overlong, and control-character search terms", () => {

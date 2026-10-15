@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { parseResearchAiResponse } from "@/features/research/ai";
+import { hasControlCharacters } from "@/features/research/text";
 import type { NativeActionMap } from "@/features/data/operations";
 import type { WidgetOperationMap } from "@/widgets/sdk/data";
 import type { WidgetProps } from "@/widgets/sdk/contracts";
@@ -32,7 +33,7 @@ export function ResearchAiWidget({
       busy ||
       text.length === 0 ||
       text.length > 4_000 ||
-      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(text)
+      hasControlCharacters(text, { allowTextWhitespace: true })
     )
       return;
     const lifecycle = host.lifecycle.getSnapshot();

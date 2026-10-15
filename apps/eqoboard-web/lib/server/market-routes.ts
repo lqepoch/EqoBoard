@@ -1,6 +1,6 @@
 import "server-only";
 
-import { NextResponse } from "next/server";
+import type { NextResponse } from "next/server";
 import type { Permission } from "../contracts/auth";
 import { authorizeGatewayRequest, noStoreJson, readBoundedJson } from "./bff-security";
 import { fetchGateway, relayGatewayJson, type GatewayPath } from "./gateway";

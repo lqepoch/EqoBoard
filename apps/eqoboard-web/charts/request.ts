@@ -4,7 +4,14 @@ import type { NativeChartConfigV1 } from "../widgets/implementations/charts/conf
 import type { DecodedCoreBarsPage } from "./core-bars";
 
 export const MAX_HISTORY_PAGES = 20;
-const CONTROL = /[\u0000-\u001f\u007f]/u;
+
+function containsControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x1f || codePoint === 0x7f) return true;
+  }
+  return false;
+}
 
 const AUTO_RESOLUTION: Readonly<
   Record<NativeChartConfigV1["range"], NonNullable<CoreBarsReadInput["resolution"]>>
@@ -94,7 +101,7 @@ export function usableContinuationCursor(value: unknown): value is string {
     value.length > 0 &&
     value.length <= 2_048 &&
     new TextEncoder().encode(value).byteLength <= 2_048 &&
-    !CONTROL.test(value)
+    !containsControlCharacter(value)
   );
 }
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultChartConfig } from "../widgets/implementations/charts/config";
+import {
+  createDefaultChartConfig,
+  type NativeChartConfigV1,
+} from "../widgets/implementations/charts/config";
 import type { DecodedCoreBarsPage } from "./core-bars";
 import {
   buildCoreBarsReadInput,
@@ -44,7 +47,11 @@ describe("Core Bars chart request selection", () => {
   });
 
   it("sends explicit market selection and accepts only the server-resolved first page", () => {
-    const config = { ...createDefaultChartConfig(), range: "MAX", assetClass: "etf" as const };
+    const config: NativeChartConfigV1 = {
+      ...createDefaultChartConfig(),
+      range: "MAX",
+      assetClass: "etf",
+    };
     const input = buildCoreBarsReadInput("SPY", config);
 
     expect(input).toEqual({

@@ -1,4 +1,5 @@
 import type { ResearchOperationName } from "./types";
+import { hasControlCharacters } from "@/features/research/text";
 
 export type ResearchOperationInput =
   | Readonly<{ operation: "news"; symbol?: string }>
@@ -125,12 +126,18 @@ export function parseResearchOperationInput(
             value: { operation: "earnings-calendar", ...(list ? { symbols: list } : {}) },
           };
     }
-    case "earnings-history":
+    case "earnings-history": {
+      if (!exactKeys(params, ["symbol"])) return { ok: false, error: "unknown-parameter" };
+      const parsed = symbol(single(params, "symbol"));
+      return parsed
+        ? { ok: true, value: { operation: "earnings-history", symbol: parsed } }
+        : { ok: false, error: "invalid-parameter" };
+    }
     case "insider": {
       if (!exactKeys(params, ["symbol"])) return { ok: false, error: "unknown-parameter" };
       const parsed = symbol(single(params, "symbol"));
       return parsed
-        ? { ok: true, value: { operation, symbol: parsed } as ResearchOperationInput }
+        ? { ok: true, value: { operation: "insider", symbol: parsed } }
         : { ok: false, error: "invalid-parameter" };
     }
     case "screener": {
@@ -162,8 +169,12 @@ export function parseResearchOperationInput(
         !marketValue ||
         sectorRaw === "" ||
         (sector !== undefined &&
-          (sector.length === 0 || sector.length > 64 || /[\u0000-\u001f\u007f]/u.test(sector))) ||
-        [marketCapMin, changeMin, changeMax, volumeMin, limitValue].some((item) => item === null) ||
+          (sector.length === 0 || sector.length > 64 || hasControlCharacters(sector))) ||
+        marketCapMin === null ||
+        changeMin === null ||
+        changeMax === null ||
+        volumeMin === null ||
+        limitValue === null ||
         (sort !== undefined && !["marketCap", "price", "changePercent", "volume"].includes(sort)) ||
         (direction !== undefined && direction !== "asc" && direction !== "desc") ||
         (typeof changeMin === "number" && typeof changeMax === "number" && changeMin > changeMax) ||
@@ -207,14 +218,17 @@ export function parseResearchOperationInput(
         query !== "" &&
         query === query.trim() &&
         query.length <= 64 &&
-        !/[\u0000-\u001f\u007f]/u.test(query)
+        !hasControlCharacters(query)
         ? { ok: true, value: { operation: "symbol-search", query } }
         : { ok: false, error: "invalid-parameter" };
     }
     case "crypto":
+      return params.size === 0
+        ? { ok: true, value: { operation: "crypto" } }
+        : { ok: false, error: "unknown-parameter" };
     case "crypto-global":
       return params.size === 0
-        ? { ok: true, value: { operation } }
+        ? { ok: true, value: { operation: "crypto-global" } }
         : { ok: false, error: "unknown-parameter" };
   }
 }

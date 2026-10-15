@@ -34,6 +34,7 @@ const LEGACY_KINDS = [
   "researchpredictions",
   "enginepreview",
 ] as const;
+const LEGACY_KIND_SET: ReadonlySet<string> = new Set(LEGACY_KINDS);
 
 type LegacyKind = (typeof LEGACY_KINDS)[number];
 type LegacyWidget = Readonly<{ id: string; type: LegacyKind; symbol?: string; linked: boolean }>;
@@ -88,6 +89,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
+function isLegacyKind(value: unknown): value is LegacyKind {
+  return typeof value === "string" && LEGACY_KIND_SET.has(value);
+}
+
+function hasControlCharacters(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+  });
+}
+
 function error(code: ParseErrorCode, path: string, message: string): typeof INVALID {
   errors.push({ code, path, message });
   return INVALID;
@@ -112,16 +124,14 @@ function parseWidget(value: unknown, index: number): LegacyWidget | typeof INVAL
   const path = `$.state.widgets[${index}]`;
   if (!isRecord(value)) return error("invalid-shape", path, "Expected a legacy widget object.");
   let valid = validContainerKeys(value, ["id", "type", "symbol", "linked"], path);
-  if (
-    typeof value.id !== "string" ||
-    value.id.length < 1 ||
-    value.id.length > 128 ||
-    /[\u0000-\u001f\u007f]/u.test(value.id)
-  ) {
+  const id = typeof value.id === "string" ? value.id : null;
+  const type = isLegacyKind(value.type) ? value.type : null;
+  const linked = typeof value.linked === "boolean" ? value.linked : null;
+  if (id === null || id.length < 1 || id.length > 128 || hasControlCharacters(id)) {
     error("invalid-value", `${path}.id`, "Legacy widget identity is invalid.");
     valid = false;
   }
-  if (typeof value.type !== "string" || !(LEGACY_KINDS as readonly string[]).includes(value.type)) {
+  if (type === null) {
     error(
       "invalid-value",
       `${path}.type`,
@@ -129,7 +139,7 @@ function parseWidget(value: unknown, index: number): LegacyWidget | typeof INVAL
     );
     valid = false;
   }
-  if (typeof value.linked !== "boolean") {
+  if (linked === null) {
     error("invalid-value", `${path}.linked`, "Legacy symbol-link mode must be boolean.");
     valid = false;
   }
@@ -140,12 +150,13 @@ function parseWidget(value: unknown, index: number): LegacyWidget | typeof INVAL
   const parsedSymbol =
     value.symbol === undefined ? undefined : symbol(value.symbol, `${path}.symbol`);
   if (parsedSymbol === INVALID) valid = false;
-  if (!valid) return INVALID;
+  if (!valid || id === null || type === null || linked === null || parsedSymbol === INVALID)
+    return INVALID;
   return {
-    id: value.id,
-    type: value.type as LegacyKind,
-    linked: value.linked,
-    ...(parsedSymbol ? { symbol: parsedSymbol } : {}),
+    id,
+    type,
+    linked,
+    ...(typeof parsedSymbol === "string" ? { symbol: parsedSymbol } : {}),
   };
 }
 
@@ -378,15 +389,37 @@ export function previewLegacyWorkspaceImport(
   }
   const workspaceId = createId();
   const tabId = createId();
-  const instances = widgets.map((widget) => instanceByOldId.get(widget.id)!);
+  const instances: WidgetInstanceV1[] = [];
+  for (const widget of widgets) {
+    const instance = instanceByOldId.get(widget.id);
+    if (!instance) {
+      error(
+        "missing-reference",
+        "$.state.widgets",
+        "Legacy widget instance could not be resolved.",
+      );
+      return finishFailure();
+    }
+    instances.push(instance);
+  }
+  const nativePlacements: GridPlacementV1[] = [];
+  for (const placement of placements) {
+    const instance = instanceByOldId.get(placement.i);
+    if (!instance) {
+      error(
+        "missing-reference",
+        "$.state.layout",
+        "Legacy placement references an unknown widget.",
+      );
+      return finishFailure();
+    }
+    nativePlacements.push({ ...placement, i: instance.instanceId });
+  }
   const candidateTab: WorkspaceTabV1 = {
     id: tabId,
     name: "Imported layout",
     widgets: instances,
-    placements: placements.map((placement) => ({
-      ...placement,
-      i: instanceByOldId.get(placement.i)!.instanceId,
-    })),
+    placements: nativePlacements,
     maximizedInstanceId: null,
   };
   const gridResult = fromGridCallback(candidateTab.placements, candidateTab, registry);

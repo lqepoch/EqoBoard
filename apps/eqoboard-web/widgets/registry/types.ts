@@ -41,9 +41,17 @@ export interface WidgetRegistration<
   provenance: BuiltinProvenance;
 }
 
-/** Internal erased form after each static config parser has been retained in the entry. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyWidgetRegistration = WidgetRegistration<any, any, any, any>;
+/** Internal erased form after static config and host generics are retained in the entry. */
+export type AnyWidgetRegistration = Readonly<{
+  manifest: WidgetManifestV1;
+  /** Never props make the erased component assignable without weakening to `any`. */
+  Component: ComponentType<never>;
+  allowedReadOperations: readonly string[];
+  allowedActions: readonly WidgetActionId[];
+  parseConfig(value: unknown): ConfigParseResult<unknown>;
+  createDefaultConfig(): unknown;
+  provenance: BuiltinProvenance;
+}>;
 
 export type WidgetConfigParseResult =
   | Readonly<{ ok: true; value: unknown }>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { isIP } from "node:net";
 import { readBoundedResponse } from "./gateway";
+import { copyBytesToArrayBuffer } from "./http-body";
 
 export type UpstreamDeadline = Readonly<{
   signal: AbortSignal;
@@ -129,7 +130,7 @@ export async function readJsonResponseBounded(
 }
 
 export function passthroughJsonResponse(bytes: Uint8Array, status = 200): Response {
-  return new Response(bytes, {
+  return new Response(copyBytesToArrayBuffer(bytes), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",

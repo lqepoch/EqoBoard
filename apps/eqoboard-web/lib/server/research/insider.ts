@@ -122,15 +122,24 @@ async function recentFilings(cik: string, contact: string, limit: number): Promi
   const accessions = readPath(recent, ["accessionNumber"]);
   const filingDates = readPath(recent, ["filingDate"]);
   const primaryDocuments = readPath(recent, ["primaryDocument"]);
-  if (![forms, accessions, filingDates, primaryDocuments].every(Array.isArray)) {
+  if (
+    !Array.isArray(forms) ||
+    !Array.isArray(accessions) ||
+    !Array.isArray(filingDates) ||
+    !Array.isArray(primaryDocuments)
+  ) {
     throw new Error("sec-submissions-response-invalid");
   }
+  const formRows: readonly unknown[] = forms;
+  const accessionRows: readonly unknown[] = accessions;
+  const filingDateRows: readonly unknown[] = filingDates;
+  const primaryDocumentRows: readonly unknown[] = primaryDocuments;
   const found: FilingRef[] = [];
-  for (let index = 0; index < forms.length && found.length < limit; index += 1) {
-    if (forms[index] !== "4") continue;
-    const accessionNumber = accessions[index];
-    const filingDate = filingDates[index];
-    const primaryDocument = primaryDocuments[index];
+  for (let index = 0; index < formRows.length && found.length < limit; index += 1) {
+    if (formRows[index] !== "4") continue;
+    const accessionNumber = accessionRows[index];
+    const filingDate = filingDateRows[index];
+    const primaryDocument = primaryDocumentRows[index];
     if (
       typeof accessionNumber !== "string" ||
       !/^\d{10}-\d{2}-\d{6}$/u.test(accessionNumber) ||

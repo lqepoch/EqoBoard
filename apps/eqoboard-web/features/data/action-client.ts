@@ -98,15 +98,24 @@ export function createNativeActionClient(
       if (bodyBytes > maxBodyBytes) throw new WidgetDataReadError("request-failed");
 
       const time = now();
-      while (requestTimes.length > 0 && time - requestTimes[0]! >= WINDOW_MS) requestTimes.shift();
+      while (requestTimes.length > 0) {
+        const oldestRequest = requestTimes[0];
+        if (oldestRequest === undefined || time - oldestRequest >= WINDOW_MS) {
+          requestTimes.shift();
+          continue;
+        }
+        break;
+      }
       const priorActionTimes = (actionTimes.get(actionId) ?? []).filter(
         (entry) => time - entry < WINDOW_MS,
       );
       const limit = actionId === "research.ai" ? 10 : MAX_REQUESTS;
-      if (requestTimes.length >= MAX_REQUESTS || priorActionTimes.length >= limit) {
-        const oldest =
-          requestTimes.length >= MAX_REQUESTS ? requestTimes[0]! : priorActionTimes[0]!;
-        throw new WidgetDataReadError("rate-limited", Math.max(1, oldest + WINDOW_MS - time));
+      const globalLimitReached = requestTimes.length >= MAX_REQUESTS;
+      if (globalLimitReached || priorActionTimes.length >= limit) {
+        const oldest = globalLimitReached ? requestTimes[0] : priorActionTimes[0];
+        const retryAfterMs =
+          oldest === undefined ? WINDOW_MS : Math.max(1, oldest + WINDOW_MS - time);
+        throw new WidgetDataReadError("rate-limited", retryAfterMs);
       }
       requestTimes.push(time);
       actionTimes.set(actionId, [...priorActionTimes, time]);

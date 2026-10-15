@@ -1,4 +1,4 @@
-import { MarketStore } from "../../stores/market/market-store";
+import type { MarketStore } from "../../stores/market/market-store";
 
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_BATCH_EVENTS = 256;

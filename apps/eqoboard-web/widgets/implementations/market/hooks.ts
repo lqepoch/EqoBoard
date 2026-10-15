@@ -8,11 +8,7 @@ import {
   decodeQuoteResponse,
   isCanonicalTicker,
 } from "../../../features/market/market-contracts";
-import type {
-  OptionChainResponse,
-  QuoteResponse,
-  StockSnapshotRow,
-} from "../../../features/market/market-contracts";
+import type { OptionChainResponse, QuoteResponse } from "../../../features/market/market-contracts";
 import { useMarketLease } from "../../../features/data/MarketDataHost";
 import type { MarketHostSnapshot } from "../../../stores/market/market-store";
 import type { WidgetHostContext } from "../../../widgets/sdk/contracts";
@@ -52,10 +48,9 @@ export function useQuoteSnapshots(
   host: QuoteWidgetHost,
   symbols: readonly string[],
 ): ReadState<AvailableQuoteResponse> {
-  const symbolsKey = JSON.stringify(symbols);
   const safeSymbols = useMemo(
     () => [...new Set(symbols.filter(isCanonicalTicker))].slice(0, 50),
-    [symbolsKey],
+    [symbols],
   );
   const [state, setState] = useState<ReadState<AvailableQuoteResponse>>({ status: "idle" });
 
@@ -99,7 +94,7 @@ export function useQuoteSnapshots(
         }
       },
     );
-  }, [host.refresh, symbolsKey]);
+  }, [host.refresh, safeSymbols]);
 
   return state;
 }
@@ -154,7 +149,7 @@ export function useOptionsResource(
     };
     sync();
     return host.market.subscribe(sync);
-  }, [host.market, symbol, valid]);
+  }, [host.market]);
 
   useEffect(() => {
     if (!valid) {
@@ -281,7 +276,8 @@ export function useOptionsResource(
     );
   }, [state, underlyingPrice]);
 
-  useMarketLease(instanceId, "stocks", valid ? [symbol] : [], host.lifecycle);
+  const stockLeaseSymbols = useMemo(() => (valid ? [symbol] : []), [symbol, valid]);
+  useMarketLease(instanceId, "stocks", stockLeaseSymbols, host.lifecycle);
   useMarketLease(instanceId, "options", selectedLeaseSymbols, host.lifecycle);
 
   return Object.freeze({

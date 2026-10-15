@@ -72,7 +72,7 @@ function readRecord(value: unknown): Record<string, unknown> | null {
   const result: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   for (const key of ownKeys as string[]) {
     const descriptor = descriptors[key];
-    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return null;
+    if (!descriptor?.enumerable || !("value" in descriptor)) return null;
     result[key] = descriptor.value;
   }
   return result;
@@ -90,7 +90,7 @@ function readArray(value: unknown): unknown[] | null {
     if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length)
       return null;
     const descriptor = descriptors[key];
-    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) return null;
+    if (!descriptor?.enumerable || !("value" in descriptor)) return null;
   }
   if (ownKeys.length !== length + 1) return null;
   const result: unknown[] = [];

@@ -12,8 +12,16 @@ export type SymbolSearchAvailability =
   | "terminal-runtime-required"
   | "research-permission-required";
 
+function containsControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export function normalizeSymbolSearchQuery(value: string): string | null {
-  if (/[\u0000-\u001f\u007f]/u.test(value)) return null;
+  if (containsControlCharacters(value)) return null;
   const query = value.trim();
   if (query.length < 1 || query.length > SYMBOL_SEARCH_MAX_QUERY_LENGTH) return null;
   return query;
@@ -21,7 +29,7 @@ export function normalizeSymbolSearchQuery(value: string): string | null {
 
 export function getSymbolSearchQueryIssue(value: string): "too-long" | "control-characters" | null {
   if (value.trim().length > SYMBOL_SEARCH_MAX_QUERY_LENGTH) return "too-long";
-  if (/[\u0000-\u001f\u007f]/u.test(value)) return "control-characters";
+  if (containsControlCharacters(value)) return "control-characters";
   return null;
 }
 

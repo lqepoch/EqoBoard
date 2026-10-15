@@ -5,6 +5,7 @@ import {
   parseResearchEnvelope,
   parseSymbolSearchEnvelope,
   projectResearchTable,
+  researchTableRowsWithKeys,
 } from "./data";
 
 const newsEnvelope = {
@@ -35,6 +36,16 @@ const newsEnvelope = {
 } as const;
 
 describe("native research envelope adapter", () => {
+  it("assigns stable unique keys to repeated provider rows", () => {
+    const rows = [{ symbol: "SPY" }, { symbol: "SPY" }, { title: "Headline" }];
+    const first = researchTableRowsWithKeys(rows);
+    const second = researchTableRowsWithKeys(rows);
+
+    expect(first.map((entry) => entry.key)).toEqual(second.map((entry) => entry.key));
+    expect(new Set(first.map((entry) => entry.key)).size).toBe(rows.length);
+    expect(first.map((entry) => entry.row)).toEqual(rows);
+  });
+
   it("retains response-derived provider, as-of, retrieval, cache and completeness evidence", () => {
     const envelope = parseResearchEnvelope("research.news", newsEnvelope);
 

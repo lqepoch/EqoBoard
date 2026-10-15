@@ -122,13 +122,21 @@ describe("widget poll budget", () => {
     await Promise.resolve();
 
     expect(operation).toHaveBeenCalledTimes(2);
-    pending.forEach((resolve, index) => resolve(`result-${index}`));
+    for (const [index, resolve] of pending.entries()) {
+      resolve(`result-${index}`);
+    }
     await expect(Promise.all([first, second])).resolves.toEqual(["result-0", "result-1"]);
 
-    const limiter = createWidgetPollBudget({ ...config, maxRequestsPerMinutePerUser: 1 });
+    let limiterNow = 0;
+    const limiter = createWidgetPollBudget(
+      { ...config, maxRequestsPerMinutePerUser: 1 },
+      () => limiterNow,
+    );
     await limiter.run(request, async () => "first");
+    limiterNow = 250;
     await expect(limiter.run(request, async () => "blocked")).rejects.toMatchObject({
       code: "rate-limited",
+      retryAfterMs: 59_750,
     });
     await expect(
       limiter.run({ ...request, scopeKey: "opaque-user-partition-b" }, async () => "other-user"),
@@ -136,7 +144,8 @@ describe("widget poll budget", () => {
   });
 
   it("pauses hidden widgets and enforces a per-instance ceiling", async () => {
-    const budget = createWidgetPollBudget(config);
+    let now = 0;
+    const budget = createWidgetPollBudget(config, () => now);
     await expect(
       budget.run(pollRequest(widgetInstanceId(5), undefined, { hidden: true }), async () => "x"),
     ).rejects.toMatchObject({ code: "hidden" });
@@ -147,6 +156,7 @@ describe("widget poll budget", () => {
     });
     const first = budget.run(pollRequest(widgetInstanceId(6)), () => pending);
     await Promise.resolve();
+    now = 250;
     await expect(
       budget.run(
         pollRequest(widgetInstanceId(6), undefined, { input: { symbols: ["QQQ"] } }),

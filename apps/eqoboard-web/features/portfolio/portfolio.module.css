@@ -159,10 +159,10 @@
 .removeButton {
   white-space: nowrap;
 }
-.dangerButton {
-  border-color: color-mix(in srgb, #fa6969 50%, transparent) !important;
-  color: #ff9d9d !important;
-  background: transparent !important;
+.root .dangerButton {
+  border-color: color-mix(in srgb, #fa6969 50%, transparent);
+  color: #ff9d9d;
+  background: transparent;
 }
 .permissionNote,
 .empty {
@@ -219,10 +219,10 @@
 .root tbody tr:last-child td {
   border-bottom: 0;
 }
-.emptyCell {
-  padding: 1rem !important;
+.root td.emptyCell {
+  padding: 1rem;
   color: var(--portfolio-muted);
-  text-align: center !important;
+  text-align: center;
 }
 .symbol {
   font-weight: 700;

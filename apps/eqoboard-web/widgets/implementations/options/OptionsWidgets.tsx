@@ -7,6 +7,7 @@ import type { ColDef, GridApi, GridReadyEvent } from "ag-grid-community";
 
 import { ResourceState } from "@/components/shell/ResourceState";
 import type { NativeDataOperationMap } from "@/features/data/operations";
+import { hasControlCharacters } from "@/features/data/validation";
 import { parseOccContractSymbol } from "@/features/market/market-contracts";
 import type { OptionContractRow } from "@/features/market/market-contracts";
 import type { MarketHostSnapshot } from "@/stores/market/market-store";
@@ -14,8 +15,7 @@ import type { WidgetProps } from "@/widgets/sdk/contracts";
 import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
 import type { WidgetOperationMap } from "@/widgets/sdk/data";
 import { useOptionsResource } from "../market/hooks";
-import type { OptionsWidgetHost } from "../market/hooks";
-import type { OptionExpiryConfigV1 } from "../market/config";
+import type { EmptyMarketConfigV1, OptionExpiryConfigV1 } from "../market/config";
 import styles from "../market/market-widgets.module.css";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -77,7 +77,7 @@ const CHAIN_COLUMNS: readonly ColDef<OptionGridRow>[] = Object.freeze([
     field: "iv",
     headerName: "IV",
     valueFormatter: ({ value }) =>
-      value === null ? "—" : formatNumber(Number(value) * 100, 2) + "%",
+      value === null ? "—" : `${formatNumber(Number(value) * 100, 2)}%`,
   },
   { field: "delta", headerName: "Delta", valueFormatter: ({ value }) => formatNumber(value, 4) },
   { field: "gamma", headerName: "Gamma", valueFormatter: ({ value }) => formatNumber(value, 4) },
@@ -103,7 +103,7 @@ const IV_COLUMNS: readonly ColDef<OptionContractRow>[] = Object.freeze([
     field: "iv",
     headerName: "IV",
     valueFormatter: ({ value }) =>
-      value === null ? "—" : formatNumber(Number(value) * 100, 2) + "%",
+      value === null ? "—" : `${formatNumber(Number(value) * 100, 2)}%`,
   },
   { field: "delta", headerName: "Delta", valueFormatter: ({ value }) => formatNumber(value, 4) },
   { field: "gamma", headerName: "Gamma", valueFormatter: ({ value }) => formatNumber(value, 4) },
@@ -272,9 +272,11 @@ export function OptionsChainWidget({
   const eventSequences = useRef(new Map<string, number>());
   const eventGatewayInstance = useRef<string | null>(null);
   const [rows, setRows] = useState<OptionGridRow[]>([]);
-  const selectedSymbolsKey = JSON.stringify(resource.selectedLeaseSymbols);
-  const selectedSymbols = useMemo(() => [...resource.selectedLeaseSymbols], [selectedSymbolsKey]);
-  const columns = useMemo(() => CHAIN_COLUMNS, []);
+  const selectedSymbols = useMemo(
+    () => [...resource.selectedLeaseSymbols],
+    [resource.selectedLeaseSymbols],
+  );
+  const columns = useMemo(() => [...CHAIN_COLUMNS], []);
   const state = formatReadState(resource.state.status);
   const chain = resource.state.status === "ready" ? resource.state.value : null;
   const evidence = chain
@@ -308,7 +310,7 @@ export function OptionsChainWidget({
       eventSequences.current,
       eventGatewayInstance,
     );
-  }, [chain, evidence, host.market, resource.state.status, selectedSymbolsKey]);
+  }, [chain, evidence, host.market, resource.state.status, selectedSymbols]);
 
   const onGridReady = useCallback(
     (event: GridReadyEvent<OptionGridRow>) => {
@@ -323,7 +325,7 @@ export function OptionsChainWidget({
         eventGatewayInstance,
       );
     },
-    [host.market, selectedSymbolsKey],
+    [host.market, selectedSymbols],
   );
 
   useEffect(
@@ -338,7 +340,7 @@ export function OptionsChainWidget({
           eventGatewayInstance,
         ),
       ),
-    [host.market, selectedSymbolsKey],
+    [host.market, selectedSymbols],
   );
 
   const feedState = resource.feedFreshness;
@@ -381,7 +383,7 @@ export function OptionsChainWidget({
             : `nearest contracts selected around verified SIP snapshot ${formatNumber(resource.underlyingPrice)} · ${resource.underlyingEvidence}`
         }
       />
-      <div className={styles.marketGrid} role="region" aria-label="Options chain community grid">
+      <section className={styles.marketGrid} aria-label="Options chain community grid">
         <AgGridReact<OptionGridRow>
           columnDefs={columns}
           defaultColDef={DEFAULT_COL_DEF}
@@ -390,7 +392,7 @@ export function OptionsChainWidget({
           rowData={rows}
           theme={themeQuartz}
         />
-      </div>
+      </section>
       <p className={styles.marketFootnote}>
         Chain snapshot bid/ask and live Gateway bid/ask stay separate. Reported feed metadata is not
         proof of entitlement; missing model_as_of remains unknown. No combo price or depth is
@@ -420,7 +422,7 @@ export function IvSkewWidget({
     [chain],
   );
   const withIv = rows.filter((row) => row.iv !== null);
-  const columns = useMemo(() => IV_COLUMNS, []);
+  const columns = useMemo(() => [...IV_COLUMNS], []);
   const state = chain
     ? withIv.length === 0
       ? "unsupported"
@@ -462,7 +464,7 @@ export function IvSkewWidget({
           interpolation, skew fit, or Greeks model time is inferred.
         </p>
       ) : null}
-      <div className={styles.marketGrid} role="region" aria-label="IV and Greeks community grid">
+      <section className={styles.marketGrid} aria-label="IV and Greeks community grid">
         <AgGridReact<OptionContractRow>
           columnDefs={columns}
           defaultColDef={IV_DEFAULT_COL_DEF}
@@ -470,7 +472,7 @@ export function IvSkewWidget({
           rowData={withIv}
           theme={themeQuartz}
         />
-      </div>
+      </section>
     </section>
   );
 }
@@ -484,7 +486,7 @@ type OptionTapeWidgetProps = WidgetProps<
 
 function textValue(record: Readonly<Record<string, unknown>>, key: string, max = 160): string {
   const value = record[key];
-  return typeof value === "string" && value.length <= max && !/[\u0000-\u001f\u007f]/u.test(value)
+  return typeof value === "string" && value.length <= max && !hasControlCharacters(value)
     ? value
     : "unknown";
 }
@@ -525,7 +527,7 @@ function tapeRow(event: Readonly<Record<string, unknown>>): OptionTapeRow | null
     return null;
   if (!parseOccContractSymbol(event.symbol)) return null;
   return Object.freeze({
-    id: event.gateway_instance_id + ":" + event.local_sequence,
+    id: `${event.gateway_instance_id}:${event.local_sequence}`,
     sequence: event.local_sequence,
     symbol: event.symbol,
     price: typeof event.price === "number" && Number.isFinite(event.price) ? event.price : null,
@@ -639,7 +641,7 @@ export function OptionTapeWidget({ host, inputs }: OptionTapeWidgetProps) {
       connectionEpoch: snapshot.feeds.options.connectionEpoch,
     };
   });
-  const columns = useMemo(() => TAPE_COLUMNS, []);
+  const columns = useMemo(() => [...TAPE_COLUMNS], []);
   const onGridReady = useCallback(
     (event: GridReadyEvent<OptionTapeRow>) => {
       apiRef.current = event.api;
@@ -721,15 +723,13 @@ export function OptionTapeWidget({ host, inputs }: OptionTapeWidgetProps) {
       <ResourceState
         state={feed.freshness}
         title="Gateway options event freshness"
-        detail={
-          "transport " + feed.transportState + "; epoch " + (feed.connectionEpoch ?? "unknown")
-        }
+        detail={`transport ${feed.transportState}; epoch ${feed.connectionEpoch ?? "unknown"}`}
       />
       <p className={styles.marketFootnote}>
         Recent option trade prints for {symbol || "the active symbol"}. Aggressor side is
         unavailable and is not inferred.
       </p>
-      <div className={styles.marketGrid} role="region" aria-label="Option tape community grid">
+      <section className={styles.marketGrid} aria-label="Option tape community grid">
         <AgGridReact<OptionTapeRow>
           columnDefs={columns}
           defaultColDef={TAPE_DEFAULT_COL_DEF}
@@ -740,7 +740,7 @@ export function OptionTapeWidget({ host, inputs }: OptionTapeWidgetProps) {
           )}
           theme={themeQuartz}
         />
-      </div>
+      </section>
       <p className={styles.marketFootnote}>
         No trade aggressor side is provided by this source; the tape does not classify prints as
         buys or sells.

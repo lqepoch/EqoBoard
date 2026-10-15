@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { builtinWidgetRegistry } from "../../widgets/registry/builtin";
 import { previewLegacyWorkspaceImport } from "../../workspace/legacy-import";
 import {
+  LEGACY_DEFAULT_WIDGETS,
   LEGACY_NATIVE_WIDGET_BINDINGS,
   LEGACY_WIDGET_TYPES,
   LEGACY_WIDGETS_RETAINED_INERT,

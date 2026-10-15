@@ -24,6 +24,19 @@ export type WidgetActionDefinition = Readonly<{
   output: unknown;
 }>;
 
+type WidgetActionPayload<TAction, TField extends "input" | "output"> =
+  TAction extends WidgetActionDefinition ? TAction[TField] : never;
+
+export type WidgetActionInput<
+  TActions extends WidgetActionMap,
+  K extends keyof TActions,
+> = WidgetActionPayload<NonNullable<TActions[K]>, "input">;
+
+export type WidgetActionOutput<
+  TActions extends WidgetActionMap,
+  K extends keyof TActions,
+> = WidgetActionPayload<NonNullable<TActions[K]>, "output">;
+
 /** Feature owners may supply precise schemas for only the closed action IDs above. */
 export type WidgetActionMap = Readonly<Partial<Record<WidgetActionId, WidgetActionDefinition>>>;
 /** Widgets expose no action IDs unless their registration supplies a feature-owned map. */
@@ -32,7 +45,7 @@ export type WidgetNoActionMap = Readonly<Record<never, WidgetActionDefinition>>;
 export interface WidgetActionClient<TActions extends WidgetActionMap = WidgetNoActionMap> {
   invoke<K extends keyof TActions & WidgetActionId>(
     actionId: K,
-    input: TActions[K]["input"],
+    input: WidgetActionInput<TActions, K>,
     options: Readonly<{ signal: AbortSignal }>,
-  ): Promise<TActions[K]["output"]>;
+  ): Promise<WidgetActionOutput<TActions, K>>;
 }

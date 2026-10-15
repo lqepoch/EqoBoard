@@ -43,32 +43,41 @@ function nextRequest(path: string, method = "GET", body?: string): NextRequest {
   });
 }
 
+const RUNTIME_ISOLATION_ENV = [
+  "EQO_GATEWAY_JWT_SECRET",
+  "MDP_TERMINAL_JWT_SECRET",
+  "QUANT_TERMINAL_JWT_SECRET",
+  "ENGINE_TERMINAL_JWT_SECRET",
+  "ALPACA_KEY",
+  "ALPACA_SECRET",
+  "EQO_ADAPTER_ALPACA_TOKEN",
+  "EQO_ADAPTER_IBKR_TOKEN",
+  "EQO_ADAPTER_SCHWAB_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "EQO_RESEARCH_JWT_SECRET",
+  "MDP_RESEARCH_JWT_SECRET",
+  "QUANT_RESEARCH_JWT_SECRET",
+  "ENGINE_RESEARCH_JWT_SECRET",
+  "EQO_RESEARCH_API_KEY",
+  "NEXTAUTH_SECRET",
+  "EQO_OIDC_CLIENT_SECRET",
+  "EQO_OPENBB_OIDC_CLIENT_SECRET",
+] as const;
+
+function setRuntimeMode(mode: "terminal" | "research"): void {
+  // Pin a complete isolated profile so the real runtime guard reaches the
+  // mocked missing-scope authorization boundary in these route tests.
+  for (const name of RUNTIME_ISOLATION_ENV) vi.stubEnv(name, "");
+  vi.stubEnv("EQO_BFF_MODE", mode);
+  if (mode === "research") vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));
+}
+
 function researchRuntime(): void {
-  // Pin only the CI/test research profile so the real mode guard reaches the
-  // authorization boundary. Clear opposite-profile secrets/credentials even
-  // if the test runner inherits unrelated environment values.
-  for (const name of [
-    "EQO_GATEWAY_JWT_SECRET",
-    "MDP_TERMINAL_JWT_SECRET",
-    "QUANT_TERMINAL_JWT_SECRET",
-    "ENGINE_TERMINAL_JWT_SECRET",
-    "ALPACA_KEY",
-    "ALPACA_SECRET",
-    "EQO_ADAPTER_ALPACA_TOKEN",
-    "EQO_ADAPTER_IBKR_TOKEN",
-    "EQO_ADAPTER_SCHWAB_TOKEN",
-    "ANTHROPIC_API_KEY",
-    "EQO_RESEARCH_JWT_SECRET",
-    "QUANT_RESEARCH_JWT_SECRET",
-    "ENGINE_RESEARCH_JWT_SECRET",
-    "EQO_RESEARCH_API_KEY",
-    "NEXTAUTH_SECRET",
-    "EQO_OIDC_CLIENT_SECRET",
-    "EQO_OPENBB_OIDC_CLIENT_SECRET",
-  ])
-    vi.stubEnv(name, "");
-  vi.stubEnv("EQO_BFF_MODE", "research");
-  vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));
+  setRuntimeMode("research");
+}
+
+function terminalRuntime(): void {
+  setRuntimeMode("terminal");
 }
 
 async function expectDenied(result: Response): Promise<void> {
@@ -87,6 +96,7 @@ describe("protected native route dispatch boundary", () => {
         "protected route attempted downstream network access after missing permission",
       );
     });
+    terminalRuntime();
     const forbidden = () => ({
       ok: false as const,
       response: NextResponse.json({ error: "forbidden" }, { status: 403 }),

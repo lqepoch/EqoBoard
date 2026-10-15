@@ -38,7 +38,9 @@ export type BoundedBodyResult =
 
 function responseHeaders(extra: HeadersInit = {}): Headers {
   const headers = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-  new Headers(extra).forEach((value, name) => headers.set(name, value));
+  new Headers(extra).forEach((value, name) => {
+    headers.set(name, value);
+  });
   return headers;
 }
 

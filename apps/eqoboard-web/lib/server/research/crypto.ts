@@ -117,7 +117,7 @@ async function binanceMarkets(): Promise<readonly CryptoMarketRow[]> {
       const row = asRecord(item);
       const pair = typeof row?.symbol === "string" ? row.symbol : "";
       const base = pair.endsWith("USDT") ? pair.slice(0, -4) : "";
-      if (!base || !(base in BINANCE_ASSETS)) return [];
+      if (!row || !base || !(base in BINANCE_ASSETS)) return [];
       return [
         Object.freeze({
           id: pair,

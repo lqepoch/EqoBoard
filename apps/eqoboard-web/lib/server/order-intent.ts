@@ -134,6 +134,10 @@ export function parseVerticalPreviewIntent(value: unknown): OrderIntentParseResu
   ) {
     return { ok: false, error: "invalid_order_intent" };
   }
+  const legs: VerticalPreviewIntent["legs"] = [
+    { symbol: first.symbol, side: first.side },
+    { symbol: second.symbol, side: second.side },
+  ];
   return {
     ok: true,
     value: {
@@ -144,10 +148,7 @@ export function parseVerticalPreviewIntent(value: unknown): OrderIntentParseResu
       quantity: value.quantity,
       limit_price: value.limit_price,
       net_effect: value.net_effect,
-      legs: [first, second].map(({ symbol, side }) => ({
-        symbol,
-        side,
-      })) as VerticalPreviewIntent["legs"],
+      legs,
     },
   };
 }

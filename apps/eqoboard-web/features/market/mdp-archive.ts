@@ -8,6 +8,8 @@
  * `80af4a52c785a939f3ae7604d7d9cf32f31ad83b6a88ea0f1a4b09c3dd1fcc96`;
  * notice: repository `LICENSE`.
  */
+import { hasControlCharacters, hasOnlyEnumerableDataProperties } from "../data/validation";
+
 export const MDP_BAR_SCHEMA_ID = "lqepoch.us_equity_trade_bar_1m.v1" as const;
 export const MDP_BAR_SCHEMA_SHA256 =
   "5e761a91d880e0002aeafe6dc2083b7c8a0ff2ba486d5d93582fbb4479146cb0" as const;
@@ -136,7 +138,6 @@ const ROW_FIELDS = [
   "completion_mode",
   "nbbo_input_status",
 ] as const;
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
 const SYMBOL = /^[A-Z0-9.-]{1,16}$/u;
 const DECIMAL = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
@@ -157,14 +158,7 @@ function plainRecord(value: unknown): value is Record<string, unknown> {
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return false;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    return Reflect.ownKeys(value).every(
-      (key) =>
-        typeof key === "string" &&
-        !!descriptors[key] &&
-        descriptors[key]!.enumerable &&
-        "value" in descriptors[key]!,
-    );
+    return hasOnlyEnumerableDataProperties(value);
   } catch {
     return false;
   }
@@ -184,7 +178,7 @@ function validLabel(value: unknown, maxLength: number): value is string {
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= maxLength &&
-    !CONTROL.test(value)
+    !hasControlCharacters(value)
   );
 }
 
@@ -224,8 +218,8 @@ function validU64(value: unknown): value is string {
 function compareDecimal(left: string, right: string): number {
   const parts = (value: string) => {
     const negative = value.startsWith("-");
-    const [integer, fraction = ""] = (negative ? value.slice(1) : value).split(".");
-    return { negative, integer: integer!.replace(/^0+/, "") || "0", fraction };
+    const [integer = "", fraction = ""] = (negative ? value.slice(1) : value).split(".");
+    return { negative, integer: integer.replace(/^0+/, "") || "0", fraction };
   };
   const a = parts(left);
   const b = parts(right);
@@ -330,15 +324,27 @@ function validBar(value: unknown, symbol: string, source: MdpSource): value is T
   )
     return false;
 
-  const barStart = utcNanoseconds(value.bar_start_utc)!;
-  const barEnd = utcNanoseconds(value.bar_end_exclusive_utc)!;
-  const available = utcNanoseconds(value.available_at_utc)!;
-  const sessionStart = utcNanoseconds(value.session_start_utc)!;
-  const sessionEnd = utcNanoseconds(value.session_end_exclusive_utc)!;
-  const windowStart = utcNanoseconds(value.window_start_utc)!;
-  const windowEnd = utcNanoseconds(value.window_end_exclusive_utc)!;
-  const sourceStart = utcNanoseconds(value.source_start_utc)!;
-  const sourceEnd = utcNanoseconds(value.source_end_exclusive_utc)!;
+  const barStart = utcNanoseconds(value.bar_start_utc);
+  const barEnd = utcNanoseconds(value.bar_end_exclusive_utc);
+  const available = utcNanoseconds(value.available_at_utc);
+  const sessionStart = utcNanoseconds(value.session_start_utc);
+  const sessionEnd = utcNanoseconds(value.session_end_exclusive_utc);
+  const windowStart = utcNanoseconds(value.window_start_utc);
+  const windowEnd = utcNanoseconds(value.window_end_exclusive_utc);
+  const sourceStart = utcNanoseconds(value.source_start_utc);
+  const sourceEnd = utcNanoseconds(value.source_end_exclusive_utc);
+  if (
+    barStart === null ||
+    barEnd === null ||
+    available === null ||
+    sessionStart === null ||
+    sessionEnd === null ||
+    windowStart === null ||
+    windowEnd === null ||
+    sourceStart === null ||
+    sourceEnd === null
+  )
+    return false;
   if (
     barEnd - barStart !== MINUTE_NS ||
     barStart % MINUTE_NS !== 0n ||
@@ -425,10 +431,12 @@ export function decodeMdpBarsResponse(
   if (rowCount < returnedRows || returnedRows !== BigInt(value.rows.length)) return null;
   const rows = value.rows as TradeMinuteBarV1[];
   for (let index = 0; index < rows.length; index += 1) {
-    if (!validBar(rows[index], expected.symbol, source)) return null;
+    const row = rows[index];
+    if (!row || !validBar(row, expected.symbol, source)) return null;
   }
   if (rows.length > 0) {
-    const first = rows[0]!;
+    const first = rows[0];
+    if (!first) return null;
     const expectedBars =
       BigInt(first.window_expected_minutes) - BigInt(first.window_empty_trade_minutes);
     if (expectedBars !== BigInt(rows.length)) return null;
@@ -450,8 +458,9 @@ export function decodeMdpBarsResponse(
       first.window_empty_trade_minutes,
     ].join("\u0000");
     for (let index = 1; index < rows.length; index += 1) {
-      const previous = rows[index - 1]!;
-      const current = rows[index]!;
+      const previous = rows[index - 1];
+      const current = rows[index];
+      if (!previous || !current) return null;
       const currentIdentity = [
         current.trade_date,
         current.session_id,
@@ -469,9 +478,13 @@ export function decodeMdpBarsResponse(
         current.window_expected_minutes,
         current.window_empty_trade_minutes,
       ].join("\u0000");
+      const previousStart = utcNanoseconds(previous.bar_start_utc);
+      const currentStart = utcNanoseconds(current.bar_start_utc);
       if (
+        previousStart === null ||
+        currentStart === null ||
         currentIdentity !== identity ||
-        utcNanoseconds(previous.bar_start_utc)! >= utcNanoseconds(current.bar_start_utc)!
+        previousStart >= currentStart
       )
         return null;
     }

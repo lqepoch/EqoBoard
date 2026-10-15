@@ -13,6 +13,7 @@ import type { ResearchRecapData } from "@/lib/server/research/recap";
 import type { ResearchSymbolSearchResult } from "@/lib/server/research/symbol-search";
 import type { ResearchEnvelope, ResearchOperationName } from "@/lib/server/research/types";
 import type { WidgetDataClient } from "@/widgets/sdk/data";
+import { hasControlCharacters } from "./text";
 
 export type ResearchEnvelopeByOperation = {
   "research.news": ResearchEnvelope<readonly ResearchNewsItem[]>;
@@ -51,6 +52,18 @@ export type ResearchTableProjection = Readonly<{
   rows: readonly ResearchDisplayRow[];
 }>;
 
+export function researchTableRowsWithKeys(
+  rows: readonly ResearchDisplayRow[],
+): readonly Readonly<{ key: string; row: ResearchDisplayRow }>[] {
+  const occurrences = new Map<string, number>();
+  return rows.map((row) => {
+    const identity = JSON.stringify(row) ?? "null";
+    const occurrence = occurrences.get(identity) ?? 0;
+    occurrences.set(identity, occurrence + 1);
+    return { key: `research-row:${identity}:${occurrence}`, row };
+  });
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   try {
@@ -84,7 +97,7 @@ function string(value: unknown, max = 2048): value is string {
     value.length > 0 &&
     value.length <= max &&
     value === value.trim() &&
-    !/[\u0000-\u001f\u007f]/u.test(value)
+    !hasControlCharacters(value)
   );
 }
 

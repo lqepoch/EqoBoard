@@ -74,17 +74,17 @@ function readCapabilityIds(
   try {
     if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
     const ownKeys = Reflect.ownKeys(value);
-    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(value as object);
     const lengthDescriptor = descriptors.length;
     if (
       !lengthDescriptor ||
-      !("value" in lengthDescriptor) ||
+      typeof lengthDescriptor.value !== "number" ||
       !Number.isSafeInteger(lengthDescriptor.value) ||
       lengthDescriptor.value > 96 ||
       ownKeys.length !== lengthDescriptor.value + 1
     )
       return null;
-    const length = lengthDescriptor.value as number;
+    const length = lengthDescriptor.value;
     const result: string[] = [];
     for (const key of ownKeys) {
       if (key === "length") continue;
@@ -92,8 +92,7 @@ function readCapabilityIds(
         return null;
       const descriptor = descriptors[key];
       if (
-        !descriptor ||
-        !descriptor.enumerable ||
+        !descriptor?.enumerable ||
         !("value" in descriptor) ||
         typeof descriptor.value !== "string" ||
         !validId(descriptor.value)

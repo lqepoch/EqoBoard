@@ -71,11 +71,13 @@ export function createWidgetEventBus(options: WidgetEventBusOptions): WidgetEven
     forInstance(instanceId: string): WidgetEventBus {
       const validInstance = validInstanceId(instanceId);
       return Object.freeze({
-        subscribe(listener) {
+        subscribe(listener: (event: WidgetHostEventV1) => void): () => void {
           listeners.add(listener);
-          return () => listeners.delete(listener);
+          return () => {
+            listeners.delete(listener);
+          };
         },
-        dispatch(input) {
+        dispatch(input: WidgetCommandIntentV1): WidgetCommandResult {
           if (!validInstance) return { accepted: false, reason: "invalid-command" };
           const intent = parseWidgetCommandIntent(input);
           if (!intent) return { accepted: false, reason: "invalid-command" };

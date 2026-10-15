@@ -11,7 +11,11 @@ import styles from "./research-widgets.module.css";
 
 export type ResearchRecapConfigV1 = Readonly<{ schemaVersion: 1 }>;
 
-type Props = WidgetProps<ResearchRecapConfigV1, ResearchDataOperationMap, WidgetNoActionMap>;
+type Props = WidgetProps<
+  ResearchRecapConfigV1,
+  Pick<ResearchDataOperationMap, "research.recap">,
+  WidgetNoActionMap
+>;
 type RecapEnvelope = NonNullable<ReturnType<typeof parseRecapEnvelope>>;
 type ViewState =
   | Readonly<{ status: "idle" | "loading" }>
@@ -126,7 +130,7 @@ function RecapContent({
 }) {
   return (
     <>
-      <div className={styles.evidence} aria-label="Recap source coverage">
+      <section className={styles.evidence} aria-label="Recap source coverage">
         <span>
           Market metadata: {data.coverage.marketMetadata.status} ·{" "}
           {data.coverage.marketMetadata.sampled}/{data.coverage.marketMetadata.returned} sampled ·
@@ -155,7 +159,7 @@ function RecapContent({
           Combined observations are not synchronized. No generated market narrative is shown; absent
           observations remain unavailable.
         </p>
-      </div>
+      </section>
 
       <section className={styles.recapPanel}>
         <h3>Market proxies and volatility</h3>
@@ -249,8 +253,8 @@ function RecapContent({
           <p className={styles.empty}>No headlines were returned.</p>
         ) : (
           <ul className={styles.recapHeadlines}>
-            {data.headlines.map((item, index) => (
-              <li key={`${item.provider}-${item.link}-${index}`}>
+            {data.headlines.map((item) => (
+              <li key={`${item.provider}-${item.link}`}>
                 <a href={item.link} target="_blank" rel="noopener noreferrer">
                   {item.title}
                 </a>
@@ -272,7 +276,6 @@ export function RecapWidget({ host }: Props) {
     host.auth.permissions.includes("research:read") &&
     host.auth.permissions.includes("market:read");
   const [state, setState] = useState<ViewState>({ status: "idle" });
-  const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
     if (!canRead) {
@@ -311,7 +314,34 @@ export function RecapWidget({ host }: Props) {
         setState({ status: "ready", envelope });
       },
     );
-  }, [canRead, host.lifecycle, host.refresh, refreshVersion]);
+  }, [canRead, host.lifecycle, host.refresh]);
+
+  async function refresh(): Promise<void> {
+    if (!canRead) return;
+    const lifecycle = host.lifecycle.getSnapshot();
+    if (lifecycle.phase !== "active" || lifecycle.signal.aborted) return;
+    setState({ status: "loading" });
+    try {
+      const value = await host.data.read("research.recap", {}, { signal: lifecycle.signal });
+      if (lifecycle.signal.aborted) return;
+      const envelope = parseRecapEnvelope(value);
+      setState(
+        envelope
+          ? { status: "ready", envelope }
+          : {
+              status: "error",
+              message: "The recap response did not match its validated source envelope.",
+            },
+      );
+    } catch {
+      if (!lifecycle.signal.aborted) {
+        setState({
+          status: "error",
+          message: "The same-origin recap request failed or was not authorized.",
+        });
+      }
+    }
+  }
 
   const selectSymbol = (symbol: string) => {
     host.events.dispatch({ type: "active-symbol.select.v1", symbol });
@@ -326,7 +356,7 @@ export function RecapWidget({ host }: Props) {
         </div>
         <button
           type="button"
-          onClick={() => setRefreshVersion((value) => value + 1)}
+          onClick={() => void refresh()}
           disabled={!canRead || state.status === "loading"}
         >
           Refresh
@@ -352,7 +382,7 @@ export function RecapWidget({ host }: Props) {
       ) : null}
       {canRead && state.status === "ready" ? (
         <>
-          <div className={styles.evidence} aria-label="Recap response evidence">
+          <section className={styles.evidence} aria-label="Recap response evidence">
             <span>
               {state.envelope.status === "available"
                 ? "Complete source requests"
@@ -366,7 +396,7 @@ export function RecapWidget({ host }: Props) {
             </span>
             <span>Source set: {state.envelope.source.provider}</span>
             {state.envelope.warning ? <p>{state.envelope.warning}</p> : null}
-          </div>
+          </section>
           <RecapContent data={state.envelope.data} onSelect={selectSymbol} />
         </>
       ) : null}

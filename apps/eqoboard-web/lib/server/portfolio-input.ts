@@ -1,5 +1,7 @@
 import "server-only";
 
+import { containsControlCharacters } from "./text-validation";
+
 export type ParsedPortfolioName = Readonly<{ ok: true; name: string }> | Readonly<{ ok: false }>;
 export type ParsedPortfolioTransaction =
   | Readonly<{
@@ -30,7 +32,7 @@ export function parsePortfolioName(value: unknown): ParsedPortfolioName {
     typeof record.name !== "string" ||
     record.name.trim().length < 1 ||
     record.name.length > 64 ||
-    /[\u0000-\u001f\u007f]/u.test(record.name)
+    containsControlCharacters(record.name)
   )
     return { ok: false };
   return { ok: true, name: record.name.trim() };

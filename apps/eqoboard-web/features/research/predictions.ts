@@ -1,3 +1,5 @@
+import { hasControlCharacters } from "./text";
+
 export type QuantPredictionAssessment = Readonly<{
   lifecycle: "UNKNOWN" | "NOT_YET_VALID" | "ACTIVE_RESEARCH_ONLY" | "EXPIRED";
   identity_resolution: "UNKNOWN" | "VERIFIED_EXACT_ONLY";
@@ -94,7 +96,7 @@ function label(value: unknown, maximum: number): value is string {
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= maximum &&
-    !/[\u0000-\u001f\u007f]/u.test(value)
+    !hasControlCharacters(value)
   );
 }
 

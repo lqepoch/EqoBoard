@@ -330,16 +330,23 @@ function parseTab(value: unknown, path: string): WorkspaceTabV1 | typeof INVALID
     }
   }
   let maximizedInstanceId: string | null = null;
+  let maximizedInstanceInvalid = false;
   if (value.maximizedInstanceId !== null) {
-    maximizedInstanceId = parseId(value.maximizedInstanceId, `${path}.maximizedInstanceId`) as
-      | string
-      | null;
-    if (maximizedInstanceId !== INVALID && !widgetIds.has(maximizedInstanceId)) {
-      fail(
-        "missing-reference",
-        `${path}.maximizedInstanceId`,
-        "Maximized widget must exist in this tab.",
-      );
+    const parsedMaximizedInstanceId = parseId(
+      value.maximizedInstanceId,
+      `${path}.maximizedInstanceId`,
+    );
+    if (parsedMaximizedInstanceId === INVALID) {
+      maximizedInstanceInvalid = true;
+    } else {
+      maximizedInstanceId = parsedMaximizedInstanceId;
+      if (!widgetIds.has(parsedMaximizedInstanceId)) {
+        fail(
+          "missing-reference",
+          `${path}.maximizedInstanceId`,
+          "Maximized widget must exist in this tab.",
+        );
+      }
     }
   }
   if (
@@ -348,7 +355,7 @@ function parseTab(value: unknown, path: string): WorkspaceTabV1 | typeof INVALID
     name === INVALID ||
     widgets.length !== value.widgets.length ||
     placements.length !== value.placements.length ||
-    maximizedInstanceId === INVALID
+    maximizedInstanceInvalid
   )
     return INVALID;
   return { id, name, widgets, placements, maximizedInstanceId };

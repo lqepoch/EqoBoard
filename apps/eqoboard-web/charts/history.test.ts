@@ -20,12 +20,18 @@ function bars(times: readonly number[]): ChartPlotBar<string>[] {
   }));
 }
 
+function rowAt<TRow>(rows: readonly TRow[], index: number): TRow {
+  const row = rows[index];
+  if (row === undefined) throw new Error(`Expected chart fixture row at index ${index}.`);
+  return row;
+}
+
 describe("chart history pagination and viewport", () => {
   it("lets the currently loaded snapshot win overlapping older-page rows", () => {
     const current = bars([20, 30]);
     const older = bars([10, 20]);
-    const replacement = { ...older[1]!, close: 99 };
-    const merged = mergeOlderPage(current, [older[0]!, replacement]);
+    const replacement = { ...rowAt(older, 1), close: 99 };
+    const merged = mergeOlderPage(current, [rowAt(older, 0), replacement]);
 
     expect(merged.map((bar) => Number(bar.time))).toEqual([10, 20, 30]);
     expect(merged[1]?.close).toBe(10);
@@ -34,7 +40,7 @@ describe("chart history pagination and viewport", () => {
   it("appends new history observations without applying uncontracted candle corrections", () => {
     const current = bars([10, 20, 30]);
     const refreshRows = bars([30, 40]);
-    const refreshed = [{ ...refreshRows[0]!, close: 99 }, refreshRows[1]!];
+    const refreshed = [{ ...rowAt(refreshRows, 0), close: 99 }, rowAt(refreshRows, 1)];
     const merged = mergeHeadRefresh(current, refreshed);
 
     expect(merged.map((bar) => Number(bar.time))).toEqual([10, 20, 30, 40]);

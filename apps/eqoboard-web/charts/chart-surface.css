@@ -158,6 +158,19 @@
   gap: 8px;
 }
 
+.native-chart-widget__range {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.native-chart-widget__range legend {
+  padding: 0;
+  color: var(--eq-text-muted, #aab4c3);
+  font-size: 11px;
+}
+
 .native-chart-widget__header {
   justify-content: space-between;
 }

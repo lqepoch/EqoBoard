@@ -3,8 +3,8 @@ import type {
   ManualPortfolioTransactionV1,
   ManualPortfolioV1,
 } from "../portfolio/contracts";
+import { hasControlCharacters, hasOnlyEnumerableDataProperties } from "./validation";
 
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const TICKER = /^[A-Z0-9.^=-]{1,12}$/u;
 const MAX_ROWS = 10_000;
 
@@ -14,17 +14,12 @@ function exactRecord(value: unknown, fields: readonly string[]): Record<string, 
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
     const keys = Reflect.ownKeys(value);
-    const descriptors = Object.getOwnPropertyDescriptors(value);
     if (
       keys.length !== fields.length ||
       keys.some(
-        (key) =>
-          typeof key !== "string" ||
-          !fields.includes(key) ||
-          !descriptors[key] ||
-          !descriptors[key]!.enumerable ||
-          !("value" in descriptors[key]!),
-      )
+        (key) => typeof key !== "string" || !fields.includes(key),
+      ) ||
+      !hasOnlyEnumerableDataProperties(value)
     )
       return null;
     return value as Record<string, unknown>;
@@ -34,7 +29,7 @@ function exactRecord(value: unknown, fields: readonly string[]): Record<string, 
 }
 
 function validTimestamp(value: unknown, strictMilliseconds = false): value is string {
-  if (typeof value !== "string" || CONTROL.test(value)) return false;
+  if (typeof value !== "string" || hasControlCharacters(value)) return false;
   if (strictMilliseconds && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value))
     return false;
   if (!strictMilliseconds && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value))
@@ -54,7 +49,7 @@ function parsePortfolio(value: unknown): ManualPortfolioV1 | null {
     typeof row.name !== "string" ||
     row.name.length < 1 ||
     row.name.length > 64 ||
-    CONTROL.test(row.name) ||
+    hasControlCharacters(row.name) ||
     !validTimestamp(row.created_at)
   )
     return null;

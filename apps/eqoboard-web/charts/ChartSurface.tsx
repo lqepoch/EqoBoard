@@ -85,8 +85,12 @@ export function ChartSurface<TRow = unknown>({
     requested: boolean;
   }> | null>(null);
   const [crosshairBar, setCrosshairBar] = useState<ChartPlotBar<TRow> | null>(null);
-  const enabledKey = useMemo(() => [...enabledIndicators].sort().join(","), [enabledIndicators]);
-  const sortedIndicators = useMemo(() => [...enabledIndicators].sort(), [enabledKey]);
+  const sortedIndicators = useMemo(() => [...enabledIndicators].sort(), [enabledIndicators]);
+  const chartOptionsRef = useRef({ style, indicators: sortedIndicators, showVolume, timeVisible });
+
+  useLayoutEffect(() => {
+    chartOptionsRef.current = { style, indicators: sortedIndicators, showVolume, timeVisible };
+  }, [style, sortedIndicators, showVolume, timeVisible]);
 
   useLayoutEffect(() => {
     readyCallbackRef.current = onSurfaceReady;
@@ -134,11 +138,9 @@ export function ChartSurface<TRow = unknown>({
     container.addEventListener("pointermove", onPointerMoveCapture, true);
     container.addEventListener("pointerup", endPointerGesture, true);
     container.addEventListener("pointercancel", endPointerGesture, true);
+    const initialOptions = chartOptionsRef.current;
     const controller = new LightweightChartController<TRow>(container, {
-      style,
-      indicators: sortedIndicators,
-      showVolume,
-      timeVisible,
+      ...initialOptions,
       onLeftEdge: () => {
         const gesture = panGestureRef.current;
         const request = olderRequestRef.current;
@@ -170,7 +172,6 @@ export function ChartSurface<TRow = unknown>({
     };
     // The controller owns one chart for this mounted surface. Live option updates
     // are applied below without replacing the chart DOM or losing its viewport.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useLayoutEffect(() => {
@@ -180,7 +181,7 @@ export function ChartSurface<TRow = unknown>({
       showVolume,
       timeVisible,
     });
-  }, [style, enabledKey, showVolume, timeVisible, sortedIndicators]);
+  }, [style, showVolume, timeVisible, sortedIndicators]);
 
   useLayoutEffect(() => {
     controllerRef.current?.setSnapshot(identity, bars, indicators, snapshotBehavior);

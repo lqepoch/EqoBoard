@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { CoreBarsPageRequest } from "../features/market/core-bars-page";
 import { decodeCoreBarsPage } from "./core-bars";
 
-const request = {
+const request: CoreBarsPageRequest = {
   symbol: "SPY",
   range: "1D",
   resolution: "1m",
@@ -13,7 +14,7 @@ const request = {
   request_start: "2026-10-15T13:00:00Z",
   request_end: "2026-10-15T14:00:00Z",
   cursor: null,
-} as const;
+};
 
 function response(numericEncoding: string) {
   return {
@@ -69,6 +70,12 @@ function envelope(responseValue: unknown, requestValue: typeof request = request
   return { kind: "eqoboard.core-bars-page.v1", request: requestValue, response: responseValue };
 }
 
+function first<T>(rows: readonly T[], name: string): T {
+  const row = rows[0];
+  if (row === undefined) throw new Error(`Expected ${name} fixture row.`);
+  return row;
+}
+
 describe("Core Bars V1 chart adapter", () => {
   it("decodes the transport envelope separately and keeps exact Core tokens on the UI projection", () => {
     const page = decodeCoreBarsPage(envelope(response("decimal_token")));
@@ -91,13 +98,13 @@ describe("Core Bars V1 chart adapter", () => {
   it("retains row-level exact values but reports unknown precision for mixed or ambiguous provenance", () => {
     const mixed = response("decimal_token");
     mixed.rows.push({
-      ...mixed.rows[0]!,
+      ...first(mixed.rows, "mixed Core Bars"),
       bar_start_utc: "2026-10-15T13:32:00Z",
       bar_end_exclusive_utc: "2026-10-15T13:33:00Z",
       provenance_id: "p2",
     });
     mixed.source_provenance.push({
-      ...mixed.source_provenance[0]!,
+      ...first(mixed.source_provenance, "mixed provenance"),
       provenance_id: "p2",
       numeric_encoding: "binary_float32_shortest_decimal",
     });
@@ -109,7 +116,7 @@ describe("Core Bars V1 chart adapter", () => {
 
     const ambiguous = response("decimal_token");
     ambiguous.source_provenance.push({
-      ...ambiguous.source_provenance[0]!,
+      ...first(ambiguous.source_provenance, "ambiguous provenance"),
       numeric_encoding: "binary_float64_shortest_decimal",
     });
     const ambiguousPage = decodeCoreBarsPage(envelope(ambiguous));
@@ -120,7 +127,7 @@ describe("Core Bars V1 chart adapter", () => {
 
   it("rejects a response that does not match the requested symbol and resolution", () => {
     const wrongSymbol = response("decimal_token");
-    wrongSymbol.rows[0]!.symbol = "QQQ";
+    first(wrongSymbol.rows, "wrong-symbol Core Bars").symbol = "QQQ";
     const wrongResolution = envelope(response("decimal_token"), { ...request, resolution: "5m" });
 
     expect(decodeCoreBarsPage(envelope(wrongSymbol))).toBeNull();
@@ -129,7 +136,7 @@ describe("Core Bars V1 chart adapter", () => {
 
   it("omits rows outside the server-resolved request window and marks their projection loss", () => {
     const outside = response("decimal_token");
-    outside.rows[0]!.bar_start_utc = "2026-10-15T14:00:00Z";
+    first(outside.rows, "outside-window Core Bars").bar_start_utc = "2026-10-15T14:00:00Z";
     const page = decodeCoreBarsPage(envelope(outside));
 
     expect(page).not.toBeNull();

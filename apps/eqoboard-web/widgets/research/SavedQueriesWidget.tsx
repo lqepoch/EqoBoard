@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
 import {
   parseResearchEnvelope,
   projectResearchTable,
+  researchTableRowsWithKeys,
   readResearchRequest,
   type ResearchReadRequest,
   type ResearchTableProjection,
@@ -25,6 +26,7 @@ import {
   type SavedResearchQueryV1,
 } from "@/features/research/query-config";
 import type { WidgetProps } from "@/widgets/sdk/contracts";
+import { hasControlCharacters } from "@/features/research/text";
 import styles from "./research-widgets.module.css";
 
 export type SavedQueriesConfigV1 = ResearchQueryConfigV1;
@@ -117,9 +119,8 @@ function applyQueryFilters(
 function useQueryComparisons(
   host: WidgetProps<SavedQueriesConfigV1, ResearchDataOperationMap, WidgetNoActionMap>["host"],
   config: SavedQueriesConfigV1,
-  refreshVersion: number,
   allowed: boolean,
-): ComparisonState {
+): Readonly<{ state: ComparisonState; refresh: () => void }> {
   const planKey = JSON.stringify({
     queries: config.queries,
     selectedQueryId: config.selectedQueryId,
@@ -141,8 +142,10 @@ function useQueryComparisons(
       : comparisons;
   }, [planKey]);
   const [state, setState] = useState<ComparisonState>({ status: "idle" });
+  const activeController = useRef<AbortController | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
+    activeController.current?.abort();
     if (!allowed || plan.length === 0) {
       setState({ status: "idle" });
       return;
@@ -153,6 +156,7 @@ function useQueryComparisons(
       return;
     }
     const controller = new AbortController();
+    activeController.current = controller;
     const abort = () => controller.abort();
     lifecycle.signal.addEventListener("abort", abort, { once: true });
     setState({ status: "loading" });
@@ -195,14 +199,18 @@ function useQueryComparisons(
         }
       }
       if (!controller.signal.aborted) setState({ status: "ready", values });
-    })();
-    return () => {
+    })().finally(() => {
       lifecycle.signal.removeEventListener("abort", abort);
-      controller.abort();
-    };
-  }, [allowed, host.data, host.lifecycle, plan, refreshVersion]);
+      if (activeController.current === controller) activeController.current = null;
+    });
+  }, [allowed, host.data, host.lifecycle, plan]);
 
-  return state;
+  useEffect(() => {
+    refresh();
+    return () => activeController.current?.abort();
+  }, [refresh]);
+
+  return { state, refresh };
 }
 
 function safeText(value: unknown): string {
@@ -233,11 +241,10 @@ export function SavedQueriesWidget(
   const [field, setField] = useState<ResearchFilterField>("title");
   const [operator, setOperator] = useState<ResearchFilterOperator>("contains");
   const [value, setValue] = useState("");
-  const [refreshVersion, setRefreshVersion] = useState(0);
   const [formError, setFormError] = useState("");
   const hasReadPermission =
     host.auth.authenticated && host.auth.permissions.includes("research:read");
-  const comparisons = useQueryComparisons(host, config, refreshVersion, hasReadPermission);
+  const { state: comparisons, refresh } = useQueryComparisons(host, config, hasReadPermission);
   const selectedQuery = config.queries.find((query) => query.id === config.selectedQueryId) ?? null;
   const allowedFields = RESEARCH_FILTER_FIELDS[viewId] as readonly ResearchFilterField[];
   const viewQueries = useMemo(
@@ -262,7 +269,7 @@ export function SavedQueriesWidget(
       normalizedName.length > 48 ||
       !value.trim() ||
       value.length > 96 ||
-      /[\u0000-\u001f\u007f]/u.test(value)
+      hasControlCharacters(value)
     ) {
       setFormError("Enter a name and one bounded filter value.");
       return;
@@ -336,7 +343,7 @@ export function SavedQueriesWidget(
         </div>
         <button
           type="button"
-          onClick={() => setRefreshVersion((count) => count + 1)}
+          onClick={refresh}
           disabled={!hasReadPermission || comparisons.status === "loading"}
         >
           Refresh comparison
@@ -410,7 +417,7 @@ export function SavedQueriesWidget(
         </p>
       ) : null}
       <div className={styles.savedQueries}>
-        <div className={styles.queryList} aria-label="Saved queries">
+        <div className={styles.queryList} role="region" aria-label="Saved queries">
           {config.queries.length === 0 ? (
             <p className={styles.empty}>No saved queries yet.</p>
           ) : null}
@@ -496,6 +503,7 @@ function QueryResultTable({ table }: { table: ResearchTableProjection }) {
   if (table.rows.length === 0)
     return <p className={styles.empty}>No rows match this saved filter.</p>;
   const visible = table.rows.slice(0, 5);
+  const visibleRows = researchTableRowsWithKeys(visible);
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table}>
@@ -507,8 +515,8 @@ function QueryResultTable({ table }: { table: ResearchTableProjection }) {
           </tr>
         </thead>
         <tbody>
-          {visible.map((row, index) => (
-            <tr key={`${safeText(row.symbol)}-${index}`}>
+          {visibleRows.map(({ row, key }) => (
+            <tr key={key}>
               {table.columns.slice(0, 6).map((column) => (
                 <td key={column.key}>{safeText(row[column.key])}</td>
               ))}

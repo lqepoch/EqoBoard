@@ -22,16 +22,8 @@ export function ResourceState({
   live = false,
 }: ResourceStateProps) {
   const label = getResourceStateLabel(state);
-
-  return (
-    <div
-      aria-atomic={live || undefined}
-      aria-label={`${title}: ${label}`}
-      aria-live={live ? "polite" : undefined}
-      className="eq-resource-state"
-      data-state={state}
-      role={live ? "status" : "group"}
-    >
+  const content = (
+    <>
       <span aria-hidden="true" className="eq-resource-state__marker" />
       <div className="eq-resource-state__body">
         <div className="eq-resource-state__heading">
@@ -41,6 +33,27 @@ export function ResourceState({
         {detail ? <div className="eq-resource-state__detail">{detail}</div> : null}
         {metadata ? <div className="eq-resource-state__meta">{metadata}</div> : null}
       </div>
+    </>
+  );
+
+  return live ? (
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className="eq-resource-state"
+      data-state={state}
+      role="status"
+    >
+      {content}
+    </div>
+  ) : (
+    <div
+      aria-label={`${title}: ${label}`}
+      className="eq-resource-state"
+      data-state={state}
+      role="group"
+    >
+      {content}
     </div>
   );
 }

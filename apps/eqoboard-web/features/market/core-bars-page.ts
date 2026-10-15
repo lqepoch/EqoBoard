@@ -1,3 +1,5 @@
+import { hasControlCharacters, hasOnlyEnumerableDataProperties } from "../data/validation";
+
 /** BFF paging metadata wrapped around the unchanged pinned Core Bars V1 response. */
 export type CoreBarsPageRequest = Readonly<{
   symbol: string;
@@ -20,7 +22,6 @@ export type CoreBarsPageEnvelope = Readonly<{
   response: unknown;
 }>;
 
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const SYMBOL = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 const RANGES = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"] as const;
 const RESOLUTIONS = ["1m", "5m", "15m", "1h", "1d"] as const;
@@ -46,14 +47,7 @@ function plainRecord(value: unknown): value is Record<string, unknown> {
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return false;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    return Reflect.ownKeys(value).every(
-      (key) =>
-        typeof key === "string" &&
-        !!descriptors[key] &&
-        descriptors[key]!.enumerable &&
-        "value" in descriptors[key]!,
-    );
+    return hasOnlyEnumerableDataProperties(value);
   } catch {
     return false;
   }
@@ -96,7 +90,7 @@ function parseRequest(value: unknown): CoreBarsPageRequest | null {
       (typeof value.cursor !== "string" ||
         value.cursor.length === 0 ||
         new TextEncoder().encode(value.cursor).byteLength > 2_048 ||
-        CONTROL.test(value.cursor)))
+        hasControlCharacters(value.cursor)))
   )
     return null;
   return Object.freeze({

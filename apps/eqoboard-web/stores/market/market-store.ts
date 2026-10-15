@@ -1,3 +1,8 @@
+import {
+  hasControlCharacters,
+  hasOnlyEnumerableDataProperties,
+} from "../../features/data/validation";
+
 export type MarketFeedName = "stocks" | "options";
 export type MarketTransportState =
   | "idle"
@@ -97,16 +102,7 @@ function record(value: unknown): GatewayMarketRecord | null {
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (
-      Reflect.ownKeys(value).some(
-        (key) =>
-          typeof key !== "string" ||
-          !descriptors[key as string] ||
-          !("value" in descriptors[key as string]!),
-      )
-    )
-      return null;
+    if (!hasOnlyEnumerableDataProperties(value)) return null;
     return value as GatewayMarketRecord;
   } catch {
     return null;
@@ -292,7 +288,7 @@ export class MarketStore {
           typeof event.gateway_instance_id === "string" &&
           event.gateway_instance_id.length > 0 &&
           event.gateway_instance_id.length <= 160 &&
-          !/[\u0000-\u001f\u007f]/u.test(event.gateway_instance_id),
+          !hasControlCharacters(event.gateway_instance_id),
       )
       .sort((left, right) => (left.local_sequence as number) - (right.local_sequence as number));
     if (parsed.length === 0) return;

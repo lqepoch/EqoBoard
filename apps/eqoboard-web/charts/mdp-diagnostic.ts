@@ -43,16 +43,14 @@ function coverageSummary(response: MdpBarsResponseV1, rejectedRows: number): str
     rejectedRows > 0
       ? ` ${rejectedRows} row(s) could not be plotted within the bounded numeric projection.`
       : "";
-  return (
-    [
-      `Validated diagnostic window only; ${response.rows.length} returned trade-minute bars`,
-      `${first.window_expected_minutes} expected minutes, ${first.window_empty_trade_minutes} empty-trade minutes`,
-      `window_input_eof=${first.window_input_eof}`,
-      `source_pages_exhausted=${first.source_pages_exhausted ?? "unknown"}`,
-      `completion_mode=${first.completion_mode}`,
-      `summary row_count=${response.summary.row_count}, returned_rows=${response.summary.returned_rows}`,
-    ].join("; ") + `.${projectionNote}`
-  );
+  return `${[
+    `Validated diagnostic window only; ${response.rows.length} returned trade-minute bars`,
+    `${first.window_expected_minutes} expected minutes, ${first.window_empty_trade_minutes} empty-trade minutes`,
+    `window_input_eof=${first.window_input_eof}`,
+    `source_pages_exhausted=${first.source_pages_exhausted ?? "unknown"}`,
+    `completion_mode=${first.completion_mode}`,
+    `summary row_count=${response.summary.row_count}, returned_rows=${response.summary.returned_rows}`,
+  ].join("; ")}.${projectionNote}`;
 }
 
 /** Projects one already-decoded fixed MDP diagnostic response; never treats it as Core history. */

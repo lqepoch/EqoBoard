@@ -1,4 +1,5 @@
 import type { MarketFeedName, MarketStore } from "../../stores/market/market-store";
+import { hasOnlyEnumerableDataProperties } from "./validation";
 
 export const MARKET_STOCK_LEASE_LIMIT = 1_000;
 export const MARKET_OPTION_LEASE_LIMIT = 16;
@@ -80,14 +81,7 @@ function isAckRecord(value: unknown): value is Record<string, unknown> {
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return false;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    return Reflect.ownKeys(value).every(
-      (key) =>
-        typeof key === "string" &&
-        !!descriptors[key] &&
-        descriptors[key]!.enumerable &&
-        "value" in descriptors[key]!,
-    );
+    return hasOnlyEnumerableDataProperties(value);
   } catch {
     return false;
   }

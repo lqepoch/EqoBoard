@@ -7,6 +7,7 @@ import type {
 import { parseResearchAiRequest } from "../research/ai";
 import type { ResearchAiActionInput, ResearchAiActionOutput } from "../research/ai";
 import type { YfinanceResearchInput } from "../research/yfinance-contract";
+import { hasControlCharacters } from "./validation";
 
 /**
  * Closed browser read boundary. Inputs only contain bounded domain intent; a
@@ -94,7 +95,7 @@ export type CoreBarsReadInput = Readonly<{
 export type NativeActionMap = {
   "orders.preview.vertical": { input: VerticalPreviewIntent; output: unknown };
   "portfolio.create": { input: Readonly<{ name: string }>; output: ManualPortfolioV1 };
-  "portfolio.delete": { input: Readonly<{ portfolioId: number }>; output: void };
+  "portfolio.delete": { input: Readonly<{ portfolioId: number }>; output: undefined };
   "portfolio.transaction.create": {
     input: Readonly<{
       portfolioId: number;
@@ -108,7 +109,7 @@ export type NativeActionMap = {
   };
   "portfolio.transaction.delete": {
     input: Readonly<{ portfolioId: number; transactionId: number }>;
-    output: void;
+    output: undefined;
   };
   "research.ai": {
     input: ResearchAiActionInput;
@@ -185,7 +186,6 @@ const CONTRACT = /^[A-Z0-9.]{1,10}\d{6}[CP]\d{8}$/u;
 const PREVIEW_CONTRACT = /^([A-Z]{1,6})(\d{6})([CP])(\d{8})$/u;
 const DATASET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const ARCHIVE_SYMBOL = /^[A-Z0-9.-]{1,16}$/u;
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -211,7 +211,7 @@ function exactRecord(
     if (
       keys.some((key) => {
         const descriptor = descriptors[key as string];
-        return !descriptor || !descriptor.enumerable || !("value" in descriptor);
+        return !descriptor?.enumerable || !("value" in descriptor);
       })
     )
       return null;
@@ -231,7 +231,7 @@ function validTicker(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value === value.trim() &&
-    !CONTROL.test(value) &&
+    !hasControlCharacters(value) &&
     TICKER.test(value)
   );
 }
@@ -240,7 +240,7 @@ function validResearchTicker(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value === value.trim() &&
-    !CONTROL.test(value) &&
+    !hasControlCharacters(value) &&
     RESEARCH_TICKER.test(value)
   );
 }
@@ -274,7 +274,7 @@ function sortedUniqueSymbols(
     if (
       typeof symbol !== "string" ||
       symbol !== symbol.trim() ||
-      CONTROL.test(symbol) ||
+      hasControlCharacters(symbol) ||
       !(contract ? CONTRACT : TICKER).test(symbol)
     )
       return null;
@@ -390,7 +390,7 @@ export function buildNativeReadRequest<Id extends NativeDataOperationId>(
           typeof record.cursor !== "string" ||
           record.cursor.length < 1 ||
           new TextEncoder().encode(record.cursor).byteLength > 2_048 ||
-          CONTROL.test(record.cursor)
+          hasControlCharacters(record.cursor)
         )
           return null;
         entries.push(
@@ -441,7 +441,7 @@ export function buildNativeReadRequest<Id extends NativeDataOperationId>(
           (typeof record.cursor !== "string" ||
             record.cursor.length < 1 ||
             new TextEncoder().encode(record.cursor).byteLength > 8_192 ||
-            CONTROL.test(record.cursor)))
+            hasControlCharacters(record.cursor)))
       )
         return null;
       const entries: [string, string][] = [
@@ -505,7 +505,7 @@ export function buildNativeReadRequest<Id extends NativeDataOperationId>(
         queryText.length < 1 ||
         queryText.length > 64 ||
         queryText.trim() !== queryText ||
-        CONTROL.test(queryText)
+        hasControlCharacters(queryText)
       )
         return null;
       return {
@@ -571,7 +571,7 @@ export function buildNativeReadRequest<Id extends NativeDataOperationId>(
           record.sector.length < 1 ||
           record.sector.length > 64 ||
           record.sector.trim() !== record.sector ||
-          CONTROL.test(record.sector)
+          hasControlCharacters(record.sector)
         )
           return null;
         entries.push(["sector", record.sector]);
@@ -707,7 +707,7 @@ export function buildNativeActionRequest(
       record.name !== record.name.trim() ||
       record.name.length < 1 ||
       record.name.length > 64 ||
-      CONTROL.test(record.name)
+      hasControlCharacters(record.name)
     )
       return null;
     return {
@@ -850,8 +850,11 @@ export function buildNativeActionRequest(
   const buyContract = PREVIEW_CONTRACT.exec(buy.symbol);
   const sellContract = PREVIEW_CONTRACT.exec(sell.symbol);
   if (!buyContract || !sellContract) return null;
-  const buyStrike = BigInt(buyContract[4]!);
-  const sellStrike = BigInt(sellContract[4]!);
+  const buyStrikeText = buyContract[4];
+  const sellStrikeText = sellContract[4];
+  if (!buyStrikeText || !sellStrikeText) return null;
+  const buyStrike = BigInt(buyStrikeText);
+  const sellStrike = BigInt(sellStrikeText);
   const width = buyStrike > sellStrike ? buyStrike - sellStrike : sellStrike - buyStrike;
   const limitCents = BigInt(Math.round(record.limit_price * 100));
   if (limitCents * 10n >= width) return null;

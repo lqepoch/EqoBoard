@@ -20,7 +20,7 @@ const EXPECTED_READ_OPERATIONS: Readonly<
   Record<
     NativeDataOperationId,
     Readonly<{
-      permission: Permission;
+      permission: Permission | readonly Permission[];
       path: string;
     }>
   >
@@ -36,6 +36,14 @@ const EXPECTED_READ_OPERATIONS: Readonly<
   "research.yahoo.daily": {
     permission: "research:read",
     path: "/api/research/yfinance/daily?symbols=SPY&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00.000Z&end_utc=2026-01-02T00%3A00%3A00.000Z&adjustment=adjusted",
+  },
+  "research.recap": {
+    permission: ["research:read", "market:read"],
+    path: "/api/research/data/recap",
+  },
+  "research.symbolSearch": {
+    permission: "research:read",
+    path: "/api/research/data/symbol-search?query=AAPL",
   },
   "research.predictions": {
     permission: "research:private-read",
@@ -86,6 +94,8 @@ const INPUTS: Record<NativeDataOperationId, unknown> = {
   "market.history.core-bars": { symbol: "SPY" },
   "market.archive.diagnostic-bars": { datasetId: "fixture-1", symbol: "SPY" },
   "research.yahoo.daily": YAHOO_INPUT,
+  "research.recap": {},
+  "research.symbolSearch": { query: "AAPL" },
   "research.predictions": { runId: "run-2026-10-15" },
   "engine.status": {},
   "engine.preview": {},
@@ -127,17 +137,25 @@ describe("native browser operation and action boundaries", () => {
     for (const [rawId, expected] of Object.entries(EXPECTED_READ_OPERATIONS)) {
       const operationId = rawId as NativeDataOperationId;
       expect(isNativeDataOperationId(rawId)).toBe(true);
-      expect(NATIVE_OPERATION_PERMISSION[operationId]).toBe(expected.permission);
+      expect(NATIVE_OPERATION_PERMISSION[operationId]).toEqual(expected.permission);
       const request = buildNativeReadRequest(operationId, INPUTS[operationId] as never);
+      expect(request, operationId).not.toBeNull();
+      if (!request) continue;
       expect(request, operationId).toEqual({
         method: "GET",
         path: expected.path,
         permission: expected.permission,
       });
-      expect(new URL(request!.path, "https://terminal.invalid").origin).toBe(
+      expect(new URL(request.path, "https://terminal.invalid").origin).toBe(
         "https://terminal.invalid",
       );
     }
+  });
+
+  it("requires both research and market reads for the recap operation", () => {
+    const request = buildNativeReadRequest("research.recap", {});
+    expect(request?.permission).toEqual(["research:read", "market:read"]);
+    expect(request?.permission).not.toEqual("research:read");
   });
 
   it("does not expose submit, broker, or arbitrary path read operation IDs", () => {

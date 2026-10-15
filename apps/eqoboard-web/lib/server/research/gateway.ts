@@ -3,7 +3,8 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 import { parseGatewayBaseUrl } from "../gateway";
-import { signGatewayDelegation, type ServerPrincipal } from "../bff-security";
+import { signGatewayDelegation } from "../bff-security";
+import type { ServerPrincipal } from "../auth";
 import { readProviderText } from "./transport";
 
 export type GatewayRead<T> =

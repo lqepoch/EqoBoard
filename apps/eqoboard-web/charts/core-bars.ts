@@ -138,9 +138,15 @@ function evidenceFor(
         ? "unknown"
         : "partial";
   const precision = precisionForRows(response, precisionById);
+  const source =
+    sources.length === 1
+      ? (sources[0] ?? "unknown")
+      : sources.length > 1
+        ? "mixed"
+        : "unknown";
   return {
     mode: "core-bars",
-    source: sources.length === 1 ? sources[0]! : sources.length > 1 ? "mixed" : "unknown",
+    source,
     provider,
     feed,
     asOf: timestampText(response.asOf),

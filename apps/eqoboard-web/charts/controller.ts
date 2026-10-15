@@ -7,6 +7,7 @@ import {
   LineStyle,
   createChart,
   type IChartApi,
+  type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
 import { remapViewportAfterPrepend, retainViewportOnRefresh, saveViewport } from "./history";
@@ -22,12 +23,12 @@ type VisibleLogicalRangeHandler = Parameters<
 
 export type SnapshotBehavior = "reset" | "preserve" | "prepend" | "refresh";
 
-export type ChartControllerOptions = Readonly<{
+export type ChartControllerOptions<TRow = unknown> = Readonly<{
   style: ChartStyle;
   indicators: readonly IndicatorId[];
   showVolume: boolean;
   timeVisible: boolean;
-  onCrosshair?: (bar: ChartPlotBar | null) => void;
+  onCrosshair?: (bar: ChartPlotBar<TRow> | null) => void;
   onLeftEdge?: () => void;
   createChart?: typeof createChart;
   resizeObserverFactory?: (
@@ -116,15 +117,13 @@ export class LightweightChartController<TRow = unknown> {
     if (width > 0 && height > 0) this.chart.resize(width, height);
   };
 
-  constructor(container: HTMLElement, options: ChartControllerOptions) {
+  constructor(container: HTMLElement, options: ChartControllerOptions<TRow>) {
     this.container = container;
     this.style = options.style;
     this.indicators = [...options.indicators];
     this.showVolume = options.showVolume;
     this.timeVisible = options.timeVisible;
-    this.onCrosshair = options.onCrosshair as
-      | ((bar: ChartPlotBar<TRow> | null) => void)
-      | undefined;
+    this.onCrosshair = options.onCrosshair;
     this.onLeftEdge = options.onLeftEdge;
     const makeChart = options.createChart ?? createChart;
     this.chart = makeChart(container, {
@@ -139,7 +138,7 @@ export class LightweightChartController<TRow = unknown> {
         attributionLogo: true,
       },
       localization: {
-        timeFormatter: (time) => formatChartAxisTimeEt(time, this.timeVisible),
+        timeFormatter: (time: Time) => formatChartAxisTimeEt(time, this.timeVisible),
       },
       grid: { vertLines: { color: "#17202d" }, horzLines: { color: "#17202d" } },
       crosshair: {
@@ -152,7 +151,7 @@ export class LightweightChartController<TRow = unknown> {
         timeVisible: this.timeVisible,
         secondsVisible: false,
         rightOffset: 5,
-        tickMarkFormatter: (time) => formatChartAxisTimeEt(time, this.timeVisible),
+        tickMarkFormatter: (time: Time) => formatChartAxisTimeEt(time, this.timeVisible),
       },
       rightPriceScale: { borderColor: "#263244", scaleMargins: { top: 0.1, bottom: 0.22 } },
       handleScroll: {
