@@ -35,7 +35,7 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   await signInAsWriter(page);
   const firstUsableWorkspaceMs = Date.now() - authenticationStartedAt;
 
-  const workspaceSelector = page.getByLabel("Workspace");
+  const workspaceSelector = page.getByRole("combobox", { name: "Workspace", exact: true });
   const previousWorkspaceId = await workspaceSelector.inputValue();
   const previousWorkspaceIds = await workspaceSelector
     .locator("option")
@@ -85,7 +85,7 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
     "All changes saved",
   );
   const workspaceReloadUsableMs = Date.now() - reloadStartedAt;
-  await expect(page.getByLabel("Workspace")).toHaveValue(workspaceId);
+  await expect(workspaceSelector).toHaveValue(workspaceId);
   const reloadedTabs = page.getByRole("tablist", { name: "Workspace tabs" }).getByRole("tab");
   await expect(reloadedTabs).toHaveCount(3);
   await expect(reloadedTabs.nth(0)).toHaveText("Overview");
