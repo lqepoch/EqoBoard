@@ -47,8 +47,9 @@ label them as exchange-calendar gaps. Yahoo pages are never mixed with Alpaca/Fu
 
 The route allowlist and `openbb-research-ingress.conf` admit only this page, the chart's GET endpoint, and bounded
 `/_next/static` GET/HEAD assets. The existing internal `/api/research/auth-check` path stays hidden from browsers; all
-unlisted Research API routes and order paths remain denied. The page has its own host-only OIDC session on the separate
-hostname.
+unlisted Research API routes and order paths remain denied. Access logging is disabled only for the history endpoint
+because its query contains a principal-bound opaque pagination cursor; other ingress paths retain their existing logs.
+The page has its own host-only OIDC session on the separate hostname.
 
 The Research E2E uses the real Next BFF/page with a bounded synthetic MDP HTTP fixture. It verifies signer claims,
 unchanged cursor windows, 2010–2026/pre-2016 pages, MAX left-pan cursor pagination with viewport preservation,
