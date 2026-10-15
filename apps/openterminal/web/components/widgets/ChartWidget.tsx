@@ -28,6 +28,8 @@ import type { MdpBarsResponseV1, TradeMinuteBarV1 } from "../../lib/mdp-market-d
 import { sma, ema, vwap, rsi, macd, bollinger, type Point } from "../../lib/indicators";
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
 import { useTradingStore } from "../../store/trading-terminal";
+import { useYfinanceResearchHistory } from "../../lib/yfinance-research-history";
+import { YFINANCE_RESEARCH_MAX_PAGES, type YfinanceResearchAdjustment } from "../../lib/yfinance-research-contract";
 
 const CHART_TYPES = ["candles", "bars", "line", "area"] as const;
 const INDICATORS = ["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "BOLL", "RSI", "MACD"] as const;
@@ -97,16 +99,29 @@ const INDICATOR_COLOR: Record<string, string> = {
   VWAP: "#80cbc4", RSI: "#ff9900", BOLL: "#ff9900", MACD: "#4fc3f7",
 };
 
-export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
-  const symbol = useWidgetSymbol(widget);
+type ChartWidgetHistoryMode = "provider" | "yfinance-research";
+
+export default function ChartWidget({
+  widget,
+  historyMode = "provider",
+  symbolOverride,
+}: {
+  widget: WidgetInstance;
+  historyMode?: ChartWidgetHistoryMode;
+  symbolOverride?: string;
+}) {
+  const widgetSymbol = useWidgetSymbol(widget);
+  const symbol = symbolOverride ?? widgetSymbol;
+  const isYfinanceResearch = historyMode === "yfinance-research";
   const providerMode = useTradingStore((state) => state.providerMode);
   const setProviderMode = useTradingStore((state) => state.setProviderMode);
   const [dataMode, setDataMode] = useState<DataMode>("provider");
   const [datasetDraft, setDatasetDraft] = useState("");
   const [datasetId, setDatasetId] = useState<string | null>(null);
   const [datasetInputError, setDatasetInputError] = useState<string | null>(null);
-  const [range, setRange] = useState<Range>("6M");
+  const [range, setRange] = useState<Range>(isYfinanceResearch ? "MAX" : "6M");
   const [assetClass, setAssetClass] = useState<ChartAssetClass>("stock");
+  const [researchAdjustment, setResearchAdjustment] = useState<YfinanceResearchAdjustment>("unadjusted");
   const [chartType, setChartType] = useState<ChartType>("candles");
   const [active, setActive] = useState<Set<Indicator>>(new Set(["SMA20"]));
   const [legend, setLegend] = useState<ChartCandle | null>(null);
@@ -125,7 +140,14 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   const pointerPanRef = useRef<PointerPan | null>(null);
   const pagingLockRef = useRef(false);
 
-  const history = useChartHistory(symbol, range, providerMode, assetClass, dataMode === "provider");
+  const strictHistory = useChartHistory(
+    symbol, range, providerMode, assetClass, !isYfinanceResearch && dataMode === "provider",
+  );
+  const yfinanceHistory = useYfinanceResearchHistory(
+    symbol, range, assetClass, researchAdjustment, isYfinanceResearch && dataMode === "provider",
+  );
+  const history = isYfinanceResearch ? yfinanceHistory : strictHistory;
+  const historyPageLimit = isYfinanceResearch ? YFINANCE_RESEARCH_MAX_PAGES : MAX_HISTORY_PAGES;
   const historyResponse = history.latestPage;
   const historyError = history.error;
   const requestOlder = useCallback(() => {
@@ -164,9 +186,10 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   const error = dataMode === "provider" ? historyError : archiveError;
   const historyIdentity = `${symbol}|${range}|${history.requestedResolution}`;
   const chartIdentity = dataMode === "provider" ? historyIdentity : `${historyIdentity}|diagnostic|${datasetId ?? "empty"}`;
-  const timeVisible = historyResolution(historyResponse, "effective_resolution") !== "1d";
+  const timeVisible = isYfinanceResearch ? false : historyResolution(historyResponse, "effective_resolution") !== "1d";
   const gapCount = Array.isArray(historyResponse?.gaps) ? historyResponse.gaps.length : "unknown";
   const segmentCount = Array.isArray(historyResponse?.segments) ? historyResponse.segments.length : "unknown";
+  const yfinanceCoverageGaps = yfinanceHistory.latestEnvelope?.observation.payload.coverage.gaps;
 
   // Fast time -> candle lookup for the crosshair legend, independent of chart type.
   const byTime = useMemo(() => {
@@ -517,26 +540,32 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
   return (
     <div className="flex flex-col h-full" data-testid="chart-widget">
       <div className="flex gap-1 p-1 flex-wrap shrink-0">
-        <button className={`term-btn ${dataMode === "provider" ? "active" : ""}`} onClick={() => switchDataMode("provider")}>
-          PROVIDER HISTORY
-        </button>
-        <button className={`term-btn ${dataMode === "mdp-diagnostic" ? "active" : ""}`} onClick={() => switchDataMode("mdp-diagnostic")}>
-          MDP DIAGNOSTIC
-        </button>
+        {isYfinanceResearch ? (
+          <span className="term-btn active" data-testid="chart-yfinance-research-mode">YAHOO DAILY RESEARCH · DISPLAY ONLY</span>
+        ) : <>
+          <button className={`term-btn ${dataMode === "provider" ? "active" : ""}`} onClick={() => switchDataMode("provider")}>
+            PROVIDER HISTORY
+          </button>
+          <button className={`term-btn ${dataMode === "mdp-diagnostic" ? "active" : ""}`} onClick={() => switchDataMode("mdp-diagnostic")}>
+            MDP DIAGNOSTIC
+          </button>
+        </>}
         {dataMode === "provider" && <>
-          <label className="sr-only" htmlFor={`chart-provider-${widget.id}`}>Chart provider mode</label>
-          <select
-            id={`chart-provider-${widget.id}`}
-            aria-label="Chart provider mode"
-            data-testid="chart-provider-mode"
-            className="term-btn bg-[#111]"
-            value={providerMode}
-            onChange={(event) => setProviderMode(event.target.value as typeof providerMode)}
-          >
-            <option value="auto">Auto</option>
-            <option value="alpaca_only">Alpaca only</option>
-            <option value="futu_only">Futu only</option>
-          </select>
+          {!isYfinanceResearch && <>
+            <label className="sr-only" htmlFor={`chart-provider-${widget.id}`}>Chart provider mode</label>
+            <select
+              id={`chart-provider-${widget.id}`}
+              aria-label="Chart provider mode"
+              data-testid="chart-provider-mode"
+              className="term-btn bg-[#111]"
+              value={providerMode}
+              onChange={(event) => setProviderMode(event.target.value as typeof providerMode)}
+            >
+              <option value="auto">Auto</option>
+              <option value="alpaca_only">Alpaca only</option>
+              <option value="futu_only">Futu only</option>
+            </select>
+          </>}
           <label className="sr-only" htmlFor={`chart-asset-class-${widget.id}`}>Caller-declared asset class</label>
           <select
             id={`chart-asset-class-${widget.id}`}
@@ -549,6 +578,23 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
             <option value="stock">Stock</option>
             <option value="etf">ETF</option>
           </select>
+          {isYfinanceResearch && <>
+            <label className="sr-only" htmlFor={`chart-yfinance-adjustment-${widget.id}`}>Yahoo adjustment request</label>
+            <select
+              id={`chart-yfinance-adjustment-${widget.id}`}
+              aria-label="Yahoo adjustment request"
+              data-testid="chart-yfinance-adjustment"
+              className="term-btn bg-[#111]"
+              value={researchAdjustment}
+              onChange={(event) => setResearchAdjustment(event.target.value as YfinanceResearchAdjustment)}
+            >
+              <option value="unadjusted">Request unadjusted</option>
+              <option value="adjusted">Request adjusted</option>
+            </select>
+            <button className="term-btn" data-testid="chart-yfinance-refresh" onClick={yfinanceHistory.refreshSnapshot}>
+              REFRESH SNAPSHOT
+            </button>
+          </>}
         </>}
         {dataMode === "provider" && CHART_RANGES.map((r) => (
           <button key={r} className={`term-btn ${range === r ? "active" : ""}`} onClick={() => setRange(r)}>
@@ -601,7 +647,70 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
         className="px-2 py-1 border-b border-[#1c1c1c] text-[9px] dim flex flex-wrap gap-x-3 gap-y-1"
         data-testid="chart-widget-history-status"
       >
-        {dataMode === "provider" ? <>
+        {dataMode === "provider" && isYfinanceResearch ? <>
+          <span data-testid="chart-yfinance-source">Source Yahoo Finance · Provider yfinance</span>
+          <span>Feed unknown · delay unknown · provider verification unavailable</span>
+          <span>Resolution 1d · daily bars only</span>
+          <span
+            data-testid="chart-yfinance-range-window"
+            data-range={range}
+            data-start-utc={yfinanceHistory.requestStart}
+            data-end-utc={yfinanceHistory.requestEnd}
+          >
+            {yfinanceHistory.rangeDescription} · UTC [{yfinanceHistory.requestStart}, {yfinanceHistory.requestEnd})
+          </span>
+          <span>Adjustment request {researchAdjustment} · basis unknown/provider-native</span>
+          <span>Raw price basis confirmed no</span>
+          <span>Numeric binary_float_projection · source decimals not exact in chart</span>
+          <span>Canonical no · point-in-time no · executable no · display-only yes</span>
+          <span>
+            Provider status {displayHistoryValue(yfinanceHistory.latestEnvelope?.observation.payload.status)} · reported coverage markers {Array.isArray(yfinanceCoverageGaps) ? yfinanceCoverageGaps.length : "unknown"}
+          </span>
+          <span>MDP coverage asserted no · calendar-gap assessment no</span>
+          <span>MDP received {displayHistoryValue(yfinanceHistory.latestEnvelope?.observation.fetched_at_utc)}</span>
+          <span>Yahoo observed {displayHistoryValue(yfinanceHistory.latestEnvelope?.observation.payload.source_observed_at)}</span>
+          <span>Provider available-at {displayHistoryValue(yfinanceHistory.latestEnvelope?.observation.payload.available_at)}</span>
+          <span
+            data-testid="chart-bar-count"
+            data-observation-times={JSON.stringify((candles ?? []).slice(-5).map((candle) =>
+              new Date(candle.time * 1_000).toISOString(),
+            ))}
+          >
+            {candles?.length ?? 0} bars
+          </span>
+          {yfinanceHistory.latestEnvelope && <details className="basis-full text-[9px]" data-testid="chart-yfinance-provenance">
+            <summary className="cursor-pointer">Research observation, unassessed coverage and provenance</summary>
+            <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{JSON.stringify({
+              schema_version: yfinanceHistory.latestEnvelope.schema_version,
+              provider: yfinanceHistory.latestEnvelope.provider,
+              source: yfinanceHistory.latestEnvelope.source,
+              requested_adjustment: yfinanceHistory.latestEnvelope.requested_adjustment,
+              provider_adjustment_semantics: yfinanceHistory.latestEnvelope.provider_adjustment_semantics,
+              adjustment_confirmed_raw: yfinanceHistory.latestEnvelope.adjustment_confirmed_raw,
+              numeric_encoding: yfinanceHistory.latestEnvelope.numeric_encoding,
+              canonical: yfinanceHistory.latestEnvelope.canonical,
+              point_in_time: yfinanceHistory.latestEnvelope.point_in_time,
+              executable: yfinanceHistory.latestEnvelope.executable,
+              display_only: yfinanceHistory.latestEnvelope.display_only,
+              mdp_coverage_asserted: yfinanceHistory.latestEnvelope.mdp_coverage_asserted,
+              requested_range: yfinanceHistory.latestEnvelope.requested_range,
+              page_range: yfinanceHistory.latestEnvelope.page_range,
+              provider_status: yfinanceHistory.latestEnvelope.observation.payload.status,
+              provider_repair_enabled: yfinanceHistory.latestEnvelope.observation.payload.provider_repair_enabled,
+              cache_status: yfinanceHistory.latestEnvelope.observation.payload.cache_status,
+              freshness: yfinanceHistory.latestEnvelope.observation.payload.freshness,
+              source_observation_sha256: yfinanceHistory.latestEnvelope.observation.source_observation_sha256,
+              source_hash_note: "MDP-reported observation hash; not a provider signature or verification receipt",
+              mdp_received_at_utc: yfinanceHistory.latestEnvelope.observation.fetched_at_utc,
+              source_observed_at: yfinanceHistory.latestEnvelope.observation.payload.source_observed_at,
+              available_at: yfinanceHistory.latestEnvelope.observation.payload.available_at,
+              missing_symbols: yfinanceHistory.latestEnvelope.observation.payload.missing_symbols,
+              coverage: yfinanceHistory.latestEnvelope.observation.payload.coverage,
+              action_coverage: yfinanceHistory.latestEnvelope.observation.payload.action_coverage,
+              provenance: yfinanceHistory.latestEnvelope.observation.payload.provenance,
+            }, null, 2).slice(0, 4_000)}</pre>
+          </details>}
+        </> : dataMode === "provider" ? <>
           <span>Source {displayHistoryValue(historyResponse?.source_label ?? historyResponse?.source)}</span>
           <span>Provider {displayHistoryValue(historyResponse?.provider)}</span>
           <span>Feed {displayHistoryValue(historyResponse?.feed)}</span>
@@ -629,11 +738,16 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
       </div>
       {error && <div role="alert" className="p-2 down" data-testid="chart-history-error">History unavailable: {(error as Error).message}</div>}
       {dataMode === "provider" && history.projectionError && <div role="alert" className="p-2 down">{history.projectionError}</div>}
+      {dataMode === "provider" && isYfinanceResearch && yfinanceHistory.cursorCycleDetected && (
+        <div role="alert" className="px-2 py-1 text-[10px] down" data-testid="chart-yfinance-cursor-cycle">
+          Yahoo research returned a repeated cursor; pagination stopped to avoid replaying the same page.
+        </div>
+      )}
       {dataMode === "provider" && history.pageLimitReached && (
         <div role="status" className="px-2 py-1 text-[10px] dim" data-testid="chart-history-page-limit">
           {range === "MAX"
-            ? `MAX history is incomplete: the ${MAX_HISTORY_PAGES}-page limit was reached; older bars remain unloaded.`
-            : `History reached the ${MAX_HISTORY_PAGES}-page limit; older bars remain unloaded.`}
+            ? `MAX history is incomplete: the ${historyPageLimit}-page limit was reached; older bars remain unloaded.`
+            : `History reached the ${historyPageLimit}-page limit; older bars remain unloaded.`}
         </div>
       )}
       {dataMode === "provider" && history.isLoading && <div className="px-2 py-1 text-[10px] dim">Loading history…</div>}
@@ -651,7 +765,7 @@ export default function ChartWidget({ widget }: { widget: WidgetInstance }) {
         onPointerCancel={cancelPointerPan}
       >
         {legend && (
-          <div className="absolute top-1 left-2 z-10 flex flex-col gap-0.5 text-[11px] pointer-events-none bg-[rgba(10,10,10,0.7)] px-2 py-1 rounded max-w-[95%]">
+          <div className="absolute top-1 left-2 z-10 flex flex-col gap-0.5 text-[11px] pointer-events-none bg-[rgba(10,10,10,0.7)] px-2 py-1 rounded max-w-[95%]" data-testid="chart-widget-legend">
             <div className="flex gap-3">
               <span className="dim">O <span className="text-[var(--text)]">{legend.exact?.open ?? fmt(legend.open)}</span></span>
               <span className="dim">H <span className="up">{legend.exact?.high ?? fmt(legend.high)}</span></span>

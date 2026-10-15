@@ -37,6 +37,7 @@ const metrics = {
   research: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   mdp: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   mdpMarketBars: [],
+  mdpYfinanceResearch: [],
   quant: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
   engine: { requests: Object.create(null), authorized: 0, rejected: 0, inFlight: 0, calls: [] },
 };
@@ -59,6 +60,17 @@ const mdpMarketBarsControl = {
   bodyBytes: 0,
   delayMs: 0,
 };
+const mdpYfinanceResearchControl = {
+  enabled: false,
+  status: null,
+  response: null,
+  responsesByCursor: null,
+  syntheticDaily: false,
+  syntheticDailyBarCount: 0,
+  location: null,
+  bodyBytes: 0,
+  delayMs: 0,
+};
 
 function marketBarsStatusForResponse(response) {
   if (!response || typeof response !== "object" || Array.isArray(response)) return 200;
@@ -74,6 +86,190 @@ function marketBarsStatusForResponse(response) {
     default:
       return 200;
   }
+}
+
+function syntheticYfinanceResearchResponse(url) {
+  const symbols = (url.searchParams.get("symbols") ?? "").split(",");
+  const assetClass = url.searchParams.get("asset_class");
+  const adjustment = url.searchParams.get("adjustment");
+  const requestedStart = url.searchParams.get("start_utc");
+  const requestedEnd = url.searchParams.get("end_utc");
+  const cursor = url.searchParams.get("cursor");
+  const startMs = Date.parse(requestedStart ?? "");
+  const endMs = Date.parse(requestedEnd ?? "");
+  const cursorMatch = cursor === null ? null : /^older:(\d{1,2})$/.exec(cursor);
+  if (symbols.length < 1 || symbols.length > 8 || symbols.some((symbol) => !/^[A-Z0-9][A-Z0-9.-]{0,31}$/.test(symbol)) ||
+      !["stock", "etf"].includes(assetClass) || !["unadjusted", "adjusted"].includes(adjustment) ||
+      !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs || (cursor !== null && !cursorMatch)) {
+    return null;
+  }
+  const dayMs = 86_400_000;
+  const pageIndex = cursorMatch ? Number(cursorMatch[1]) : 0;
+  const pageEndMs = pageIndex === 0 ? endMs : endMs - pageIndex * 3_650 * dayMs;
+  const pageStartMs = Math.max(startMs, pageEndMs - 3_650 * dayMs);
+  if (pageStartMs >= pageEndMs) return null;
+  const pageStart = new Date(pageStartMs).toISOString();
+  const pageEnd = new Date(pageEndMs).toISOString();
+  const nextCursor = pageStartMs > startMs ? `older:${pageIndex + 1}` : null;
+  const rows = [];
+  const syntheticBarCount = mdpYfinanceResearchControl.syntheticDailyBarCount;
+  let syntheticWeekdayTimes = [];
+  if (pageIndex === 0 && syntheticBarCount > 0) {
+    const end = new Date(pageEndMs);
+    let candidate = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate(), 16);
+    while (candidate >= pageEndMs) candidate -= dayMs;
+    while (syntheticWeekdayTimes.length < syntheticBarCount && candidate >= pageStartMs) {
+      const weekday = new Date(candidate).getUTCDay();
+      if (weekday !== 0 && weekday !== 6) syntheticWeekdayTimes.unshift(candidate);
+      candidate -= dayMs;
+    }
+  }
+  for (const symbol of symbols) {
+    const candidateTimes = pageIndex === 0
+      ? syntheticBarCount > 0
+        ? syntheticWeekdayTimes
+        : [pageEndMs - 2 * dayMs, pageEndMs - dayMs]
+      : pageIndex === 1
+        ? [Date.parse("2010-01-04T00:00:00Z"), Date.parse("2015-12-31T00:00:00Z")]
+        : [pageStartMs + dayMs];
+    for (const eventTime of candidateTimes) {
+      if (eventTime < pageStartMs || eventTime >= pageEndMs) continue;
+      rows.push({
+        symbol,
+        asset_class: assetClass,
+        event_ts_utc: new Date(eventTime).toISOString(),
+        resolution: "1d",
+        adjustment,
+        open: "100.1000",
+        high: "102.2500",
+        low: "99.7500",
+        close: "101.5000",
+        adj_close: "101.1250",
+        volume: "123456",
+        dividends: null,
+        stock_splits: null,
+      });
+    }
+  }
+  rows.sort((left, right) => left.symbol.localeCompare(right.symbol) || left.event_ts_utc.localeCompare(right.event_ts_utc));
+  const now = new Date().toISOString();
+  const provenanceNow = now.replace(/Z$/, "+00:00");
+  const provenanceStart = pageStart.replace(/Z$/, "+00:00");
+  const provenanceEnd = pageEnd.replace(/Z$/, "+00:00");
+  const payload = {
+    schema_version: "yfinance-history-bridge-v1",
+    status: "ready",
+    provider: "yfinance",
+    source: "Yahoo Finance",
+    asset_class: assetClass,
+    classification_source: "caller_declared",
+    resolution: "1d",
+    effective_resolution: "1d",
+    adjustment,
+    provider_adjustment_semantics: "unknown_or_provider_native",
+    adjustment_confirmed_raw: false,
+    provider_repair_enabled: false,
+    numeric_encoding: "binary_float_projection",
+    volume_encoding: "integer_exact_or_safe_integer_float",
+    canonical: false,
+    point_in_time: false,
+    executable: false,
+    display_only: true,
+    requested_range: { start: pageStart, end: pageEnd, semantics: "start_inclusive_end_exclusive" },
+    requested_symbols: symbols,
+    returned_symbols: symbols,
+    missing_symbols: [],
+    available_at: now,
+    fetched_at: now,
+    source_observed_at: now,
+    request_started_at: now,
+    cache_status: "network",
+    freshness: "retrieved",
+    coverage: {
+      requested_start: pageStart,
+      requested_end: pageEnd,
+      bar_count: rows.length,
+      per_symbol: symbols.map((symbol) => {
+        const selected = rows.filter((row) => row.symbol === symbol);
+        return {
+          symbol,
+          bar_count: selected.length,
+          first_bar_at: selected[0]?.event_ts_utc ?? null,
+          last_bar_at: selected.at(-1)?.event_ts_utc ?? null,
+          gaps: ["DATE_GAPS_UNASSESSED", "SYMBOL_RENAME_HISTORY_UNAVAILABLE"],
+        };
+      }),
+      gaps: [
+        { code: "DATE_GAPS_UNASSESSED" },
+        { code: "SYMBOL_RENAME_HISTORY_UNAVAILABLE" },
+        { code: "NON_POINT_IN_TIME_PROVIDER_HISTORY" },
+      ],
+      calendar_gaps_assessed: false,
+    },
+    action_coverage: {
+      dividends: "provider_field_unavailable",
+      stock_splits: "provider_field_unavailable",
+      symbol_renames: "unsupported",
+    },
+    actions: [],
+    bars: rows,
+    provenance: {
+      acquired_at: provenanceNow,
+      adapter_version: "bounded-synthetic-e2e",
+      adjustment,
+      cache_status: "network",
+      config_fingerprint: "a".repeat(64),
+      end: provenanceEnd,
+      include_actions: true,
+      interval: "1d",
+      missing_symbols: [],
+      prepost: false,
+      provider: "yahoo_finance",
+      query_fingerprint: "b".repeat(64),
+      requested_at: provenanceNow,
+      requested_symbols: symbols,
+      returned_symbols: symbols,
+      row_count: rows.length,
+      schema_version: "research-bars-v1",
+      served_at: provenanceNow,
+      source: "yfinance",
+      start: provenanceStart,
+    },
+  };
+  const observationBytes = Buffer.from(JSON.stringify(payload));
+  return {
+    schema_version: "mdp-yfinance-research-observations-v1",
+    provider: "yfinance",
+    source: "Yahoo Finance",
+    asset_class: assetClass,
+    resolution: "1d",
+    requested_adjustment: adjustment,
+    provider_adjustment_semantics: "unknown_or_provider_native",
+    adjustment_confirmed_raw: false,
+    numeric_encoding: "binary_float_projection",
+    canonical: false,
+    point_in_time: false,
+    executable: false,
+    display_only: true,
+    mdp_coverage_asserted: false,
+    requested_symbols: symbols,
+    requested_range: {
+      start_utc: requestedStart,
+      end_utc: requestedEnd,
+      semantics: "start_inclusive_end_exclusive",
+    },
+    page_range: {
+      start_utc: pageStart,
+      end_utc: pageEnd,
+      semantics: "start_inclusive_end_exclusive",
+    },
+    observation: {
+      source_observation_sha256: createHash("sha256").update(observationBytes).digest("hex"),
+      fetched_at_utc: now,
+      payload,
+    },
+    next_cursor: nextCursor,
+  };
 }
 const quantControl = {
   status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
@@ -273,6 +469,10 @@ const oidc = createServer(async (req, res) => {
       enabled: false, status: null, response: null, responsesByCursor: null,
       location: null, bodyBytes: 0, delayMs: 0,
     });
+    Object.assign(mdpYfinanceResearchControl, {
+      enabled: false, status: null, response: null, responsesByCursor: null,
+      syntheticDaily: false, syntheticDailyBarCount: 0, location: null, bodyBytes: 0, delayMs: 0,
+    });
     Object.assign(quantControl, {
       status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
       protoJsonText: null, publicProjectionBase64: null, publicProjectionSha256: null, factorFeatureSummary: null,
@@ -322,6 +522,25 @@ const oidc = createServer(async (req, res) => {
       }
       Object.assign(mdpMarketBarsControl, control);
     }
+    if (Object.hasOwn(body, "yfinanceResearch")) {
+      const control = body.yfinanceResearch;
+      const allowed = new Set(["enabled", "status", "response", "responsesByCursor", "syntheticDaily", "syntheticDailyBarCount", "location", "bodyBytes", "delayMs"]);
+      if (!control || typeof control !== "object" || Array.isArray(control) ||
+          Object.keys(control).some((key) => !allowed.has(key)) ||
+          (Object.hasOwn(control, "enabled") && typeof control.enabled !== "boolean") ||
+          (Object.hasOwn(control, "syntheticDaily") && typeof control.syntheticDaily !== "boolean") ||
+          (Object.hasOwn(control, "syntheticDailyBarCount") &&
+            (!Number.isSafeInteger(control.syntheticDailyBarCount) || control.syntheticDailyBarCount < 0 || control.syntheticDailyBarCount > 100)) ||
+          (Object.hasOwn(control, "status") && (!Number.isInteger(control.status) || control.status < 100 || control.status > 599)) ||
+          (Object.hasOwn(control, "bodyBytes") && (!Number.isSafeInteger(control.bodyBytes) || control.bodyBytes < 0)) ||
+          (Object.hasOwn(control, "delayMs") && (!Number.isFinite(control.delayMs) || control.delayMs < 0)) ||
+          (Object.hasOwn(control, "responsesByCursor") && control.responsesByCursor !== null &&
+            (typeof control.responsesByCursor !== "object" || Array.isArray(control.responsesByCursor))) ||
+          (Object.hasOwn(control, "location") && control.location !== null && typeof control.location !== "string")) {
+        return sendJson(res, 400, { error: "invalid_yfinance_research_control" });
+      }
+      Object.assign(mdpYfinanceResearchControl, control);
+    }
     for (const key of [
       "status", "response", "location", "delayMs", "finiteReceiptBinding", "protoJsonText",
       "publicProjectionBase64", "publicProjectionSha256", "factorFeatureSummary",
@@ -350,6 +569,7 @@ const oidc = createServer(async (req, res) => {
       config: gatewayControl,
       mdp: mdpControl,
       marketBars: mdpMarketBarsControl,
+      yfinanceResearch: mdpYfinanceResearchControl,
       engine: { ...engineControl, statusText: undefined, previewText: undefined },
     });
   }
@@ -810,6 +1030,73 @@ const mdp = createServer(async (req, res) => {
   trackResponse(metrics.mdp, res);
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${mdpPort}`);
   countRequest(metrics.mdp, url.pathname);
+  if (url.pathname === "/v1/research/yfinance/daily") {
+    const call = {
+      method: req.method,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams.entries()),
+      query_entries: [...url.searchParams.entries()],
+      bearer_present: Boolean(req.headers.authorization),
+      gateway_delegation_present: Boolean(req.headers["x-eqo-gateway-delegation"]),
+    };
+    metrics.mdpYfinanceResearch.push(call);
+    if (!mdpYfinanceResearchControl.enabled) return sendJson(res, 404, { error: "not_found" });
+    if (req.method !== "GET") return sendJson(res, 405, { error: "method_not_allowed" });
+    let verified;
+    try {
+      verified = await verifyMdpRequest(req);
+      if (verified.kid !== "mdp-research") throw new Error("research MDP signer required");
+      metrics.mdp.authorized += 1;
+    } catch {
+      metrics.mdp.rejected += 1;
+      return sendJson(res, 401, { error: "unauthorized" });
+    }
+    Object.assign(call, {
+      subject: verified.payload.sub,
+      scope: verified.payload.scope,
+      issuer: verified.payload.iss,
+      audience: verified.payload.aud,
+      iat: verified.payload.iat,
+      exp: verified.payload.exp,
+      kid: verified.kid,
+    });
+    const allowedKeys = new Set(["symbols", "asset_class", "start_utc", "end_utc", "adjustment", "cursor"]);
+    const queryKeys = [...url.searchParams.keys()];
+    if (queryKeys.some((key) => !allowedKeys.has(key)) ||
+        ["symbols", "asset_class", "start_utc", "end_utc", "adjustment"].some((key) => url.searchParams.getAll(key).length !== 1) ||
+        url.searchParams.getAll("cursor").length > 1) {
+      return sendJson(res, 422, { error: "invalid_research_query" });
+    }
+    if (mdpYfinanceResearchControl.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(mdpYfinanceResearchControl.delayMs, 130_000)));
+    }
+    const cursor = url.searchParams.get("cursor") ?? "";
+    let response = mdpYfinanceResearchControl.responsesByCursor &&
+      Object.hasOwn(mdpYfinanceResearchControl.responsesByCursor, cursor)
+      ? mdpYfinanceResearchControl.responsesByCursor[cursor]
+      : mdpYfinanceResearchControl.response;
+    if (response === null && mdpYfinanceResearchControl.syntheticDaily) {
+      response = syntheticYfinanceResearchResponse(url);
+    }
+    if (response === null) return sendJson(res, 502, { error: "yfinance_fixture_not_configured" });
+    const responseStatus = mdpYfinanceResearchControl.status ?? 200;
+    if (mdpYfinanceResearchControl.location) {
+      res.writeHead(responseStatus, {
+        location: mdpYfinanceResearchControl.location,
+        "cache-control": "no-store",
+        "content-length": "0",
+      });
+      return res.end();
+    }
+    const bytes = mdpYfinanceResearchControl.bodyBytes > 0
+      ? Buffer.alloc(mdpYfinanceResearchControl.bodyBytes, 0x20)
+      : Buffer.from(JSON.stringify(response));
+    return res.writeHead(responseStatus, {
+      "content-type": "application/json",
+      "content-length": String(bytes.byteLength),
+      "cache-control": "no-store",
+    }).end(bytes);
+  }
   if (url.pathname === "/v1/market/bars") {
     const call = {
       method: req.method,

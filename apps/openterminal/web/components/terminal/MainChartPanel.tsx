@@ -88,6 +88,7 @@ function setSeriesData(series: ChartSeries, data: unknown[]) {
 }
 
 type PointerPan = { startX: number; movedOlder: boolean; requested: boolean; active: boolean };
+const YFINANCE_RESEARCH_SYMBOL = /^[A-Z0-9][A-Z0-9.-]{0,31}$/;
 
 function safeDetails(value: unknown): string {
   try {
@@ -98,7 +99,7 @@ function safeDetails(value: unknown): string {
   }
 }
 
-export default function MainChartPanel() {
+export default function MainChartPanel({ researchOrigin = null }: { researchOrigin?: string | null }) {
   const activeSymbol = useTradingStore((state) => state.activeSymbol);
   const chartType = useTradingStore((state) => state.chartType);
   const setChartType = useTradingStore((state) => state.setChartType);
@@ -198,6 +199,9 @@ export default function MainChartPanel() {
     const latest = bars?.length ? rsi(bars).at(-1)?.value : undefined;
     return typeof latest === "number" && Number.isFinite(latest) ? latest : null;
   }, [bars]);
+  const yfinanceResearchHref = researchOrigin && YFINANCE_RESEARCH_SYMBOL.test(activeSymbol)
+    ? `${researchOrigin}/research/yfinance/${encodeURIComponent(activeSymbol)}`
+    : null;
   barsRef.current = bars ?? [];
   currentIdentityRef.current = historyIdentity;
   currentTimeVisibleRef.current = timeVisible;
@@ -518,6 +522,27 @@ export default function MainChartPanel() {
           <option value="stock">Stock</option>
           <option value="etf">ETF</option>
         </select>
+        {yfinanceResearchHref ? (
+          <a
+            href={yfinanceResearchHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="main-chart-yfinance-research-link"
+            className="px-1.5 py-0.5 text-[10px] font-mono rounded border border-amber-900/70 text-amber-300 hover:bg-amber-950/40"
+          >
+            Yahoo daily research ↗
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled
+            title={!researchOrigin ? "Unavailable: no validated research hostname is configured." : "Unavailable: the active symbol is outside the Yahoo ticker route allowlist."}
+            data-testid="main-chart-yfinance-research-unavailable"
+            className="px-1.5 py-0.5 text-[10px] font-mono rounded border border-[#223048] text-slate-600 cursor-not-allowed"
+          >
+            Yahoo daily research unavailable
+          </button>
+        )}
         {history.hasNextPage && (
           <button
             className="px-1.5 py-0.5 text-[10px] font-mono rounded border border-[#223048] text-slate-300"
