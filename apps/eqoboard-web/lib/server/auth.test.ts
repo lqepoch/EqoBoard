@@ -3,9 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const { ownerKeyForPrincipal, principalFromClaims } = await import("./auth");
-const { authCookieName, authOptions } = await vi.importActual<typeof import("../../auth")>(
-  "../../auth",
-);
+const { authCookieName, authOptions } =
+  await vi.importActual<typeof import("../../auth")>("../../auth");
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -83,8 +82,7 @@ describe("server principal projection", () => {
 
   it("requires PKCE, state, and nonce with realm-isolated nonce cookies", async () => {
     const oidcProvider = authOptions.providers.find(
-      (provider) =>
-        typeof provider === "object" && "id" in provider && provider.id === "eqo-oidc",
+      (provider) => typeof provider === "object" && "id" in provider && provider.id === "eqo-oidc",
     );
     expect(oidcProvider).toMatchObject({ checks: ["pkce", "state", "nonce"] });
 

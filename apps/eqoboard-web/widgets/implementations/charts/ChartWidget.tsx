@@ -108,9 +108,7 @@ function mergePageEvidence(
   // most recent dynamic head snapshot. Cursor continuation remains bound to
   // pages[0]'s exact server-resolved window.
   const evidencePages =
-    state.latestHead && pages[0] !== state.latestHead
-      ? [state.latestHead, ...pages]
-      : pages;
+    state.latestHead && pages[0] !== state.latestHead ? [state.latestHead, ...pages] : pages;
 
   const values = (select: (page: HistoryPage) => string): string[] => [
     ...new Set(evidencePages.map(select).filter((value) => value !== "unknown")),

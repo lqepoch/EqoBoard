@@ -41,16 +41,15 @@ describe("chart history pagination and viewport", () => {
   });
 
   it("lets a newer validated head snapshot update overlapping OHLC and source rows", () => {
-    const current: ChartPlotBar<Readonly<{ source: string }>>[] = bars([10, 20, 30]).map(
-      (bar) => ({ ...bar, sourceRow: { source: "futu" } }),
-    );
-    const refreshRows: ChartPlotBar<Readonly<{ source: string }>>[] = bars([30, 40]).map(
-      (bar) => ({ ...bar, sourceRow: { source: "alpaca" } }),
-    );
-    const refreshed = [
-      { ...rowAt(refreshRows, 0), close: 99 },
-      rowAt(refreshRows, 1),
-    ];
+    const current: ChartPlotBar<Readonly<{ source: string }>>[] = bars([10, 20, 30]).map((bar) => ({
+      ...bar,
+      sourceRow: { source: "futu" },
+    }));
+    const refreshRows: ChartPlotBar<Readonly<{ source: string }>>[] = bars([30, 40]).map((bar) => ({
+      ...bar,
+      sourceRow: { source: "alpaca" },
+    }));
+    const refreshed = [{ ...rowAt(refreshRows, 0), close: 99 }, rowAt(refreshRows, 1)];
     const merged = mergeHeadRefresh(current, refreshed);
 
     expect(merged.map((bar) => Number(bar.time))).toEqual([10, 20, 30, 40]);

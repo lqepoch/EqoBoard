@@ -74,10 +74,7 @@ export function mergePagedHistoryHead<TPage extends EffectiveResolutionPage, TRo
   nextHead: TPage,
   nextBars: readonly ChartPlotBar<TRow>[],
 ): PagedHistoryHeadResult<TPage, TRow> {
-  const knownPages = [
-    ...current.cursorPages,
-    ...(current.latestHead ? [current.latestHead] : []),
-  ];
+  const knownPages = [...current.cursorPages, ...(current.latestHead ? [current.latestHead] : [])];
   if (!historyPageMatchesResolution(knownPages, nextHead)) {
     return { accepted: false, snapshot: current };
   }
@@ -88,10 +85,7 @@ export function mergePagedHistoryHead<TPage extends EffectiveResolutionPage, TRo
     snapshot: {
       cursorPages,
       latestHead: nextHead,
-      bars:
-        current.cursorPages.length > 0
-          ? mergeHeadRefresh(current.bars, nextBars)
-          : nextBars,
+      bars: current.cursorPages.length > 0 ? mergeHeadRefresh(current.bars, nextBars) : nextBars,
     },
   };
 }

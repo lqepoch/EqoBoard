@@ -83,9 +83,9 @@ export function YfinanceDailyWidget({
     fullAuth.permissions.includes("research:read") &&
     host.auth.authenticated &&
     host.auth.permissions.includes("research:read");
-  const request = useMemo(
-    () =>
-      buildYfinanceResearchInput(
+  const requestIntent = useMemo(
+    () => ({
+      input: buildYfinanceResearchInput(
         {
           symbol: config.symbol,
           assetClass: config.assetClass,
@@ -95,12 +95,23 @@ export function YfinanceDailyWidget({
         inputs.symbol,
         anchorNow,
       ),
-    [config.symbol, config.assetClass, config.range, config.adjustment, inputs.symbol, anchorNow],
+      // A manual refresh must issue a new read even when the UTC window is unchanged.
+      revision: refreshRevision,
+    }),
+    [
+      config.symbol,
+      config.assetClass,
+      config.range,
+      config.adjustment,
+      inputs.symbol,
+      anchorNow,
+      refreshRevision,
+    ],
   );
-  const selectionKey =
-    request
-      ? yfinanceSelectionKey(config, inputs.symbol)
-      : `invalid:${yfinanceSelectionKey(config, inputs.symbol)}`;
+  const request = requestIntent.input;
+  const selectionKey = request
+    ? yfinanceSelectionKey(config, inputs.symbol)
+    : `invalid:${yfinanceSelectionKey(config, inputs.symbol)}`;
   const current =
     history.selectionKey === selectionKey
       ? history
@@ -110,18 +121,16 @@ export function YfinanceDailyWidget({
     historyRef.current = next;
     setHistory(next);
   }, []);
-  const updateHistory = useCallback(
-    (update: (current: HistoryState) => HistoryState) => {
-      setHistory((current) => {
-        const next = update(current);
-        historyRef.current = next;
-        return next;
-      });
-    },
-    [],
-  );
+  const updateHistory = useCallback((update: (current: HistoryState) => HistoryState) => {
+    setHistory((current) => {
+      const next = update(current);
+      historyRef.current = next;
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
+    const request = requestIntent.input;
     const generation = requestGenerationRef.current + 1;
     requestGenerationRef.current = generation;
     if (!allowed || !request) {
@@ -214,7 +223,7 @@ export function YfinanceDailyWidget({
       controller.abort();
       if (activeRequest.current === controller) activeRequest.current = null;
     };
-  }, [allowed, commitHistory, host.data, host.lifecycle, refreshRevision, request, selectionKey]);
+  }, [allowed, commitHistory, host.data, host.lifecycle, requestIntent, selectionKey]);
 
   useEffect(() => () => activeRequest.current?.abort(), []);
 

@@ -89,8 +89,9 @@ describe("Yahoo daily research adapter", () => {
     expect(advancedRequest).not.toBeNull();
     if (!firstRequest || !advancedRequest) return;
 
+    const lineStyleConfig: YfinanceResearchConfigV1 = { ...config, style: "line" };
     expect(yfinanceSelectionKey(config, undefined)).toBe(
-      yfinanceSelectionKey({ ...config, style: "line" }, undefined),
+      yfinanceSelectionKey(lineStyleConfig, undefined),
     );
     expect(yfinanceSelectionKey(config, undefined)).not.toBe(
       yfinanceSelectionKey({ ...config, range: "5D" }, undefined),
@@ -118,18 +119,25 @@ describe("Yahoo daily research adapter", () => {
     const originalEarliestRow = {
       ...row,
       event_ts_utc: "2026-09-01T00:00:00.000Z",
+      open: "88.2",
+      high: "90.0",
+      low: "87.0",
       close: "88.8",
     };
     const cursorOlderRow = {
       ...row,
       event_ts_utc: "2026-08-31T00:00:00.000Z",
+      open: "87.0",
+      high: "88.5",
+      low: "86.5",
       close: "87.7",
     };
     const originalOverlapRow = { ...row, close: "102.4" };
-    const latestOverlapRow = { ...row, close: "105.5" };
+    const latestOverlapRow = { ...row, high: "106.0", close: "105.5" };
     const latestNewRow = {
       ...row,
       event_ts_utc: "2026-10-15T00:00:00.000Z",
+      high: "107.0",
       close: "106.6",
     };
     const originalRequest = {
