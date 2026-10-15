@@ -31,7 +31,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    tmpfs: [/tmp:rw,noexec,nosuid,size=64m]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     ports: ["127.0.0.1:3441:3000"]
     environment:
       EQO_NATIVE_E2E: "1"

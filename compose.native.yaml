@@ -12,7 +12,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    tmpfs: [/tmp:rw,noexec,nosuid,size=64m]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
     ports:
       - "127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440}:3000"
     environment:
