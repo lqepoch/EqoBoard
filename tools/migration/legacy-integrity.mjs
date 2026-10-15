@@ -4,12 +4,10 @@ import { createHash } from "node:crypto";
 import {
   closeSync,
   constants as fsConstants,
-  existsSync,
   fstatSync,
   lstatSync,
   mkdirSync,
   openSync,
-  readFileSync,
   readSync,
   realpathSync,
   writeFileSync,
@@ -112,29 +110,25 @@ function decodeUtf8(buffer, label) {
   }
 }
 
-export function readBoundedManifestFile(filePath, maxBytes = MAX_MANIFEST_BYTES) {
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > MAX_MANIFEST_BYTES) {
-    fail("Invalid manifest size bound");
+function readNoFollowBounded(filePath, maxBytes, label) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > MAX_SINGLE_FILE_BYTES) {
+    fail("Invalid file size bound");
   }
-
-  const beforeOpen = lstatSync(filePath, { bigint: true });
-  if (beforeOpen.isSymbolicLink()) fail("Manifest must not be a symlink");
-  if (!beforeOpen.isFile()) fail("Manifest must be a regular file");
-  if (beforeOpen.size > BigInt(maxBytes)) fail("Manifest exceeds size bound");
-
   if (typeof fsConstants.O_NOFOLLOW !== "number") {
-    fail("Manifest reader requires O_NOFOLLOW support");
+    fail(label + " reader requires O_NOFOLLOW support");
   }
 
   let descriptor;
   try {
-    descriptor = openSync(filePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-    const opened = fstatSync(descriptor, { bigint: true });
-    if (!opened.isFile()) fail("Manifest must be a regular file");
-    if (opened.dev !== beforeOpen.dev || opened.ino !== beforeOpen.ino) {
-      fail("Manifest changed while opening");
+    try {
+      descriptor = openSync(filePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    } catch (error) {
+      if (error.code === "ELOOP") fail(label + " must not be a symlink");
+      throw error;
     }
-    if (opened.size > BigInt(maxBytes)) fail("Manifest exceeds size bound");
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!opened.isFile()) fail(label + " must be a regular file");
+    if (opened.size > BigInt(maxBytes)) fail(label + " exceeds size bound");
 
     const buffer = Buffer.alloc(maxBytes + 1);
     let bytesRead = 0;
@@ -143,7 +137,7 @@ export function readBoundedManifestFile(filePath, maxBytes = MAX_MANIFEST_BYTES)
       if (count === 0) break;
       bytesRead += count;
     }
-    if (bytesRead > maxBytes) fail("Manifest exceeds size bound");
+    if (bytesRead > maxBytes) fail(label + " exceeds size bound");
 
     const afterRead = fstatSync(descriptor, { bigint: true });
     if (
@@ -155,12 +149,16 @@ export function readBoundedManifestFile(filePath, maxBytes = MAX_MANIFEST_BYTES)
       || afterRead.ctimeNs !== opened.ctimeNs
       || BigInt(bytesRead) !== opened.size
     ) {
-      fail("Manifest changed while reading");
+      fail(label + " changed while reading");
     }
-    return buffer.subarray(0, bytesRead);
+    return { bytes: buffer.subarray(0, bytesRead), stat: opened };
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
   }
+}
+
+export function readBoundedManifestFile(filePath, maxBytes = MAX_MANIFEST_BYTES) {
+  return readNoFollowBounded(filePath, maxBytes, "Manifest").bytes;
 }
 
 function nulRecords(buffer, label) {
@@ -667,20 +665,24 @@ export function inspectWorktreeFile(repoRoot, filePath) {
   const root = realpathSync(repoRoot);
   const parts = filePath.split("/");
   let current = root;
+  let finalStat;
   for (let index = 0; index < parts.length; index += 1) {
     current = path.join(current, parts[index]);
-    const stat = lstatSync(current);
+    const stat = lstatSync(current, { bigint: true });
     if (stat.isSymbolicLink()) fail("Symlink is forbidden in protected path: " + filePath);
     const final = index === parts.length - 1;
     if (!final && !stat.isDirectory()) fail("Protected parent is not a directory: " + filePath);
     if (final && !stat.isFile()) fail("Protected path is not a regular file: " + filePath);
+    if (final) finalStat = stat;
   }
   const resolved = realpathSync(current);
   if (!resolved.startsWith(root + path.sep)) fail("Protected file resolves outside repository");
-  const stat = lstatSync(current);
-  const mode = stat.mode & 0o111 ? "100755" : "100644";
-  const content = readFileSync(current);
-  if (content.length > MAX_SINGLE_FILE_BYTES) fail("Worktree file exceeds size bound: " + filePath);
+  const opened = readNoFollowBounded(current, MAX_SINGLE_FILE_BYTES, "Worktree file");
+  if (opened.stat.dev !== finalStat.dev || opened.stat.ino !== finalStat.ino) {
+    fail("Protected path changed while opening: " + filePath);
+  }
+  const content = opened.bytes;
+  const mode = opened.stat.mode & 0o111n ? "100755" : "100644";
   return {
     path: filePath,
     mode,
@@ -769,17 +771,23 @@ function usage() {
 
 function createManifestFile(repoRoot) {
   const manifestPath = path.join(repoRoot, MANIFEST_RELATIVE_PATH);
-  if (existsSync(manifestPath)) fail("Refusing to overwrite existing manifest: " + MANIFEST_RELATIVE_PATH);
   const manifest = makeManifest(repoRoot);
   validateManifestShape(manifest);
   const json = JSON.stringify(manifest, null, 2) + "\n";
   if (Buffer.byteLength(json, "utf8") > MAX_MANIFEST_BYTES) fail("Generated manifest exceeds size bound");
   ensureSafeDirectoryTree(repoRoot, path.posix.dirname(MANIFEST_RELATIVE_PATH));
-  const descriptor = openSync(manifestPath, "wx", 0o644);
+  let descriptor;
   try {
+    descriptor = openSync(manifestPath, fsConstants.O_WRONLY | fsConstants.O_CREAT
+      | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o644);
     writeFileSync(descriptor, json, "utf8");
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      fail("Refusing to overwrite existing manifest: " + MANIFEST_RELATIVE_PATH);
+    }
+    throw error;
   } finally {
-    closeSync(descriptor);
+    if (descriptor !== undefined) closeSync(descriptor);
   }
   return manifest;
 }

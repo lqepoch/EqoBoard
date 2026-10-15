@@ -236,7 +236,7 @@ test("manifest validation binds the fixed snapshot, complete scope and sorted un
 test("manifest validation rejects duplicate, traversal and symlink-mode entries", () => {
   const { expected, manifest } = validManifestFixture();
   const duplicate = { ...manifest, fileCount: 2, files: [manifest.files[0], manifest.files[0]] };
-  assert.throws(() => validateManifestShape(duplicate, expected), /duplicate manifest path/i);
+  assert.throws(() => validateManifestShape(duplicate, expected), /duplicate manifest file path/i);
 
   const traversal = {
     ...manifest,
