@@ -81,34 +81,18 @@ jobs:
         id: install
         run: npm ci --no-audit --no-fund
       - name: Scan candidate source and commits for secrets
-        shell: bash
+        working-directory: .
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$NATIVE_CANDIDATE_SHA"
-          if [[ -z "${BASE_SHA:-}" || "$BASE_SHA" =~ ^0{40}$ ]]; then
-            scan_range='--all'
-          else
-            [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-            git cat-file -e "$BASE_SHA^{commit}"
-            scan_range="$BASE_SHA..$NATIVE_CANDIDATE_SHA"
-          fi
-          docker run --rm --network=none --read-only --cap-drop=ALL \
-            --security-opt=no-new-privileges \
-            --volume "$GITHUB_WORKSPACE:/repo:ro" --workdir /repo \
-            "$GITLEAKS_IMAGE" dir --redact --verbose --no-banner /repo/apps/eqoboard-web
-          docker run --rm --network=none --read-only --cap-drop=ALL \
-            --security-opt=no-new-privileges \
-            --volume "$GITHUB_WORKSPACE:/repo:ro" --workdir /repo \
-            "$GITLEAKS_IMAGE" git --redact --verbose --no-banner --log-opts="$scan_range" .
+        run: bash tools/native-web-secret-scan.sh
       - name: Native source boundary and legacy preservation
         working-directory: .
         run: |
           git diff --check
           node tools/migration/legacy-integrity.mjs
           python3 tools/ci/run-contract-tests.py native
+          node --test tools/ci/native-provenance-audit.test.mjs
+          node tools/ci/native-provenance-audit.mjs
       - name: TypeScript contracts
         if: always() && steps.install.outcome == 'success'
         run: npm run typecheck

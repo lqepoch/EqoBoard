@@ -405,6 +405,7 @@ export const provenance = Object.freeze({
             REPO_ROOT / "tools" / "native-web-compose-e2e.sh",
             REPO_ROOT / "tools" / "native-web-sbom.sh",
             REPO_ROOT / "tools" / "native-web-format-proposal.sh",
+            REPO_ROOT / "tools" / "native-web-secret-scan.sh",
         )
         for helper in helpers:
             self.assertTrue(helper.is_file(), f"native workflow helper is required: {helper.name}")
