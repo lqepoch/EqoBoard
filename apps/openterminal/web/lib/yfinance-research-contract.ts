@@ -175,6 +175,10 @@ function parseRange(value: unknown): { start: bigint; end: bigint } | null {
   return start !== null && end !== null && end > start ? { start, end } : null;
 }
 
+function rangeMatchesRequest(value: unknown, request: ExpectedYfinanceResearchRequest): boolean {
+  return isRecord(value) && value.start_utc === request.startUtc && value.end_utc === request.endUtc;
+}
+
 function isDecimalOrNull(value: unknown): value is string | null {
   if (value === null) return true;
   return typeof value === "string" && value.length <= 64 && DECIMAL.test(value) && Number.isFinite(Number(value));
@@ -200,7 +204,13 @@ function validPayload(
   pageStart: bigint,
   pageEnd: bigint,
 ): value is YfinanceHistoryBridgePayload {
-  if (!isRecord(value) || !hasExactFields(value, PAYLOAD_FIELDS) ||
+  if (!isRecord(value) || !hasExactFields(value, PAYLOAD_FIELDS)) return false;
+  const returnedSymbols = value.returned_symbols;
+  const missingSymbols = value.missing_symbols;
+  if (!isSymbolList(returnedSymbols, request.symbols) || !isSymbolList(missingSymbols, request.symbols) ||
+      returnedSymbols.some((symbol) => missingSymbols.includes(symbol))) return false;
+
+  if (
       value.schema_version !== YFINANCE_BRIDGE_SCHEMA || !["ready", "partial"].includes(value.status as string) ||
       value.provider !== "yfinance" || value.source !== "Yahoo Finance" ||
       value.asset_class !== request.assetClass || value.classification_source !== "caller_declared" ||
@@ -210,9 +220,7 @@ function validPayload(
       value.volume_encoding !== YFINANCE_RESEARCH_VOLUME_ENCODING || value.canonical !== false ||
       value.point_in_time !== false || value.executable !== false || value.display_only !== true ||
       !symbolsEchoRequest(value.requested_symbols, request) ||
-      !isSymbolList(value.returned_symbols, request.symbols) || !isSymbolList(value.missing_symbols, request.symbols) ||
-      value.returned_symbols.some((symbol) => value.missing_symbols.includes(symbol)) ||
-      ((value.status === "partial") !== (value.missing_symbols.length > 0)) ||
+      ((value.status === "partial") !== (missingSymbols.length > 0)) ||
       !["network", "fresh_cache", "stale_cache"].includes(value.cache_status as string) ||
       !["retrieved", "stale"].includes(value.freshness as string) ||
       ((value.cache_status === "stale_cache") !== (value.freshness === "stale")) ||
@@ -383,7 +391,7 @@ export function validateYfinanceResearchResponse(
   const pageLimit = BigInt(YFINANCE_RESEARCH_MAX_PAGE_DAYS) * DAY_NS;
   if (!requested || !page || expectedStart === null || expectedEnd === null ||
       requested.start !== expectedStart || requested.end !== expectedEnd ||
-      value.requested_range.start_utc !== request.startUtc || value.requested_range.end_utc !== request.endUtc ||
+      !rangeMatchesRequest(value.requested_range, request) ||
       page.start < requested.start || page.end > requested.end || page.end - page.start > pageLimit ||
       (request.cursor === null
         ? page.end !== requested.end || page.start !== (requested.start > requested.end - pageLimit ? requested.start : requested.end - pageLimit)
