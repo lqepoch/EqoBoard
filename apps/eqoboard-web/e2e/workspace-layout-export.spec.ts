@@ -41,7 +41,7 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
     .locator("option")
     .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
   const saveStartedAt = Date.now();
-  await page.getByRole("button", { name: "New workspace" }).click();
+  await page.getByRole("button", { name: "New workspace", exact: true }).click();
   await expect(workspaceSelector.locator("option")).toHaveCount(previousWorkspaceIds.length + 1);
   const workspaceId = await workspaceSelector.inputValue();
   expect(workspaceId).not.toBe(previousWorkspaceId);
@@ -51,19 +51,22 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
     throw new Error("The new workspace was not selected after creation.");
   }
   const workspaceName = selectedWorkspaceName.trim();
-  const tabs = page.getByRole("tablist", { name: "Workspace tabs" });
+  const tabs = page.getByRole("tablist", { name: "Workspace tabs", exact: true });
   await expect(tabs.getByRole("tab")).toHaveCount(1);
-  await expect(tabs.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+  await expect(tabs.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
   );
 
   await page.getByTestId("workspace-add-tab").click();
   await expect(tabs.getByRole("tab")).toHaveCount(2);
-  await expect(tabs.getByRole("tab", { name: "New tab" })).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await page.getByTestId("workspace-duplicate-tab").click();
   await expect(tabs.getByRole("tab")).toHaveCount(3);
-  await expect(tabs.getByRole("tab", { name: "New tab copy" })).toHaveAttribute(
+  await expect(tabs.getByRole("tab", { name: "New tab copy", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
   );
@@ -72,11 +75,14 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   );
   const workspaceMutationSaveMs = Date.now() - saveStartedAt;
 
-  const duplicateTab = tabs.getByRole("tab", { name: "New tab copy" });
+  const duplicateTab = tabs.getByRole("tab", { name: "New tab copy", exact: true });
   await duplicateTab.focus();
   await page.keyboard.press("ArrowLeft");
-  await expect(tabs.getByRole("tab", { name: "New tab" })).toBeFocused();
-  await expect(tabs.getByRole("tab", { name: "New tab" })).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.getByRole("tab", { name: "New tab", exact: true })).toBeFocused();
+  await expect(tabs.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 
   const reloadStartedAt = Date.now();
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -86,7 +92,7 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   );
   const workspaceReloadUsableMs = Date.now() - reloadStartedAt;
   await expect(workspaceSelector).toHaveValue(workspaceId);
-  const reloadedTabs = page.getByRole("tablist", { name: "Workspace tabs" }).getByRole("tab");
+  const reloadedTabs = tabs.getByRole("tab");
   await expect(reloadedTabs).toHaveCount(3);
   await expect(reloadedTabs.nth(0)).toHaveText("Overview");
   await expect(reloadedTabs.nth(1)).toHaveText("New tab");

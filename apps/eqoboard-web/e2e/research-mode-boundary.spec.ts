@@ -328,20 +328,29 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     await researchPage.getByTestId("yahoo-indicator-sma20").check();
     const expectedMaxEnd = new Date();
     expectedMaxEnd.setUTCHours(0, 0, 0, 0);
+    const supportedStartUtc = "1970-01-01T00:00:00.000Z";
+    const expectedMaxEndUtc = expectedMaxEnd.toISOString();
     const maxRangeReadPromise = researchPage.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
-        url.pathname === "/api/research/yfinance/daily" && url.searchParams.get("cursor") === null
+        url.pathname === "/api/research/yfinance/daily" &&
+        url.searchParams.get("cursor") === null &&
+        url.searchParams.get("symbols") === "SPY" &&
+        url.searchParams.get("asset_class") === "stock" &&
+        url.searchParams.get("adjustment") === "unadjusted" &&
+        url.searchParams.get("start_utc") === supportedStartUtc &&
+        url.searchParams.get("end_utc") === expectedMaxEndUtc
       );
     });
     await researchPage.getByLabel("Daily window").selectOption("MAX");
     const maxRangeRead = await maxRangeReadPromise;
     expect(maxRangeRead.status()).toBe(200);
-    const maxRange = (await maxRangeRead.json()) as PagedYfinanceObservation;
-    const supportedStartUtc = "1970-01-01T00:00:00.000Z";
+    expect(await maxRangeRead.finished()).toBeNull();
+    const maxRangeBody = await maxRangeRead.body();
+    const maxRange = JSON.parse(maxRangeBody.toString("utf8")) as PagedYfinanceObservation;
     expect(maxRange.requested_range).toEqual({
       start_utc: supportedStartUtc,
-      end_utc: expectedMaxEnd.toISOString(),
+      end_utc: expectedMaxEndUtc,
       semantics: "start_inclusive_end_exclusive",
     });
     const maxStartMs = Date.parse(maxRange.requested_range.start_utc);
