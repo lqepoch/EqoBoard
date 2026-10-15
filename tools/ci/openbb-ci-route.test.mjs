@@ -204,6 +204,7 @@ test("copies from unchanged shared paths route both the source and destination",
   const sharedPath = ".github/workflows/openbb.yml";
   withRepo(({ root, git, classify }) => {
     const copiedPath = "docs/copied-workflow-notes.md";
+    mkdirSync(dirname(join(root, copiedPath)), { recursive: true });
     writeFileSync(join(root, copiedPath), readFileSync(join(root, sharedPath)));
     commit(git, "copy shared workflow input");
     assert.deepEqual(classify(), { source: true, runtime: true, reason: "related-paths" });
