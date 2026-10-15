@@ -1,52 +1,105 @@
 #!/usr/bin/env node
-// Audit installed metadata against the committed graph; image notices are retained separately.
+// Validate installed license metadata against the lock and exact runtime-exclusion inventory.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  compareRuntimeExcludedInventory,
+  isRuntimeExcludedPackageName,
+  isKnownRuntimeExcludedSpdxExpression,
+  isPermissiveSpdxExpression,
+  packageNameFromLockPath,
+  parseSpdxExpression,
+} from "./native-license-policy.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../apps/eqoboard-web");
-const lock = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8"));
-const allowed = new Set([
-  "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD", "Unlicense",
-  "CC0-1.0", "CC-BY-4.0", "Python-2.0", "BlueOak-1.0.0", "Zlib", "WTFPL",
-]);
-function allowedExpression(value) {
-  if (typeof value !== "string" || value.length > 256) return false;
-  const tokens = value.replace(/[()]/gu, " ").trim().split(/\s+/u);
-  return tokens.length > 0 && tokens.some((token) => allowed.has(token)) &&
-    tokens.every((token) => token === "OR" || token === "AND" || allowed.has(token));
-}
-const records = [];
+const toolDirectory = path.dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = path.resolve(toolDirectory, "../..");
+const appRoot = path.join(repositoryRoot, "apps/eqoboard-web");
+const lockPath = path.join(appRoot, "package-lock.json");
+const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+const inventory = JSON.parse(readFileSync(path.join(toolDirectory, "native-runtime-excluded-license-inventory.json"), "utf8"));
 const failures = [];
+const records = [];
+
+function fail(target, reason, details = {}) {
+  failures.push({ path: target, reason, ...details });
+}
+
+if (inventory.schemaVersion !== 1 || inventory.kind !== "native-runtime-excluded-license-inventory" ||
+    inventory.lockfile !== "apps/eqoboard-web/package-lock.json" || !Array.isArray(inventory.packages)) {
+  throw new Error("invalid native runtime-exclusion license inventory header");
+}
+
+const inventoryComparison = compareRuntimeExcludedInventory(lock.packages ?? {}, inventory.packages);
+failures.push(...inventoryComparison.failures);
+const inventoryByPath = inventoryComparison.inventoryByPath;
+
 for (const [relative, metadata] of Object.entries(lock.packages ?? {})) {
   if (!relative) continue;
   if (!relative.startsWith("node_modules/") || relative.split("/").some((part) => part === "..")) {
-    failures.push({ path: relative, reason: "non-install package path" });
+    fail(relative, "non-install package path");
     continue;
   }
+
+  const packageName = packageNameFromLockPath(relative);
+  const runtimeExcluded = isRuntimeExcludedPackageName(packageName ?? "");
+  const reviewed = inventoryByPath.get(relative);
+  if (!runtimeExcluded && reviewed) {
+    fail(relative, "inventory contains a package outside the approved runtime-excluded families");
+  }
+
   let installed;
-  try { installed = JSON.parse(readFileSync(path.join(root, relative, "package.json"), "utf8")); }
-  catch (error) {
-    // Platform-excluded optional packages remain in the reviewed lock metadata.
+  try {
+    installed = JSON.parse(readFileSync(path.join(appRoot, relative, "package.json"), "utf8"));
+  } catch (error) {
+    // npm omits optional packages for non-matching platforms, but their complete lock metadata remains reviewed.
     if (error.code === "ENOENT" && metadata.optional === true) {
-      records.push({ path: relative, version: metadata.version, license: metadata.license ?? null, installed: false });
-      if (!allowedExpression(metadata.license)) failures.push({ path: relative, reason: "unreviewed optional license" });
+      const license = metadata.license ?? null;
+      if (typeof license !== "string" || !parseSpdxExpression(license)) {
+        fail(relative, "invalid or missing optional-package SPDX expression", { license });
+      } else if (runtimeExcluded ? !isKnownRuntimeExcludedSpdxExpression(license) : !isPermissiveSpdxExpression(license)) {
+        fail(relative, runtimeExcluded ? "unreviewed runtime-excluded license expression" : "unreviewed optional license", { license });
+      }
+      records.push({ path: relative, name: packageName, version: metadata.version, integrity: metadata.integrity ?? null, license, notices: [], installed: false, scope: runtimeExcluded ? reviewed?.scope ?? null : null });
       continue;
     }
     throw error;
   }
+
   const license = typeof installed.license === "string" ? installed.license : installed.license?.type;
-  const notices = readdirSync(path.join(root, relative)).filter((name) => /^(?:licen[sc]e|notice|copying)(?:[._-]|$)/iu.test(name));
-  records.push({ path: relative, name: installed.name, version: installed.version, license: license ?? null, notices, installed: true });
-  if (!allowedExpression(license)) failures.push({ path: relative, reason: "unreviewed or missing SPDX expression", license: license ?? null });
-  if (metadata.version && installed.version !== metadata.version) failures.push({ path: relative, reason: "installed version differs from lock" });
+  const notices = readdirSync(path.join(appRoot, relative)).filter((name) => /^(?:licen[sc]e|notice|copying)(?:[._-]|$)/iu.test(name));
+  records.push({ path: relative, name: installed.name, version: installed.version, integrity: metadata.integrity ?? null, license: license ?? null, notices, installed: true, scope: runtimeExcluded ? reviewed?.scope ?? null : null });
+
+  if (installed.name !== packageName) fail(relative, "installed package name differs from lock path", { expected: packageName, actual: installed.name });
+  if (metadata.version && installed.version !== metadata.version) fail(relative, "installed version differs from lock", { expected: metadata.version, actual: installed.version });
+  if (typeof license !== "string" || !parseSpdxExpression(license)) {
+    fail(relative, "invalid or missing SPDX expression", { license: license ?? null });
+  } else if (metadata.license !== license) {
+    fail(relative, "installed SPDX expression differs from lock", { locked: metadata.license ?? null, installed: license });
+  } else if (runtimeExcluded ? !isKnownRuntimeExcludedSpdxExpression(license) : !isPermissiveSpdxExpression(license)) {
+    fail(relative, runtimeExcluded ? "unreviewed runtime-excluded license expression" : "unreviewed or non-permissive SPDX expression", { license });
+  }
 }
+
 for (const filename of ["legal/EQOBOARD-LICENSE-MIT", "legal/OPENTERMINAL-LICENSE-MIT"]) {
-  const notice = readFileSync(path.join(root, filename), "utf8");
-  if (!notice.includes("Permission is hereby granted") || !notice.includes("copyright")) throw new Error("missing complete MIT notice: " + filename);
+  const notice = readFileSync(path.join(appRoot, filename), "utf8");
+  if (!notice.includes("Permission is hereby granted") || !notice.toLowerCase().includes("copyright")) {
+    fail(filename, "complete MIT notice text was not found");
+  }
 }
-const report = { schemaVersion: 1, kind: "native-dependency-license-audit", acceptance: "metadata-and-notice-audit-not-provider-data-rights", records, failures };
-const output = path.join(process.env.RUNNER_TEMP ?? root, "native-license-audit.json");
+
+const report = {
+  schemaVersion: 2,
+  kind: "native-dependency-license-audit",
+  acceptance: "lock-metadata-spdx-syntax-runtime-exclusion-inventory-and-notice-audit-not-provider-data-rights",
+  inventory: path.relative(repositoryRoot, path.join(toolDirectory, "native-runtime-excluded-license-inventory.json")),
+  records,
+  failures,
+};
+const output = path.join(process.env.RUNNER_TEMP ?? appRoot, "native-license-audit.json");
 writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
-console.log(`License metadata reviewed: ${records.length}; blocking findings: ${failures.length}`);
-if (failures.length) { console.error(JSON.stringify(failures)); process.exitCode = 1; }
+console.log(`License metadata reviewed: ${records.length}; runtime-exclusion inventory: ${inventoryByPath.size}; blocking findings: ${failures.length}`);
+if (failures.length) {
+  console.error(JSON.stringify(failures, null, 2));
+  process.exitCode = 1;
+}

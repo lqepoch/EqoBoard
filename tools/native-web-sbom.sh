@@ -90,6 +90,7 @@ python3 - "$source_sbom" "$image_sbom" <<'PY'
 import json
 import pathlib
 import sys
+from urllib.parse import unquote
 
 for raw_path in sys.argv[1:]:
     path = pathlib.Path(raw_path)
@@ -99,6 +100,22 @@ for raw_path in sys.argv[1:]:
     packages = data.get("packages")
     if not isinstance(packages, list) or not packages:
         raise SystemExit(f"{path.name}: package inventory is empty or malformed")
+    if path.name == "eqoboard-web-image.spdx.json":
+        forbidden = []
+        for package in packages:
+            names = {str(package.get("name", "")).lower()}
+            for reference in package.get("externalRefs", []):
+                if reference.get("referenceType") == "purl":
+                    locator = unquote(str(reference.get("referenceLocator", "")))
+                    if locator.startswith("pkg:npm/"):
+                        names.add(locator[len("pkg:npm/"):].rsplit("@", 1)[0].lower())
+            if any(name in {"sharp", "lightningcss", "libvips", "vips"}
+                   or name.startswith(("@img/sharp-", "sharp-libvips-", "lightningcss-", "libvips"))
+                   for name in names):
+                forbidden.append(package.get("name"))
+        if forbidden:
+            raise SystemExit(f"runtime optimizer/build-transform packages remain: {forbidden}")
+        print("Image SBOM confirms no registered Sharp/libvips/Lightning CSS runtime package")
     print(f"{path.name}: SPDX-2.3, {len(packages)} packages")
 PY
 

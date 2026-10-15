@@ -17,17 +17,18 @@ FROM deps AS builder
 COPY . .
 RUN mkdir -p public \
     && npm run build \
+    && node tools/ci/native-runtime-package-audit.mjs .next/standalone \
     && mkdir -p .legal/source .legal/dependencies \
     && find . \
       -path ./node_modules -prune -o \
       -path ./.next -prune -o \
       -path ./.legal -prune -o \
-      -type f \( -iname 'license*' -o -iname 'notice*' \) \
+      -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' \) \
       -exec cp --parents -t .legal/source {} + \
-    && find node_modules -type f \( -iname 'license*' -o -iname 'notice*' \) \
+    && find node_modules -type f \( -iname 'license*' -o -iname 'notice*' -o -iname 'copying*' \) \
       -exec cp --parents -t .legal/dependencies {} +
 
-FROM node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runner
+FROM node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
@@ -44,6 +45,9 @@ COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.legal ./legal/
+COPY --from=builder /app/tools/ci/native-runtime-package-audit.mjs /tmp/native-runtime-package-audit.mjs
+RUN node /tmp/native-runtime-package-audit.mjs /app \
+    && rm /tmp/native-runtime-package-audit.mjs
 VOLUME ["/data/eqoboard-native"]
 USER node
 EXPOSE 3000
