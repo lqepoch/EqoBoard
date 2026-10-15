@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { validateYfinanceResearchResponse } from "../lib/yfinance-research-contract";
 
 const WEB_ORIGIN = process.env.E2E_WEB_ORIGIN ?? `http://127.0.0.1:${process.env.E2E_RESEARCH_WEB_PORT ?? "3320"}`;
 const OIDC_ORIGIN = process.env.E2E_OIDC_ORIGIN ?? `http://127.0.0.1:${process.env.E2E_OIDC_PORT ?? "4320"}`;
@@ -648,6 +649,21 @@ test("Yahoo research BFF canonicalizes explicit UTC offsets and preserves fracti
     start_utc: "2010-01-01T00:00:00.123Z",
     end_utc: "2026-01-01T00:00:00Z",
   });
+
+  const expected = {
+    symbols: ["AAPL"],
+    assetClass: "stock" as const,
+    adjustment: "unadjusted" as const,
+    startUtc: "2010-01-01T00:00:00.123000+00:00",
+    endUtc: "2026-01-01T00:00:00.000000+00:00",
+    cursor: null,
+  };
+  expect(validateYfinanceResearchResponse(body, expected)).toBe(true);
+  const differentNanosecond = JSON.parse(JSON.stringify(body)) as {
+    requested_range: { start_utc: string; end_utc: string; semantics: string };
+  };
+  differentNanosecond.requested_range.start_utc = "2010-01-01T00:00:00.123000001Z";
+  expect(validateYfinanceResearchResponse(differentNanosecond, expected)).toBe(false);
 });
 
 test("Yahoo chart page uses the shared widget, bounded MAX cursor pages, and float-only tooltip values", async ({ page, request }) => {

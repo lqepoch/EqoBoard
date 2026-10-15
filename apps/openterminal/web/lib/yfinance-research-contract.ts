@@ -176,7 +176,11 @@ function parseRange(value: unknown): { start: bigint; end: bigint } | null {
 }
 
 function rangeMatchesRequest(value: unknown, request: ExpectedYfinanceResearchRequest): boolean {
-  return isRecord(value) && value.start_utc === request.startUtc && value.end_utc === request.endUtc;
+  const actual = parseRange(value);
+  const expectedStart = parseUtcTimestamp(request.startUtc);
+  const expectedEnd = parseUtcTimestamp(request.endUtc);
+  return actual !== null && expectedStart !== null && expectedEnd !== null &&
+    actual.start === expectedStart && actual.end === expectedEnd;
 }
 
 function isDecimalOrNull(value: unknown): value is string | null {
