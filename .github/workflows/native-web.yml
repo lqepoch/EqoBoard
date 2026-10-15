@@ -1,0 +1,157 @@
+name: Native Web CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NATIVE_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+concurrency:
+  group: native-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lock:
+    name: Native web lock bootstrap
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.3
+      - name: Require a committed native lockfile
+        id: bootstrap
+        working-directory: apps/eqoboard-web
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f package-lock.json; then
+            echo 'missing=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'missing=true' >> "$GITHUB_OUTPUT"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          echo '::error::Bootstrap lock is a proposal artifact only. Commit and review it before acceptance.'
+          exit 1
+      - name: Preserve proposed lock without accepting generated dependencies
+        if: always() && steps.bootstrap.outputs.missing == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-lock-bootstrap-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
+          path: apps/eqoboard-web/package-lock.json
+          if-no-files-found: warn
+          retention-days: 7
+  validate:
+    name: Native web package and runtime checks
+    needs: lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/eqoboard-web
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.3
+          cache: npm
+          cache-dependency-path: apps/eqoboard-web/package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: 3.12.15
+      - name: Install committed dependency graph
+        run: npm ci --no-audit --no-fund
+      - name: Native source boundary and legacy preservation
+        working-directory: .
+        run: |
+          git diff --check
+          node tools/migration/legacy-integrity.mjs
+          python3 tools/ci/run-contract-tests.py native
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test:unit
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=high
+      - name: Dependency licenses and source attribution
+        working-directory: .
+        run: node tools/ci/native-license-audit.mjs
+      - name: Build independent production app
+        run: npm run build
+      - name: Install Chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: npx playwright install --with-deps chromium
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        id: buildx
+      - name: Build independent runtime image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./apps/eqoboard-web
+          file: ./apps/eqoboard-web/Dockerfile
+          target: runtime
+          tags: eqoboard-native-web:ci
+          builder: ${{ steps.buildx.outputs.name }}
+          load: true
+          push: false
+          cache-from: type=gha,scope=native-web-runtime,version=2
+          cache-to: type=gha,scope=native-web-runtime,mode=max,version=2,ignore-error=true
+      - name: Production containers, OIDC and browser acceptance
+        working-directory: .
+        env:
+          NATIVE_WEB_IMAGE: eqoboard-native-web:ci
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: bash tools/native-web-compose-e2e.sh
+      - name: Install fixed SBOM scanner
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-syft"
+          curl --fail --location --retry 2 --output "$RUNNER_TEMP/native-syft/syft.tar.gz" https://github.com/anchore/syft/releases/download/v1.54.1/syft_1.54.1_linux_amd64.tar.gz
+          echo 'c069905b391cc4c20a5ba65ad5c10be2a7ba074f8ea6ad203e24d14e303dad47  '"$RUNNER_TEMP/native-syft/syft.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/native-syft/syft.tar.gz" -C "$RUNNER_TEMP/native-syft" syft
+          echo "$RUNNER_TEMP/native-syft" >> "$GITHUB_PATH"
+      - name: Source and runtime image SBOM
+        working-directory: .
+        env:
+          NATIVE_WEB_IMAGE: eqoboard-native-web:ci
+        run: bash tools/native-web-sbom.sh
+      - name: Preserve actual native validation artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-validation-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/eqoboard-web/test-results/
+            apps/eqoboard-web/playwright-report/
+            ${{ runner.temp }}/native-web-sbom/
+            ${{ runner.temp }}/native-license-audit.json
+          if-no-files-found: warn
+          retention-days: 7
+  gate:
+    name: Native web validation gate
+    if: always()
+    needs: [lock, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every native lane
+        env:
+          LOCK_RESULT: ${{ needs.lock.result }}
+          VALIDATION_RESULT: ${{ needs.validate.result }}
+        run: test "$LOCK_RESULT" = success && test "$VALIDATION_RESULT" = success

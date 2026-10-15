@@ -1,0 +1,46 @@
+# Opt-in candidate only. compose.yaml remains the accepted legacy deployment.
+services:
+  native-web:
+    profiles: [native]
+    image: ${NATIVE_WEB_IMAGE:-eqoboard-native-web:candidate}
+    build:
+      context: ./apps/eqoboard-web
+      dockerfile: Dockerfile
+      target: runtime
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:rw,noexec,nosuid,size=64m]
+    ports:
+      - "127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440}:3000"
+    environment:
+      NODE_ENV: production
+      EQO_BFF_MODE: terminal
+      NEXTAUTH_URL: ${EQO_NATIVE_PUBLIC_ORIGIN:-http://127.0.0.1:3440}
+      EQO_PUBLIC_ORIGIN: ${EQO_NATIVE_PUBLIC_ORIGIN:-http://127.0.0.1:3440}
+      NEXTAUTH_SECRET: ${EQO_NATIVE_SESSION_SECRET:-}
+      EQO_OIDC_ISSUER: ${EQO_OIDC_ISSUER:-}
+      EQO_OIDC_CLIENT_ID: ${EQO_NATIVE_OIDC_CLIENT_ID:-}
+      EQO_OIDC_CLIENT_SECRET: ${EQO_NATIVE_OIDC_CLIENT_SECRET:-}
+      EQO_RUST_URL: ${EQO_NATIVE_GATEWAY_URL:-http://gateway:8080}
+      EQO_GATEWAY_JWT_SECRET: ${EQO_GATEWAY_JWT_SECRET:-}
+      EQO_MDP_URL: ${EQO_MDP_URL:-}
+      MDP_TERMINAL_JWT_SECRET: ${MDP_TERMINAL_JWT_SECRET:-}
+      EQO_QUANT_RESEARCH_URL: ${EQO_QUANT_RESEARCH_URL:-}
+      QUANT_TERMINAL_JWT_SECRET: ${QUANT_TERMINAL_JWT_SECRET:-}
+      EQO_ENGINE_URL: ${EQO_ENGINE_URL:-}
+      ENGINE_TERMINAL_JWT_SECRET: ${ENGINE_TERMINAL_JWT_SECRET:-}
+      EQO_RESEARCH_PUBLIC_ORIGIN: ${EQO_NATIVE_RESEARCH_PUBLIC_ORIGIN:-}
+      EQOBOARD_DATA_DIR: /data/eqoboard-native
+    volumes:
+      - native-workspaces:/data/eqoboard-native
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+volumes:
+  native-workspaces:
