@@ -77,10 +77,18 @@ function useDocumentHidden(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
-function useWidgetLifecycle(): WidgetLifecycleController {
+export function createWidgetLifecycleForVisibility(
+  documentHidden: boolean,
+): WidgetLifecycleController {
+  const lifecycle = createWidgetLifecycleController();
+  if (documentHidden) lifecycle.suspend();
+  return lifecycle;
+}
+
+function useWidgetLifecycle(documentHidden: boolean): WidgetLifecycleController {
   const lifecycle = useRef<WidgetLifecycleController | null>(null);
   const disposalToken = useRef(0);
-  if (!lifecycle.current) lifecycle.current = createWidgetLifecycleController();
+  if (!lifecycle.current) lifecycle.current = createWidgetLifecycleForVisibility(documentHidden);
   useEffect(() => {
     const token = ++disposalToken.current;
     return () => {
@@ -92,6 +100,15 @@ function useWidgetLifecycle(): WidgetLifecycleController {
     };
   }, []);
   return lifecycle.current;
+}
+
+/** Pauses every resource tied to a mounted widget while its document is hidden. */
+export function syncWidgetLifecycleVisibility(
+  lifecycle: WidgetLifecycleController,
+  documentHidden: boolean,
+): void {
+  if (documentHidden) lifecycle.suspend();
+  else lifecycle.resume();
 }
 
 function resolutionMessage(resolution: WidgetInstanceResolution): string {
@@ -134,12 +151,15 @@ function WidgetRenderer({
   onConfigChange(next: unknown): void;
   onWidgetError(errorCode: string): void;
 }) {
-  const lifecycle = useWidgetLifecycle();
+  const documentHidden = useDocumentHidden();
+  const lifecycle = useWidgetLifecycle(documentHidden);
   const events = useMemo(
     () => eventBus.forInstance(instance.instanceId),
     [eventBus, instance.instanceId],
   );
-  const documentHidden = useDocumentHidden();
+  useEffect(() => {
+    syncWidgetLifecycleVisibility(lifecycle, documentHidden);
+  }, [documentHidden, lifecycle]);
   const refresh = useWidgetRefreshScheduler(resolution.registration.manifest.refresh, lifecycle, {
     instanceId: instance.instanceId,
     hidden: documentHidden,

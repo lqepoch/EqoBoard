@@ -34,9 +34,18 @@ visibility hints.
 The SDK error boundary exposes bounded error codes and safe labels, not raw
 provider bodies or exception messages. Lifecycle generations abort stale work
 on suspend/dispose; host schedulers own refresh timers and stop them when the
-widget is inactive or hidden according to the registered policy.
-Direct reads are always paused while hidden. Poll manifests retain their
-declared refresh interval, one-request concurrency, and request-rate ceilings.
+widget is inactive or hidden according to the registered policy. When the
+document becomes hidden, each mounted widget is suspended: its unfinished reads
+and actions are aborted, refresh observers stop, and lifecycle-owned stream
+leases are released. Becoming visible resumes the widget with a new generation,
+allowing host observers and leases to subscribe again. A hidden widget cannot
+start a transport through direct reads.
+
+Poll manifests retain their declared refresh interval, one-request
+concurrency, and request-rate ceilings. Expired 60-second rate-window entries
+are swept opportunistically on subsequent budget calls. Per-widget cooldown
+timestamps remain until the longest accepted one-hour minimum interval has
+expired, so cleanup does not erase an active quota or cooldown.
 `shared-market` direct reads use a bounded 1-second/30-request-per-minute,
 single-request default. `none` manual widgets use the same interval and rate
 ceiling with a host-capped maximum of three concurrent independent reads, which

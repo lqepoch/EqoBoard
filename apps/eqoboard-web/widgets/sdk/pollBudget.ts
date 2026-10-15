@@ -178,6 +178,32 @@ function prune(timestamps: number[], now: number): number[] {
   return timestamps.filter((timestamp) => now - timestamp < WINDOW_MS);
 }
 
+function sweepExpiredWindowKeys(map: Map<string, number[]>, now: number): void {
+  for (const [key, timestamps] of map) {
+    const remaining = prune(timestamps, now);
+    if (remaining.length === 0) map.delete(key);
+    else if (remaining.length !== timestamps.length) map.set(key, remaining);
+  }
+}
+
+function sweepExpiredRateState(
+  now: number,
+  operationTimes: Map<string, number[]>,
+  widgetTimes: Map<string, number[]>,
+  scopedUserTimes: Map<string, number[]>,
+  lastReadAt: Map<string, number>,
+): void {
+  sweepExpiredWindowKeys(operationTimes, now);
+  sweepExpiredWindowKeys(widgetTimes, now);
+  sweepExpiredWindowKeys(scopedUserTimes, now);
+
+  // A manifest may set a one-hour minimum interval. Keep every key long enough
+  // to enforce the largest accepted policy, then discard inactive identities.
+  for (const [key, timestamp] of lastReadAt) {
+    if (now - timestamp >= MAX_INTERVAL_MS) lastReadAt.delete(key);
+  }
+}
+
 function nextWindowDelay(timestamps: readonly number[], now: number): number {
   return Math.max(1, Math.min(...timestamps) + WINDOW_MS - now);
 }
@@ -259,17 +285,15 @@ export function createWidgetPollBudget(
       if (existing) return existing as Promise<T>;
 
       const time = now();
+      sweepExpiredRateState(time, operationTimes, widgetTimes, scopedUserTimes, lastReadAt);
       const operationKey = request.operationId;
       const widgetKey = stableKey({ scopeKey: request.scopeKey, instanceId: request.instanceId });
       if (widgetKey === null) throw new WidgetDataReadError("request-failed");
       const global = prune(globalTimes, time);
-      const user = prune(scopedUserTimes.get(request.scopeKey) ?? [], time);
-      const perOperation = prune(operationTimes.get(operationKey) ?? [], time);
-      const perWidget = prune(widgetTimes.get(widgetKey) ?? [], time);
+      const user = scopedUserTimes.get(request.scopeKey) ?? [];
+      const perOperation = operationTimes.get(operationKey) ?? [];
+      const perWidget = widgetTimes.get(widgetKey) ?? [];
       globalTimes.splice(0, globalTimes.length, ...global);
-      scopedUserTimes.set(request.scopeKey, user);
-      operationTimes.set(operationKey, perOperation);
-      widgetTimes.set(widgetKey, perWidget);
 
       const rateCeilings = [
         [global, config.maxRequestsPerMinuteGlobal],
@@ -304,6 +328,9 @@ export function createWidgetPollBudget(
       user.push(time);
       perOperation.push(time);
       perWidget.push(time);
+      scopedUserTimes.set(request.scopeKey, user);
+      operationTimes.set(operationKey, perOperation);
+      widgetTimes.set(widgetKey, perWidget);
       lastReadAt.set(`${widgetKey}:${operationKey}`, time);
       globalCount += 1;
       bump(operationCounts, operationKey, 1);

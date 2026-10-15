@@ -24,6 +24,7 @@ import type {
   WidgetRefreshScheduler,
 } from "../../widgets/sdk/data";
 import { createWidgetEventBus } from "../../widgets/sdk/events";
+import { createWidgetLifecycleController } from "../../widgets/sdk/lifecycle";
 import { createBudgetedWidgetDataClient } from "../../widgets/sdk/budgetedData";
 import {
   createWidgetPollBudget,
@@ -32,7 +33,12 @@ import {
 } from "../../widgets/sdk/pollBudget";
 import type { WorkspaceTabV1, WorkspaceV1 } from "../../workspace/model";
 import type { RefreshScope } from "../../features/data/refresh-scheduler";
-import { WorkspaceGrid, type WorkspaceGridProps } from "./WorkspaceGrid";
+import {
+  createWidgetLifecycleForVisibility,
+  syncWidgetLifecycleVisibility,
+  WorkspaceGrid,
+  type WorkspaceGridProps,
+} from "./WorkspaceGrid";
 
 type DirectReadHook = (
   policy: WidgetRefreshPolicyV1,
@@ -177,6 +183,20 @@ function createGridProps(data: WidgetDataClient<NativeDataOperationMap>): Worksp
 }
 
 describe("WorkspaceGrid direct-read budget wiring", () => {
+  it("starts an initially hidden widget suspended before child effects", () => {
+    const lifecycle = createWidgetLifecycleForVisibility(true);
+    const initial = lifecycle.getSnapshot();
+
+    expect(initial.phase).toBe("suspended");
+    expect(initial.signal.aborted).toBe(true);
+
+    syncWidgetLifecycleVisibility(lifecycle, false);
+    const resumed = lifecycle.getSnapshot();
+    expect(resumed.phase).toBe("active");
+    expect(resumed.generation).toBe(initial.generation + 1);
+    expect(resumed.signal).not.toBe(initial.signal);
+  });
+
   beforeEach(() => {
     capturedHost = null;
     hookMocks.directDataHook.mockClear();
@@ -262,5 +282,26 @@ describe("WorkspaceGrid direct-read budget wiring", () => {
     });
     expect(hookMocks.refreshObserve).toHaveBeenCalledTimes(1);
     expect(rawRead).not.toHaveBeenCalled();
+  });
+
+  it("suspends hidden widget work and resumes it with a fresh generation", () => {
+    const lifecycle = createWidgetLifecycleController();
+    const visible = lifecycle.getSnapshot();
+
+    syncWidgetLifecycleVisibility(lifecycle, true);
+    syncWidgetLifecycleVisibility(lifecycle, true);
+    expect(lifecycle.getSnapshot().phase).toBe("suspended");
+    expect(visible.signal.aborted).toBe(true);
+
+    syncWidgetLifecycleVisibility(lifecycle, false);
+    const resumed = lifecycle.getSnapshot();
+    syncWidgetLifecycleVisibility(lifecycle, false);
+    const stillResumed = lifecycle.getSnapshot();
+    expect(resumed.phase).toBe("active");
+    expect(resumed.generation).toBe(visible.generation + 1);
+    expect(resumed.signal).not.toBe(visible.signal);
+    expect(stillResumed.generation).toBe(resumed.generation);
+    expect(stillResumed.signal).toBe(resumed.signal);
+    expect(lifecycle.isCurrent(resumed.generation)).toBe(true);
   });
 });

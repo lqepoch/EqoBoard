@@ -188,6 +188,34 @@ describe("widget poll budget", () => {
     await first;
   });
 
+  it("sweeps expired rate windows without dropping a longer manifest cooldown", async () => {
+    let now = 0;
+    const budget = createWidgetPollBudget(config, () => now);
+    const longCooldown = pollRequest(widgetInstanceId(9), undefined, {
+      policy: {
+        mode: "poll",
+        minIntervalMs: 3_600_000,
+        maxRequestsPerMinute: 10,
+        maxConcurrentRequests: 1,
+        whenHidden: "pause",
+      },
+    });
+
+    await expect(budget.run(longCooldown, async () => "first")).resolves.toBe("first");
+    now = 60_001;
+    await expect(budget.run(pollRequest(widgetInstanceId(10)), async () => "other")).resolves.toBe(
+      "other",
+    );
+    await expect(
+      budget.run({ ...longCooldown, input: { symbols: ["QQQ"] } }, async () => "too-soon"),
+    ).rejects.toMatchObject({ code: "rate-limited", retryAfterMs: 3_539_999 });
+
+    now = 3_600_000;
+    await expect(budget.run(longCooldown, async () => "after-cooldown")).resolves.toBe(
+      "after-cooldown",
+    );
+  });
+
   it("rejects late results after suspend and bounds retry metadata", async () => {
     const budget = createWidgetPollBudget(config);
     const lifecycle = createWidgetLifecycleController();
