@@ -4,6 +4,9 @@ export const YFINANCE_RESEARCH_MAX_CURSOR_BYTES = 8_192;
 export const YFINANCE_RESEARCH_MAX_PAGE_ROWS = 24_000;
 export const YFINANCE_RESEARCH_MAX_PAGE_DAYS = 3_650;
 export const YFINANCE_RESEARCH_MAX_RANGE_DAYS = 36_500;
+export const YFINANCE_RESEARCH_MAX_PAGES = 10;
+export const YFINANCE_RESEARCH_VOLUME_ENCODING = "integer_exact_or_safe_integer_float" as const;
+export const YFINANCE_BRIDGE_PROVENANCE_SCHEMA = "research-bars-v1" as const;
 
 export type YfinanceResearchAdjustment = "unadjusted" | "adjusted";
 export type YfinanceResearchAssetClass = "stock" | "etf";
@@ -42,9 +45,9 @@ export type YfinanceHistoryBridgePayload = {
   adjustment: YfinanceResearchAdjustment;
   provider_adjustment_semantics: "unknown_or_provider_native";
   adjustment_confirmed_raw: false;
-  provider_repair_enabled: boolean;
+  provider_repair_enabled: false;
   numeric_encoding: "binary_float_projection";
-  volume_encoding: string;
+  volume_encoding: typeof YFINANCE_RESEARCH_VOLUME_ENCODING;
   canonical: false;
   point_in_time: false;
   executable: false;
@@ -53,9 +56,9 @@ export type YfinanceHistoryBridgePayload = {
   requested_symbols: string[];
   returned_symbols: string[];
   missing_symbols: string[];
-  available_at: string | null;
+  available_at: string;
   fetched_at: string;
-  source_observed_at: string | null;
+  source_observed_at: string;
   request_started_at: string;
   cache_status: unknown;
   freshness: unknown;
@@ -63,7 +66,11 @@ export type YfinanceHistoryBridgePayload = {
   action_coverage: Record<string, unknown>;
   actions: unknown[];
   bars: YfinanceBridgeBar[];
-  provenance: Record<string, unknown>;
+  provenance: Record<string, unknown> & {
+    provider: "yahoo_finance";
+    source: "yfinance";
+    schema_version: typeof YFINANCE_BRIDGE_PROVENANCE_SCHEMA;
+  };
 };
 
 export type YfinanceResearchResponse = {
@@ -132,7 +139,7 @@ const BRIDGE_PROVENANCE_FIELDS = new Set([
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const DECIMAL = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
-const UTC_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
+const UTC_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?:Z|\+00:00)$/;
 const DAY_NS = 86_400_000_000_000n;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -161,19 +168,20 @@ function parseUtcTimestamp(value: unknown): bigint | null {
 function parseRange(value: unknown): { start: bigint; end: bigint } | null {
   if (!isRecord(value) || !hasExactFields(value, new Set(["start_utc", "end_utc", "semantics"])) ||
       value.semantics !== "start_inclusive_end_exclusive" ||
-      typeof value.start_utc !== "string" || typeof value.end_utc !== "string") return null;
+      typeof value.start_utc !== "string" || !value.start_utc.endsWith("Z") ||
+      typeof value.end_utc !== "string" || !value.end_utc.endsWith("Z")) return null;
   const start = parseUtcTimestamp(value.start_utc);
   const end = parseUtcTimestamp(value.end_utc);
   return start !== null && end !== null && end > start ? { start, end } : null;
 }
 
-function isTimestampOrNull(value: unknown): value is string | null {
-  return value === null || parseUtcTimestamp(value) !== null;
-}
-
 function isDecimalOrNull(value: unknown): value is string | null {
   if (value === null) return true;
-  return typeof value === "string" && value.length <= 128 && DECIMAL.test(value) && Number.isFinite(Number(value));
+  return typeof value === "string" && value.length <= 64 && DECIMAL.test(value) && Number.isFinite(Number(value));
+}
+
+function isIntegerOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && value.length <= 64 && /^[0-9]+$/.test(value));
 }
 
 function isSymbolList(value: unknown, allowed: readonly string[]): value is string[] {
@@ -198,17 +206,18 @@ function validPayload(
       value.asset_class !== request.assetClass || value.classification_source !== "caller_declared" ||
       value.resolution !== "1d" || value.effective_resolution !== "1d" || value.adjustment !== request.adjustment ||
       value.provider_adjustment_semantics !== "unknown_or_provider_native" || value.adjustment_confirmed_raw !== false ||
-      typeof value.provider_repair_enabled !== "boolean" || value.numeric_encoding !== "binary_float_projection" ||
-      typeof value.volume_encoding !== "string" || !value.volume_encoding || value.canonical !== false ||
+      value.provider_repair_enabled !== false || value.numeric_encoding !== "binary_float_projection" ||
+      value.volume_encoding !== YFINANCE_RESEARCH_VOLUME_ENCODING || value.canonical !== false ||
       value.point_in_time !== false || value.executable !== false || value.display_only !== true ||
       !symbolsEchoRequest(value.requested_symbols, request) ||
       !isSymbolList(value.returned_symbols, request.symbols) || !isSymbolList(value.missing_symbols, request.symbols) ||
       value.returned_symbols.some((symbol) => value.missing_symbols.includes(symbol)) ||
+      ((value.status === "partial") !== (value.missing_symbols.length > 0)) ||
       !["network", "fresh_cache", "stale_cache"].includes(value.cache_status as string) ||
       !["retrieved", "stale"].includes(value.freshness as string) ||
       ((value.cache_status === "stale_cache") !== (value.freshness === "stale")) ||
-      !isTimestampOrNull(value.available_at) || parseUtcTimestamp(value.fetched_at) === null ||
-      !isTimestampOrNull(value.source_observed_at) || parseUtcTimestamp(value.request_started_at) === null ||
+      parseUtcTimestamp(value.available_at) === null || parseUtcTimestamp(value.fetched_at) === null ||
+      parseUtcTimestamp(value.source_observed_at) === null || parseUtcTimestamp(value.request_started_at) === null ||
       !isRecord(value.coverage) || !hasExactFields(value.coverage, new Set([
         "requested_start", "requested_end", "bar_count", "per_symbol", "gaps", "calendar_gaps_assessed",
       ])) || !Array.isArray(value.coverage.per_symbol) || !Array.isArray(value.coverage.gaps) ||
@@ -222,9 +231,11 @@ function validPayload(
   const innerRange = value.requested_range;
   if (!isRecord(innerRange) || !hasExactFields(innerRange, new Set(["start", "end", "semantics"])) ||
       innerRange.semantics !== "start_inclusive_end_exclusive" ||
-      typeof innerRange.start !== "string" || typeof innerRange.end !== "string" ||
+      typeof innerRange.start !== "string" || !innerRange.start.endsWith("Z") ||
+      typeof innerRange.end !== "string" || !innerRange.end.endsWith("Z") ||
       parseUtcTimestamp(innerRange.start) !== pageStart || parseUtcTimestamp(innerRange.end) !== pageEnd ||
-      typeof value.coverage.requested_start !== "string" || typeof value.coverage.requested_end !== "string" ||
+      typeof value.coverage.requested_start !== "string" || !value.coverage.requested_start.endsWith("Z") ||
+      typeof value.coverage.requested_end !== "string" || !value.coverage.requested_end.endsWith("Z") ||
       parseUtcTimestamp(value.coverage.requested_start) !== pageStart ||
       parseUtcTimestamp(value.coverage.requested_end) !== pageEnd ||
       typeof value.coverage.bar_count !== "number" || !Number.isSafeInteger(value.coverage.bar_count) ||
@@ -237,15 +248,13 @@ function validPayload(
       typeof item.bar_count === "number" && Number.isSafeInteger(item.bar_count) && item.bar_count >= 0 &&
       (item.first_bar_at === null || parseUtcTimestamp(item.first_bar_at) !== null) &&
       (item.last_bar_at === null || parseUtcTimestamp(item.last_bar_at) !== null) &&
-      Array.isArray(item.gaps) && item.gaps.every((gap) => typeof gap === "string"))) return false;
+      Array.isArray(item.gaps) && item.gaps.length <= 8 && item.gaps.every((gap) =>
+        typeof gap === "string" && gap.length > 0 && gap.length <= 64))) return false;
   if (new Set(perSymbol.map((item) => (item as Record<string, unknown>).symbol)).size !== request.symbols.length) return false;
 
-  const validGapCodes = new Set([
-    "DATE_GAPS_UNASSESSED", "SYMBOL_RENAME_HISTORY_UNAVAILABLE", "NON_POINT_IN_TIME_PROVIDER_HISTORY", "NO_BARS_RETURNED",
-  ]);
-  if (!value.coverage.gaps.every((gap) => isRecord(gap) &&
+  if (value.coverage.gaps.length > 72 || !value.coverage.gaps.every((gap) => isRecord(gap) &&
       (hasExactFields(gap, new Set(["code"])) || hasExactFields(gap, new Set(["code", "symbol"]))) &&
-      typeof gap.code === "string" && validGapCodes.has(gap.code) &&
+      typeof gap.code === "string" && gap.code.length > 0 && gap.code.length <= 64 &&
       (gap.symbol === undefined || (typeof gap.symbol === "string" && request.symbols.includes(gap.symbol))))) return false;
 
   const actionCoverage = value.action_coverage;
@@ -261,18 +270,29 @@ function validPayload(
       !["network", "fresh_cache", "stale_cache"].includes(provenance.cache_status as string) ||
       typeof provenance.config_fingerprint !== "string" || !SHA256.test(provenance.config_fingerprint) ||
       typeof provenance.end !== "string" || parseUtcTimestamp(provenance.end) !== pageEnd ||
-      typeof provenance.include_actions !== "boolean" || provenance.interval !== "1d" ||
+      provenance.include_actions !== true || provenance.interval !== "1d" ||
       !isSymbolList(provenance.missing_symbols, request.symbols) ||
-      typeof provenance.prepost !== "boolean" || provenance.provider !== "yfinance" ||
+      provenance.prepost !== false || provenance.provider !== "yahoo_finance" ||
       typeof provenance.query_fingerprint !== "string" || !SHA256.test(provenance.query_fingerprint) ||
+      provenance.cache_status !== value.cache_status ||
       typeof provenance.requested_at !== "string" || parseUtcTimestamp(provenance.requested_at) === null ||
       !symbolsEchoRequest(provenance.requested_symbols, request) ||
       !isSymbolList(provenance.returned_symbols, request.symbols) ||
       typeof provenance.row_count !== "number" || !Number.isSafeInteger(provenance.row_count) ||
-      provenance.row_count !== value.bars.length || provenance.schema_version !== YFINANCE_BRIDGE_SCHEMA ||
+      provenance.row_count !== value.bars.length || provenance.schema_version !== YFINANCE_BRIDGE_PROVENANCE_SCHEMA ||
       typeof provenance.served_at !== "string" || parseUtcTimestamp(provenance.served_at) === null ||
-      provenance.source !== "Yahoo Finance" || typeof provenance.start !== "string" ||
+      provenance.source !== "yfinance" || typeof provenance.start !== "string" ||
       parseUtcTimestamp(provenance.start) !== pageStart) return false;
+
+  const requestedAt = parseUtcTimestamp(provenance.requested_at);
+  const acquiredAt = parseUtcTimestamp(provenance.acquired_at);
+  const servedAt = parseUtcTimestamp(provenance.served_at);
+  if (parseUtcTimestamp(value.request_started_at) !== requestedAt ||
+      parseUtcTimestamp(value.source_observed_at) !== acquiredAt ||
+      parseUtcTimestamp(value.available_at) !== servedAt ||
+      parseUtcTimestamp(value.fetched_at) !== servedAt ||
+      requestedAt === null || acquiredAt === null || servedAt === null ||
+      requestedAt > acquiredAt || acquiredAt > servedAt) return false;
 
   for (const action of value.actions) {
     if (!isRecord(action) || typeof action.symbol !== "string" || !request.symbols.includes(action.symbol) ||
@@ -281,10 +301,10 @@ function validPayload(
     if (actionTime === null || actionTime < pageStart || actionTime >= pageEnd) return false;
     if (action.kind === "DIVIDEND") {
       if (!hasExactFields(action, new Set(["symbol", "event_ts_utc", "kind", "amount", "source"])) ||
-          !isDecimalOrNull(action.amount)) return false;
+          typeof action.amount !== "string" || !isDecimalOrNull(action.amount)) return false;
     } else if (action.kind === "SPLIT") {
       if (!hasExactFields(action, new Set(["symbol", "event_ts_utc", "kind", "ratio", "source"])) ||
-          !isDecimalOrNull(action.ratio)) return false;
+          typeof action.ratio !== "string" || !isDecimalOrNull(action.ratio)) return false;
     } else {
       return false;
     }
@@ -296,7 +316,7 @@ function validPayload(
         !request.symbols.includes(row.symbol) || row.asset_class !== request.assetClass ||
         row.resolution !== "1d" || row.adjustment !== request.adjustment ||
         ![row.open, row.high, row.low, row.close, row.adj_close, row.volume, row.dividends, row.stock_splits]
-          .every(isDecimalOrNull)) return false;
+        .every(isDecimalOrNull) || !isIntegerOrNull(row.volume)) return false;
     const eventTime = parseUtcTimestamp(row.event_ts_utc);
     if (eventTime === null || eventTime < pageStart || eventTime >= pageEnd) return false;
     const key = `${row.symbol}\u0000${eventTime}`;

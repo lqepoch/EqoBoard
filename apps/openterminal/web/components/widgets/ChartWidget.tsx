@@ -29,7 +29,7 @@ import { sma, ema, vwap, rsi, macd, bollinger, type Point } from "../../lib/indi
 import { useWidgetSymbol, type WidgetInstance } from "../../store/terminal";
 import { useTradingStore } from "../../store/trading-terminal";
 import { useYfinanceResearchHistory } from "../../lib/yfinance-research-history";
-import type { YfinanceResearchAdjustment } from "../../lib/yfinance-research-contract";
+import { YFINANCE_RESEARCH_MAX_PAGES, type YfinanceResearchAdjustment } from "../../lib/yfinance-research-contract";
 
 const CHART_TYPES = ["candles", "bars", "line", "area"] as const;
 const INDICATORS = ["SMA20", "SMA50", "SMA200", "EMA20", "VWAP", "BOLL", "RSI", "MACD"] as const;
@@ -147,6 +147,7 @@ export default function ChartWidget({
     symbol, range, assetClass, researchAdjustment, isYfinanceResearch && dataMode === "provider",
   );
   const history = isYfinanceResearch ? yfinanceHistory : strictHistory;
+  const historyPageLimit = isYfinanceResearch ? YFINANCE_RESEARCH_MAX_PAGES : MAX_HISTORY_PAGES;
   const historyResponse = history.latestPage;
   const historyError = history.error;
   const requestOlder = useCallback(() => {
@@ -730,8 +731,8 @@ export default function ChartWidget({
       {dataMode === "provider" && history.pageLimitReached && (
         <div role="status" className="px-2 py-1 text-[10px] dim" data-testid="chart-history-page-limit">
           {range === "MAX"
-            ? `MAX history is incomplete: the ${MAX_HISTORY_PAGES}-page limit was reached; older bars remain unloaded.`
-            : `History reached the ${MAX_HISTORY_PAGES}-page limit; older bars remain unloaded.`}
+            ? `MAX history is incomplete: the ${historyPageLimit}-page limit was reached; older bars remain unloaded.`
+            : `History reached the ${historyPageLimit}-page limit; older bars remain unloaded.`}
         </div>
       )}
       {dataMode === "provider" && history.isLoading && <div className="px-2 py-1 text-[10px] dim">Loading history…</div>}

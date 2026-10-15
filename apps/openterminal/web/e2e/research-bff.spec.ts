@@ -437,6 +437,21 @@ test("Yahoo research daily BFF keeps a full 2010-2026 query stable across opaque
       semantics: "start_inclusive_end_exclusive",
     },
   });
+  expect(first.observation.payload).toMatchObject({
+    provider_repair_enabled: false,
+    volume_encoding: "integer_exact_or_safe_integer_float",
+    available_at: expect.any(String),
+    source_observed_at: expect.any(String),
+    provenance: {
+      provider: "yahoo_finance",
+      source: "yfinance",
+      schema_version: "research-bars-v1",
+      include_actions: true,
+      prepost: false,
+    },
+  });
+  expect(first.observation.payload.provenance.acquired_at).toMatch(/\+00:00$/);
+  expect(first.observation.payload.provenance.served_at).toMatch(/\+00:00$/);
   expect(first.page_range.start_utc).toBe("2016-01-04T00:00:00.000Z");
   expect(first.page_range.end_utc).toBe("2026-01-01T00:00:00.000Z");
   expect(first.next_cursor).toBe("older:1");
@@ -485,6 +500,60 @@ test("Yahoo research daily BFF keeps a full 2010-2026 query stable across opaque
     expect(call.query).not.toHaveProperty("resolution");
   }
   expect(JSON.stringify(calls)).not.toContain("q".repeat(64));
+});
+
+test("Yahoo research BFF rejects payload metadata that violates the native MDP observation contract", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+
+  const query = new URLSearchParams({
+    symbols: "AAPL",
+    asset_class: "stock",
+    start_utc: "2010-01-01T00:00:00Z",
+    end_utc: "2026-01-01T00:00:00Z",
+    adjustment: "unadjusted",
+  });
+  const url = `${WEB_ORIGIN}/api/research/yfinance/daily?${query}`;
+  const validResponse = await page.context().request.get(url);
+  expect(validResponse.status()).toBe(200);
+  const valid = await validResponse.json();
+  const providerGap = JSON.parse(JSON.stringify(valid)) as {
+    observation: { payload: Record<string, unknown> };
+  };
+  const providerPayload = providerGap.observation.payload;
+  const providerCoverage = providerPayload.coverage as {
+    gaps: Array<Record<string, unknown>>;
+    per_symbol: Array<Record<string, unknown>>;
+  };
+  providerCoverage.gaps.push({ code: "PROVIDER_SPECIFIC_NOTE" });
+  (providerCoverage.per_symbol[0]!.gaps as string[]).push("PROVIDER_SPECIFIC_NOTE");
+  await configureGateway(request, { yfinanceResearch: { enabled: true, response: providerGap } });
+  expect((await page.context().request.get(url)).status()).toBe(200);
+
+  const corruptions: Array<(candidate: { observation: { payload: Record<string, unknown> } }) => void> = [
+    (candidate) => { candidate.observation.payload.provider_repair_enabled = true; },
+    (candidate) => { candidate.observation.payload.volume_encoding = "decimal_string"; },
+    (candidate) => { candidate.observation.payload.available_at = null; },
+    (candidate) => { candidate.observation.payload.source_observed_at = null; },
+    (candidate) => { (candidate.observation.payload.provenance as Record<string, unknown>).provider = "yfinance"; },
+    (candidate) => { (candidate.observation.payload.provenance as Record<string, unknown>).source = "Yahoo Finance"; },
+    (candidate) => { (candidate.observation.payload.provenance as Record<string, unknown>).schema_version = "yfinance-history-bridge-v1"; },
+    (candidate) => { (candidate.observation.payload.provenance as Record<string, unknown>).include_actions = false; },
+    (candidate) => { (candidate.observation.payload.provenance as Record<string, unknown>).prepost = true; },
+    (candidate) => { (candidate.observation.payload.provenance as Record<string, unknown>).cache_status = "stale_cache"; },
+    (candidate) => { candidate.observation.payload.status = "partial"; },
+    (candidate) => { candidate.observation.payload.request_started_at = "2010-01-01T00:00:00Z"; },
+  ];
+  for (const corrupt of corruptions) {
+    const malformed = JSON.parse(JSON.stringify(valid)) as {
+      observation: { payload: Record<string, unknown> };
+    };
+    corrupt(malformed);
+    await configureGateway(request, { yfinanceResearch: { enabled: true, response: malformed } });
+    const rejected = await page.context().request.get(url);
+    expect(rejected.status()).toBe(502);
+    expect(await rejected.json()).toEqual({ error: "invalid_research_observation_response" });
+  }
 });
 
 test("Yahoo research BFF canonicalizes explicit UTC offsets and preserves fractional range bounds", async ({ page, request }) => {

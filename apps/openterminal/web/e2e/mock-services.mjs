@@ -138,6 +138,9 @@ function syntheticYfinanceResearchResponse(url) {
   }
   rows.sort((left, right) => left.symbol.localeCompare(right.symbol) || left.event_ts_utc.localeCompare(right.event_ts_utc));
   const now = new Date().toISOString();
+  const provenanceNow = now.replace(/Z$/, "+00:00");
+  const provenanceStart = pageStart.replace(/Z$/, "+00:00");
+  const provenanceEnd = pageEnd.replace(/Z$/, "+00:00");
   const payload = {
     schema_version: "yfinance-history-bridge-v1",
     status: "ready",
@@ -152,7 +155,7 @@ function syntheticYfinanceResearchResponse(url) {
     adjustment_confirmed_raw: false,
     provider_repair_enabled: false,
     numeric_encoding: "binary_float_projection",
-    volume_encoding: "decimal_string",
+    volume_encoding: "integer_exact_or_safe_integer_float",
     canonical: false,
     point_in_time: false,
     executable: false,
@@ -161,9 +164,9 @@ function syntheticYfinanceResearchResponse(url) {
     requested_symbols: symbols,
     returned_symbols: symbols,
     missing_symbols: [],
-    available_at: null,
+    available_at: now,
     fetched_at: now,
-    source_observed_at: null,
+    source_observed_at: now,
     request_started_at: now,
     cache_status: "network",
     freshness: "retrieved",
@@ -196,26 +199,26 @@ function syntheticYfinanceResearchResponse(url) {
     actions: [],
     bars: rows,
     provenance: {
-      acquired_at: now,
+      acquired_at: provenanceNow,
       adapter_version: "bounded-synthetic-e2e",
       adjustment,
       cache_status: "network",
       config_fingerprint: "a".repeat(64),
-      end: pageEnd,
+      end: provenanceEnd,
       include_actions: true,
       interval: "1d",
       missing_symbols: [],
       prepost: false,
-      provider: "yfinance",
+      provider: "yahoo_finance",
       query_fingerprint: "b".repeat(64),
-      requested_at: now,
+      requested_at: provenanceNow,
       requested_symbols: symbols,
       returned_symbols: symbols,
       row_count: rows.length,
-      schema_version: "yfinance-history-bridge-v1",
-      served_at: now,
-      source: "Yahoo Finance",
-      start: pageStart,
+      schema_version: "research-bars-v1",
+      served_at: provenanceNow,
+      source: "yfinance",
+      start: provenanceStart,
     },
   };
   const observationBytes = Buffer.from(JSON.stringify(payload));

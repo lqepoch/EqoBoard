@@ -14,7 +14,7 @@ import {
 
 const MAX_QUERY_LENGTH = 16_384;
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
-const UPSTREAM_DEADLINE_MS = 30_000;
+const UPSTREAM_DEADLINE_MS = 35_000;
 const SYMBOL = /^[A-Z0-9][A-Z0-9.-]{0,31}$/;
 const UTC_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|\+00:00)$/;
 const DAY_MS = 86_400_000;

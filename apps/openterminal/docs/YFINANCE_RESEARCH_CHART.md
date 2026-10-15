@@ -10,8 +10,9 @@ SMA/EMA/VWAP/RSI/MACD/Bollinger calculations. It requests one symbol at a time a
 choose UTC calendar windows (1D uses 7 calendar days, 5D 14, 1M 45, 6M 200, YTD starts January 1, 1Y 366, 5Y 1,827,
 and MAX starts at 1970-01-01); they do not claim exchange-session coverage. MAX is requested as one full range and loaded
 newest-first in bounded pages. `Load older` and chart panning pass the opaque cursor together with the unchanged full
-range. The browser stops after 20 pages and labels the result incomplete when another cursor remains. Refresh Snapshot
-starts a new full-range snapshot and does not replay old cursors. Yahoo history does not auto-poll or accept quote pushes.
+range. The browser stops after 10 pages, matching the MDP endpoint bound, and labels the result incomplete when another
+cursor remains. Refresh Snapshot starts a new full-range snapshot and does not replay old cursors. Yahoo history does
+not auto-poll or accept quote pushes.
 
 The browser calls only the same-origin Research BFF route:
 
@@ -30,9 +31,10 @@ signer, and forwards the query to `GET /v1/research/yfinance/daily`. It never se
 signing key, order scope, or provider credential. The upstream envelope and its original bridge payload are validated
 without translating the observations to Bars V1. The BFF accepts UTC `Z` or `+00:00` timestamps, compares range bounds
 at nanosecond precision, then forwards canonical `Z` timestamps; cursor requests retain those same full-range bounds.
-HTTP 200 represents a non-empty page, not complete history; a typed upstream failure remains an error. The
-source-observation hash is displayed as an MDP-reported hash, not as a Yahoo signature or independent verification
-receipt.
+HTTP 200 represents a non-empty page, not complete history; a typed upstream failure remains an error. The Research
+BFF enforces a 35-second upstream deadline, allowing the stock bridge's bounded 31-second fetch deadline to return its
+typed timeout first. The source-observation hash is displayed as an MDP-reported hash, not as a Yahoo signature or
+independent verification receipt.
 
 The chart labels provider and source, while feed, delay, and provider verification remain unknown or unavailable. It
 also labels `provider_adjustment_semantics=unknown_or_provider_native`, `adjustment_confirmed_raw=false`,

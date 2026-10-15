@@ -4,7 +4,6 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import {
   CHART_HISTORY_CACHE_SCOPE,
-  MAX_HISTORY_PAGES,
   projectChartHistoryBar,
   type ChartAssetClass,
   type ChartHistoryCandle,
@@ -13,6 +12,7 @@ import {
 } from "./chart-history";
 import {
   validateYfinanceResearchResponse,
+  YFINANCE_RESEARCH_MAX_PAGES,
   type YfinanceResearchAdjustment,
   type YfinanceResearchResponse,
 } from "./yfinance-research-contract";
@@ -27,7 +27,7 @@ type YfinanceChartResponse = ChartHistoryResponse & {
   yfinance_research: YfinanceResearchResponse;
 };
 
-const YFINANCE_PAGE_LIMIT = MAX_HISTORY_PAGES;
+const YFINANCE_PAGE_LIMIT = YFINANCE_RESEARCH_MAX_PAGES;
 
 function subtractCalendarDays(date: Date, days: number): Date {
   const result = new Date(date);
