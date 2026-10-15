@@ -1,3 +1,10 @@
+const optimizerTraceExcludes = [
+  "**/node_modules/sharp/**/*",
+  "**/node_modules/@img/sharp-*/**/*",
+  "**/node_modules/lightningcss/**/*",
+  "**/node_modules/lightningcss-*/**/*",
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
@@ -6,12 +13,9 @@ const nextConfig = {
     unoptimized: true,
   },
   outputFileTracingExcludes: {
-    "/*": [
-      "./node_modules/sharp/**/*",
-      "./node_modules/@img/sharp-*/**/*",
-      "./node_modules/lightningcss/**/*",
-      "./node_modules/lightningcss-*/**/*",
-    ],
+    // Next applies `*` to its shared `next-server` trace; `/*` covers route traces.
+    "*": [...optimizerTraceExcludes],
+    "/*": [...optimizerTraceExcludes],
   },
   serverExternalPackages: ["better-sqlite3"],
   poweredByHeader: false,

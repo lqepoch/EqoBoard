@@ -32,3 +32,9 @@ The native app uses the repository's existing React/TypeScript stack, fixed nati
 ## Evidence references
 
 The source and license observations above were made against the fixed source IDs and official pages linked in the table. The related read-only implementation audit and structured inventory are in the task handoff directory as `native07-openbb-audit.md` and `native07-openbb-audit.json`; they are audit inputs, not native-app acceptance receipts.
+
+## Native dependency pruning and notice scope
+
+The native source does not import Recharts. Its unused direct dependency and 11 exclusive transitive packages were removed using an Actions-generated lock proposal, preserving all remaining package versions, integrity values and resolved identities. The reviewed proposal binds the Core browser-safe package to commit `3359ead64da27113b383cc8c0126463cd772c5a6`; it is not acceptance until the committed lock passes the exact candidate checks.
+
+Pinned notice texts and unresolved runtime notice conditions are recorded in `apps/eqoboard-web/legal/third-party/NOTICE-RECORDS.json`. A passing metadata/text-integrity audit does not turn its separate `runtimeNoticeGate=BLOCKED` into runtime legal clearance. Shared Next server traces and per-route traces must both exclude unused optimizer families; only actual standalone/image scans and image SBOM establish their absence.
