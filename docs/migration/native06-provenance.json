@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "owner": "native06",
+  "entries": [
+    {
+      "provenanceId": "eqoboard.native06.market.quote.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    },
+    {
+      "provenanceId": "eqoboard.native06.market.watchlist.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    },
+    {
+      "provenanceId": "eqoboard.native06.market.options-chain.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    },
+    {
+      "provenanceId": "eqoboard.native06.market.iv-skew.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    },
+    {
+      "provenanceId": "eqoboard.native06.market.option-tape.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    },
+    {
+      "provenanceId": "eqoboard.native06.market.feed-status.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    },
+    {
+      "provenanceId": "eqoboard.native06.market.orderbook.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    },
+    {
+      "provenanceId": "eqoboard.native06.market.vertical-preview.v1",
+      "origin": "first-party",
+      "implementation": "independent",
+      "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+      "sourcePath": "apps/eqoboard-web/widgets/implementations/market/VerticalPreviewWidget.tsx",
+      "sourceCommit": null,
+      "license": "MIT",
+      "noticePath": "LICENSE"
+    }
+  ]
+}

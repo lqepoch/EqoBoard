@@ -109,3 +109,22 @@ OpenTerminal 由单一 `MarketStreamProvider` 建立 SSE。所有 Widget 从共�
 股票和期权订阅都使用 90 秒租约，30 秒续租。浏览器关闭或 Widget 删除后主动释放，异常退出最多在 TTL 后回收。Rust 对多个浏览器/Widget 求订阅并集，只维持每个 feed 的共享上游连接。options 使用固定版本 Broker `MarketDataPort` 的单一只读 OPRA session；Gateway 复用 Broker 解码器和有序 control lane，不自建 WebSocket 或 ACK 状态机。options 租约需带正数 `generation`；旧代次拒绝，等代次只接受相同 symbol set。最大合约数取配置值和 Broker 的 32 个 quote/trade channel entries 双订阅上限（16 个合约）中的较小值，超限直接拒绝、不截断。并集变化时 Gateway 先取消并在 5 秒内排空旧 session，再开始新 session；超时会 poison supervisor 并停止，避免连接重叠。OptionsWidget 读取 Gateway 报告的有效 coverage limit，先按合约符号去重，再优先租用最接近 underlying 的有限集合；实时租约不会裁剪 REST 返回行，上游 `truncated` 状态仍单独显示。limit 缺失或无效时不创建实时租约，不能把有限集合描述为整条链已覆盖。
 
 Broker 完整 subscription ACK 可将对应 OPRA quote/trade channels 标为 `confirmed` 并完成该订阅请求的 coverage；它不代表认证成功、OPRA entitlement、来源真实性或新鲜行情。当前 Gateway 对 options 的 auth、source mode/label 和 source entitlement 均保持 `unknown`，`market_data_ready` 继续固定为 false。股票 SIP 仍走既有 `eqo-alpaca-data` stream adapter，没有接入 typed Broker ACK，故 confirmed 保持空、event time 不从 Gateway receive time推导。当前 Broker raw-frame record 在 Gateway 侧不做持久化；不能称为 durable raw capture。真实 provider、账户授权、OPRA/SIP 行情与 durable pre-decode sink 本阶段均未验证。
+
+## 原生终端迁移目标（候选，尚未默认部署）
+
+```mermaid
+flowchart TD
+  W[EqoBoard 原生 Web / Workspace / Widget Registry] --> B[原生 Next BFF / OIDC / CSRF / CAS]
+  B --> G[Rust Gateway / 现行 Core Contracts]
+  B --> M[MDP 历史与归档]
+  B --> Q[私有 Quant 只读研究]
+  B --> E[Engine 只读离线预览]
+  R[独立 hostname 的原生 Research] --> RB[Research BFF / 独立会话与 signer]
+  RB --> Y[MDP Yahoo 历史日线]
+  RB --> Q
+  RB --> M
+```
+
+浏览器使用单一共享行情host；Widget仅获得声明的读取/动作能力，静态builtin尚不构成第三方插件沙箱。Core图表、非canonical诊断归档、Yahoo研究观测分别保留来源、精度与可用时间含义。终端和研究进程不混用签名密钥；未配置数据服务准确返回unavailable，不生成行情。
+
+Workspace与手动Portfolio使用独立 `EQOBOARD_DATA_DIR`，服务端由已验证issuer+subject定归属，Workspace以revision/ETag原子CAS写入。旧SQLite不自动迁移，匿名布局仅显式预览/复制导入。交易仍由现有可信系统掌权且effective execution disabled。全量功能、权限、成对性能、持久化与回滚验收通过前，旧源码与默认部署保持。
