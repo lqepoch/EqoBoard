@@ -9,6 +9,8 @@ export type ResearchOperationInput =
   | Readonly<{ operation: "insider"; symbol: string }>
   | Readonly<{ operation: "screener"; market: "us" | "eu"; sector?: string; marketCapMin?: number; changeMin?: number; changeMax?: number; volumeMin?: number; sort?: "marketCap" | "price" | "changePercent" | "volume"; direction?: "asc" | "desc"; limit?: number }>
   | Readonly<{ operation: "heatmap"; market: "us" | "eu" }>
+  | Readonly<{ operation: "recap" }>
+  | Readonly<{ operation: "symbol-search"; query: string }>
   | Readonly<{ operation: "crypto" }>
   | Readonly<{ operation: "crypto-global" }>;
 
@@ -18,7 +20,7 @@ export type ResearchInputParseResult =
 
 const OPERATIONS: readonly ResearchOperationName[] = Object.freeze([
   "news", "macro", "economic-calendar", "earnings-calendar", "earnings-history", "insider",
-  "screener", "heatmap", "crypto", "crypto-global",
+  "screener", "heatmap", "recap", "symbol-search", "crypto", "crypto-global",
 ]);
 
 function exactKeys(params: URLSearchParams, allowed: readonly string[]): boolean {
@@ -141,6 +143,18 @@ export function parseResearchOperationInput(
       if (!exactKeys(params, ["market"])) return { ok: false, error: "unknown-parameter" };
       const marketValue = market(single(params, "market"));
       return marketValue ? { ok: true, value: { operation: "heatmap", market: marketValue } } : { ok: false, error: "invalid-parameter" };
+    }
+    case "recap":
+      return params.size === 0
+        ? { ok: true, value: { operation: "recap" } }
+        : { ok: false, error: "unknown-parameter" };
+    case "symbol-search": {
+      if (!exactKeys(params, ["query"])) return { ok: false, error: "unknown-parameter" };
+      const query = single(params, "query");
+      return query !== null && query !== "" && query === query.trim() && query.length <= 64 &&
+        !/[\u0000-\u001f\u007f]/u.test(query)
+        ? { ok: true, value: { operation: "symbol-search", query } }
+        : { ok: false, error: "invalid-parameter" };
     }
     case "crypto":
     case "crypto-global":

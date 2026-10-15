@@ -1,11 +1,7 @@
 import NextAuth from "next-auth";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { authOptions, isOidcConfigured } from "@/auth";
-import {
-  noStoreJson,
-  readBoundedBody,
-  validateSameOriginWrite,
-} from "@/lib/server/bff-security";
+import { noStoreJson, readBoundedBody, validateSameOriginWrite } from "@/lib/server/bff-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

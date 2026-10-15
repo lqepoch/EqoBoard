@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { authorizeGatewayRequest, noStoreJson, readBoundedJson } from "@/lib/server/bff-security";
 import { fetchGateway, readBoundedResponse } from "@/lib/server/gateway";
 import { isOrderPreviewResponse, parseVerticalPreviewIntent } from "@/lib/server/order-intent";
@@ -23,7 +23,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!upstream.ok) {
     return noStoreJson({ error: upstream.error }, upstream.error === "gateway_timeout" ? 504 : 503);
   }
-  const contentType = upstream.response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  const contentType = upstream.response.headers
+    .get("content-type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
   if (contentType !== "application/json") {
     await upstream.response.body?.cancel().catch(() => undefined);
     return noStoreJson({ error: "invalid_gateway_response" }, 502);
@@ -32,11 +36,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!responseBody.ok) return noStoreJson({ error: "invalid_gateway_response" }, 502);
   let value: unknown;
   try {
-    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(responseBody.bytes)) as unknown;
+    value = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(responseBody.bytes),
+    ) as unknown;
   } catch {
     return noStoreJson({ error: "invalid_gateway_response" }, 502);
   }
-  if (upstream.response.status >= 200 && upstream.response.status < 300 && !isOrderPreviewResponse(value, intent.value)) {
+  if (
+    upstream.response.status >= 200 &&
+    upstream.response.status < 300 &&
+    !isOrderPreviewResponse(value, intent.value)
+  ) {
     return noStoreJson({ error: "invalid_gateway_response" }, 502);
   }
   return new NextResponse(responseBody.bytes, {

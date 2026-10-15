@@ -13,6 +13,8 @@ import {
   type ResearchTableProjection,
 } from "@/features/research/data";
 import type { WidgetProps } from "@/widgets/sdk/contracts";
+import type { ResearchMarketData } from "@/lib/server/research/screener";
+import { layoutMarketCapTreemap, type MarketCapTreemapCell } from "@/features/research/treemap";
 import styles from "./research-widgets.module.css";
 
 export type ResearchViewId =
@@ -223,7 +225,12 @@ type ResearchViewProps = WidgetProps<ResearchViewConfigV1, ResearchDataOperation
 type ReadState =
   | Readonly<{ status: "idle" | "loading" }>
   | Readonly<{ status: "error"; message: string }>
-  | Readonly<{ status: "ready"; envelope: NonNullable<ReturnType<typeof parseResearchEnvelope>>; table: ResearchTableProjection }>;
+  | Readonly<{
+      status: "ready";
+      envelope: NonNullable<ReturnType<typeof parseResearchEnvelope>>;
+      table: ResearchTableProjection;
+      heatmapData: ResearchMarketData | null;
+    }>;
 
 function useReadResearch(
   host: ResearchViewProps["host"],
@@ -254,7 +261,10 @@ function useReadResearch(
         return;
       }
       const table = projectResearchTable(request.operation, envelope as NonNullable<ReturnType<typeof parseResearchEnvelope>>);
-      setState({ status: "ready", envelope, table });
+      const heatmap = request.operation === "research.heatmap"
+        ? parseResearchEnvelope("research.heatmap", response)?.data ?? null
+        : null;
+      setState({ status: "ready", envelope, table, heatmapData: heatmap });
     }).catch(() => {
       if (!controller.signal.aborted) setState({ status: "error", message: "Research data is unavailable for this request." });
     });
@@ -387,22 +397,59 @@ function Table({ table, emptyMessage }: { table: ResearchTableProjection; emptyM
   );
 }
 
-function Heatmap({ table }: { table: ResearchTableProjection }) {
+function workspaceTicker(symbol: string): string | null {
+  const ticker = symbol.split(":").at(-1)?.toUpperCase() ?? "";
+  return /^[A-Z][A-Z0-9.^-]{0,15}$/u.test(ticker) ? ticker : null;
+}
+
+function compactMarketCap(cell: MarketCapTreemapCell): string {
+  const currency = cell.market === "eu" ? "EUR" : cell.currency;
+  try {
+    return currency
+      ? new Intl.NumberFormat("en-US", { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 }).format(cell.marketCap)
+      : `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(cell.marketCap)} (source currency unknown)`;
+  } catch {
+    return `${display(cell.marketCap)} ${currency ?? "unknown currency"}`;
+  }
+}
+
+function Heatmap({ data, onSelect }: { data: ResearchMarketData; onSelect: (symbol: string) => void }) {
+  const layout = useMemo(() => layoutMarketCapTreemap(data), [data]);
   return (
-    <div className={styles.heatmap} aria-label="Equal-sized research heatmap; tile size is not proportional to market capitalization">
-      <p className={styles.notice}>Equal-sized tiles; color uses returned change only. Unknown change stays neutral.</p>
-      {table.rows.map((row, index) => {
-        const change = typeof row.changePercent === "number" ? row.changePercent : null;
-        const tone = change === null ? "neutral" : change > 0 ? "positive" : change < 0 ? "negative" : "neutral";
-        return (
-          <article className={`${styles.tile} ${styles[`tile_${tone}`]}`} key={`${String(row.symbol ?? "row")}-${index}`}>
-            <strong>{display(row.symbol)}</strong>
-            <span>{display(row.name)}</span>
-            <span>{display(row.changePercent)}%</span>
-            <small>{display(row.priceSource)} · {display(row.priceAsOf)}</small>
-          </article>
-        );
-      })}
+    <div className={styles.heatmap} aria-label="Market-cap-weighted research heatmap" data-testid="research-heatmap">
+      <p className={styles.notice}>Tile area is proportional to the returned positive market-cap value ({data.market === "eu" ? "EUR-converted cap" : "provider cap"}). Color uses the returned change; unknown change stays neutral. This view is metadata and research evidence, not a synchronized quote surface.</p>
+      <div className={styles.heatmapCanvas}>
+        {layout.cells.length === 0 ? <p className={styles.empty}>No positive source-reported market caps are available to size tiles.</p> : null}
+        {layout.cells.map((cell) => {
+          const change = typeof cell.changePercent === "number" && Number.isFinite(cell.changePercent) ? cell.changePercent : null;
+          const tone = change === null ? "neutral" : change > 0 ? "positive" : change < 0 ? "negative" : "neutral";
+          const ticker = workspaceTicker(cell.symbol);
+          const capText = compactMarketCap(cell);
+          const label = `${cell.symbol}, ${cell.name}, market cap ${capText} from ${cell.marketCapSource} as of ${cell.marketCapAsOf ?? "unknown"}, change ${change === null ? "unavailable" : `${change}%`} from ${cell.priceSource} as of ${cell.priceAsOf ?? "unknown"}`;
+          return (
+            <button
+              className={`${styles.tile} ${styles[`tile_${tone}`]}`}
+              key={cell.symbol}
+              type="button"
+              data-testid="research-heatmap-tile"
+              data-symbol={cell.symbol}
+              style={{ left: `${cell.x}%`, top: `${cell.y}%`, width: `${cell.width}%`, height: `${cell.height}%` }}
+              aria-label={label}
+              title={label}
+              disabled={!ticker}
+              onClick={() => { if (ticker) onSelect(ticker); }}
+            >
+              <strong>{cell.symbol}</strong>
+              <span>{cell.name}</span>
+              <span>{change === null ? "Change unavailable" : `${change > 0 ? "+" : ""}${change.toFixed(2)}%`}</span>
+              <span>{capText}</span>
+              <small>Cap: {cell.marketCapSource} · {cell.marketCapAsOf ?? "as of unknown"}</small>
+              <small>Change: {cell.priceSource} · {cell.priceAsOf ?? "as of unknown"}</small>
+            </button>
+          );
+        })}
+      </div>
+      <p className={styles.heatmapFootnote}>Excluded from tile area: {layout.excludedRows} listings without a positive known market cap. Select a tile to focus the workspace symbol.</p>
     </div>
   );
 }
@@ -413,6 +460,7 @@ export function ResearchViewWidget(props: ResearchViewProps) {
   const request = useMemo(() => buildResearchViewRequest(definition.id, config, inputs.symbol), [definition.id, config, inputs.symbol]);
   const hasReadPermission = host.auth.authenticated && host.auth.permissions.includes("research:read");
   const state = useReadResearch(host, hasReadPermission ? request : null, refreshVersion);
+  const selectSymbol = (symbol: string) => host.events.dispatch({ type: "active-symbol.select.v1", symbol });
 
   return (
     <section className={styles.widget} aria-label={definition.title}>
@@ -430,7 +478,9 @@ export function ResearchViewWidget(props: ResearchViewProps) {
       {hasReadPermission && state.status === "ready" ? (
         <>
           <Evidence envelope={state.envelope} />
-          {definition.id === "heatmap" ? <Heatmap table={state.table} /> : <Table table={state.table} emptyMessage={definition.emptyMessage} />}
+          {definition.id === "heatmap" && state.heatmapData
+            ? <Heatmap data={state.heatmapData} onSelect={selectSymbol} />
+            : <Table table={state.table} emptyMessage={definition.emptyMessage} />}
         </>
       ) : null}
     </section>

@@ -69,8 +69,9 @@ describe("Yahoo daily research adapter", () => {
       label: "Fixture provenance",
       value: "Synthetic acceptance fixture · bounded-synthetic-e2e marker",
     });
-    expect(buildYahooResearchPageHref("https://research.example/", "AAPL", "terminal.example"))
+    expect(buildYahooResearchPageHref("https://research.example", "AAPL", "terminal.example"))
       .toBe("https://research.example/research/yfinance/AAPL");
+    expect(buildYahooResearchPageHref("https://research.example/", "AAPL", "terminal.example")).toBeNull();
     expect(buildYahooResearchPageHref("https://terminal.example/", "AAPL", "terminal.example")).toBeNull();
     expect(buildYahooResearchPageHref("https://user:secret@research.example/", "AAPL", "terminal.example")).toBeNull();
   });

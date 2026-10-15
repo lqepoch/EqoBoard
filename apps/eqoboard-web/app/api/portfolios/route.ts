@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
   if (!db) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
   try {
     const records = listPortfolioRecords(db, ownerKeyForPrincipal(authorization.principal));
-    if (!secureNativeDbFilesForRequest()) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
+    if (!secureNativeDbFilesForRequest())
+      return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
     return noStoreJson(records);
   } catch {
     return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
@@ -39,8 +40,13 @@ export async function POST(request: NextRequest) {
   const db = getNativeDb();
   if (!db) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
   try {
-    const result = createPortfolioRecord(db, ownerKeyForPrincipal(authorization.principal), parsed.name);
-    if (!secureNativeDbFilesForRequest()) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
+    const result = createPortfolioRecord(
+      db,
+      ownerKeyForPrincipal(authorization.principal),
+      parsed.name,
+    );
+    if (!secureNativeDbFilesForRequest())
+      return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
     if (result.kind === "conflict") return noStoreJson({ error: "portfolio_name_conflict" }, 409);
     if (result.kind !== "ok") return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
     return noStoreJson(result.value, 201);

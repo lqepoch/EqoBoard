@@ -15,6 +15,12 @@ async function expectNonceMatchesRenderedScripts(page: Page, expectedNonce: stri
   );
   expect(scriptNonces.length, "the document must render nonce-bearing Next scripts").toBeGreaterThan(0);
   expect(new Set(scriptNonces)).toEqual(new Set([expectedNonce]));
+
+  const inlineScriptNonces = await page.locator("script:not([src])").evaluateAll((scripts) =>
+    scripts.map((script) => (script as HTMLScriptElement).nonce),
+  );
+  expect(inlineScriptNonces.length, "the document must render inline Next hydration scripts").toBeGreaterThan(0);
+  expect(inlineScriptNonces.every((nonce) => nonce === expectedNonce)).toBe(true);
 }
 
 test("@component terminal and Research documents use a fresh nonce-bound production CSP", async ({ page }) => {
@@ -42,6 +48,49 @@ test("@component terminal and Research documents use a fresh nonce-bound product
     expect(secondCsp).not.toContain("'unsafe-eval'");
     await expectNonceMatchesRenderedScripts(page, secondNonce);
   }
+});
+
+test("@component auth projection and hydration remain request-scoped across anonymous and OIDC documents", async ({ page }) => {
+  const origin = terminalWebOrigin();
+  const anonymousResponse = await page.goto(origin, { waitUntil: "domcontentloaded" });
+  expect(anonymousResponse).not.toBeNull();
+  expect(anonymousResponse?.status()).toBe(200);
+  const anonymousCsp = anonymousResponse?.headers()["content-security-policy"];
+  const anonymousNonce = cspNonce(anonymousCsp);
+  await expect(page.getByTestId("access-state")).toContainText("Sign in to open your workspace");
+  await expect(page.getByTestId("sign-in-button")).toBeVisible();
+  await expect(page.getByTestId("account-menu")).toHaveCount(0);
+  await expectNonceMatchesRenderedScripts(page, anonymousNonce);
+
+  await page.keyboard.press("Control+k");
+  await expect(page.getByTestId("command-palette")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("command-palette")).toBeHidden();
+
+  const authenticatedDocument = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().isNavigationRequest() && url.origin === origin && url.pathname === "/";
+  });
+  await page.getByTestId("sign-in-button").click();
+  await expect(page.getByTestId("mock-login-writer")).toBeVisible();
+  await page.getByTestId("mock-login-writer").click();
+
+  const authenticatedResponse = await authenticatedDocument;
+  expect(authenticatedResponse.status()).toBe(200);
+  const authenticatedCsp = authenticatedResponse.headers()["content-security-policy"];
+  const authenticatedNonce = cspNonce(authenticatedCsp);
+  expect(authenticatedNonce).not.toBe(anonymousNonce);
+  expect(authenticatedCsp).toContain("'strict-dynamic'");
+  expect(authenticatedCsp).not.toContain("'unsafe-eval'");
+  await expect(page.getByTestId("account-menu")).toBeVisible();
+  await expect(page.getByTestId("sign-in-button")).toHaveCount(0);
+  await expect(page.getByTestId("workspace-root")).toBeVisible();
+  await expectNonceMatchesRenderedScripts(page, authenticatedNonce);
+
+  await page.keyboard.press("Control+k");
+  await expect(page.getByTestId("command-palette")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("command-palette")).toBeHidden();
 });
 
 test("@api anonymous terminal and Research JSON responses omit page CSP and nonce material", async ({ request }) => {

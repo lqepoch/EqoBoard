@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
+import { parseGatewayBaseUrl } from "../gateway";
 import { signGatewayDelegation, type ServerPrincipal } from "../bff-security";
 import { readProviderText } from "./transport";
 
@@ -20,16 +21,8 @@ export async function authorizeMarketDelegation(principal: ServerPrincipal): Pro
 function gatewayBaseUrl(): URL {
   const configured = process.env.EQO_RUST_URL?.trim();
   if (!configured) throw new Error("research-gateway-unconfigured");
-  let base: URL;
-  try {
-    base = new URL(configured);
-  } catch {
-    throw new Error("research-gateway-unconfigured");
-  }
-  if ((base.protocol !== "http:" && base.protocol !== "https:") || base.username !== "" || base.password !== "" ||
-      base.search !== "" || base.hash !== "" || base.pathname !== "/") {
-    throw new Error("research-gateway-unconfigured");
-  }
+  const base = parseGatewayBaseUrl(configured);
+  if (!base) throw new Error("research-gateway-unconfigured");
   return base;
 }
 

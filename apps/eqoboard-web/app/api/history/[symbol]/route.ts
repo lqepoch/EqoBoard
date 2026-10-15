@@ -1,8 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { authorizeRequest, noStoreJson, signGatewayDelegation, signMdpMarketReadDelegation } from "@/lib/server/bff-security";
-import { coreBarsRateLimit, CORE_BARS_LIMIT, parseCoreBarsPageRequest, parseCoreBarsResponse } from "@/lib/server/core-bars";
-import { mdpBaseUrl, createUpstreamDeadline, readJsonResponseBounded } from "@/lib/server/service-http";
+import {
+  authorizeRequest,
+  noStoreJson,
+  signGatewayDelegation,
+  signMdpMarketReadDelegation,
+} from "@/lib/server/bff-security";
+import {
+  coreBarsRateLimit,
+  CORE_BARS_LIMIT,
+  parseCoreBarsPageRequest,
+  parseCoreBarsResponse,
+} from "@/lib/server/core-bars";
+import {
+  mdpBaseUrl,
+  createUpstreamDeadline,
+  readJsonResponseBounded,
+} from "@/lib/server/service-http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +27,8 @@ const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 type RouteContext = Readonly<{ params: Promise<{ symbol: string }> }>;
 
 function invalidRequest(request: Request): boolean {
-  if (request.headers.has("content-encoding") || request.headers.has("transfer-encoding")) return true;
+  if (request.headers.has("content-encoding") || request.headers.has("transfer-encoding"))
+    return true;
   if (request.body !== null) {
     void request.body.cancel().catch(() => undefined);
     return true;
@@ -24,7 +39,8 @@ function invalidRequest(request: Request): boolean {
 function upstreamStatus(status: number): NextResponse {
   if (status === 401) return noStoreJson({ error: "market_data_authentication_required" }, 401);
   if (status === 403) return noStoreJson({ error: "market_data_access_denied" }, 403);
-  if (status === 404 || status === 405 || status === 501) return noStoreJson({ error: "market_data_endpoint_unsupported" }, 501);
+  if (status === 404 || status === 405 || status === 501)
+    return noStoreJson({ error: "market_data_endpoint_unsupported" }, 501);
   if (status === 409) return noStoreJson({ error: "market_data_conflict" }, 409);
   if (status === 413) return noStoreJson({ error: "result_limit_exceeded" }, 413);
   if (status === 422) return noStoreJson({ error: "market_data_query_rejected" }, 422);
@@ -76,17 +92,22 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
   upstreamUrl.searchParams.set("limit", String(CORE_BARS_LIMIT));
   if (parsed.cursor !== null) upstreamUrl.searchParams.set("cursor", parsed.cursor);
 
-  const expiresAt = Math.min(mdpAuthorization.expiresAt, gatewayAuthorization?.ok
-    ? gatewayAuthorization.expiresAt
-    : Number.POSITIVE_INFINITY);
-  const deadline = createUpstreamDeadline(request, Math.max(1, Math.min(UPSTREAM_DEADLINE_MS, expiresAt - Date.now())));
+  const expiresAt = Math.min(
+    mdpAuthorization.expiresAt,
+    gatewayAuthorization?.ok ? gatewayAuthorization.expiresAt : Number.POSITIVE_INFINITY,
+  );
+  const deadline = createUpstreamDeadline(
+    request,
+    Math.max(1, Math.min(UPSTREAM_DEADLINE_MS, expiresAt - Date.now())),
+  );
   try {
     const headers = new Headers({
       accept: "application/json",
       authorization: `Bearer ${mdpAuthorization.token}`,
       "x-request-id": randomUUID(),
     });
-    if (gatewayAuthorization?.ok) headers.set("X-Eqo-Gateway-Delegation", gatewayAuthorization.token);
+    if (gatewayAuthorization?.ok)
+      headers.set("X-Eqo-Gateway-Delegation", gatewayAuthorization.token);
     const upstream = await fetch(upstreamUrl, {
       method: "GET",
       headers,
@@ -100,7 +121,9 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
     }
     if (![200, 206, 422].includes(upstream.status)) {
       await upstream.body?.cancel().catch(() => undefined);
-      return deadline.timedOut() ? noStoreJson({ error: "market_data_query_timeout" }, 504) : upstreamStatus(upstream.status);
+      return deadline.timedOut()
+        ? noStoreJson({ error: "market_data_query_timeout" }, 504)
+        : upstreamStatus(upstream.status);
     }
 
     const body = await readJsonResponseBounded(upstream, MAX_RESPONSE_BYTES);
@@ -119,7 +142,10 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
       requestEnd: parsed.requestEnd,
       cursor: parsed.cursor,
     };
-    if (!parseCoreBarsResponse(body.value, requestContract) || !coverageMatchesStatus(body.value, upstream.status)) {
+    if (
+      !parseCoreBarsResponse(body.value, requestContract) ||
+      !coverageMatchesStatus(body.value, upstream.status)
+    ) {
       return noStoreJson({ error: "invalid_market_data_response" }, 502);
     }
 
@@ -145,8 +171,14 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
       headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
     });
   } catch {
-    return noStoreJson({ error: deadline.timedOut() ? "market_data_query_timeout" : "market_data_service_unavailable" },
-      deadline.timedOut() ? 504 : 503);
+    return noStoreJson(
+      {
+        error: deadline.timedOut()
+          ? "market_data_query_timeout"
+          : "market_data_service_unavailable",
+      },
+      deadline.timedOut() ? 504 : 503,
+    );
   } finally {
     deadline.close();
   }

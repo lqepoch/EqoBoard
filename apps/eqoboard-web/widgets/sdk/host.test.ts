@@ -67,7 +67,7 @@ type ScopedTestOperations = {
 
 type ScopedTestActions = WidgetActionMap & {
   "research.ai": { input: Readonly<{ prompt: string }>; output: string };
-  "portfolio.delete": { input: Readonly<{ id: number }>; output: void };
+  "portfolio.delete": { input: Readonly<{ id: number }>; output: undefined };
 };
 
 describe("per-registration host capability scope", () => {

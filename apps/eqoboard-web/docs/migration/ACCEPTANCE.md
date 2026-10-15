@@ -104,10 +104,12 @@ Current browser assertions exercise anonymous route denial and zero Gateway
 dispatch, actual OIDC role selection, secret-sentinel absence, cross-origin and
 stale workspace writes, competing ETag compare-and-swap, reader/writer
 workspace and manual-portfolio isolation, cross-tab logout, fixed same-origin
-stream authorization, shell keyboard and mobile navigation, explicit
-legacy-layout preview/import, fresh imported IDs, inert unsupported tiles,
-persistent tabs, tab deletion followed by local recovery restore and a persisted
-reload, and layout-only export. A reader role also receives 403 for private
+stream authorization, shell keyboard and mobile navigation, metadata-only
+symbol search through a same-origin synthetic response with keyboard focus and
+workspace selection, explicit legacy-layout preview/import, fresh imported
+IDs, inert unsupported tiles, persistent tabs, tab deletion followed by local
+recovery restore and a persisted reload, and layout-only export. A reader role
+also receives 403 for private
 prediction and Engine routes. The workspace-only fixture identity is also used
 to test the 403-before-MDP Research boundary. The browser recovery assertion
 restores a partition-scoped pre-delete snapshot; a source unit test separately
@@ -172,7 +174,7 @@ legacy modules.
 | `ai` | Do not leak private context or silently turn denied data into a successful answer. |
 | `calendar` | Preserve provider/time facts or display unavailable. |
 | `insider` | Preserve provider/time facts or display unavailable. |
-| `tv` | Preserve attribution and upstream license/notice requirements. |
+| `tv` | Remain inert/unavailable until a registered implementation has a reviewed source and license contract; do not mount an untrusted embed. |
 | `recap` | Preserve the provenance and coverage of each input; partial inputs stay partial. |
 | `researchpredictions` | Read-only observation; no promotion, mutation, or execution authority. |
 | `enginepreview` | Offline synthetic diagnostic only; unknown source, no account/market-loaded or trading claim. |
@@ -231,7 +233,11 @@ Production browser acceptance also checks a fresh nonce for each terminal and
 Research document, matches the nonce-bound scripts to the response CSP, and
 requires `strict-dynamic`, `frame-ancestors 'none'`, and frame denial without
 `unsafe-eval`. JSON API denials remain `no-store` and must not receive page CSP,
-nonce, or `Set-Cookie` material.
+nonce, or `Set-Cookie` material. A separate terminal browser case requests one
+anonymous document and then one document after the signed OIDC redirect; it
+checks that the visible auth projection changes per request, each response has
+a distinct CSP nonce matching its inline hydration scripts, and the command
+palette is interactive in both documents.
 
 Use only deterministic mock OIDC/Gateway adapters and synthetic market
 fixtures. E2E browser interception must assert that no provider or broker host

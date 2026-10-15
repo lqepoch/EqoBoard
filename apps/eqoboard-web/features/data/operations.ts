@@ -25,6 +25,8 @@ export type NativeDataOperationMap = {
   "engine.status": { input: Readonly<Record<string, never>>; output: unknown };
   "engine.preview": { input: Readonly<Record<string, never>>; output: unknown };
   "research.news": { input: Readonly<{ symbol?: string }>; output: unknown };
+  "research.recap": { input: Readonly<Record<string, never>>; output: unknown };
+  "research.symbolSearch": { input: Readonly<{ query: string }>; output: unknown };
   "research.macro": { input: Readonly<{ region: "us" | "eu" }>; output: unknown };
   "research.economicCalendar": { input: Readonly<Record<string, never>>; output: unknown };
   "research.earningsCalendar": { input: Readonly<{ symbols?: readonly string[] }>; output: unknown };
@@ -109,7 +111,7 @@ export type VerticalPreviewIntent = Readonly<{
 
 export type NativeActionId = keyof NativeActionMap;
 
-export type NativeOperationPermission = Readonly<Record<NativeDataOperationId, Permission>>;
+export type NativeOperationPermission = Readonly<Record<NativeDataOperationId, Permission | readonly Permission[]>>;
 
 export const NATIVE_OPERATION_PERMISSION: NativeOperationPermission = Object.freeze({
   "market.quotes": "market:read",
@@ -122,6 +124,8 @@ export const NATIVE_OPERATION_PERMISSION: NativeOperationPermission = Object.fre
   "engine.status": "engine:offline-read",
   "engine.preview": "engine:offline-read",
   "research.news": "research:read",
+  "research.recap": Object.freeze(["research:read", "market:read"] as const),
+  "research.symbolSearch": "research:read",
   "research.macro": "research:read",
   "research.economicCalendar": "research:read",
   "research.earningsCalendar": "research:read",
@@ -140,7 +144,7 @@ type NativeHttpRequest = Readonly<{
   method: "GET";
   path: string;
   body?: never;
-  permission: Permission;
+  permission: Permission | readonly Permission[];
 }>;
 
 type NativeActionRequest = Readonly<{
@@ -327,8 +331,10 @@ export function buildNativeReadRequest<Id extends NativeDataOperationId>(
           record.startUtc >= record.endUtc ||
           Date.parse(record.endUtc) - Date.parse(record.startUtc) > 36_500 * 86_400_000 ||
           (record.adjustment !== "unadjusted" && record.adjustment !== "adjusted") ||
-          (record.cursor !== undefined && (typeof record.cursor !== "string" || record.cursor.length < 1 ||
-          new TextEncoder().encode(record.cursor).byteLength > 8_192 || CONTROL.test(record.cursor))) return null;
+          (record.cursor !== undefined && (
+            typeof record.cursor !== "string" || record.cursor.length < 1 ||
+            new TextEncoder().encode(record.cursor).byteLength > 8_192 || CONTROL.test(record.cursor)
+          ))) return null;
       const entries: [string, string][] = [
         ["symbols", record.symbol],
         ["asset_class", record.assetClass],
@@ -370,6 +376,21 @@ export function buildNativeReadRequest<Id extends NativeDataOperationId>(
       return {
         method: "GET",
         path: `/api/research/data/news${record.symbol ? query([["symbol", record.symbol]]) : ""}`,
+        permission,
+      };
+    }
+    case "research.recap": {
+      if (!exactRecord(input, [])) return null;
+      return { method: "GET", path: "/api/research/data/recap", permission };
+    }
+    case "research.symbolSearch": {
+      const record = exactRecord(input, ["query"]);
+      const queryText = record?.query;
+      if (typeof queryText !== "string" || queryText.length < 1 || queryText.length > 64 ||
+          queryText.trim() !== queryText || CONTROL.test(queryText)) return null;
+      return {
+        method: "GET",
+        path: `/api/research/data/symbol-search${query([["query", queryText]])}`,
         permission,
       };
     }

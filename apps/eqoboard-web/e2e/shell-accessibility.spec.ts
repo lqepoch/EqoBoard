@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { signInAt, terminalWebOrigin } from "./helpers/research-test-support";
 
 function webOrigin(): string {
   const origin = process.env.E2E_WEB_ORIGIN;
@@ -129,4 +130,94 @@ test("@component appearance cycles through the persisted native theme preference
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("theme-toggle")).toHaveAccessibleName(/Appearance: Light/);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});
+
+test("@component command-palette keyboard selection updates the active workspace from synthetic same-origin metadata", async ({ page }) => {
+  const origin = terminalWebOrigin();
+  await signInAt(page, origin, "writer", "/");
+  await expect(page.getByTestId("workspace-root")).toBeVisible();
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  const activeSymbol = page.getByLabel("Active symbol");
+  const previousSymbol = await activeSymbol.inputValue();
+
+  const externalRequests: string[] = [];
+  const symbolSearchRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.origin !== origin) externalRequests.push(url.href);
+    if (url.pathname === "/api/research/data/symbol-search") symbolSearchRequests.push(url.href);
+  });
+
+  const syntheticEnvelope = {
+    schemaVersion: 1,
+    operation: "symbol-search",
+    source: {
+      provider: "TradingView symbol search",
+      providerUrl: "https://www.tradingview.com/",
+      sourcePath: "apps/openterminal/server/src/providers/tradingview.ts",
+      license: null,
+    },
+    status: "available",
+    asOf: null,
+    retrievedAt: "2026-10-15T03:00:00.000Z",
+    completeness: { complete: true, failedItems: null, truncated: false },
+    cache: "miss",
+    data: [{
+      symbol: "AAPL",
+      providerSymbol: "AAPL",
+      name: "Apple Inc.",
+      exchange: "NASDAQ",
+      type: "stock",
+      provider: "TradingView symbol search",
+      asOf: null,
+    }],
+    warning: "Synthetic E2E symbol metadata fixture; no TradingView network or market observation was used.",
+  } as const;
+
+  const fulfilledSearches: string[] = [];
+  await page.route((url) =>
+    url.origin === origin && url.pathname === "/api/research/data/symbol-search" &&
+      url.searchParams.get("query") === "AAPL",
+  async (route) => {
+    fulfilledSearches.push(route.request().url());
+    await route.fulfill({
+      status: 200,
+      headers: { "cache-control": "no-store", "content-type": "application/json" },
+      body: JSON.stringify(syntheticEnvelope),
+    });
+  });
+
+  await page.keyboard.press("Control+k");
+  const dialog = page.getByTestId("command-palette");
+  const search = page.getByTestId("command-palette-search");
+  await expect(dialog).toBeVisible();
+  await search.fill("AAPL");
+
+  const result = page.getByTestId("command-symbol-result-AAPL");
+  await expect(result).toBeVisible();
+  await expect(result).toHaveAccessibleName("Select AAPL, Apple Inc., NASDAQ, stock");
+  await expect(page.getByTestId("command-symbol-source")).toContainText("TradingView symbol search");
+  await expect(page.getByTestId("command-symbol-source")).toContainText("not live market data or SIP quotes");
+  await expect(page.getByTestId("command-symbol-results")).toContainText("Synthetic E2E symbol metadata fixture");
+  await expect(page.getByTestId("command-symbol-results")).toContainText("no TradingView network or market observation was used");
+
+  await page.keyboard.press("ArrowDown");
+  await expect(result).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+
+  await expect(activeSymbol).toHaveValue("AAPL");
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  expect(fulfilledSearches).toHaveLength(1);
+  expect(symbolSearchRequests).toHaveLength(1);
+  expect(new URL(symbolSearchRequests[0]!).searchParams.get("query")).toBe("AAPL");
+  expect(externalRequests).toEqual([]);
+
+  // Restore the prior workspace symbol so this browser case leaves no user-data change behind.
+  if (previousSymbol && previousSymbol !== "AAPL") {
+    await activeSymbol.fill(previousSymbol);
+    await activeSymbol.press("Enter");
+    await expect(activeSymbol).toHaveValue(previousSymbol);
+    await expect(page.locator("[aria-label='Workspace sync status']")).toContainText("All changes saved");
+  }
 });

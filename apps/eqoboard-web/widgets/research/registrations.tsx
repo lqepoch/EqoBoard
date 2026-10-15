@@ -22,6 +22,7 @@ import {
 } from "@/features/research/predictions";
 import { RegisteredPredictionsWidget } from "./RegisteredPredictionsWidget";
 import { EngineOfflinePreviewWidget, type EngineOfflinePreviewConfigV1 } from "./EngineOfflinePreviewWidget";
+import { RecapWidget, type ResearchRecapConfigV1 } from "./RecapWidget";
 
 const SOURCE_REPOSITORY = "https://github.com/lqepoch/EqoBoard";
 const NOTICE_PATH = "LICENSE";
@@ -144,6 +145,36 @@ const savedQueriesRegistration: WidgetRegistration<SavedQueriesConfigV1, Researc
   },
   createDefaultConfig: emptyResearchQueryConfig,
   provenance: provenance(savedQueriesManifest.provenanceId, "apps/eqoboard-web/widgets/research/SavedQueriesWidget.tsx"),
+};
+
+const recapId = "eqoboard.research.recap";
+const recapManifest: WidgetManifestV1 = {
+  manifestVersion: 1,
+  sdkVersion: 1,
+  id: recapId,
+  version: "1.0.0",
+  title: "Market recap",
+  description: "A bounded, partially covered view of macro, TradingView listing metadata, Gateway SIP observations, and source-linked headlines.",
+  category: "research",
+  rendererId: `${recapId}.renderer.v1`,
+  configSchemaId: `${recapId}.config.v1`,
+  defaultSize: { w: 8, h: 8, minW: 5, minH: 5, maxW: 12, maxH: 12 },
+  inputs: [],
+  requiredPermissions: ["research:read", "market:read"],
+  refresh: { mode: "poll", minIntervalMs: 15_000, maxRequestsPerMinute: 4, maxConcurrentRequests: 1, whenHidden: "pause" },
+  symbolBinding: "unsupported",
+  provenanceId: `${recapId}.provenance.v1`,
+  provenancePolicy: "surface-response-evidence",
+};
+
+const recapRegistration: WidgetRegistration<ResearchRecapConfigV1, Pick<ResearchDataOperationMap, "research.recap">, WidgetNoActionMap> = {
+  manifest: recapManifest,
+  allowedReadOperations: ["research.recap"],
+  allowedActions: [],
+  Component: RecapWidget,
+  parseConfig: parseSchemaVersionConfig,
+  createDefaultConfig: () => ({ schemaVersion: 1 }),
+  provenance: provenance(recapManifest.provenanceId, "apps/eqoboard-web/widgets/research/RecapWidget.tsx"),
 };
 
 const aiId = "eqoboard.research.ai-assistant";
@@ -291,6 +322,7 @@ const enginePreviewRegistration: WidgetRegistration<EngineOfflinePreviewConfigV1
 /** Static, audited first-party research built-ins. */
 export const researchWidgetRegistrations: readonly AnyWidgetRegistration[] = Object.freeze([
   ...RESEARCH_VIEW_DEFINITIONS.map((definition) => createViewRegistration(definition.id)),
+  recapRegistration,
   savedQueriesRegistration,
   aiRegistration,
   yahooDailyRegistration,

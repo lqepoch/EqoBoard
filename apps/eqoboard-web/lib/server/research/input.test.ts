@@ -33,6 +33,17 @@ describe("closed research BFF operation inputs", () => {
     expect(parse("heatmap", "market=nyse").ok).toBe(false);
   });
 
+  it("accepts only the bounded no-parameter recap and exact symbol-search input", () => {
+    expect(parse("recap")).toEqual({ ok: true, value: { operation: "recap" } });
+    expect(parse("recap", "limit=20")).toEqual({ ok: false, error: "unknown-parameter" });
+    expect(parse("symbol-search", "query=AAPL")).toEqual({ ok: true, value: { operation: "symbol-search", query: "AAPL" } });
+    expect(parse("symbol-search", `query=${"A".repeat(64)}`).ok).toBe(true);
+    expect(parse("symbol-search", `query=${"A".repeat(65)}`).ok).toBe(false);
+    expect(parse("symbol-search", "query=%20AAPL").ok).toBe(false);
+    expect(parse("symbol-search", "query=AAPL&query=MSFT").ok).toBe(false);
+    expect(parse("symbol-search", "query=AAPL&limit=20")).toEqual({ ok: false, error: "unknown-parameter" });
+  });
+
   it("rejects unbounded, duplicate, fractional-limit, and non-finite numeric filters", () => {
     expect(parse("screener", "market=us&volumeMin=-1").ok).toBe(false);
     expect(parse("screener", "market=us&limit=500.5").ok).toBe(false);

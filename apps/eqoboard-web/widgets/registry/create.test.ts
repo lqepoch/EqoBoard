@@ -151,13 +151,16 @@ describe("static widget registry", () => {
     expect(() => createWidgetRegistry([bad])).toThrowError(
       expect.objectContaining({ code: "invalid-provenance" }),
     );
+    expect(WidgetRegistryDefinitionError).toBeDefined();
+  });
+
+  it("rejects a default config that does not satisfy the registration parser", () => {
     expect(() => createWidgetRegistry([{
       ...registration(),
-      createDefaultConfig: () => ({ label: "" }),
+      createDefaultConfig: () => ({ label: 42 }),
     }])).toThrowError(
       expect.objectContaining({ code: "invalid-default-config" }),
     );
-    expect(WidgetRegistryDefinitionError).toBeDefined();
   });
 
   it("rejects malformed capability lists instead of widening a registration", () => {

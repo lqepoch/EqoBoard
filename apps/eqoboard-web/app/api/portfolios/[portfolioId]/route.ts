@@ -2,7 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authorizeRequest, noStoreJson } from "@/lib/server/bff-security";
 import { getNativeDb, secureNativeDbFilesForRequest } from "@/lib/server/native-db";
 import { ownerKeyForPrincipal } from "@/lib/server/auth";
-import { isEmptyReadRequest, numericPathId, portfolioLimitResponse } from "@/lib/server/portfolio-http";
+import {
+  isEmptyReadRequest,
+  numericPathId,
+  portfolioLimitResponse,
+} from "@/lib/server/portfolio-http";
 import { deletePortfolioRecord } from "@/lib/server/portfolio-storage";
 
 export const runtime = "nodejs";
@@ -22,8 +26,13 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const db = getNativeDb();
   if (!db) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
   try {
-    const deleted = deletePortfolioRecord(db, portfolioId, ownerKeyForPrincipal(authorization.principal));
-    if (!secureNativeDbFilesForRequest()) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
+    const deleted = deletePortfolioRecord(
+      db,
+      portfolioId,
+      ownerKeyForPrincipal(authorization.principal),
+    );
+    if (!secureNativeDbFilesForRequest())
+      return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
     if (!deleted) return noStoreJson({ error: "portfolio_not_found" }, 404);
     return new NextResponse(null, {
       status: 204,

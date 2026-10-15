@@ -9,6 +9,14 @@ import type {
   WidgetRegistry,
 } from "./types";
 
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export type WidgetRegistryDefinitionErrorCode =
   | "invalid-manifest"
   | "invalid-provenance"
@@ -32,7 +40,7 @@ export class WidgetRegistryDefinitionError extends Error {
 
 function boundedText(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= maxLength &&
-    value === value.trim() && !/[\u0000-\u001f\u007f]/u.test(value);
+    value === value.trim() && !hasControlCharacters(value);
 }
 
 function safeRelativePath(value: string): boolean {

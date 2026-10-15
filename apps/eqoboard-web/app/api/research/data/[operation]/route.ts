@@ -9,7 +9,9 @@ import { attachMacroSnapshots, loadMacro } from "@/lib/server/research/macro";
 import { loadCryptoGlobal, loadCryptoMarkets } from "@/lib/server/research/crypto";
 import { loadInsiderTransactions } from "@/lib/server/research/insider";
 import { loadNews } from "@/lib/server/research/news";
+import { loadResearchRecap } from "@/lib/server/research/recap";
 import { attachSipSnapshots, filterMarketData, loadMarketMetadata, toHeatmap } from "@/lib/server/research/screener";
+import { loadTradingViewSymbolSearch } from "@/lib/server/research/symbol-search";
 import { getCached } from "@/lib/server/research/cache";
 import { parseResearchOperationInput, type ResearchOperationInput } from "@/lib/server/research/input";
 import type { ProviderResult, ResearchEnvelope, ResearchOperationName } from "@/lib/server/research/types";
@@ -19,7 +21,7 @@ export const runtime = "nodejs";
 
 const ALLOWED_OPERATIONS = new Set<ResearchOperationName>([
   "news", "macro", "economic-calendar", "earnings-calendar", "earnings-history", "insider",
-  "screener", "heatmap", "crypto", "crypto-global",
+  "screener", "heatmap", "recap", "symbol-search", "crypto", "crypto-global",
 ]);
 
 const RATE_LIMITS: Readonly<Record<ResearchOperationName, number>> = Object.freeze({
@@ -33,6 +35,8 @@ const RATE_LIMITS: Readonly<Record<ResearchOperationName, number>> = Object.free
   heatmap: 4,
   crypto: 20,
   "crypto-global": 10,
+  recap: 4,
+  "symbol-search": 30,
 });
 
 const CACHE_TTL_MS: Readonly<Record<ResearchOperationName, number>> = Object.freeze({
@@ -47,6 +51,8 @@ const CACHE_TTL_MS: Readonly<Record<ResearchOperationName, number>> = Object.fre
   heatmap: 3_000,
   crypto: 5_000,
   "crypto-global": 120_000,
+  recap: 15_000,
+  "symbol-search": 60_000,
 });
 
 class RouteResponseError extends Error {
@@ -190,6 +196,14 @@ async function dispatch(input: ResearchOperationInput, principal: Parameters<typ
       return loadCached(input, loadCryptoMarkets);
     case "crypto-global":
       return loadCached(input, loadCryptoGlobal);
+    case "recap": {
+      // Require market:read before any macro, metadata, headline, or Gateway request.
+      const delegation = await authorizeMarketDelegation(principal);
+      if (!delegation.ok) return delegation.response;
+      return loadCached(input, () => loadResearchRecap(delegation.value));
+    }
+    case "symbol-search":
+      return loadCached(input, () => loadTradingViewSymbolSearch(input.query));
   }
 }
 

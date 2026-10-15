@@ -5,6 +5,9 @@ import { consumePrincipalRateLimit } from "@/lib/server/rate-limit";
 import { authorizeMarketDelegation } from "@/lib/server/research/gateway";
 import { loadMacro } from "@/lib/server/research/macro";
 import { loadNews } from "@/lib/server/research/news";
+import { loadMarketMetadata } from "@/lib/server/research/screener";
+import { loadResearchRecap } from "@/lib/server/research/recap";
+import { loadTradingViewSymbolSearch } from "@/lib/server/research/symbol-search";
 import { clearResearchCacheForTests } from "@/lib/server/research/cache";
 import { requireRuntimeMode } from "@/lib/server/runtime-mode";
 import { GET } from "./route";
@@ -19,6 +22,14 @@ vi.mock("@/lib/server/research/gateway", () => ({
 }));
 vi.mock("@/lib/server/research/news", () => ({ loadNews: vi.fn() }));
 vi.mock("@/lib/server/research/macro", () => ({ loadMacro: vi.fn() }));
+vi.mock("@/lib/server/research/screener", () => ({
+  attachSipSnapshots: vi.fn(),
+  filterMarketData: vi.fn(),
+  loadMarketMetadata: vi.fn(),
+  toHeatmap: vi.fn(),
+}));
+vi.mock("@/lib/server/research/recap", () => ({ loadResearchRecap: vi.fn() }));
+vi.mock("@/lib/server/research/symbol-search", () => ({ loadTradingViewSymbolSearch: vi.fn() }));
 
 const principal = Object.freeze({
   identityIssuer: "https://identity.example",
@@ -86,6 +97,48 @@ describe("closed native research data route", () => {
     expect(response.status).toBe(403);
     expect(authorizeMarketDelegation).toHaveBeenCalledWith(principal);
     expect(loadMacro).not.toHaveBeenCalled();
+  });
+
+  it("requires market delegation before any recap provider work", async () => {
+    vi.mocked(authorizeRequest).mockResolvedValue({ ok: true, principal } as never);
+    vi.mocked(authorizeMarketDelegation).mockResolvedValue({
+      ok: false,
+      response: new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }) as never,
+    } as never);
+
+    const response = await GET(routeRequest("recap"), context("recap"));
+
+    expect(response.status).toBe(403);
+    expect(authorizeMarketDelegation).toHaveBeenCalledWith(principal);
+    expect(loadResearchRecap).not.toHaveBeenCalled();
+    expect(loadMacro).not.toHaveBeenCalled();
+    expect(loadMarketMetadata).not.toHaveBeenCalled();
+    expect(loadNews).not.toHaveBeenCalled();
+  });
+
+  it("dispatches bounded symbol search through the fixed provider adapter", async () => {
+    vi.mocked(authorizeRequest).mockResolvedValue({ ok: true, principal } as never);
+    vi.mocked(loadTradingViewSymbolSearch).mockResolvedValue({
+      source: {
+        provider: "TradingView symbol search",
+        providerUrl: "https://www.tradingview.com/",
+        sourcePath: "apps/openterminal/server/src/providers/tradingview.ts",
+        license: null,
+      },
+      data: [],
+      asOf: null,
+      complete: true,
+      failedItems: null,
+      truncated: false,
+      warning: "Listing metadata only.",
+    });
+
+    const response = await GET(routeRequest("symbol-search", "?query=AAPL"), context("symbol-search"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(loadTradingViewSymbolSearch).toHaveBeenCalledWith("AAPL");
+    expect(body).toMatchObject({ operation: "symbol-search", source: { provider: "TradingView symbol search" }, data: [] });
   });
 
   it("returns provider evidence and no-store cache headers for a valid read", async () => {

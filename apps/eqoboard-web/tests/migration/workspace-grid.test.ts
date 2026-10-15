@@ -5,6 +5,7 @@ import type { WorkspaceTabV1 } from "../../workspace/model";
 
 const firstId = "11111111-1111-4111-8111-111111111111";
 const secondId = "22222222-2222-4222-8222-222222222222";
+const thirdId = "44444444-4444-4444-8444-444444444444";
 
 const tab: WorkspaceTabV1 = {
   id: "33333333-3333-4333-8333-333333333333",
@@ -49,6 +50,29 @@ describe("native workspace layout acceptance", () => {
     if (!result.ok) return;
 
     expect(result.placements.find((item) => item.i === firstId)).toMatchObject({ x: 1, y: 0 });
+    for (let left = 0; left < result.placements.length; left += 1) {
+      for (let right = left + 1; right < result.placements.length; right += 1) {
+        expect(placementsOverlap(result.placements[left], result.placements[right])).toBe(false);
+      }
+    }
+  });
+
+  it("resolves a multi-widget collision chain without colliding a pushed item with itself", () => {
+    const placements = [
+      { i: firstId, x: 0, y: 0, w: 4, h: 3 },
+      { i: secondId, x: 4, y: 0, w: 4, h: 3 },
+      { i: thirdId, x: 4, y: 3, w: 4, h: 3 },
+    ];
+
+    const result = keyboardMove(placements, firstId, "ArrowRight");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.placements).toEqual([
+      { i: firstId, x: 1, y: 0, w: 4, h: 3 },
+      { i: secondId, x: 4, y: 3, w: 4, h: 3 },
+      { i: thirdId, x: 4, y: 6, w: 4, h: 3 },
+    ]);
     for (let left = 0; left < result.placements.length; left += 1) {
       for (let right = left + 1; right < result.placements.length; right += 1) {
         expect(placementsOverlap(result.placements[left], result.placements[right])).toBe(false);

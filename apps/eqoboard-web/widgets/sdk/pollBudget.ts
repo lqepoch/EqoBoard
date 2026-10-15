@@ -9,6 +9,14 @@ const MAX_INTERVAL_MS = 3_600_000;
 const INSTANCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const OPERATION_ID = /^[A-Za-z][A-Za-z0-9.-]{0,95}$/u;
 
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export type WidgetPollBudgetConfig = Readonly<{
   /** Host-owned ceilings. Manifest policy can only lower these limits. */
   maxConcurrentGlobal: number;
@@ -180,7 +188,7 @@ export function createWidgetPollBudget(
       if (request.hidden && request.policy.whenHidden === "pause") throw new WidgetDataReadError("hidden");
       if (typeof request.scopeKey !== "string" || request.scopeKey.length === 0 ||
           request.scopeKey.length > 256 || request.scopeKey !== request.scopeKey.trim() ||
-          /[\u0000-\u001f\u007f]/u.test(request.scopeKey)) {
+          hasControlCharacters(request.scopeKey)) {
         throw new WidgetDataReadError("request-failed");
       }
 

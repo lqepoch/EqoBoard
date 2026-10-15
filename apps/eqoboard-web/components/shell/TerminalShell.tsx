@@ -110,7 +110,7 @@ export function TerminalShell({ children }: TerminalShellProps) {
           type="button"
         >
           <span aria-hidden="true" className="eq-command-trigger__search"><ShellIcon name="search" size={16} /></span>
-          <span className="eq-command-trigger__label">Search commands</span>
+          <span className="eq-command-trigger__label">Search commands or symbols</span>
           <span aria-hidden="true" className="eq-shortcut">Ctrl K / ⌘ K</span>
         </button>
         <div className="eq-header-actions">

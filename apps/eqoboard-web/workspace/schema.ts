@@ -85,7 +85,14 @@ function exactKeys(
 
 function isText(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.length <= maxLength &&
-    !/[\u0000-\u001f\u007f]/u.test(value);
+    !hasControlCharacters(value);
+}
+
+function hasControlCharacters(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+  });
 }
 
 function parseId(value: unknown, path: string): string | typeof INVALID {

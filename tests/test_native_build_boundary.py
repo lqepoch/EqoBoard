@@ -404,6 +404,7 @@ export const provenance = Object.freeze({
         helpers = (
             REPO_ROOT / "tools" / "native-web-compose-e2e.sh",
             REPO_ROOT / "tools" / "native-web-sbom.sh",
+            REPO_ROOT / "tools" / "native-web-format-proposal.sh",
         )
         for helper in helpers:
             self.assertTrue(helper.is_file(), f"native workflow helper is required: {helper.name}")
@@ -445,6 +446,20 @@ export const provenance = Object.freeze({
         self.assertIn('printf \'Candidate: `%s`\\n\\n\' "$NATIVE_CANDIDATE_SHA"', sbom_helper)
         self.assertIn("SPDX-2.3", sbom_helper)
         self.assertIn("RUNNER_TEMP", sbom_helper)
+
+        format_helper = helpers[2].read_text(encoding="utf-8")
+        self.assertIn('git -C "$repo_root" archive --format=tar "$NATIVE_CANDIDATE_SHA" -- apps/eqoboard-web', format_helper)
+        self.assertIn('biome_bin="$app_dir/node_modules/.bin/biome"', format_helper)
+        self.assertIn('"$biome_bin" format --write .', format_helper)
+        self.assertIn('cd "$archive_app_dir"', format_helper)
+        self.assertIn('git -C "$source_root" diff --cached --binary', format_helper)
+        self.assertIn('proposal_dir="$runner_temp_real/native-format-proposal"', format_helper)
+        self.assertIn('"acceptance": "NOT_ACCEPTANCE"', format_helper)
+        self.assertIn("8388608", format_helper)
+        self.assertIn("patch_sha256", format_helper)
+        self.assertIn("archive_sha256", format_helper)
+        self.assertNotIn("--unsafe", format_helper)
+        self.assertNotIn("lint --write", format_helper)
 
 
 if __name__ == "__main__":

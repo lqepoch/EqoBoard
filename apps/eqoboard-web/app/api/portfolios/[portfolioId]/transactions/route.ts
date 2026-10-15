@@ -2,9 +2,16 @@ import type { NextRequest } from "next/server";
 import { authorizeRequest, noStoreJson, readBoundedJson } from "@/lib/server/bff-security";
 import { getNativeDb, secureNativeDbFilesForRequest } from "@/lib/server/native-db";
 import { ownerKeyForPrincipal } from "@/lib/server/auth";
-import { isEmptyReadRequest, numericPathId, portfolioLimitResponse } from "@/lib/server/portfolio-http";
+import {
+  isEmptyReadRequest,
+  numericPathId,
+  portfolioLimitResponse,
+} from "@/lib/server/portfolio-http";
 import { parsePortfolioTransaction } from "@/lib/server/portfolio-input";
-import { createPortfolioTransaction, listPortfolioTransactions } from "@/lib/server/portfolio-storage";
+import {
+  createPortfolioTransaction,
+  listPortfolioTransactions,
+} from "@/lib/server/portfolio-storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,10 +30,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const db = getNativeDb();
   if (!db) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
   try {
-    const result = listPortfolioTransactions(db, portfolioId, ownerKeyForPrincipal(authorization.principal));
-    if (!secureNativeDbFilesForRequest()) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
+    const result = listPortfolioTransactions(
+      db,
+      portfolioId,
+      ownerKeyForPrincipal(authorization.principal),
+    );
+    if (!secureNativeDbFilesForRequest())
+      return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
     if (result.kind === "not-found") return noStoreJson({ error: "portfolio_not_found" }, 404);
-    if (result.kind === "too-many") return noStoreJson({ error: "transaction_history_limit_exceeded" }, 413);
+    if (result.kind === "too-many")
+      return noStoreJson({ error: "transaction_history_limit_exceeded" }, 413);
     return noStoreJson(result.value);
   } catch {
     return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
@@ -55,10 +68,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       ownerKeyForPrincipal(authorization.principal),
       parsed.value,
     );
-    if (!secureNativeDbFilesForRequest()) return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
+    if (!secureNativeDbFilesForRequest())
+      return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);
     if (result.kind === "not-found") return noStoreJson({ error: "portfolio_not_found" }, 404);
-    if (result.kind === "too-many") return noStoreJson({ error: "transaction_history_limit_exceeded" }, 413);
-    if (result.kind === "conflict") return noStoreJson({ error: "insufficient_position_for_sale" }, 409);
+    if (result.kind === "too-many")
+      return noStoreJson({ error: "transaction_history_limit_exceeded" }, 413);
+    if (result.kind === "conflict")
+      return noStoreJson({ error: "insufficient_position_for_sale" }, 409);
     return noStoreJson(result.value, 201);
   } catch {
     return noStoreJson({ error: "portfolio_storage_unavailable" }, 503);

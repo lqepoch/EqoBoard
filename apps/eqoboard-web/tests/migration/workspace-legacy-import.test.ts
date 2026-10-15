@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { previewLegacyWorkspaceImport } from "../../workspace/legacy-import";
 import type { AnyWidgetRegistration, WidgetRegistry } from "../../widgets/registry/types";
+import { researchWidgetRegistrations } from "../../widgets/research/registrations";
+
+const recapRegistration = researchWidgetRegistrations.find((registration) =>
+  registration.manifest.id === "eqoboard.research.recap",
+);
 
 const quoteRegistration: AnyWidgetRegistration = {
   manifest: {
@@ -41,8 +46,11 @@ const quoteRegistration: AnyWidgetRegistration = {
 };
 
 const registry = {
-  get(id: string) { return id === "market.quote" ? quoteRegistration : undefined; },
-  list() { return [quoteRegistration]; },
+  get(id: string) {
+    if (id === "market.quote") return quoteRegistration;
+    return id === "eqoboard.research.recap" ? recapRegistration : undefined;
+  },
+  list() { return [quoteRegistration, ...(recapRegistration ? [recapRegistration] : [])]; },
   getByShortcut() { return undefined; },
   parseConfig() { return { ok: false as const, code: "unsupported-config-schema" as const }; },
   resolveInstance() { return { status: "unsupported-manifest" as const }; },
@@ -104,6 +112,20 @@ describe("explicit legacy workspace import preview", () => {
     expect(result.value.excludedState).toEqual(["commandOpen", "optionLegs"]);
     expect(JSON.stringify(result.value.document)).not.toMatch(/optionLegs|commandOpen|QQQ260116C/);
     expect(legacyState()).toBe(before);
+  });
+
+  it("maps legacy recap to the registered native renderer", () => {
+    expect(recapRegistration?.manifest.id).toBe("eqoboard.research.recap");
+    const result = previewLegacyWorkspaceImport(legacyState({
+      widgets: [{ id: "w-recap", type: "recap", linked: true }],
+      layout: [{ i: "w-recap", x: 0, y: 0, w: 8, h: 8 }],
+    }), registry);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const instance = result.value.document.workspaces[0]?.tabs[0]?.widgets[0];
+    expect(instance?.manifestId).toBe("eqoboard.research.recap");
+    expect(instance?.config).toEqual({ schemaVersion: 1 });
+    expect(result.value.retainedAsInert).toEqual([]);
   });
 
   it("surfaces layout adjustments caused by native size and 12-column constraints", () => {

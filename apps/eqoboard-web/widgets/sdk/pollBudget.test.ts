@@ -14,6 +14,9 @@ const config: WidgetPollBudgetConfig = {
   minimumIntervalMs: 0,
 };
 
+const widgetInstanceId = (sequence: number): string =>
+  `80e310b0-4a9e-4b0b-b500-${String(sequence).padStart(12, "0")}`;
+
 const pollRequest = (
   instanceId: string,
   lifecycle = createWidgetLifecycleController(),
@@ -45,12 +48,22 @@ describe("widget poll budget", () => {
 
   it("rejects runtime policy values that bypass a parsed manifest ceiling", async () => {
     const budget = createWidgetPollBudget(config);
-    const malformed = pollRequest("instance-bad-policy", undefined, {
+    const operation = vi.fn(async () => "unreachable");
+    const malformed = pollRequest(widgetInstanceId(1), undefined, {
       policy: { mode: "poll", minIntervalMs: 0, maxRequestsPerMinute: 10_000,
         maxConcurrentRequests: 1, whenHidden: "continue" } as WidgetPollRequest["policy"],
     });
-    await expect(budget.run(malformed, async () => "unreachable"))
+    await expect(budget.run(malformed, operation))
       .rejects.toMatchObject({ code: "request-failed" });
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-UUID widget instance identities before dispatch", async () => {
+    const budget = createWidgetPollBudget(config);
+    const operation = vi.fn(async () => "unreachable");
+    await expect(budget.run(pollRequest("instance-invalid"), operation))
+      .rejects.toMatchObject({ code: "request-failed" });
+    expect(operation).not.toHaveBeenCalled();
   });
 
   it("rejects data inputs with accessors without invoking them", async () => {
@@ -63,7 +76,9 @@ describe("widget poll budget", () => {
         throw new Error("must not run");
       },
     });
-    await expect(budget.run(pollRequest("instance-accessor", undefined, { input }), async () => "unreachable"))
+    await expect(
+      budget.run(pollRequest(widgetInstanceId(2), undefined, { input }), async () => "unreachable"),
+    )
       .rejects.toMatchObject({ code: "request-failed" });
     expect(called).toBe(false);
   });
@@ -73,7 +88,7 @@ describe("widget poll budget", () => {
     let resolve: (value: string) => void = () => undefined;
     const deferred = new Promise<string>((done) => { resolve = done; });
     const operation = vi.fn(() => deferred);
-    const request = pollRequest("instance-a");
+    const request = pollRequest(widgetInstanceId(3));
 
     const first = budget.run(request, operation);
     const duplicate = budget.run(request, operation);
@@ -87,7 +102,7 @@ describe("widget poll budget", () => {
     const budget = createWidgetPollBudget({ ...config, maxRequestsPerMinutePerUser: 1 });
     const pending: Array<(value: string) => void> = [];
     const operation = vi.fn(() => new Promise<string>((resolve) => pending.push(resolve)));
-    const request = pollRequest("instance-shared");
+    const request = pollRequest(widgetInstanceId(4));
     const first = budget.run(request, operation);
     const second = budget.run({ ...request, scopeKey: "opaque-user-partition-b" }, operation);
     await Promise.resolve();
@@ -105,14 +120,21 @@ describe("widget poll budget", () => {
 
   it("pauses hidden widgets and enforces a per-instance ceiling", async () => {
     const budget = createWidgetPollBudget(config);
-    await expect(budget.run(pollRequest("instance-hidden", undefined, { hidden: true }), async () => "x"))
+    await expect(
+      budget.run(pollRequest(widgetInstanceId(5), undefined, { hidden: true }), async () => "x"),
+    )
       .rejects.toMatchObject({ code: "hidden" });
 
     let resolve: (value: string) => void = () => undefined;
     const pending = new Promise<string>((done) => { resolve = done; });
-    const first = budget.run(pollRequest("instance-a"), () => pending);
+    const first = budget.run(pollRequest(widgetInstanceId(6)), () => pending);
     await Promise.resolve();
-    await expect(budget.run(pollRequest("instance-a", undefined, { input: { symbols: ["QQQ"] } }), async () => "x"))
+    await expect(
+      budget.run(
+        pollRequest(widgetInstanceId(6), undefined, { input: { symbols: ["QQQ"] } }),
+        async () => "x",
+      ),
+    )
       .rejects.toMatchObject({ code: "concurrency-limited" });
     resolve("done");
     await first;
@@ -123,15 +145,15 @@ describe("widget poll budget", () => {
     const lifecycle = createWidgetLifecycleController();
     let resolve: (value: string) => void = () => undefined;
     const pending = new Promise<string>((done) => { resolve = done; });
-    const result = budget.run(pollRequest("instance-a", lifecycle), () => pending);
+    const result = budget.run(pollRequest(widgetInstanceId(7), lifecycle), () => pending);
     await Promise.resolve();
     lifecycle.suspend();
     await expect(result).rejects.toMatchObject({ code: "cancelled" });
     resolve("late");
 
     const limiter = createWidgetPollBudget({ ...config, maxRequestsPerMinutePerWidget: 1 }, () => 1000);
-    await limiter.run(pollRequest("instance-rate"), async () => "first");
-    await expect(limiter.run(pollRequest("instance-rate"), async () => "second"))
+    await limiter.run(pollRequest(widgetInstanceId(8)), async () => "first");
+    await expect(limiter.run(pollRequest(widgetInstanceId(8)), async () => "second"))
       .rejects.toMatchObject({ code: "rate-limited" });
     expect(new WidgetDataReadError("rate-limited", 70_000).retryAfterMs).toBe(70_000);
   });

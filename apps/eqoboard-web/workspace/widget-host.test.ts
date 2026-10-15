@@ -13,7 +13,7 @@ type WorkspaceHostTestOperations = {
 
 type WorkspaceHostTestActions = WidgetActionMap & {
   "research.ai": { input: Readonly<{ prompt: string }>; output: string };
-  "portfolio.delete": { input: Readonly<{ portfolioId: number }>; output: void };
+  "portfolio.delete": { input: Readonly<{ portfolioId: number }>; output: undefined };
 };
 
 describe("workspace per-widget host join", () => {
@@ -30,7 +30,10 @@ describe("workspace per-widget host join", () => {
       refresh: { observe: refreshDispatch },
       market: { getSnapshot: () => "snapshot", subscribe: () => () => undefined },
       reportError: () => undefined,
-    } as unknown as Omit<WidgetHostContext<WorkspaceHostTestOperations, WorkspaceHostTestActions, string>, "lifecycle">;
+    } as unknown as Omit<
+      WidgetHostContext<WorkspaceHostTestOperations, WorkspaceHostTestActions, string>,
+      "lifecycle"
+    >;
     const registrationCapabilities = {
       allowedReadOperations: ["allowed.read"] as const,
       allowedActions: ["research.ai"] as const,
@@ -42,34 +45,44 @@ describe("workspace per-widget host join", () => {
     );
     const signal = new AbortController().signal;
 
-    await expect(host.data.read("allowed.read", { symbol: "SPY" }, { signal })).resolves.toBe("allowed.read");
-    await expect(host.actions.invoke("research.ai", { prompt: "summary" }, { signal })).resolves.toBe("research.ai");
+    await expect(host.data.read("allowed.read", { symbol: "SPY" }, { signal })).resolves.toBe(
+      "allowed.read",
+    );
+    await expect(
+      host.actions.invoke("research.ai", { prompt: "summary" }, { signal }),
+    ).resolves.toBe("research.ai");
     expect(readDispatch).toHaveBeenCalledTimes(1);
     expect(actionDispatch).toHaveBeenCalledTimes(1);
 
-    await expect((host.data.read as unknown as (
-      id: string,
-      input: unknown,
-      options: Readonly<{ signal: AbortSignal }>,
-    ) => Promise<unknown>)("denied.read", {}, { signal })).rejects.toMatchObject({ code: "request-failed" });
-    await expect((host.actions.invoke as unknown as (
-      id: string,
-      input: unknown,
-      options: Readonly<{ signal: AbortSignal }>,
-    ) => Promise<unknown>)("portfolio.delete", { portfolioId: 7 }, { signal }))
-      .rejects.toMatchObject({ code: "request-failed" });
+    await expect(
+      (
+        host.data.read as unknown as (
+          id: string,
+          input: unknown,
+          options: Readonly<{ signal: AbortSignal }>,
+        ) => Promise<unknown>
+      )("denied.read", {}, { signal }),
+    ).rejects.toMatchObject({ code: "request-failed" });
+    await expect(
+      (
+        host.actions.invoke as unknown as (
+          id: string,
+          input: unknown,
+          options: Readonly<{ signal: AbortSignal }>,
+        ) => Promise<unknown>
+      )("portfolio.delete", { portfolioId: 7 }, { signal }),
+    ).rejects.toMatchObject({ code: "request-failed" });
 
     let deniedRefresh: WidgetScheduledReadState<string> | undefined;
-    (host.refresh as unknown as WidgetHostContext<
-      WorkspaceHostTestOperations,
-      WorkspaceHostTestActions,
-      string
-    >["refresh"]).observe(
-      "denied.read",
-      {},
-      { refreshIntervalMs: 1_000 },
-      (state) => { deniedRefresh = state; },
-    );
+    (
+      host.refresh as unknown as WidgetHostContext<
+        WorkspaceHostTestOperations,
+        WorkspaceHostTestActions,
+        string
+      >["refresh"]
+    ).observe("denied.read", {}, { refreshIntervalMs: 1_000 }, (state) => {
+      deniedRefresh = state;
+    });
     expect(deniedRefresh).toEqual({ status: "error", code: "request-failed" });
     expect(readDispatch).toHaveBeenCalledTimes(1);
     expect(actionDispatch).toHaveBeenCalledTimes(1);

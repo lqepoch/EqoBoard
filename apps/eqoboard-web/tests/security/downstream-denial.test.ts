@@ -82,14 +82,17 @@ describe("protected native route dispatch boundary", () => {
     downstreamFetch.mockImplementation(async () => {
       throw new Error("protected route attempted downstream network access after missing permission");
     });
-    const forbidden = { ok: false as const, response: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
-    authMocks.authorizeRequest.mockResolvedValue(forbidden);
-    authMocks.authorizeGatewayRequest.mockResolvedValue(forbidden);
-    authMocks.signGatewayDelegation.mockResolvedValue(forbidden);
-    authMocks.signMdpMarketReadDelegation.mockResolvedValue(forbidden);
-    authMocks.signMdpResearchReadDelegation.mockResolvedValue(forbidden);
-    authMocks.signEngineOfflineReadDelegation.mockResolvedValue(forbidden);
-    authMocks.signQuantPredictionReadDelegation.mockResolvedValue(forbidden);
+    const forbidden = () => ({
+      ok: false as const,
+      response: NextResponse.json({ error: "forbidden" }, { status: 403 }),
+    });
+    authMocks.authorizeRequest.mockImplementation(forbidden);
+    authMocks.authorizeGatewayRequest.mockImplementation(forbidden);
+    authMocks.signGatewayDelegation.mockImplementation(forbidden);
+    authMocks.signMdpMarketReadDelegation.mockImplementation(forbidden);
+    authMocks.signMdpResearchReadDelegation.mockImplementation(forbidden);
+    authMocks.signEngineOfflineReadDelegation.mockImplementation(forbidden);
+    authMocks.signQuantPredictionReadDelegation.mockImplementation(forbidden);
   });
 
   afterEach(() => {
@@ -132,10 +135,10 @@ describe("protected native route dispatch boundary", () => {
 
   it("denies a Research Yahoo request before MDP dispatch when research:read is missing", async () => {
     researchRuntime();
-    authMocks.authorizeRequest.mockResolvedValue({
+    authMocks.authorizeRequest.mockImplementation(async () => ({
       ok: false,
       response: NextResponse.json({ error: "forbidden" }, { status: 403 }),
-    });
+    }));
 
     await expectDenied(await getYfinanceDaily(nextRequest(
       "/api/research/yfinance/daily?symbols=SPY&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00.000Z&end_utc=2026-01-02T00%3A00%3A00.000Z&adjustment=adjusted",
@@ -157,10 +160,10 @@ describe("protected native route dispatch boundary", () => {
         sessionExpiresAt: Date.now() + 60_000,
       },
     });
-    authMocks.signMdpResearchReadDelegation.mockResolvedValue({
+    authMocks.signMdpResearchReadDelegation.mockImplementation(async () => ({
       ok: false,
       response: NextResponse.json({ error: "identity_unavailable" }, { status: 503 }),
-    });
+    }));
 
     const response = await getYfinanceDaily(nextRequest(
       "/api/research/yfinance/daily?symbols=SPY&asset_class=stock&start_utc=2026-01-01T00%3A00%3A00.000Z&end_utc=2026-01-02T00%3A00%3A00.000Z&adjustment=adjusted",

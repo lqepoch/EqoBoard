@@ -1,6 +1,39 @@
 import { describe, expect, it } from "vitest";
 
 import { buildNativeActionRequest, buildNativeReadRequest } from "./operations";
+import { isNativeReadAllowedInRuntime } from "./runtime-policy";
+
+describe("fixed recap and symbol-search read operations", () => {
+  it("compiles only the fixed same-origin routes and keeps the recap permission conjunction", () => {
+    expect(buildNativeReadRequest("research.recap", {})).toEqual({
+      method: "GET",
+      path: "/api/research/data/recap",
+      permission: ["research:read", "market:read"],
+    });
+    expect(buildNativeReadRequest("research.symbolSearch", { query: "NVDA earnings" })).toEqual({
+      method: "GET",
+      path: "/api/research/data/symbol-search?query=NVDA+earnings",
+      permission: "research:read",
+    });
+    const searchRequest = buildNativeReadRequest("research.symbolSearch", { query: "AAPL" });
+    expect(searchRequest?.path).toBe("/api/research/data/symbol-search?query=AAPL");
+    expect(searchRequest?.path).not.toContain("limit");
+    expect(buildNativeReadRequest("research.symbolSearch", { query: "AAPL", limit: 20 })).toBeNull();
+  });
+
+  it("rejects empty, untrimmed, overlong, and control-character search terms", () => {
+    for (const query of ["", "   ", " AAPL", "AAPL ", "x".repeat(65), "AAPL\nNVDA"]) {
+      expect(buildNativeReadRequest("research.symbolSearch", { query })).toBeNull();
+    }
+  });
+
+  it("keeps both new operations terminal-only", () => {
+    for (const operationId of ["research.recap", "research.symbolSearch"] as const) {
+      expect(isNativeReadAllowedInRuntime(operationId, "terminal")).toBe(true);
+      expect(isNativeReadAllowedInRuntime(operationId, "research")).toBe(false);
+    }
+  });
+});
 
 describe("diagnostic archive request compiler", () => {
   it("accepts dataset IDs and symbols within the fixed BFF route grammar", () => {

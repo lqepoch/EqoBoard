@@ -36,7 +36,7 @@ function fakeChart() {
 
 describe("Lightweight Charts controller", () => {
   it("rebuilds visual series for settings, reapplies loaded data, and releases owned resources once", () => {
-    const { chart, removedSeries } = fakeChart();
+    const { chart, removedSeries, timeScale } = fakeChart();
     const createChart = vi.fn(() => chart as unknown as IChartApi);
     const disconnect = vi.fn();
     const observe = vi.fn();

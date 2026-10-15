@@ -34,11 +34,18 @@ const CONFIG_SCHEMA_ID = /^[a-z][a-z0-9.-]*\.v[1-9]\d*$/u;
 const RENDERER_ID = /^[a-z][a-z0-9.-]{1,95}$/u;
 const PROVENANCE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/u;
 const INSTANCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const CONTROL = /[\u0000-\u001f\u007f]/u;
 const CATEGORIES = new Set<WidgetCategory>(["market", "research", "portfolio", "utility"]);
 const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 type IssueCollector = { issues: WidgetValidationIssue[] };
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
 
 function issue(
   collector: IssueCollector,
@@ -119,7 +126,7 @@ function exactKeys(
 
 function text(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= maxLength &&
-    value === value.trim() && !CONTROL.test(value);
+    value === value.trim() && !hasControlCharacters(value);
 }
 
 function finiteInteger(value: unknown, min: number, max: number): value is number {
@@ -149,7 +156,7 @@ function parseJsonValue(
     return INVALID;
   }
   if (typeof value === "string") {
-    if (value.length <= WIDGET_SCHEMA_LIMITS.maxTextLength && !CONTROL.test(value)) return value;
+    if (value.length <= WIDGET_SCHEMA_LIMITS.maxTextLength && !hasControlCharacters(value)) return value;
     issue(collector, "too-large", path, "Text value is too long or contains control characters.");
     return INVALID;
   }
@@ -181,7 +188,7 @@ function parseJsonValue(
   const parsed: Record<string, WidgetJsonValueV1> = Object.create(null) as Record<string, WidgetJsonValueV1>;
   let valid = true;
   for (const key of keys) {
-    if (FORBIDDEN_KEYS.has(key) || key.length > 128 || CONTROL.test(key)) {
+    if (FORBIDDEN_KEYS.has(key) || key.length > 128 || hasControlCharacters(key)) {
       issue(collector, "invalid-shape", `${path}.*`, "Configuration contains an invalid field name.");
       valid = false;
       continue;
@@ -339,7 +346,7 @@ function parseManifest(input: unknown, collector: IssueCollector): WidgetManifes
     issue(collector, "invalid-value", "$.title", "Expected a non-empty bounded title.");
     valid = false;
   }
-  if (typeof value.description !== "string" || value.description.length > 280 || CONTROL.test(value.description)) {
+  if (typeof value.description !== "string" || value.description.length > 280 || hasControlCharacters(value.description)) {
     issue(collector, "invalid-value", "$.description", "Description exceeds its bounded text limit.");
     valid = false;
   }

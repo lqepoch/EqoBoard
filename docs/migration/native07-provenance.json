@@ -81,6 +81,29 @@
       "changes": "Retains fixed TradingView security scans and existing Gateway SIP snapshot join semantics; separates metadata and market prices, preserves per-field source/time evidence, and reports coverage/truncation."
     },
     {
+      "nativePath": "apps/eqoboard-web/lib/server/research/symbol-search.ts",
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/tradingview.ts", "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+      "relationship": "bounded-provider-behavior-adaptation",
+      "changes": "Uses a fixed TradingView symbol-search host and bounded metadata projection; normalizes listing symbols for workspace selection while preserving the provider symbol. No quote fields or SIP authority are added."
+    },
+    {
+      "nativePath": "apps/eqoboard-web/lib/server/research/recap.ts",
+      "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceFiles": [
+        { "path": "apps/openterminal/server/src/providers/fred.ts", "sha256": "38076119c097f224668f87bfae9a87d51cfa677c752dce172a044d2dc66460a2" },
+        { "path": "apps/openterminal/server/src/providers/ecb.ts", "sha256": "ba39dfa64a7484aadaae77424760c9637677d321738b3079c3ce8677e01151cb" },
+        { "path": "apps/openterminal/server/src/providers/tradingview.ts", "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3" },
+        { "path": "apps/openterminal/server/src/providers/news.ts", "sha256": "5fbcf5cdf924935dbd16acd8e874f51beb391741346f3af9ebb548ef7365c616" }
+      ],
+      "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+      "relationship": "first-party-composition-of-audited-provider-adapters",
+      "changes": "New EqoBoard composition of already audited provider adapters and the existing Rust Gateway snapshot helper; no upstream recap implementation is copied. Each field retains its source and as-of, source coverage stays partial, and no narrative or missing-value fallback is synthesized."
+    },
+    {
       "nativePath": "apps/eqoboard-web/lib/server/research/crypto.ts",
       "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
       "sourceFiles": [
@@ -110,6 +133,9 @@
     "apps/eqoboard-web/features/research/predictions.ts",
     "apps/eqoboard-web/features/research/query-config.ts",
     "apps/eqoboard-web/features/research/yfinance.ts",
+    "apps/eqoboard-web/features/research/treemap.ts",
+    "apps/eqoboard-web/lib/server/research/recap.test.ts",
+    "apps/eqoboard-web/lib/server/research/symbol-search.test.ts",
     "apps/eqoboard-web/widgets/research/"
   ],
   "notes": [

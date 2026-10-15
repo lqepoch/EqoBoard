@@ -8,12 +8,15 @@ export function GET() {
   const identityConfigured = isOidcConfigured();
   const runtime = nativeRuntimeReadiness();
   const ready = identityConfigured && runtime.ready;
-  return noStoreJson({
-    status: ready ? "ready" : "unavailable",
-    identity_configured: identityConfigured,
-    runtime_mode: runtime.mode ?? "unknown",
-    runtime_profile_isolated: runtime.profileIsolated,
-    market_data: "not_checked",
-    execution: "disabled",
-  }, ready ? 200 : 503);
+  return noStoreJson(
+    {
+      status: ready ? "ready" : "unavailable",
+      identity_configured: identityConfigured,
+      runtime_mode: runtime.mode ?? "unknown",
+      runtime_profile_isolated: runtime.profileIsolated,
+      market_data: "not_checked",
+      execution: "disabled",
+    },
+    ready ? 200 : 503,
+  );
 }

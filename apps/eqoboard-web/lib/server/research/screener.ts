@@ -338,7 +338,10 @@ export function filterMarketData(data: ResearchMarketData, input: ScreenerInput)
 
 export function toHeatmap(data: ResearchMarketData): ResearchMarketData {
   const sorted = [...data.rows]
-    .filter((row) => (data.market === "eu" ? row.marketCapEur : row.marketCap) !== null)
+    .filter((row) => {
+      const value = data.market === "eu" ? row.marketCapEur : row.marketCap;
+      return typeof value === "number" && Number.isFinite(value) && value > 0;
+    })
     .sort((left, right) => {
       const a = data.market === "eu" ? left.marketCapEur! : left.marketCap!;
       const b = data.market === "eu" ? right.marketCapEur! : right.marketCap!;

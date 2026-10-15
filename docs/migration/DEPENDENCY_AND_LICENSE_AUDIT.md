@@ -27,7 +27,7 @@ The local audit captured the Workspace archive SHA-256 as `4171aa8984c7c63e17123
 
 ## Dependency decision
 
-The native app uses the repository's existing React/TypeScript stack, fixed native contracts, and MIT `fast-xml-parser@5.7.0` dependency. No OpenBB Workspace, ODP V4/V5 SDK, proprietary chart/grid package, or provider SDK is introduced by the research migration. Root owns shared dependency manifests, lockfiles, CI and container configuration.
+The native app uses the repository's existing React/TypeScript stack, fixed native contracts, MIT `fast-xml-parser@5.7.0` dependency, and already-pinned D3 `7.9.0` for market-cap treemap geometry. No package is added for the recap, symbol search, or treemap implementation. No OpenBB Workspace, ODP V4/V5 SDK, proprietary chart/grid package, or provider SDK is introduced by the research migration. Root owns shared dependency manifests, lockfiles, CI and container configuration.
 
 ## Evidence references
 

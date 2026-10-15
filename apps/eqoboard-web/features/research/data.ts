@@ -5,6 +5,8 @@ import type { CryptoGlobalData, CryptoMarketRow } from "@/lib/server/research/cr
 import type { InsiderTransaction } from "@/lib/server/research/insider";
 import type { ResearchNewsItem } from "@/lib/server/research/news";
 import type { ResearchMarketData, ResearchMarketRow } from "@/lib/server/research/screener";
+import type { ResearchRecapData } from "@/lib/server/research/recap";
+import type { ResearchSymbolSearchResult } from "@/lib/server/research/symbol-search";
 import type { ResearchEnvelope, ResearchOperationName } from "@/lib/server/research/types";
 import type { WidgetDataClient } from "@/widgets/sdk/data";
 
@@ -17,6 +19,8 @@ export type ResearchEnvelopeByOperation = {
   "research.insider": ResearchEnvelope<readonly InsiderTransaction[]>;
   "research.screener": ResearchEnvelope<ResearchMarketData>;
   "research.heatmap": ResearchEnvelope<ResearchMarketData>;
+  "research.recap": ResearchEnvelope<ResearchRecapData>;
+  "research.symbolSearch": ResearchEnvelope<readonly ResearchSymbolSearchResult[]>;
   "research.crypto": ResearchEnvelope<readonly CryptoMarketRow[]>;
   "research.cryptoGlobal": ResearchEnvelope<CryptoGlobalData>;
 };
@@ -32,6 +36,8 @@ export type ResearchReadRequest = {
 }[keyof ResearchEnvelopeByOperation];
 
 export type ResearchReadOperation = ResearchReadRequest["operation"];
+export type { ResearchSymbolSearchResult } from "@/lib/server/research/symbol-search";
+export type { ResearchRecapData } from "@/lib/server/research/recap";
 export type ResearchDisplayRow = Readonly<Record<string, unknown>>;
 export type ResearchTableProjection = Readonly<{
   columns: readonly Readonly<{ key: string; label: string }> [];
@@ -50,6 +56,11 @@ function record(value: unknown): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const found = Object.keys(value);
+  return found.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
 
 function string(value: unknown, max = 2048): value is string {
@@ -185,6 +196,62 @@ function acceptsMarketData(value: unknown): value is ResearchMarketData {
     Number(coverage.timed) <= Number(coverage.requested);
 }
 
+function acceptsRecapObservation(value: unknown): boolean {
+  const row = record(value);
+  return Boolean(row && exactKeys(row, ["value", "source", "asOf"]) && finiteOrNull(row.value) &&
+    nullableString(row.source, 160) && nullableDate(row.asOf));
+}
+
+function acceptsRecapData(value: unknown): value is ResearchRecapData {
+  const data = record(value);
+  const volatility = data ? record(data.volatility) : null;
+  const coverage = data ? record(data.coverage) : null;
+  const market = coverage ? record(coverage.marketMetadata) : null;
+  const sip = coverage ? record(coverage.sipSnapshots) : null;
+  const macro = coverage ? record(coverage.macro) : null;
+  const headlines = coverage ? record(coverage.headlines) : null;
+  if (!data || !exactKeys(data, ["indexes", "volatility", "gainers", "losers", "sectors", "headlines", "coverage"]) ||
+      !volatility || !exactKeys(volatility, ["vix"]) || !acceptsRecapObservation(volatility.vix) ||
+      !coverage || !market || !sip || !macro || !headlines ||
+      !exactKeys(market, ["status", "returned", "sampled", "sampleLimit", "truncated", "source", "asOf"]) ||
+      !["available", "unavailable"].includes(String(market.status)) ||
+      ![market.returned, market.sampled, market.sampleLimit].every((item) => Number.isSafeInteger(item) && Number(item) >= 0) ||
+      typeof market.truncated !== "boolean" || !nullableString(market.source, 160) || market.asOf !== null ||
+      !exactKeys(sip, ["status", "requested", "snapshots", "marketRequested", "priced", "timed", "complete", "source", "asOf"]) ||
+      !["available", "partial", "unavailable"].includes(String(sip.status)) ||
+      ![sip.requested, sip.snapshots, sip.marketRequested, sip.priced, sip.timed].every((item) => Number.isSafeInteger(item) && Number(item) >= 0) ||
+      typeof sip.complete !== "boolean" || !nullableString(sip.source, 160) || sip.asOf !== null ||
+      !exactKeys(macro, ["status", "source", "asOf"]) || !["available", "partial", "unavailable"].includes(String(macro.status)) ||
+      !nullableString(macro.source, 160) || macro.asOf !== null ||
+      !exactKeys(headlines, ["status", "returned", "source", "asOf"]) || !["available", "partial", "unavailable"].includes(String(headlines.status)) ||
+      !Number.isSafeInteger(headlines.returned) || Number(headlines.returned) < 0 || !nullableString(headlines.source, 160) || headlines.asOf !== null) return false;
+
+  if (!rows(data.indexes, 16, (row) => exactKeys(row, ["symbol", "label", "price", "changePercent"]) &&
+      string(row.symbol, 16) && /^[A-Z0-9.-]{1,16}$/u.test(row.symbol) && string(row.label, 96) &&
+      acceptsRecapObservation(row.price) && acceptsRecapObservation(row.changePercent))) return false;
+  if (!rows(data.gainers, 5, (row) => exactKeys(row, ["symbol", "name", "sector", "price", "changePercent", "marketCap"]) &&
+      string(row.symbol, 24) && /^[A-Z0-9.-]{1,24}$/u.test(row.symbol) && string(row.name, 160) && string(row.sector, 96) &&
+      acceptsRecapObservation(row.price) && acceptsRecapObservation(row.changePercent) && acceptsRecapObservation(row.marketCap))) return false;
+  if (!rows(data.losers, 5, (row) => exactKeys(row, ["symbol", "name", "sector", "price", "changePercent", "marketCap"]) &&
+      string(row.symbol, 24) && /^[A-Z0-9.-]{1,24}$/u.test(row.symbol) && string(row.name, 160) && string(row.sector, 96) &&
+      acceptsRecapObservation(row.price) && acceptsRecapObservation(row.changePercent) && acceptsRecapObservation(row.marketCap))) return false;
+  if (!rows(data.sectors, 6, (row) => {
+    const range = record(row.sourceTimeRange);
+    return exactKeys(row, ["sector", "averageChangePercent", "sampleCount", "sourceTimeRange"]) && string(row.sector, 96) &&
+      acceptsRecapObservation(row.averageChangePercent) && Number.isSafeInteger(row.sampleCount) && Number(row.sampleCount) > 0 &&
+      Boolean(range && exactKeys(range, ["earliest", "latest"]) && nullableDate(range.earliest) && nullableDate(range.latest));
+  })) return false;
+  return rows(data.headlines, 6, acceptsNews);
+}
+
+function acceptsSymbolSearchResult(row: Record<string, unknown>): boolean {
+  return exactKeys(row, ["symbol", "providerSymbol", "name", "exchange", "type", "provider", "asOf"]) &&
+    string(row.symbol, 24) && /^[A-Z0-9.-]{1,24}$/u.test(row.symbol) &&
+    string(row.providerSymbol, 16) && /^[A-Z0-9.-]{1,16}$/u.test(row.providerSymbol) &&
+    string(row.name, 160) && string(row.exchange, 64) &&
+    ["stock", "fund", "dr"].includes(String(row.type)) && row.provider === "TradingView symbol search" && row.asOf === null;
+}
+
 function acceptsCryptoMarketRow(row: Record<string, unknown>): boolean {
   return string(row.id, 80) && string(row.symbol, 16) && string(row.name, 96) && finiteOrNull(row.price) &&
     finiteOrNull(row.changePercent24h) && finiteOrNull(row.marketCap) && finiteOrNull(row.volume24h) &&
@@ -202,6 +269,8 @@ function acceptsData(operation: ResearchOperationName, data: unknown): boolean {
     case "insider": return rows(data, 200, acceptsInsider);
     case "screener":
     case "heatmap": return acceptsMarketData(data);
+    case "recap": return acceptsRecapData(data);
+    case "symbol-search": return rows(data, 20, acceptsSymbolSearchResult);
     case "crypto": return rows(data, 50, acceptsCryptoMarketRow);
     case "crypto-global": {
       const value = record(data);
@@ -219,6 +288,8 @@ const OPERATION_NAMES: Readonly<Record<ResearchReadOperation, ResearchOperationN
   "research.insider": "insider",
   "research.screener": "screener",
   "research.heatmap": "heatmap",
+  "research.recap": "recap",
+  "research.symbolSearch": "symbol-search",
   "research.crypto": "crypto",
   "research.cryptoGlobal": "crypto-global",
 });
@@ -275,6 +346,22 @@ export function parseResearchEnvelope<Operation extends ResearchReadOperation>(
   }) as ResearchEnvelopeByOperation[Operation];
 }
 
+/** Strict decoder for the additive market recap envelope. */
+export function parseRecapEnvelope(input: unknown): ResearchEnvelope<ResearchRecapData> | null {
+  return parseResearchEnvelope("research.recap", input);
+}
+
+/** Strict decoder for provider metadata-only symbol search; never a quote contract. */
+export function parseSymbolSearchEnvelope(input: unknown): ResearchEnvelope<readonly ResearchSymbolSearchResult[]> | null {
+  const envelope = parseResearchEnvelope("research.symbolSearch", input);
+  if (!envelope || envelope.asOf !== null ||
+      envelope.source.provider !== "TradingView symbol search" ||
+      envelope.source.providerUrl !== "https://www.tradingview.com/" ||
+      envelope.source.sourcePath !== "apps/openterminal/server/src/providers/tradingview.ts" ||
+      envelope.source.license !== null) return null;
+  return envelope;
+}
+
 /** Invoke only the fixed, same-origin read operations declared in the native host map. */
 export function readResearchRequest(
   data: WidgetDataClient<ResearchDataOperationMap>,
@@ -290,6 +377,8 @@ export function readResearchRequest(
     case "research.insider": return data.read(request.operation, request.input, { signal });
     case "research.screener": return data.read(request.operation, request.input, { signal });
     case "research.heatmap": return data.read(request.operation, request.input, { signal });
+    case "research.recap": return data.read(request.operation, request.input, { signal });
+    case "research.symbolSearch": return data.read(request.operation, request.input, { signal });
     case "research.crypto": return data.read(request.operation, request.input, { signal });
     case "research.cryptoGlobal": return data.read(request.operation, request.input, { signal });
   }
@@ -344,6 +433,10 @@ export function projectResearchTable(operation: ResearchReadOperation, envelope:
       const rowsWithCoverage = marketData.rows.map((row: ResearchMarketRow) => ({ ...row }));
       return makeTable(["symbol", "name", "sector", "exchange", "price", "changePercent", "volume", "priceSource", "priceAsOf", "marketCap", "marketCapEur", "marketCapCurrency", "marketCapSource"], rowsWithCoverage);
     }
+    case "research.recap":
+      return makeTable([], []);
+    case "research.symbolSearch":
+      return makeTable(["symbol", "providerSymbol", "name", "exchange", "type", "provider", "asOf"], data as readonly ResearchSymbolSearchResult[]);
     case "research.crypto":
       return makeTable(["symbol", "name", "price", "changePercent24h", "marketCap", "volume24h", "rank", "asOf", "provider"], (data as readonly CryptoMarketRow[]).map((row) => ({ ...row, provider: envelope.source.provider })));
     case "research.cryptoGlobal":

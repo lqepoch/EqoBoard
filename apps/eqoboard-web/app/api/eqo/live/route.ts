@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextResponse, NextRequest } from "next/server";
 import { authorizeRequest, noStoreJson, signGatewayDelegation } from "@/lib/server/bff-security";
 import { gatewayUrl } from "@/lib/server/gateway";
 import { consumePrincipalRateLimit, consumeServiceRateLimit } from "@/lib/server/rate-limit";
@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
 const CONNECT_DEADLINE_MS = 5_000;
 
 function invalidRequest(request: Request): boolean {
-  if (new URL(request.url).search || request.headers.has("content-encoding") || request.headers.has("transfer-encoding")) return true;
+  if (
+    new URL(request.url).search ||
+    request.headers.has("content-encoding") ||
+    request.headers.has("transfer-encoding")
+  )
+    return true;
   if (request.body !== null) {
     void request.body.cancel().catch(() => undefined);
     return true;
@@ -27,7 +32,9 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (!authorization.ok) return authorization.response;
   if (invalidRequest(request)) return errorResponse("invalid_request", 400);
   const perPrincipal = consumePrincipalRateLimit(authorization.principal, {
-    bucket: "market:live:connect", maxRequests: 20, windowMs: 60_000,
+    bucket: "market:live:connect",
+    maxRequests: 20,
+    windowMs: 60_000,
   });
   const service = consumeServiceRateLimit("market:live:connect", 600, 60_000);
   if (!perPrincipal.allowed || !service.allowed) {
@@ -85,12 +92,18 @@ export async function GET(request: NextRequest): Promise<Response> {
       cleanup();
       return errorResponse("gateway_redirect_rejected", 502);
     }
-    const contentType = upstream.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+    const contentType = upstream.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
     if (upstream.status !== 200 || contentType !== "text/event-stream" || !upstream.body) {
       await upstream.body?.cancel().catch(() => undefined);
       cleanup();
-      return errorResponse(upstream.status >= 500 ? "market_stream_unavailable" : "invalid_market_stream_response",
-        upstream.status >= 500 ? 503 : 502);
+      return errorResponse(
+        upstream.status >= 500 ? "market_stream_unavailable" : "invalid_market_stream_response",
+        upstream.status >= 500 ? 503 : 502,
+      );
     }
 
     const expiresAt = Math.min(authorization.principal.sessionExpiresAt, delegation.expiresAt);
@@ -100,7 +113,10 @@ export async function GET(request: NextRequest): Promise<Response> {
       cleanup();
       return errorResponse("unauthenticated", 401);
     }
-    authorizationTimer = setTimeout(() => controller.abort(new Error("authorization_expired")), remainingMs);
+    authorizationTimer = setTimeout(
+      () => controller.abort(new Error("authorization_expired")),
+      remainingMs,
+    );
 
     const reader = upstream.body.getReader();
     const authorizedStream = new ReadableStream<Uint8Array>({
@@ -135,7 +151,10 @@ export async function GET(request: NextRequest): Promise<Response> {
     });
   } catch {
     cleanup();
-    return errorResponse(connectTimedOut ? "gateway_timeout" : "market_stream_unavailable", connectTimedOut ? 504 : 503);
+    return errorResponse(
+      connectTimedOut ? "gateway_timeout" : "market_stream_unavailable",
+      connectTimedOut ? 504 : 503,
+    );
   }
 }
 

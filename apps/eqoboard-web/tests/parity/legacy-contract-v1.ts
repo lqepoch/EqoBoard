@@ -67,6 +67,7 @@ export const LEGACY_NATIVE_WIDGET_BINDINGS = [
   { legacyType: "ai", manifestId: "eqoboard.research.ai-assistant" },
   { legacyType: "calendar", manifestId: "eqoboard.research.economic-calendar" },
   { legacyType: "insider", manifestId: "eqoboard.research.insider" },
+  { legacyType: "recap", manifestId: "eqoboard.research.recap" },
   { legacyType: "researchpredictions", manifestId: "eqoboard.research.registered-predictions" },
   { legacyType: "enginepreview", manifestId: "eqoboard.research.engine-offline-preview" },
 ] as const;
@@ -74,7 +75,6 @@ export const LEGACY_NATIVE_WIDGET_BINDINGS = [
 /** Explicit V1 gaps; these kinds stay inert rather than resolving arbitrary code. */
 export const LEGACY_WIDGETS_RETAINED_INERT = [
   "tv",
-  "recap",
 ] as const;
 
 export const LEGACY_PRO_PANELS = [

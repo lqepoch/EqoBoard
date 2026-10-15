@@ -1,16 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest, NextResponse } from "next/server";
 import { noStoreJson } from "@/lib/server/bff-security";
-import { postGatewayJson, hasExactKeys, isRecord, TICKER_PATTERN, UUID_PATTERN } from "@/lib/server/market-routes";
+import {
+  postGatewayJson,
+  hasExactKeys,
+  isRecord,
+  TICKER_PATTERN,
+  UUID_PATTERN,
+} from "@/lib/server/market-routes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function parseBody(value: unknown): Readonly<{ ok: true; body: unknown }> | Readonly<{ ok: false; error: string }> {
-  if (!isRecord(value) || !hasExactKeys(value, ["consumer_id", "symbols"]) ||
-      typeof value.consumer_id !== "string" || !UUID_PATTERN.test(value.consumer_id) ||
-      !Array.isArray(value.symbols) || value.symbols.length < 1 || value.symbols.length > 1000 ||
-      !value.symbols.every((item) => typeof item === "string" && TICKER_PATTERN.test(item)) ||
-      new Set(value.symbols as string[]).size !== value.symbols.length) {
+function parseBody(
+  value: unknown,
+): Readonly<{ ok: true; body: unknown }> | Readonly<{ ok: false; error: string }> {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["consumer_id", "symbols"]) ||
+    typeof value.consumer_id !== "string" ||
+    !UUID_PATTERN.test(value.consumer_id) ||
+    !Array.isArray(value.symbols) ||
+    value.symbols.length < 1 ||
+    value.symbols.length > 1000 ||
+    !value.symbols.every((item) => typeof item === "string" && TICKER_PATTERN.test(item)) ||
+    new Set(value.symbols as string[]).size !== value.symbols.length
+  ) {
     return { ok: false, error: "invalid_subscription" };
   }
   return { ok: true, body: { consumer_id: value.consumer_id, symbols: value.symbols } };

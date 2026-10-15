@@ -81,7 +81,7 @@ export function moveGridItem(
   while (queue.length > 0) {
     const current = queue.shift()!;
     const collided = rest
-      .filter((item) => placementsOverlap(current, item))
+      .filter((item) => item.i !== current.i && placementsOverlap(current, item))
       .sort((a, b) => a.y - b.y || a.x - b.x || a.i.localeCompare(b.i));
     for (const item of collided) {
       const index = rest.findIndex((candidate) => candidate.i === item.i);

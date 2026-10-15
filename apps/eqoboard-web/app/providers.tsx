@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AuthUiSnapshot } from "@/lib/contracts/auth";
 import { AuthCacheBoundary, AuthProvider } from "@/components/auth/AuthProvider";
 import { MarketDataHost } from "@/features/data/MarketDataHost";
+import { WorkspaceCommandProvider } from "@/components/shell/WorkspaceCommandContext";
 
 type ProvidersProps = Readonly<{
   auth: AuthUiSnapshot;
@@ -33,7 +34,9 @@ function AuthScopedProviders({ auth, children }: AuthScopedProvidersProps) {
     <QueryClientProvider client={queryClient}>
       <AuthCacheBoundary>
         <AuthProvider snapshot={auth}>
-          <MarketDataHost auth={auth}>{children}</MarketDataHost>
+          <WorkspaceCommandProvider>
+            <MarketDataHost auth={auth}>{children}</MarketDataHost>
+          </WorkspaceCommandProvider>
         </AuthProvider>
       </AuthCacheBoundary>
     </QueryClientProvider>

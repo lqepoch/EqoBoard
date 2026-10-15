@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useStore } from "zustand";
 import { useWidgetActionClient, useWidgetDataClient, useMarketDataReader } from "../features/data/MarketDataHost";
+import { useWorkspaceCommandRegistration } from "../components/shell/WorkspaceCommandContext";
 import type { AuthUiSnapshot } from "../lib/contracts/auth";
 import { createWorkspaceStore, type WorkspaceStoreHook } from "../stores/workspace/store";
 import { WORKSPACE_LIMITS, type WorkspaceDocumentV1, type WorkspaceTabV1, type WorkspaceV1 } from "./model";
@@ -12,6 +13,7 @@ import { createWidgetEventBus } from "../widgets/sdk/events";
 import { WorkspaceGrid } from "../components/workspace/WorkspaceGrid";
 import { WorkspaceTransferControls } from "../components/workspace/WorkspaceTransferControls";
 import { LegacyWorkspaceImportPanel } from "../components/workspace/LegacyWorkspaceImportPanel";
+import { bindActiveWorkspaceSymbolSelector, canRegisterActiveWorkspaceSymbolSelector } from "./command-selector";
 import "../components/workspace/workspace.css";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -234,6 +236,7 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
   const data = useWidgetDataClient();
   const actions = useWidgetActionClient();
   const market = useMarketDataReader();
+  const { registerActiveSymbolSelector } = useWorkspaceCommandRegistration();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -244,9 +247,11 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
   const canEdit = state.canEdit;
   const activeSymbol = workspace?.marketContext.activeSymbol ?? null;
   const activeWorkspaceIdRef = useRef(workspace?.id ?? null);
+  const activeTabIdRef = useRef(tab?.id ?? null);
   const eventBusRef = useRef<ReturnType<typeof createWidgetEventBus> | null>(null);
   const lastPublishedSymbol = useRef<string | null>(null);
   activeWorkspaceIdRef.current = workspace?.id ?? null;
+  activeTabIdRef.current = tab?.id ?? null;
 
   const handleWidgetError = useCallback((errorCode: string) => {
     setWidgetError(`A widget reported ${errorCode.replace(/[^a-z-]/gu, "") || "an error"}. Its data boundary remains active.`);
@@ -276,6 +281,38 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
       eventBus.publishActiveSymbol(activeSymbol, null);
     }
   }, [activeSymbol, eventBus]);
+
+  const permissionKey = auth.permissions.join("|");
+  const authReady = auth.status === "authenticated" && auth.authenticated;
+  const hasWorkspaceWritePermission = auth.permissions.includes("workspace:write");
+  useEffect(() => {
+    if (!workspace || !tab || !canRegisterActiveWorkspaceSymbolSelector({
+      authReady,
+      hasWorkspaceWritePermission,
+      canEdit,
+      loadStatus: state.loadStatus,
+      workspaceId: workspace.id,
+      tabId: tab.id,
+    })) return;
+    const registeredWorkspaceId = workspace.id;
+    const registeredTabId = tab.id;
+    return registerActiveSymbolSelector(bindActiveWorkspaceSymbolSelector(
+      { workspaceId: registeredWorkspaceId, tabId: registeredTabId },
+      () => ({ workspaceId: activeWorkspaceIdRef.current, tabId: activeTabIdRef.current }),
+      (symbol) => { setActiveSymbol(symbol, null); },
+    ));
+  }, [
+    authReady,
+    auth.storagePartition,
+    permissionKey,
+    hasWorkspaceWritePermission,
+    canEdit,
+    state.loadStatus,
+    workspace?.id,
+    tab?.id,
+    registerActiveSymbolSelector,
+    setActiveSymbol,
+  ]);
 
   useEffect(() => {
     function handleShortcuts(event: KeyboardEvent): void {

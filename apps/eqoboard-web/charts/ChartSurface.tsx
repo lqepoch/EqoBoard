@@ -32,6 +32,7 @@ export type ChartSurfaceProps<TRow = unknown> = Readonly<{
   snapshotBehavior?: SnapshotBehavior;
   olderPageAvailable?: boolean;
   olderPageLoading?: boolean;
+  olderPageTestId?: string;
   onRequestOlder?: () => void;
   onSurfaceReady?: (handle: ChartSurfaceHandle | null) => void;
   onCrosshairChange?: (bar: ChartPlotBar<TRow> | null) => void;
@@ -57,6 +58,7 @@ export function ChartSurface<TRow = unknown>({
   snapshotBehavior = "preserve",
   olderPageAvailable = false,
   olderPageLoading = false,
+  olderPageTestId = "native-chart-load-older",
   onRequestOlder,
   onSurfaceReady,
   onCrosshairChange,
@@ -226,7 +228,7 @@ export function ChartSurface<TRow = unknown>({
             type="button"
             onClick={onRequestOlder}
             disabled={!olderPageAvailable || olderPageLoading}
-            data-testid="native-chart-load-older"
+            data-testid={olderPageTestId}
           >
             {olderPageLoading ? "Loading older bars…" : "Load older bars"}
           </button>

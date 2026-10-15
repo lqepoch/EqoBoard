@@ -1,8 +1,12 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextResponse, NextRequest } from "next/server";
 import { parseWorkspaceDocument } from "@/workspace/schema";
 import { consumePrincipalRateLimit } from "@/lib/server/rate-limit";
 import { getNativeDb, secureNativeDbFilesForRequest } from "@/lib/server/native-db";
-import { loadWorkspaceDocument, saveWorkspaceDocument, workspaceEtag } from "@/lib/server/workspace-storage";
+import {
+  loadWorkspaceDocument,
+  saveWorkspaceDocument,
+  workspaceEtag,
+} from "@/lib/server/workspace-storage";
 import { authorizeRequest, noStoreJson, readBoundedJson } from "@/lib/server/bff-security";
 import { ownerKeyForPrincipal, type ServerPrincipal } from "@/lib/server/auth";
 
@@ -11,7 +15,11 @@ export const dynamic = "force-dynamic";
 
 function invalidQuery(request: Request): boolean {
   const url = new URL(request.url);
-  return url.search !== "" || request.headers.has("content-encoding") || request.headers.has("transfer-encoding");
+  return (
+    url.search !== "" ||
+    request.headers.has("content-encoding") ||
+    request.headers.has("transfer-encoding")
+  );
 }
 
 function invalidReadRequest(request: Request): boolean {
@@ -24,10 +32,16 @@ function invalidReadRequest(request: Request): boolean {
 }
 
 function enforceLimit(principal: ServerPrincipal) {
-  const result = consumePrincipalRateLimit(principal, { bucket: "workspace", maxRequests: 120, windowMs: 60_000 });
-  return result.allowed ? null : noStoreJson({ error: "rate_limit_exceeded" }, 429, {
-    "Retry-After": String(result.retryAfterSeconds),
+  const result = consumePrincipalRateLimit(principal, {
+    bucket: "workspace",
+    maxRequests: 120,
+    windowMs: 60_000,
   });
+  return result.allowed
+    ? null
+    : noStoreJson({ error: "rate_limit_exceeded" }, 429, {
+        "Retry-After": String(result.retryAfterSeconds),
+      });
 }
 
 function etag(revision: string): string {
@@ -45,7 +59,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!db) return noStoreJson({ error: "workspace_storage_unavailable" }, 503);
   try {
     const snapshot = loadWorkspaceDocument(db, ownerKeyForPrincipal(authorization.principal));
-    if (!secureNativeDbFilesForRequest()) return noStoreJson({ error: "workspace_storage_unavailable" }, 503);
+    if (!secureNativeDbFilesForRequest())
+      return noStoreJson({ error: "workspace_storage_unavailable" }, 503);
     return noStoreJson(snapshot, 200, { ETag: etag(snapshot.revision) });
   } catch {
     return noStoreJson({ error: "workspace_storage_unavailable" }, 503);
@@ -55,7 +70,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 function hasExactEnvelope(value: unknown): value is { schemaVersion: 1; document: unknown } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const object = value as Record<string, unknown>;
-  return Object.keys(object).length === 2 && object.schemaVersion === 1 && Object.hasOwn(object, "document");
+  return (
+    Object.keys(object).length === 2 &&
+    object.schemaVersion === 1 &&
+    Object.hasOwn(object, "document")
+  );
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
@@ -69,7 +88,8 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
   if (!db) return noStoreJson({ error: "workspace_storage_unavailable" }, 503);
   const body = await readBoundedJson(request, 64 * 1024);
   if (!body.ok) return body.response;
-  if (!hasExactEnvelope(body.value)) return noStoreJson({ error: "invalid_workspace_envelope" }, 400);
+  if (!hasExactEnvelope(body.value))
+    return noStoreJson({ error: "invalid_workspace_envelope" }, 400);
   const parsed = parseWorkspaceDocument(body.value.document);
   if (!parsed.ok) return noStoreJson({ error: "invalid_workspace_document" }, 422);
 
@@ -80,13 +100,12 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       request.headers.get("if-match"),
       parsed.value,
     );
-    if (!secureNativeDbFilesForRequest()) return noStoreJson({ error: "workspace_storage_unavailable" }, 503);
+    if (!secureNativeDbFilesForRequest())
+      return noStoreJson({ error: "workspace_storage_unavailable" }, 503);
     if (result.kind === "conflict") {
-      return noStoreJson(
-        { error: "workspace_revision_conflict", revision: result.revision },
-        412,
-        { ETag: etag(result.revision) },
-      );
+      return noStoreJson({ error: "workspace_revision_conflict", revision: result.revision }, 412, {
+        ETag: etag(result.revision),
+      });
     }
     return noStoreJson(result.snapshot, 200, { ETag: etag(result.snapshot.revision) });
   } catch (error) {

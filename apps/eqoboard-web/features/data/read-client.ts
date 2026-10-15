@@ -17,6 +17,8 @@ const MAX_BYTES_BY_OPERATION: Readonly<Record<NativeDataOperationId, number>> = 
   "market.archive.diagnostic-bars": 4 * 1024 * 1024,
   "research.yahoo.daily": 4 * 1024 * 1024,
   "research.predictions": 512 * 1024,
+  "research.recap": 2 * 1024 * 1024,
+  "research.symbolSearch": 512 * 1024,
   "engine.status": 16 * 1024,
   "engine.preview": 16 * 1024,
   "research.news": 2 * 1024 * 1024,
@@ -45,8 +47,9 @@ type SharedRead = {
   settled: boolean;
 };
 
-function permissionGranted(auth: AuthUiSnapshot, permission: Permission): boolean {
-  return auth.authenticated && auth.permissions.includes(permission);
+function permissionGranted(auth: AuthUiSnapshot, permission: Permission | readonly Permission[]): boolean {
+  const required: readonly Permission[] = typeof permission === "string" ? [permission] : permission;
+  return auth.authenticated && required.every((item) => auth.permissions.includes(item));
 }
 
 export async function readNativeJsonResponse(response: Response, maxBytes: number, signal: AbortSignal): Promise<unknown> {

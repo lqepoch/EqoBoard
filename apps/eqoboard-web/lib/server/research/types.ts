@@ -8,6 +8,8 @@ export type ResearchOperationName =
   | "insider"
   | "screener"
   | "heatmap"
+  | "recap"
+  | "symbol-search"
   | "crypto"
   | "crypto-global";
 

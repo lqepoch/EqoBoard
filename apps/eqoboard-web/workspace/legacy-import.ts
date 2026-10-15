@@ -34,7 +34,7 @@ const MANIFEST_CANDIDATES: Readonly<Record<LegacyKind, readonly string[]>> = {
   calendar: ["eqoboard.research.economic-calendar"],
   insider: ["eqoboard.research.insider"],
   tv: [],
-  recap: [],
+  recap: ["eqoboard.research.recap"],
   researchpredictions: ["eqoboard.research.registered-predictions"],
   enginepreview: ["eqoboard.research.engine-offline-preview"],
 };
