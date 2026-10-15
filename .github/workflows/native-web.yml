@@ -186,6 +186,7 @@ jobs:
             apps/eqoboard-web/playwright-report/
             ${{ runner.temp }}/native-web-sbom/
             ${{ runner.temp }}/native-license-audit.json
+            ${{ runner.temp }}/native-web-source-drift.json
             ${{ runner.temp }}/native-format-proposal/
           if-no-files-found: warn
           retention-days: 7

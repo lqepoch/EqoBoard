@@ -36,14 +36,150 @@ if [[ ! "$checkout_sha" =~ ^[0-9a-f]{40}$ || "$checkout_sha" != "$NATIVE_CANDIDA
     "$NATIVE_CANDIDATE_SHA" "$checkout_sha" >&2
   exit 2
 fi
-if ! git -C "$repo_root" diff --quiet "$NATIVE_CANDIDATE_SHA" -- apps/eqoboard-web; then
-  printf '%s\n' 'Native app source differs from NATIVE_CANDIDATE_SHA.' >&2
-  exit 2
-fi
-if [[ -n "$(git -C "$repo_root" ls-files --others --exclude-standard -- apps/eqoboard-web)" ]]; then
-  printf '%s\n' 'Untracked native app source cannot be included in the candidate SBOM.' >&2
-  exit 2
-fi
+# BEGIN bounded candidate source drift diagnostic. It records path/status only.
+python3 - "$repo_root" "$NATIVE_CANDIDATE_SHA" "$RUNNER_TEMP" <<'PY'
+import json
+import os
+import pathlib
+import subprocess
+import sys
+
+MAX_DIAGNOSTIC_PATHS = 32
+repo_root, candidate_sha, runner_temp_raw = sys.argv[1:]
+runner_temp = pathlib.Path(runner_temp_raw).resolve(strict=True)
+metadata_path = runner_temp / "native-web-source-drift.json"
+counts = {"tracked": 0, "untracked": 0}
+listed = {"tracked": [], "untracked": []}
+listed_path_count = 0
+
+
+def nul_fields(stream):
+    buffer = b""
+    while True:
+        chunk = stream.read(8192)
+        if not chunk:
+            break
+        buffer += chunk
+        while b"\0" in buffer:
+            field, buffer = buffer.split(b"\0", 1)
+            yield field
+    if buffer:
+        yield buffer
+
+
+def git_fields(arguments):
+    try:
+        process = subprocess.Popen(
+            ["git", "-C", repo_root, *arguments],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        raise RuntimeError("could not start the Git source-path inspection") from None
+    assert process.stdout is not None
+    try:
+        yield from nul_fields(process.stdout)
+    finally:
+        process.stdout.close()
+    if process.wait() != 0:
+        raise RuntimeError("Git source-path inspection failed")
+
+
+def record(category, status, raw_path):
+    global listed_path_count
+    counts[category] += 1
+    if listed_path_count < MAX_DIAGNOSTIC_PATHS:
+        listed[category].append({"status": status, "path": os.fsdecode(raw_path)})
+        listed_path_count += 1
+
+
+try:
+    tracked = iter(
+        git_fields(
+            [
+                "diff",
+                "--name-status",
+                "--no-renames",
+                "-z",
+                candidate_sha,
+                "--",
+                "apps/eqoboard-web",
+            ]
+        )
+    )
+    for raw_status in tracked:
+        if not raw_status:
+            continue
+        try:
+            raw_path = next(tracked)
+        except StopIteration:
+            raise RuntimeError("Git returned an incomplete tracked path/status record") from None
+        record("tracked", os.fsdecode(raw_status), raw_path)
+
+    for raw_path in git_fields(
+        ["ls-files", "--others", "--exclude-standard", "-z", "--", "apps/eqoboard-web"]
+    ):
+        if raw_path:
+            record("untracked", "??", raw_path)
+except RuntimeError as error:
+    print(f"Native source drift diagnostic failed: {error}.", file=sys.stderr)
+    raise SystemExit(2) from None
+
+drift_count = counts["tracked"] + counts["untracked"]
+if drift_count == 0:
+    raise SystemExit(0)
+
+metadata = {
+    "kind": "eqoboard-native-source-drift-diagnostic",
+    "schemaVersion": 1,
+    "candidateSha": candidate_sha,
+    "sourceRoot": "apps/eqoboard-web",
+    "trackedChangeCount": counts["tracked"],
+    "untrackedPathCount": counts["untracked"],
+    "maxListedPaths": MAX_DIAGNOSTIC_PATHS,
+    "listedPathCount": listed_path_count,
+    "truncated": drift_count > listed_path_count,
+    "trackedChanges": listed["tracked"],
+    "untrackedPaths": listed["untracked"],
+}
+try:
+    metadata_fd = os.open(
+        metadata_path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        0o600,
+    )
+except OSError:
+    print("Could not create the private source drift metadata file under RUNNER_TEMP.", file=sys.stderr)
+    raise SystemExit(2) from None
+try:
+    with os.fdopen(metadata_fd, "w", encoding="utf-8") as metadata_file:
+        json.dump(metadata, metadata_file, indent=2, sort_keys=True, ensure_ascii=True)
+        metadata_file.write("\n")
+except OSError:
+    try:
+        metadata_path.unlink()
+    except OSError:
+        pass
+    print("Could not write the private source drift metadata file under RUNNER_TEMP.", file=sys.stderr)
+    raise SystemExit(2) from None
+
+print(
+    f"Native app source differs from NATIVE_CANDIDATE_SHA: "
+    f"{counts['tracked']} tracked path(s), {counts['untracked']} untracked path(s).",
+    file=sys.stderr,
+)
+for category in ("tracked", "untracked"):
+    for entry in listed[category]:
+        print(
+            f"  {entry['status']} {json.dumps(entry['path'], ensure_ascii=True)}",
+            file=sys.stderr,
+        )
+if metadata["truncated"]:
+    print("Additional source drift paths omitted after the 32-path diagnostic limit.", file=sys.stderr)
+print(f"Private source drift metadata: {metadata_path}", file=sys.stderr)
+raise SystemExit(2)
+PY
+# END bounded candidate source drift diagnostic.
 
 if ! command -v syft >/dev/null 2>&1; then
   printf '%s\n' 'Syft must be installed by the pinned native web security workflow.' >&2

@@ -1043,7 +1043,18 @@
     "source_provenance": {
       "classification": "first-party app configuration, CI/container integration, legal archive, and shared provenance audit implementation",
       "adapted_sources": [],
-      "notes": "Root owns dependency pins and lockfile, runtime/build configuration, CI wiring, deployment recipes, and aggregate audit. No OpenTerminal app runtime is imported."
+      "notes": "Root owns dependency pins and lockfile, runtime/build configuration, CI wiring, deployment recipes, and aggregate audit. No OpenTerminal app runtime is imported. next-env.d.ts is the generated declaration template from pinned Next.js 15.5.27, not original EqoBoard application logic.",
+      "generated_declarations": [
+        {
+          "nativePath": "apps/eqoboard-web/next-env.d.ts",
+          "repository": "https://github.com/vercel/next.js",
+          "commit": "def7eff9063f79cf58610c15fe58dd78b967c885",
+          "upstreamPath": "packages/next/src/lib/typescript/writeAppTypeDeclarations.ts",
+          "license": "MIT",
+          "noticePath": "apps/eqoboard-web/legal/third-party/LICENSE-NEXT-15.5.27-MIT.md",
+          "use": "Matches the generated App Router declaration output; Actions runs next typegen before tsc, and the SBOM dirty-source guard remains enforced."
+        }
+      ]
     }
   },
   "sourceReferences": {
