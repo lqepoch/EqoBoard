@@ -128,6 +128,41 @@ def native_compose_security_fixture() -> dict[str, object]:
     }
 
 
+def credential_value_accesses(source: str) -> list[str]:
+    source = re.sub(r"(?m)^#![^\n]*$", "", source)
+    names = r"(?:ALPACA_KEY|ALPACA_SECRET|EQO_ACCESS_TOKEN)"
+    patterns = (
+        (
+            "shell variable expansion",
+            re.compile(r"\$\{" + names + r"(?:[^}]*)\}|\$" + names + r"(?![A-Za-z0-9_])"),
+        ),
+        (
+            "shell command reads or forwards a credential",
+            re.compile(r"\b(?:printenv|export|env)\b[^\n;]*\b" + names + r"\b"),
+        ),
+        ("credential environment assignment", re.compile(r"\b" + names + r"\s*[:=]")),
+        (
+            "Python or Node environment read",
+            re.compile(
+                r"\bos\.environ\b|\bos\.getenv\s*\(|\bgetenv\s*\(|"
+                r"\bprocess\.env(?:\.|\[)"
+            ),
+        ),
+        (
+            "ambient environment read or forwarding",
+            re.compile(
+                r"(?m)^[ \t]*(?:command[ \t]+)?(?:printenv\b|env\b(?![ \t]+-i(?:[ \t]|$)))|"
+                r"\$\([ \t]*(?:command[ \t]+)?(?:printenv|env)\b(?![ \t]+-i)"
+            ),
+        ),
+    )
+    return [
+        f"{label}: {match.group(0)}"
+        for label, pattern in patterns
+        if (match := pattern.search(source)) is not None
+    ]
+
+
 def is_test_source(path: Path, app_root: Path) -> bool:
     relative = path.relative_to(app_root)
     if any(part.lower() in TEST_DIRS for part in relative.parts[:-1]):
@@ -434,7 +469,7 @@ export const provenance = Object.freeze({
             (
                 "Gateway fixture verifies the terminal signer",
                 candidate,
-                    "Gateway fixture must verify the terminal Gateway signer",
+                "Gateway fixture must verify the terminal Gateway signer",
             )
         )
 
@@ -473,6 +508,33 @@ export const provenance = Object.freeze({
                 rejected = run_validator(candidate)
                 self.assertNotEqual(rejected.returncode, 0, f"accepted invalid fixture: {label}")
                 self.assertIn(expected_error, rejected.stderr)
+
+    def test_credential_guard_allows_denylist_names_but_rejects_value_access(self) -> None:
+        harmless_denylist = '''
+research_forbidden_secrets = ("ALPACA_KEY", "ALPACA_SECRET", "EQO_ACCESS_TOKEN")
+for name in research_forbidden_secrets:
+    if research.get(name):
+        reject(name)
+'''
+        self.assertEqual(credential_value_accesses(harmless_denylist), [])
+        isolated_allowlist = 'env -i PATH="$PATH" NATIVE_WEB_IMAGE="$NATIVE_WEB_IMAGE"'
+        self.assertEqual(credential_value_accesses(isolated_allowlist), [])
+
+        actual_reads = (
+            'value = "$ALPACA_KEY"',
+            'value = "${ALPACA_SECRET}"',
+            'value = os.environ.get("ALPACA_KEY")',
+            "for key, value in os.environ.items(): pass",
+            'value = os.getenv("ALPACA_SECRET")',
+            'value = process.env.EQO_ACCESS_TOKEN',
+            'env EQO_ACCESS_TOKEN="$EQO_ACCESS_TOKEN"',
+            "env",
+            "printenv",
+            'export ALPACA_SECRET="$ALPACA_SECRET"',
+        )
+        for source in actual_reads:
+            with self.subTest(source=source):
+                self.assertTrue(credential_value_accesses(source), source)
 
     def test_container_context_is_the_native_app_only(self) -> None:
         dockerfile = APP_ROOT / "Dockerfile"
@@ -570,14 +632,20 @@ export const provenance = Object.freeze({
             self.assertIn('"$checkout_sha" != "$NATIVE_CANDIDATE_SHA"', source)
             for forbidden in FORBIDDEN_PATHS:
                 self.assertNotIn(forbidden, source, f"helper depends on a legacy tree: {helper.name}")
-            for forbidden_secret in ("ALPACA_KEY", "ALPACA_SECRET", "EQO_ACCESS_TOKEN"):
-                self.assertNotIn(forbidden_secret, source, f"helper names a real credential: {helper.name}")
+            self.assertEqual(
+                credential_value_accesses(source),
+                [],
+                f"helper must not read or propagate real credential values: {helper.name}",
+            )
             self.assertIn("GITHUB_ACTIONS", source, f"helper must reject local invocation: {helper.name}")
             self.assertNotIn("NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_", source)
 
         compose_helper = helpers[0].read_text(encoding="utf-8")
         self.assertIn("env -i", compose_helper, "Compose must receive a sanitized environment")
         self.assertIn("--env-file /dev/null", compose_helper, "operator .env files must not enter Compose")
+        self.assertIn('COMPOSE_PROJECT_NAME="$compose_project"', compose_helper)
+        self.assertIn('NATIVE_WEB_IMAGE="$NATIVE_WEB_IMAGE"', compose_helper)
+        self.assertIn('NATIVE_WEB_HOST_PORT="$native_web_host_port"', compose_helper)
         self.assertIn("NATIVE_WEB_HOST_PORT", compose_helper)
         self.assertIn("compose.native.e2e.yaml", compose_helper)
         self.assertIn("NEXTAUTH_URL", compose_helper)
