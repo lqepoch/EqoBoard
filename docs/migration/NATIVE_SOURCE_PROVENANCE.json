@@ -223,10 +223,10 @@
             "license": "MIT OR Apache-2.0",
             "notice": "Pinned package includes LICENSE-MIT, LICENSE-APACHE, and NOTICE.md.",
             "use": "Pinned Core Bars V1 request/response and row types.",
-            "pinnedCommit": "f793be47ab90ebff9f530c8b08f41db5e774e4e5",
-            "source": "https://github.com/lqepoch/trading-core.git#f793be47ab90ebff9f530c8b08f41db5e774e4e5",
-            "packageSpec": "https://github.com/lqepoch/trading-core.git#f793be47ab90ebff9f530c8b08f41db5e774e4e5",
-            "resolved": "git+ssh://git@github.com/lqepoch/trading-core.git#f793be47ab90ebff9f530c8b08f41db5e774e4e5"
+            "pinnedCommit": "3359ead64da27113b383cc8c0126463cd772c5a6",
+            "source": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "packageSpec": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "resolved": "git+ssh://git@github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6"
           }
         ],
         "notes": "The controller, finite-number projection, Core envelope adapter, bounded cursor state, export, evidence UI, config parser, static registration, and MDP diagnostic archive projection are native feature modules. SMA/EMA/MACD/Bollinger and RSI relative-strength fallback preserve pinned legacy formulas; zero-average-loss RSI uses RS=100 (about 99.01, including a flat window). VWAP is cumulative over explicitly loaded rows and labeled loaded-window. Core Bars V1, MDP diagnostic archive, and Yahoo daily observations are separate contracts and series. MDP charting consumes only the fixed `market.archive.diagnostic-bars` operation and validated MDP Bars V1 response; the response is bounded to one archive window with no cursor/pagination or live updates. No quote/trade-derived candles or fabricated chart rows are implemented; if a validated archive response identifies synthetic observations, the chart labels them synthetic. No night coverage, live bar updates, or correction claims are added."
@@ -874,10 +874,10 @@
             "version": "0.1.0",
             "license": "MIT OR Apache-2.0",
             "notice": "Pinned package LICENSE-MIT, LICENSE-APACHE and NOTICE.md",
-            "pinnedCommit": "f793be47ab90ebff9f530c8b08f41db5e774e4e5",
-            "source": "https://github.com/lqepoch/trading-core.git#f793be47ab90ebff9f530c8b08f41db5e774e4e5",
-            "packageSpec": "https://github.com/lqepoch/trading-core.git#f793be47ab90ebff9f530c8b08f41db5e774e4e5",
-            "resolved": "git+ssh://git@github.com/lqepoch/trading-core.git#f793be47ab90ebff9f530c8b08f41db5e774e4e5"
+            "pinnedCommit": "3359ead64da27113b383cc8c0126463cd772c5a6",
+            "source": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "packageSpec": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "resolved": "git+ssh://git@github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6"
           }
         ],
         "pinOwner": "native_root_integration",

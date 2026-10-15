@@ -3,7 +3,7 @@ import {
   BarsResponseV1Schema,
   type BarRowV1,
   type BarsResponseV1,
-} from "@lqepoch/trading-core-contracts";
+} from "@lqepoch/trading-core-contracts/bars";
 import {
   decodeCoreBarsPageEnvelope,
   type CoreBarsPageEnvelope,

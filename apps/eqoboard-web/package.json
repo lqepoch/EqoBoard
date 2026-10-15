@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0",
-    "@lqepoch/trading-core-contracts": "https://github.com/lqepoch/trading-core.git#f793be47ab90ebff9f530c8b08f41db5e774e4e5",
+    "@lqepoch/trading-core-contracts": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
     "@tanstack/react-query": "5.102.8",
     "ag-grid-community": "36.2.0",
     "ag-grid-react": "36.2.0",

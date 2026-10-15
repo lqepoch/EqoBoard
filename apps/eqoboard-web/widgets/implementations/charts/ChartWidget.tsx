@@ -31,7 +31,7 @@ import type { ChartDisplayEvidence, ChartPlotBar, IndicatorId } from "../../../c
 import type { TradeMinuteBarV1 } from "../../../features/market/mdp-archive";
 import type { CoreBarsReadInput } from "../../../features/data/operations";
 import type { NativeChartOperationMap } from "../../../charts/native-operations";
-import type { BarsResponseV1, BarRowV1 } from "@lqepoch/trading-core-contracts";
+import type { BarsResponseV1, BarRowV1 } from "@lqepoch/trading-core-contracts/bars";
 import type { WidgetProps } from "../../../widgets/sdk/contracts";
 import type { WidgetNoActionMap } from "../../../widgets/sdk/actions";
 import type { MarketHostSnapshot } from "../../../stores/market/market-store";
