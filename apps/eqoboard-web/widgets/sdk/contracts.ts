@@ -199,4 +199,3 @@ export type WidgetRuntimeError =
   | Readonly<{ code: "data-unavailable" | "request-failed"; retryable: boolean }>
   | Readonly<{ code: "render-failed"; retryable: false }>
   | Readonly<{ code: "cancelled"; retryable: false }>;
-

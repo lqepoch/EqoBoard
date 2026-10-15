@@ -17,4 +17,3 @@ const registrations: readonly AnyWidgetRegistration[] = [
 ];
 
 export const builtinWidgetRegistry = createWidgetRegistry(registrations);
-

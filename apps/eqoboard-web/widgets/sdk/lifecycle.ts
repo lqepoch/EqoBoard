@@ -87,4 +87,3 @@ export function createWidgetLifecycleController(): WidgetLifecycleController {
   };
   return lifecycle;
 }
-

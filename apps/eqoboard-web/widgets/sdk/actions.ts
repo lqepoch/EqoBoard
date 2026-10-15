@@ -36,4 +36,3 @@ export interface WidgetActionClient<TActions extends WidgetActionMap = WidgetNoA
     options: Readonly<{ signal: AbortSignal }>,
   ): Promise<TActions[K]["output"]>;
 }
-

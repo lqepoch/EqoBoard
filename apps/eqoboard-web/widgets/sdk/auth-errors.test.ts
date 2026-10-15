@@ -47,4 +47,3 @@ describe("widget safe auth and error projections", () => {
     expect(called).toBe(false);
   });
 });
-

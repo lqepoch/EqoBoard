@@ -72,4 +72,3 @@ export class WidgetDataReadError extends Error {
     this.retryAfterMs = retryAfterMs;
   }
 }
-

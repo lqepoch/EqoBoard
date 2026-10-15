@@ -136,4 +136,3 @@ describe("widget poll budget", () => {
     expect(new WidgetDataReadError("rate-limited", 70_000).retryAfterMs).toBe(70_000);
   });
 });
-

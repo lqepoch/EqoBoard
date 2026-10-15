@@ -46,4 +46,3 @@ export class WidgetErrorBoundary extends React.Component<WidgetErrorBoundaryProp
     return <React.Fragment key={this.state.attempt}>{this.props.children}</React.Fragment>;
   }
 }
-

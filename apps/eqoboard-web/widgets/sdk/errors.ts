@@ -96,4 +96,3 @@ export function widgetErrorMessage(error: WidgetRuntimeError): string {
     case "request-failed": return "This widget could not be loaded.";
   }
 }
-

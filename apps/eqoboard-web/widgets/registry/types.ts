@@ -72,4 +72,3 @@ export interface WidgetRegistry {
   /** Only a `ready` result may mount its static component. */
   resolveInstance(instance: WidgetInstanceV1): WidgetInstanceResolution;
 }
-

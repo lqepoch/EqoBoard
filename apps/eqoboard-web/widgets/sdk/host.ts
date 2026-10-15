@@ -214,4 +214,3 @@ export function resolveWidgetInputs(
   }
   return Object.freeze(inputs);
 }
-

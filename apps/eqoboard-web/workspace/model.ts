@@ -121,4 +121,3 @@ export function createEmptyWorkspaceDocument(): WorkspaceDocumentV1 {
     userTemplates: [],
   };
 }
-

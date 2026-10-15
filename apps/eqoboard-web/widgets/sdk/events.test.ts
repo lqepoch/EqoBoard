@@ -45,4 +45,3 @@ describe("widget host event bus", () => {
     expect(parseWidgetCommandIntent(hostile)).toBeNull();
   });
 });
-

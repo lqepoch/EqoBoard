@@ -94,4 +94,3 @@ export function createWidgetEventBus(options: WidgetEventBusOptions): WidgetEven
     },
   });
 }
-

@@ -14,4 +14,3 @@ export function projectWidgetAuthorization(snapshot: AuthUiSnapshot): WidgetAuth
     permissions: Object.freeze(permissions),
   });
 }
-

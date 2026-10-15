@@ -440,4 +440,3 @@ export function createWorkspaceExport(document: WorkspaceDocumentV1): WorkspaceE
   if (!parsed.ok) throw new TypeError("Cannot export an invalid workspace document.");
   return { format: WORKSPACE_EXPORT_FORMAT, schemaVersion: WORKSPACE_SCHEMA_VERSION, document: parsed.value };
 }
-

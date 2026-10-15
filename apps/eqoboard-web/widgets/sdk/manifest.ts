@@ -547,4 +547,3 @@ export function parseWidgetInstanceV1(input: unknown): WidgetParseResult<WidgetI
 export function parseWidgetConfigData(input: unknown): WidgetParseResult<WidgetJsonValueV1> {
   return runParser((collector) => configData(input, "$", collector));
 }
-

@@ -115,4 +115,3 @@ describe("widget manifest runtime validation", () => {
     expect(parseWidgetInstanceV1(instance).ok).toBe(false);
   });
 });
-

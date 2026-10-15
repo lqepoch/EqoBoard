@@ -39,4 +39,3 @@ describe("widget lifecycle", () => {
     expect(lifecycle.isCurrent(1)).toBe(false);
   });
 });
-

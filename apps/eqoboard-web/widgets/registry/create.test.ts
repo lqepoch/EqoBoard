@@ -217,4 +217,3 @@ describe("static widget registry", () => {
     );
   });
 });
-
