@@ -259,7 +259,7 @@ describe("WorkspaceGrid direct-read budget wiring", () => {
     const signal = new AbortController().signal;
     await expect(
       host.data.read("market.quotes", { symbols: ["SPY"] }, { signal }),
-    ).rejects.toMatchObject({ code: "hidden" });
+    ).rejects.toMatchObject({ code: "suspended" });
     host.refresh.observe(
       "market.quotes",
       { symbols: ["SPY"] },

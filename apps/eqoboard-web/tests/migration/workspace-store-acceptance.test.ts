@@ -138,6 +138,10 @@ class TestWorkspaceBroadcastChannel {
   static latest: TestWorkspaceBroadcastChannel | null = null;
   onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
 
+  static getLatest(): TestWorkspaceBroadcastChannel | null {
+    return TestWorkspaceBroadcastChannel.latest;
+  }
+
   constructor() {
     TestWorkspaceBroadcastChannel.latest = this;
   }
@@ -332,7 +336,7 @@ describe("workspace migration store acceptance", () => {
     if (!saveCall) throw new Error("The workspace save did not start.");
 
     deferred.setCurrent(clientSnapshot(latest, "2"));
-    const channel = TestWorkspaceBroadcastChannel.latest;
+    const channel = TestWorkspaceBroadcastChannel.getLatest();
     expect(channel).not.toBeNull();
     channel?.dispatch({
       type: "workspace.changed.v1",
@@ -380,7 +384,7 @@ describe("workspace migration store acceptance", () => {
     await store.getState().hydrate();
 
     deferred.deferNextLoad();
-    TestWorkspaceBroadcastChannel.latest?.dispatch({
+    TestWorkspaceBroadcastChannel.getLatest()?.dispatch({
       type: "workspace.changed.v1",
       workspaceId: initial.activeWorkspaceId,
       revision: "2",

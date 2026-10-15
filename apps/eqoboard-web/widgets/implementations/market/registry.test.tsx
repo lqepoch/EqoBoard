@@ -173,7 +173,7 @@ describe("native market widget registrations", () => {
       tradeAt: "REST snapshot trade time",
     });
 
-    store.acceptBatch([feedStatus("stocks", 2, 2)]);
+    store.acceptBatch([feedStatus("stocks", 2, 3)]);
     apply();
     expect(rows.get("SPY")).toMatchObject({
       liveBid: null,
