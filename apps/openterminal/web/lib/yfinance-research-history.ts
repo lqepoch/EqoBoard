@@ -35,18 +35,49 @@ function subtractCalendarDays(date: Date, days: number): Date {
   return result;
 }
 
+function subtractCalendarMonths(date: Date, months: number): Date {
+  const targetMonthIndex = date.getUTCFullYear() * 12 + date.getUTCMonth() - months;
+  const targetYear = Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const targetDay = Math.min(date.getUTCDate(), lastDay);
+  return new Date(Date.UTC(
+    targetYear,
+    targetMonth,
+    targetDay,
+    date.getUTCHours(),
+    date.getUTCMinutes(),
+    date.getUTCSeconds(),
+    date.getUTCMilliseconds(),
+  ));
+}
+
 function rangeStart(range: ChartRange, endUtc: string): string {
   const end = new Date(endUtc);
   switch (range) {
     case "1D": return subtractCalendarDays(end, 7).toISOString();
     case "5D": return subtractCalendarDays(end, 14).toISOString();
-    case "1M": return subtractCalendarDays(end, 45).toISOString();
-    case "6M": return subtractCalendarDays(end, 200).toISOString();
+    case "1M": return subtractCalendarMonths(end, 1).toISOString();
+    case "6M": return subtractCalendarMonths(end, 6).toISOString();
     case "YTD": return new Date(Date.UTC(end.getUTCFullYear(), 0, 1)).toISOString();
-    case "1Y": return subtractCalendarDays(end, 366).toISOString();
-    case "5Y": return subtractCalendarDays(end, 1_827).toISOString();
+    case "1Y": return subtractCalendarMonths(end, 12).toISOString();
+    case "5Y": return subtractCalendarMonths(end, 60).toISOString();
     case "MAX": return "1970-01-01T00:00:00.000Z";
-    default: return subtractCalendarDays(end, 183).toISOString();
+    default: return subtractCalendarMonths(end, 6).toISOString();
+  }
+}
+
+function rangeDescription(range: ChartRange): string {
+  switch (range) {
+    case "1D": return "1D plots up to the latest available daily observation; the lookup window is 7 calendar days";
+    case "5D": return "5D plots up to the latest 5 available daily observations; the lookup window is 14 calendar days";
+    case "1M": return "1M uses a rolling UTC calendar-month window";
+    case "6M": return "6M uses a rolling six-calendar-month UTC window";
+    case "YTD": return "YTD starts at January 1 UTC";
+    case "1Y": return "1Y uses a rolling UTC calendar-year window";
+    case "5Y": return "5Y uses a rolling five-calendar-year UTC window";
+    case "MAX": return "MAX starts at the 1970 UTC lower bound and loads newest-first cursor pages";
+    default: return "Daily observations in the requested UTC window";
   }
 }
 
@@ -176,8 +207,15 @@ export function useYfinanceResearchHistory(
         if (!firstByTimestamp.has(key)) firstByTimestamp.set(key, bar);
       }
     }
-    return { bars: [...firstByTimestamp.values()].sort((left, right) => left.time - right.time), error: null };
-  }, [pages]);
+    const orderedBars = [...firstByTimestamp.values()].sort((left, right) => left.time - right.time);
+    const latestObservationLimit = pages.length === 1
+      ? range === "1D" ? 1 : range === "5D" ? 5 : null
+      : null;
+    return {
+      bars: latestObservationLimit === null ? orderedBars : orderedBars.slice(-latestObservationLimit),
+      error: null,
+    };
+  }, [pages, range]);
 
   const latest = pages[0];
   const lastPage = pages[pages.length - 1];
@@ -215,6 +253,7 @@ export function useYfinanceResearchHistory(
     requestedResolution: "1d" as const,
     requestStart: startUtc,
     requestEnd: snapshotEndUtc,
+    rangeDescription: rangeDescription(range),
     loadedPageCount: pages.length,
     refreshSnapshot: () => {
       void queryClient.cancelQueries({ queryKey, exact: true });

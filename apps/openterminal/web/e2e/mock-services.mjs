@@ -66,6 +66,7 @@ const mdpYfinanceResearchControl = {
   response: null,
   responsesByCursor: null,
   syntheticDaily: false,
+  syntheticDailyBarCount: 0,
   location: null,
   bodyBytes: 0,
   delayMs: 0,
@@ -111,9 +112,23 @@ function syntheticYfinanceResearchResponse(url) {
   const pageEnd = new Date(pageEndMs).toISOString();
   const nextCursor = pageStartMs > startMs ? `older:${pageIndex + 1}` : null;
   const rows = [];
+  const syntheticBarCount = mdpYfinanceResearchControl.syntheticDailyBarCount;
+  let syntheticWeekdayTimes = [];
+  if (pageIndex === 0 && syntheticBarCount > 0) {
+    const end = new Date(pageEndMs);
+    let candidate = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate(), 16);
+    while (candidate >= pageEndMs) candidate -= dayMs;
+    while (syntheticWeekdayTimes.length < syntheticBarCount && candidate >= pageStartMs) {
+      const weekday = new Date(candidate).getUTCDay();
+      if (weekday !== 0 && weekday !== 6) syntheticWeekdayTimes.unshift(candidate);
+      candidate -= dayMs;
+    }
+  }
   for (const symbol of symbols) {
     const candidateTimes = pageIndex === 0
-      ? [pageEndMs - 2 * dayMs, pageEndMs - dayMs]
+      ? syntheticBarCount > 0
+        ? syntheticWeekdayTimes
+        : [pageEndMs - 2 * dayMs, pageEndMs - dayMs]
       : pageIndex === 1
         ? [Date.parse("2010-01-04T00:00:00Z"), Date.parse("2015-12-31T00:00:00Z")]
         : [pageStartMs + dayMs];
@@ -456,7 +471,7 @@ const oidc = createServer(async (req, res) => {
     });
     Object.assign(mdpYfinanceResearchControl, {
       enabled: false, status: null, response: null, responsesByCursor: null,
-      syntheticDaily: false, location: null, bodyBytes: 0, delayMs: 0,
+      syntheticDaily: false, syntheticDailyBarCount: 0, location: null, bodyBytes: 0, delayMs: 0,
     });
     Object.assign(quantControl, {
       status: 200, response: null, location: null, delayMs: 0, finiteReceiptBinding: "UNKNOWN",
@@ -509,11 +524,13 @@ const oidc = createServer(async (req, res) => {
     }
     if (Object.hasOwn(body, "yfinanceResearch")) {
       const control = body.yfinanceResearch;
-      const allowed = new Set(["enabled", "status", "response", "responsesByCursor", "syntheticDaily", "location", "bodyBytes", "delayMs"]);
+      const allowed = new Set(["enabled", "status", "response", "responsesByCursor", "syntheticDaily", "syntheticDailyBarCount", "location", "bodyBytes", "delayMs"]);
       if (!control || typeof control !== "object" || Array.isArray(control) ||
           Object.keys(control).some((key) => !allowed.has(key)) ||
           (Object.hasOwn(control, "enabled") && typeof control.enabled !== "boolean") ||
           (Object.hasOwn(control, "syntheticDaily") && typeof control.syntheticDaily !== "boolean") ||
+          (Object.hasOwn(control, "syntheticDailyBarCount") &&
+            (!Number.isSafeInteger(control.syntheticDailyBarCount) || control.syntheticDailyBarCount < 0 || control.syntheticDailyBarCount > 100)) ||
           (Object.hasOwn(control, "status") && (!Number.isInteger(control.status) || control.status < 100 || control.status > 599)) ||
           (Object.hasOwn(control, "bodyBytes") && (!Number.isSafeInteger(control.bodyBytes) || control.bodyBytes < 0)) ||
           (Object.hasOwn(control, "delayMs") && (!Number.isFinite(control.delayMs) || control.delayMs < 0)) ||

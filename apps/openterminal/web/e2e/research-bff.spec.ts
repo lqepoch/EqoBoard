@@ -746,26 +746,75 @@ test("Yahoo MAX left-pan follows an opaque cursor and preserves the viewport whi
   expect(afterPrepend.to - afterPrepend.from).toBeCloseTo(whilePending.to - whilePending.from, 1);
 });
 
-test("Yahoo range buttons stay daily-only and use distinct UTC calendar windows", async ({ page, request }) => {
-  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+test("Yahoo range windows use UTC calendar boundaries and show only returned daily observations", async ({ page, request }) => {
+  await configureGateway(request, {
+    yfinanceResearch: { enabled: true, syntheticDaily: true, syntheticDailyBarCount: 8 },
+  });
   await signIn(page, request, ["eqoboard-market-reader"]);
+  await page.clock.setFixedTime(new Date("2024-03-31T12:00:00.000Z"));
   await page.goto(`${WEB_ORIGIN}/research/yfinance/AAPL`);
   await expect(page.getByTestId("chart-yfinance-source")).toBeVisible();
+  await expect(page.getByTestId("chart-bar-count")).toHaveText("8 bars");
+  await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.length).toBe(1);
 
-  const starts: string[] = [];
-  for (const range of ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y"] as const) {
+  const end = "2024-03-31T12:00:00.000Z";
+  const allEightBars = [
+    "2024-03-20T16:00:00.000Z", "2024-03-21T16:00:00.000Z", "2024-03-22T16:00:00.000Z",
+    "2024-03-25T16:00:00.000Z", "2024-03-26T16:00:00.000Z", "2024-03-27T16:00:00.000Z",
+    "2024-03-28T16:00:00.000Z", "2024-03-29T16:00:00.000Z",
+  ];
+  const cases = [
+    { range: "1D", start: "2024-03-24T12:00:00.000Z", bars: ["2024-03-29T16:00:00.000Z"], label: "up to the latest available daily observation" },
+    { range: "5D", start: "2024-03-17T12:00:00.000Z", bars: allEightBars.slice(-5), label: "up to the latest 5 available daily observations" },
+    { range: "1M", start: "2024-02-29T12:00:00.000Z", bars: allEightBars, label: "rolling UTC calendar-month window" },
+    { range: "6M", start: "2023-09-30T12:00:00.000Z", bars: allEightBars, label: "rolling six-calendar-month UTC window" },
+    { range: "YTD", start: "2024-01-01T00:00:00.000Z", bars: allEightBars, label: "starts at January 1 UTC" },
+    { range: "1Y", start: "2023-03-31T12:00:00.000Z", bars: allEightBars, label: "rolling UTC calendar-year window" },
+    { range: "5Y", start: "2019-03-31T12:00:00.000Z", bars: allEightBars, label: "rolling five-calendar-year UTC window" },
+  ] as const;
+
+  for (const { range, start, bars, label } of cases) {
     const before = (await metrics(request)).mdpYfinanceResearch.length;
     await page.getByRole("button", { name: range, exact: true }).click();
     await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.length).toBe(before + 1);
     const call = (await metrics(request)).mdpYfinanceResearch[before];
     expect(call.query).toMatchObject({ symbols: "AAPL", asset_class: "stock", adjustment: "unadjusted" });
-    expect(Date.parse(call.query.start_utc)).toBeLessThan(Date.parse(call.query.end_utc));
-    starts.push(call.query.start_utc);
+    expect(call.query.start_utc).toBe(start);
+    expect(call.query.end_utc).toBe(end);
     expect(call.query).not.toHaveProperty("resolution");
+    const rangeWindow = page.getByTestId("chart-yfinance-range-window");
+    await expect(rangeWindow).toHaveAttribute("data-range", range);
+    await expect(rangeWindow).toHaveAttribute("data-start-utc", start);
+    await expect(rangeWindow).toHaveAttribute("data-end-utc", end);
+    await expect(rangeWindow).toContainText(label);
+    const barCount = page.getByTestId("chart-bar-count");
+    await expect(barCount).toHaveText(`${bars.length} bars`);
+    await expect(barCount).toHaveAttribute("data-observation-times", JSON.stringify(bars.slice(-5)));
     await expect(page.getByTestId("chart-yfinance-source")).toBeVisible();
     await expect(page.getByTestId("chart-widget-history-status")).toContainText("Resolution 1d · daily bars only");
   }
-  expect(new Set(starts).size).toBe(starts.length);
+});
+
+test("Yahoo yearly windows clamp leap day to the last day of February", async ({ page, request }) => {
+  await configureGateway(request, { yfinanceResearch: { enabled: true, syntheticDaily: true } });
+  await signIn(page, request, ["eqoboard-market-reader"]);
+  await page.clock.setFixedTime(new Date("2024-02-29T12:00:00.000Z"));
+  await page.goto(`${WEB_ORIGIN}/research/yfinance/AAPL`);
+  await expect(page.getByTestId("chart-bar-count")).toHaveText("2 bars");
+
+  const end = "2024-02-29T12:00:00.000Z";
+  for (const [range, start] of [
+    ["1Y", "2023-02-28T12:00:00.000Z"],
+    ["5Y", "2019-02-28T12:00:00.000Z"],
+  ] as const) {
+    const before = (await metrics(request)).mdpYfinanceResearch.length;
+    await page.getByRole("button", { name: range, exact: true }).click();
+    await expect.poll(async () => (await metrics(request)).mdpYfinanceResearch.length).toBe(before + 1);
+    const call = (await metrics(request)).mdpYfinanceResearch[before];
+    expect(call.query).toMatchObject({ start_utc: start, end_utc: end });
+    await expect(page.getByTestId("chart-yfinance-range-window")).toHaveAttribute("data-start-utc", start);
+    await expect(page.getByTestId("chart-yfinance-range-window")).toHaveAttribute("data-end-utc", end);
+  }
 });
 
 test("Yahoo history route rejects non-research roles and malformed cursor queries before MDP", async ({ page, request }) => {

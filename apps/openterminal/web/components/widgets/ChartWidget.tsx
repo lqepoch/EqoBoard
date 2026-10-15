@@ -651,6 +651,14 @@ export default function ChartWidget({
           <span data-testid="chart-yfinance-source">Source Yahoo Finance · Provider yfinance</span>
           <span>Feed unknown · delay unknown · provider verification unavailable</span>
           <span>Resolution 1d · daily bars only</span>
+          <span
+            data-testid="chart-yfinance-range-window"
+            data-range={range}
+            data-start-utc={yfinanceHistory.requestStart}
+            data-end-utc={yfinanceHistory.requestEnd}
+          >
+            {yfinanceHistory.rangeDescription} · UTC [{yfinanceHistory.requestStart}, {yfinanceHistory.requestEnd})
+          </span>
           <span>Adjustment request {researchAdjustment} · basis unknown/provider-native</span>
           <span>Raw price basis confirmed no</span>
           <span>Numeric binary_float_projection · source decimals not exact in chart</span>
@@ -662,7 +670,14 @@ export default function ChartWidget({
           <span>MDP received {displayHistoryValue(yfinanceHistory.latestEnvelope?.observation.fetched_at_utc)}</span>
           <span>Yahoo observed {displayHistoryValue(yfinanceHistory.latestEnvelope?.observation.payload.source_observed_at)}</span>
           <span>Provider available-at {displayHistoryValue(yfinanceHistory.latestEnvelope?.observation.payload.available_at)}</span>
-          <span data-testid="chart-bar-count">{candles?.length ?? 0} bars</span>
+          <span
+            data-testid="chart-bar-count"
+            data-observation-times={JSON.stringify((candles ?? []).slice(-5).map((candle) =>
+              new Date(candle.time * 1_000).toISOString(),
+            ))}
+          >
+            {candles?.length ?? 0} bars
+          </span>
           {yfinanceHistory.latestEnvelope && <details className="basis-full text-[9px]" data-testid="chart-yfinance-provenance">
             <summary className="cursor-pointer">Research observation, unassessed coverage and provenance</summary>
             <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{JSON.stringify({
