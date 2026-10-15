@@ -39,49 +39,49 @@ const US_SERIES: readonly SeriesSpec[] = [
 
 const EU_SERIES: readonly Readonly<{
   flow: string;
-  key: string;
+  seriesId: string;
   id: string;
   label: string;
   unit: "percent" | "index";
 }>[] = [
   {
     flow: "YC",
-    key: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_3M",
+    seriesId: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_3M",
     id: "YC-3M",
     label: "Euro area AAA yield 3M",
     unit: "percent",
   },
   {
     flow: "YC",
-    key: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_5Y",
+    seriesId: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_5Y",
     id: "YC-5Y",
     label: "Euro area AAA yield 5Y",
     unit: "percent",
   },
   {
     flow: "YC",
-    key: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y",
+    seriesId: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y",
     id: "YC-10Y",
     label: "Euro area AAA yield 10Y",
     unit: "percent",
   },
   {
     flow: "YC",
-    key: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_30Y",
+    seriesId: "B.U2.EUR.4F.G_N_A.SV_C_YM.SR_30Y",
     id: "YC-30Y",
     label: "Euro area AAA yield 30Y",
     unit: "percent",
   },
   {
     flow: "FM",
-    key: "D.U2.EUR.4F.KR.DFR.LEV",
+    seriesId: "D.U2.EUR.4F.KR.DFR.LEV",
     id: "deposit-rate",
     label: "ECB deposit facility rate",
     unit: "percent",
   },
   {
     flow: "ICP",
-    key: "M.U2.N.000000.4.ANR",
+    seriesId: "M.U2.N.000000.4.ANR",
     id: "hicp-yoy",
     label: "Euro area HICP y/y",
     unit: "percent",
@@ -124,14 +124,18 @@ export async function readFredHistory(seriesId: string, limit = 24): Promise<rea
   const url = new URL("https://fred.stlouisfed.org/graph/fredgraph.csv");
   url.search = new URLSearchParams({ id: seriesId }).toString();
   const csv = parseCsv(await readProviderText(url, { timeoutMs: 7_000, maxBytes: 256 * 1024 }));
-  if (csv.length < 2) return [];
-  const dateIndex =
-    csv[0]!.indexOf("observation_date") >= 0 ? csv[0]!.indexOf("observation_date") : 0;
-  const valueIndex = csv[0]!.indexOf(seriesId) >= 0 ? csv[0]!.indexOf(seriesId) : 1;
+  const header = csv.at(0);
+  if (csv.length < 2 || !header) return [];
+  const observationDateIndex = header.indexOf("observation_date");
+  const seriesValueIndex = header.indexOf(seriesId);
+  const dateIndex = observationDateIndex >= 0 ? observationDateIndex : 0;
+  const valueIndex = seriesValueIndex >= 0 ? seriesValueIndex : 1;
   const points: Point[] = [];
   for (let index = 1; index < csv.length; index += 1) {
-    const date = csv[index]![dateIndex];
-    const value = finiteNumber(csv[index]![valueIndex]);
+    const row = csv[index];
+    if (!row) continue;
+    const date = row[dateIndex];
+    const value = finiteNumber(row[valueIndex]);
     if (date && value !== null && /^\d{4}-\d{2}-\d{2}$/u.test(date)) points.push({ date, value });
   }
   return points.slice(-Math.min(Math.max(1, limit), 260));
@@ -142,17 +146,20 @@ async function fredLatest(seriesId: string): Promise<Point | null> {
   return points.at(-1) ?? null;
 }
 
-export async function readEcbLatest(flow: string, key: string): Promise<Point | null> {
-  const url = new URL(`https://data-api.ecb.europa.eu/service/data/${flow}/${key}`);
+export async function readEcbLatest(flow: string, seriesId: string): Promise<Point | null> {
+  const url = new URL(`https://data-api.ecb.europa.eu/service/data/${flow}/${seriesId}`);
   url.search = new URLSearchParams({ format: "csvdata", lastNObservations: "5" }).toString();
   const csv = parseCsv(await readProviderText(url, { timeoutMs: 8_000, maxBytes: 256 * 1024 }));
-  if (csv.length < 2) return null;
-  const dateIndex = csv[0]!.indexOf("TIME_PERIOD");
-  const valueIndex = csv[0]!.indexOf("OBS_VALUE");
+  const header = csv.at(0);
+  if (csv.length < 2 || !header) return null;
+  const dateIndex = header.indexOf("TIME_PERIOD");
+  const valueIndex = header.indexOf("OBS_VALUE");
   if (dateIndex < 0 || valueIndex < 0) return null;
   for (let index = csv.length - 1; index > 0; index -= 1) {
-    const date = csv[index]![dateIndex];
-    const value = finiteNumber(csv[index]![valueIndex]);
+    const row = csv[index];
+    if (!row) continue;
+    const date = row[dateIndex];
+    const value = finiteNumber(row[valueIndex]);
     if (date && value !== null && /^\d{4}(-\d{2}(-\d{2})?)?$/u.test(date)) return { date, value };
   }
   return null;
@@ -163,19 +170,18 @@ export async function loadMacro(region: "us" | "eu"): Promise<ProviderResult<Mac
   const proxies = region === "us" ? US_INDEX_PROXIES : EU_INDEX_PROXIES;
   const specs = region === "us" ? US_SERIES : EU_SERIES;
   const settled = await Promise.allSettled(
-    specs.map((spec) =>
-      region === "us"
-        ? fredLatest(spec.id)
-        : readEcbLatest(
-            EU_SERIES.find((entry) => entry.id === spec.id)!.flow,
-            EU_SERIES.find((entry) => entry.id === spec.id)!.key,
-          ),
-    ),
+    specs.map((spec) => {
+      if (region === "us") return fredLatest(spec.id);
+      const ecbSeries = EU_SERIES.find((entry) => entry.id === spec.id);
+      return ecbSeries
+        ? readEcbLatest(ecbSeries.flow, ecbSeries.seriesId)
+        : Promise.resolve(null);
+    }),
   );
   let failedItems = 0;
   const observations = specs.map((spec, index): MacroObservation => {
-    const result = settled[index]!;
-    if (result.status === "rejected") {
+    const result = settled[index];
+    if (!result || result.status === "rejected") {
       failedItems += 1;
       return {
         id: spec.id,

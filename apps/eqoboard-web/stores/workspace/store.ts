@@ -11,7 +11,6 @@ import {
   type WorkspaceDocumentV1,
   type WorkspaceMarketContextV1,
   type WorkspaceTabV1,
-  type WorkspaceTemplateV1,
   type WorkspaceV1,
 } from "../../workspace/model";
 import {
@@ -31,7 +30,7 @@ import {
   createWorkspaceFromTemplate,
   replaceWorkspaceInDocument,
 } from "../../workspace/transforms";
-import { parseWorkspaceDocument } from "../../workspace/schema";
+import { hasControlCharacters, parseWorkspaceDocument } from "../../workspace/schema";
 import {
   createWorkspaceClientRepository,
   type WorkspaceClientRepository,
@@ -128,7 +127,7 @@ function validName(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 &&
     trimmed.length <= WORKSPACE_LIMITS.maxNameLength &&
-    !/[\u0000-\u001f\u007f]/u.test(trimmed)
+    !hasControlCharacters(trimmed)
     ? trimmed
     : null;
 }
@@ -546,8 +545,7 @@ export function createWorkspaceStore(
 
     selectWorkspace(workspaceId) {
       const document = get().document;
-      if (!document || !document.workspaces.some((workspace) => workspace.id === workspaceId))
-        return false;
+      if (!document?.workspaces.some((workspace) => workspace.id === workspaceId)) return false;
       return persist({ ...document, activeWorkspaceId: workspaceId });
     },
 
@@ -608,7 +606,7 @@ export function createWorkspaceStore(
     selectTab(workspaceId, tabId) {
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
-      if (!document || !workspace || !workspace.tabs.some((tab) => tab.id === tabId)) return false;
+      if (!document || !workspace?.tabs.some((tab) => tab.id === tabId)) return false;
       return persist(replaceWorkspaceInDocument(document, { ...workspace, activeTabId: tabId }));
     },
 
@@ -764,8 +762,7 @@ export function createWorkspaceStore(
       if (
         !document ||
         !workspace ||
-        !tab ||
-        !tab.widgets.some((widget) => widget.instanceId === instanceId)
+        !tab?.widgets.some((widget) => widget.instanceId === instanceId)
       )
         return false;
       if (!(await backupWorkspaces([workspace], "delete"))) return false;
@@ -805,8 +802,7 @@ export function createWorkspaceStore(
       const tab = activeTab(workspace, tabId);
       const widget = tab?.widgets.find((candidate) => candidate.instanceId === instanceId);
       if (!document || !workspace || !tab || !widget) return false;
-      const registration = registry.get(widget.manifestId);
-      if (!registration || registration.manifest.symbolBinding !== "active-or-fixed") return false;
+      if (registry.get(widget.manifestId)?.manifest.symbolBinding !== "active-or-fixed") return false;
       if (binding?.mode === "fixed" && !validSymbol(binding.symbol)) return false;
       const widgets = tab.widgets.map((candidate) => {
         if (candidate.instanceId !== instanceId) return candidate;
@@ -953,8 +949,7 @@ export function createWorkspaceStore(
 
     deleteTemplate(templateId) {
       const document = get().document;
-      if (!document || !document.userTemplates.some((template) => template.id === templateId))
-        return false;
+      if (!document?.userTemplates.some((template) => template.id === templateId)) return false;
       return persist({
         ...document,
         userTemplates: document.userTemplates.filter((template) => template.id !== templateId),

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WidgetActionMap } from "./actions";
 import type { WidgetHostContext, WidgetInstanceV1, WidgetManifestV1 } from "./contracts";
-import type { WidgetScheduledReadState } from "./data";
+import type { WidgetDataClient, WidgetScheduledReadState } from "./data";
 import { createWidgetLifecycleController } from "./lifecycle";
 import { createWidgetEventBus } from "./events";
+import { createBudgetedWidgetDataClient } from "./budgetedData";
+import { createWidgetPollBudget } from "./pollBudget";
 import { resolveWidgetInputs, scopeWidgetHostContext, type WidgetHostCapabilities } from "./host";
 
 const manifest: WidgetManifestV1 = {
@@ -77,17 +79,44 @@ type ScopedTestActions = WidgetActionMap & {
   "portfolio.delete": { input: Readonly<{ id: number }>; output: undefined };
 };
 
+function budgetedTestData(
+  read: WidgetDataClient<ScopedTestOperations>["read"],
+  lifecycle: ReturnType<typeof createWidgetLifecycleController>,
+) {
+  return createBudgetedWidgetDataClient(
+    { read },
+    createWidgetPollBudget({
+      maxConcurrentGlobal: 4,
+      maxConcurrentPerOperation: 2,
+      maxConcurrentPerWidget: 1,
+      maxRequestsPerMinuteGlobal: 20,
+      maxRequestsPerMinutePerUser: 20,
+      maxRequestsPerMinutePerOperation: 10,
+      maxRequestsPerMinutePerWidget: 10,
+      minimumIntervalMs: 0,
+    }),
+    {
+      scopeKey: "opaque-test-user-partition",
+      instanceId: "80e310b0-4a9e-4b0b-b500-01a1a5d06e0d",
+      manifestRefresh: { mode: "none" },
+      lifecycle,
+      hidden: false,
+    },
+  );
+}
+
 describe("per-registration host capability scope", () => {
   it("limits reads, refresh scheduling, and actions before any underlying dispatch", async () => {
     const readDispatch = vi.fn(async (operationId: string) => `read:${operationId}`);
     const actionDispatch = vi.fn(async (actionId: string) => `action:${actionId}`);
     const refreshDispatch = vi.fn(() => () => undefined);
+    const lifecycle = createWidgetLifecycleController();
     const eventBus = createWidgetEventBus({ onCommand: () => ({ accepted: true }) });
     const base = {
       auth: { authenticated: true, permissions: [] },
-      lifecycle: createWidgetLifecycleController(),
+      lifecycle,
       events: eventBus.forInstance("80e310b0-4a9e-4b0b-b500-01a1a5d06e0d"),
-      data: { read: readDispatch },
+      data: budgetedTestData(readDispatch, lifecycle),
       actions: { invoke: actionDispatch },
       refresh: { observe: refreshDispatch },
       market: { getSnapshot: () => "snapshot", subscribe: () => () => undefined },
@@ -144,6 +173,108 @@ describe("per-registration host capability scope", () => {
     unsubscribe();
     expect(deniedRefresh).toEqual({ status: "error", code: "request-failed" });
     expect(refreshDispatch).not.toHaveBeenCalled();
+
+    lifecycle.suspend();
+    await expect(scoped.data.read("safe.read", { query: "QQQ" }, { signal })).rejects.toMatchObject(
+      { code: "suspended" },
+    );
+    await expect(
+      scoped.actions.invoke("research.ai", { prompt: "summary" }, { signal }),
+    ).rejects.toMatchObject({ code: "suspended" });
+    expect(readDispatch).toHaveBeenCalledTimes(1);
+    expect(actionDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts active reads and actions on generation changes and rejects late results", async () => {
+    const readLifecycle = createWidgetLifecycleController();
+    let resolveRead: (value: string) => void = () => undefined;
+    let readSignal: AbortSignal | undefined;
+    const readPending = new Promise<string>((resolve) => {
+      resolveRead = resolve;
+    });
+    const readDispatch = vi.fn(
+      (_operationId: string, _input: unknown, options: { signal: AbortSignal }) => {
+        readSignal = options.signal;
+        return readPending;
+      },
+    );
+    const actionLifecycle = createWidgetLifecycleController();
+    let resolveAction: (value: string) => void = () => undefined;
+    let actionSignal: AbortSignal | undefined;
+    const actionPending = new Promise<string>((resolve) => {
+      resolveAction = resolve;
+    });
+    const actionDispatch = vi.fn(
+      (_actionId: string, _input: unknown, options: { signal: AbortSignal }) => {
+        actionSignal = options.signal;
+        return actionPending;
+      },
+    );
+    const eventBus = createWidgetEventBus({ onCommand: () => ({ accepted: true }) });
+    const createBase = (lifecycle: ReturnType<typeof createWidgetLifecycleController>) =>
+      ({
+        auth: { authenticated: true, permissions: [] },
+        lifecycle,
+        events: eventBus.forInstance("80e310b0-4a9e-4b0b-b500-01a1a5d06e0d"),
+        data: budgetedTestData(readDispatch, lifecycle),
+        actions: { invoke: actionDispatch },
+        refresh: { observe: vi.fn(() => () => undefined) },
+        market: { getSnapshot: () => "snapshot", subscribe: () => () => undefined },
+        reportError: () => undefined,
+      }) as unknown as WidgetHostContext<ScopedTestOperations, ScopedTestActions, string>;
+    const capabilities = {
+      allowedReadOperations: ["safe.read"],
+      allowedActions: ["research.ai"],
+    } as const;
+    const readHost = scopeWidgetHostContext(createBase(readLifecycle), capabilities);
+    const actionHost = scopeWidgetHostContext(createBase(actionLifecycle), capabilities);
+    const signal = new AbortController().signal;
+
+    const readResult = readHost.data.read("safe.read", { query: "SPY" }, { signal });
+    const actionResult = actionHost.actions.invoke(
+      "research.ai",
+      { prompt: "summary" },
+      { signal },
+    );
+    await Promise.resolve();
+    readLifecycle.suspend();
+    actionLifecycle.suspend();
+    readLifecycle.resume();
+    actionLifecycle.resume();
+
+    await expect(readResult).rejects.toMatchObject({ code: "cancelled" });
+    await expect(actionResult).rejects.toMatchObject({ code: "cancelled" });
+    expect(readSignal?.aborted).toBe(true);
+    expect(actionSignal?.aborted).toBe(true);
+    resolveRead("late read");
+    resolveAction("late action");
+    await Promise.resolve();
+  });
+
+  it("fails closed before dispatch when the host data port is not budget-wrapped", async () => {
+    const readDispatch = vi.fn(async () => "unreachable");
+    const lifecycle = createWidgetLifecycleController();
+    const base = {
+      auth: { authenticated: true, permissions: [] },
+      lifecycle,
+      events: createWidgetEventBus({ onCommand: () => ({ accepted: true }) }).forInstance(
+        "80e310b0-4a9e-4b0b-b500-01a1a5d06e0d",
+      ),
+      data: { read: readDispatch },
+      actions: { invoke: vi.fn() },
+      refresh: { observe: vi.fn(() => () => undefined) },
+      market: { getSnapshot: () => "snapshot", subscribe: () => () => undefined },
+      reportError: () => undefined,
+    } as unknown as WidgetHostContext<ScopedTestOperations, ScopedTestActions, string>;
+    const scoped = scopeWidgetHostContext(base, {
+      allowedReadOperations: ["safe.read"],
+      allowedActions: [],
+    });
+
+    await expect(
+      scoped.data.read("safe.read", { query: "SPY" }, { signal: new AbortController().signal }),
+    ).rejects.toMatchObject({ code: "request-failed" });
+    expect(readDispatch).not.toHaveBeenCalled();
   });
 
   it("defaults malformed capability metadata to deny-all", async () => {

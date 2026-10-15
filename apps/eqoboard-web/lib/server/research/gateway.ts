@@ -82,7 +82,9 @@ async function mapLimit<T, Result>(
       for (;;) {
         const current = index++;
         if (current >= items.length) return;
-        result[current] = await run(items[current]!);
+        const item = items.at(current);
+        if (item === undefined) return;
+        result[current] = await run(item);
       }
     }),
   );

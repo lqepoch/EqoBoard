@@ -90,6 +90,13 @@ describe("static widget registry", () => {
     expect(registry.list()).toHaveLength(1);
   });
 
+  it("rejects a registry entry without a compiled React component", () => {
+    const invalid = { ...registration(), Component: { render: null } };
+    expect(() => createWidgetRegistry([invalid])).toThrowError(
+      expect.objectContaining({ code: "invalid-registration" }),
+    );
+  });
+
   it("returns inert statuses for unknown manifests, versions, schemas and invalid configs", () => {
     const registry = createWidgetRegistry([registration()]);
     expect(registry.resolveInstance(instance({ manifestId: "vendor.unknown" })).status).toBe(

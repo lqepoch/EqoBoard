@@ -280,7 +280,8 @@ export function YfinanceDailyWidget({
           Refresh
         </button>
       </header>
-      <div className={styles.controls} role="group" aria-label="Yahoo daily history controls">
+      <fieldset className={styles.controls}>
+        <legend className={styles.visuallyHidden}>Yahoo daily history controls</legend>
         <label className={styles.control}>
           <span>Symbol</span>
           <input
@@ -369,7 +370,7 @@ export function YfinanceDailyWidget({
             </label>
           ))}
         </fieldset>
-      </div>
+      </fieldset>
       {!allowed ? (
         <p className={styles.empty}>Sign in with research:read to load Yahoo daily observations.</p>
       ) : null}

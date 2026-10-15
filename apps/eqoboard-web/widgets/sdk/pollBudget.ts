@@ -4,6 +4,7 @@ import { WidgetDataReadError } from "./data";
 const WINDOW_MS = 60_000;
 const MAX_CONCURRENT_GLOBAL = 128;
 const MAX_CONCURRENT_PER_OPERATION = 32;
+const MAX_CONCURRENT_PER_WIDGET = 3;
 const MAX_REQUESTS_PER_MINUTE = 120;
 const MAX_INTERVAL_MS = 3_600_000;
 const INSTANCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -21,7 +22,7 @@ export type WidgetPollBudgetConfig = Readonly<{
   /** Host-owned ceilings. Manifest policy can only lower these limits. */
   maxConcurrentGlobal: number;
   maxConcurrentPerOperation: number;
-  maxConcurrentPerWidget: 1;
+  maxConcurrentPerWidget: number;
   maxRequestsPerMinuteGlobal: number;
   maxRequestsPerMinutePerUser: number;
   maxRequestsPerMinutePerOperation: number;
@@ -35,10 +36,19 @@ export type WidgetPollRequest = Readonly<{
   instanceId: string;
   operationId: string;
   input: unknown;
-  policy: Extract<WidgetRefreshPolicyV1, { mode: "poll" }>;
+  policy: DirectBudgetPolicy;
   lifecycle: WidgetLifecycle;
   hidden: boolean;
+  /** Optional caller cancellation. Requests with caller signals are never deduplicated. */
+  signal?: AbortSignal;
 }>;
+
+/** Runtime read budget; direct `none` widgets may use a small host-approved fanout. */
+type DirectBudgetPolicy = Readonly<
+  Omit<Extract<WidgetRefreshPolicyV1, { mode: "poll" }>, "maxConcurrentRequests"> & {
+    maxConcurrentRequests: 1 | 3;
+  }
+>;
 
 export interface WidgetPollBudget {
   run<T>(request: WidgetPollRequest, operation: (signal: AbortSignal) => Promise<T>): Promise<T>;
@@ -52,7 +62,9 @@ function validConfig(config: WidgetPollBudgetConfig): boolean {
     Number.isSafeInteger(config.maxConcurrentPerOperation) &&
     config.maxConcurrentPerOperation >= 1 &&
     config.maxConcurrentPerOperation <= MAX_CONCURRENT_PER_OPERATION &&
-    config.maxConcurrentPerWidget === 1 &&
+    Number.isSafeInteger(config.maxConcurrentPerWidget) &&
+    config.maxConcurrentPerWidget >= 1 &&
+    config.maxConcurrentPerWidget <= MAX_CONCURRENT_PER_WIDGET &&
     [
       config.maxRequestsPerMinuteGlobal,
       config.maxRequestsPerMinutePerUser,
@@ -67,7 +79,7 @@ function validConfig(config: WidgetPollBudgetConfig): boolean {
   );
 }
 
-function validPollPolicy(policy: WidgetRefreshPolicyV1): boolean {
+function validPollPolicy(policy: DirectBudgetPolicy): boolean {
   return (
     policy.mode === "poll" &&
     Number.isSafeInteger(policy.minIntervalMs) &&
@@ -76,7 +88,7 @@ function validPollPolicy(policy: WidgetRefreshPolicyV1): boolean {
     Number.isSafeInteger(policy.maxRequestsPerMinute) &&
     policy.maxRequestsPerMinute >= 1 &&
     policy.maxRequestsPerMinute <= MAX_REQUESTS_PER_MINUTE &&
-    policy.maxConcurrentRequests === 1 &&
+    (policy.maxConcurrentRequests === 1 || policy.maxConcurrentRequests === 3) &&
     (policy.whenHidden === "pause" || policy.whenHidden === "continue")
   );
 }
@@ -146,8 +158,8 @@ function stableKey(
     const parts: string[] = [];
     for (const key of (keys as string[]).sort()) {
       if (key.length > 256 || ["__proto__", "constructor", "prototype"].includes(key)) return null;
-        const descriptor = descriptors[key];
-        if (!descriptor?.enumerable || !("value" in descriptor)) return null;
+      const descriptor = descriptors[key];
+      if (!descriptor?.enumerable || !("value" in descriptor)) return null;
       const part = stableKey(descriptor.value, depth + 1, budget);
       if (part === null) return null;
       const encodedKey = JSON.stringify(key);
@@ -216,6 +228,7 @@ export function createWidgetPollBudget(
       if (snapshot.phase === "disposed") throw new WidgetDataReadError("disposed");
       if (snapshot.phase !== "active" || snapshot.signal.aborted)
         throw new WidgetDataReadError("suspended");
+      if (request.signal?.aborted) throw new WidgetDataReadError("cancelled");
       if (request.hidden && request.policy.whenHidden === "pause")
         throw new WidgetDataReadError("hidden");
       if (
@@ -241,8 +254,10 @@ export function createWidgetPollBudget(
         nextLifecycleId += 1;
         lifecycleIds.set(request.lifecycle, lifecycleId);
       }
-      const dedupeKey = `${lifecycleId}:${snapshot.generation}:${inputKey}`;
-      const existing = inFlight.get(dedupeKey);
+      const dedupeKey = request.signal
+        ? null
+        : `${lifecycleId}:${snapshot.generation}:${inputKey}`;
+      const existing = dedupeKey === null ? undefined : inFlight.get(dedupeKey);
       if (existing) return existing as Promise<T>;
 
       const time = now();
@@ -281,7 +296,8 @@ export function createWidgetPollBudget(
       if (
         globalCount >= config.maxConcurrentGlobal ||
         (operationCounts.get(operationKey) ?? 0) >= config.maxConcurrentPerOperation ||
-        (widgetCounts.get(widgetKey) ?? 0) >= config.maxConcurrentPerWidget
+        (widgetCounts.get(widgetKey) ?? 0) >=
+          Math.min(config.maxConcurrentPerWidget, request.policy.maxConcurrentRequests)
       ) {
         throw new WidgetDataReadError("concurrency-limited");
       }
@@ -296,16 +312,34 @@ export function createWidgetPollBudget(
       bump(widgetCounts, widgetKey, 1);
 
       const execute = async (): Promise<T> => {
-        let abortListener: (() => void) | undefined;
+        const controller = new AbortController();
+        let rejectAbort: ((error: WidgetDataReadError) => void) | undefined;
+        const onAbort = () => {
+          controller.abort();
+          rejectAbort?.(new WidgetDataReadError("cancelled"));
+        };
+        const cancellationSignals = new Set<AbortSignal>([snapshot.signal]);
+        if (request.signal) cancellationSignals.add(request.signal);
         const aborted = new Promise<never>((_resolve, reject) => {
-          const onAbort = () => reject(new WidgetDataReadError("cancelled"));
-          abortListener = onAbort;
-          if (snapshot.signal.aborted) onAbort();
-          else snapshot.signal.addEventListener("abort", onAbort, { once: true });
+          rejectAbort = reject;
+          for (const signal of cancellationSignals) {
+            if (signal.aborted) {
+              onAbort();
+              return;
+            }
+            signal.addEventListener("abort", onAbort, { once: true });
+          }
         });
         const work = Promise.resolve().then(() => {
-          if (snapshot.signal.aborted) throw new WidgetDataReadError("cancelled");
-          return operation(snapshot.signal);
+          const current = request.lifecycle.getSnapshot();
+          if (
+            controller.signal.aborted ||
+            current.phase !== "active" ||
+            current.generation !== snapshot.generation
+          ) {
+            throw new WidgetDataReadError("cancelled");
+          }
+          return operation(controller.signal);
         });
         // If the signal wins, a late work rejection is still observed.
         void work.catch(() => undefined);
@@ -315,25 +349,31 @@ export function createWidgetPollBudget(
           if (
             after.phase !== "active" ||
             after.generation !== snapshot.generation ||
-            snapshot.signal.aborted
+            snapshot.signal.aborted ||
+            request.signal?.aborted
           ) {
             throw new WidgetDataReadError("cancelled");
           }
           return result;
         } catch (error) {
-          if (snapshot.signal.aborted) throw new WidgetDataReadError("cancelled");
+          if (
+            controller.signal.aborted ||
+            snapshot.signal.aborted ||
+            request.signal?.aborted
+          )
+            throw new WidgetDataReadError("cancelled");
           throw error;
         } finally {
-          if (abortListener) snapshot.signal.removeEventListener("abort", abortListener);
+          for (const signal of cancellationSignals) signal.removeEventListener("abort", onAbort);
           globalCount -= 1;
           bump(operationCounts, operationKey, -1);
           bump(widgetCounts, widgetKey, -1);
-          inFlight.delete(dedupeKey);
+          if (dedupeKey !== null) inFlight.delete(dedupeKey);
         }
       };
 
       const promise = execute();
-      inFlight.set(dedupeKey, promise);
+      if (dedupeKey !== null) inFlight.set(dedupeKey, promise);
       return promise;
     },
   });

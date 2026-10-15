@@ -72,7 +72,7 @@ describe("native research envelope adapter", () => {
         ...newsEnvelope,
         status: "available",
         completeness: { ...newsEnvelope.completeness, complete: true },
-        data: [{ ...newsEnvelope.data[0]!, link: "javascript:alert(1)" }],
+        data: [{ ...newsEnvelope.data[0], link: "javascript:alert(1)" }],
       }),
     ).toBeNull();
   });

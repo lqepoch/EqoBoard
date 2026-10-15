@@ -157,11 +157,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     if (prototype !== Object.prototype && prototype !== null) return false;
     const keys = Reflect.ownKeys(value);
     const descriptors = Object.getOwnPropertyDescriptors(value);
-    return keys.every(
-      (key) =>
-        typeof key === "string" &&
-        Boolean(descriptors[key]?.enumerable && "value" in descriptors[key]!),
-    );
+    return keys.every((key) => {
+      if (typeof key !== "string") return false;
+      const descriptor = descriptors[key];
+      return Boolean(descriptor?.enumerable && "value" in descriptor);
+    });
   } catch {
     return false;
   }
@@ -268,7 +268,8 @@ export function parseResearchViewConfig(
         changeMax: [-100, 1000],
         volumeMin: [0, 1e16],
       };
-      const bounds = limits[key]!;
+      const bounds = limits[key];
+      if (!bounds) return { ok: false, code: "config-invalid", field: key };
       if (number !== null && (number < bounds[0] || number > bounds[1]))
         return { ok: false, code: "config-invalid", field: key };
       output[key] = raw;
@@ -451,7 +452,8 @@ function ResearchControls({
   const fields = definition.configFields;
   if (fields.length === 0) return null;
   return (
-    <div className={styles.controls} role="group" aria-label={`${definition.title} filters`}>
+    <fieldset className={styles.controls}>
+      <legend className={styles.visuallyHidden}>{`${definition.title} filters`}</legend>
       {fields.map((field) => {
         if (field === "region" || field === "market") {
           const value = config[field] ?? "us";
@@ -532,7 +534,7 @@ function ResearchControls({
           </label>
         );
       })}
-    </div>
+    </fieldset>
   );
 }
 
@@ -564,7 +566,7 @@ function Evidence({
 }) {
   const { source, status, asOf, retrievedAt, completeness, cache, warning } = envelope;
   return (
-    <div className={styles.evidence} role="region" aria-label="Research source evidence">
+    <section className={styles.evidence} aria-label="Research source evidence">
       <span>{source.provider}</span>
       <span>{status === "available" ? "Complete response" : "Partial response"}</span>
       <span>Provider as of: {asOf ?? "unknown"}</span>
@@ -575,7 +577,7 @@ function Evidence({
       </span>
       <span>Process cache: {cache}</span>
       {warning ? <p>{warning}</p> : null}
-    </div>
+    </section>
   );
 }
 

@@ -72,8 +72,7 @@ export function parseResearchAiRequest(input: unknown): ResearchAiRequestResult 
 export function parseResearchAiResponse(value: unknown): ResearchAiResponse | null {
   const root = record(value);
   if (
-    !root ||
-    root.schemaVersion !== 1 ||
+    root?.schemaVersion !== 1 ||
     root.provider !== "Anthropic" ||
     typeof root.text !== "string" ||
     root.text.trim() === "" ||

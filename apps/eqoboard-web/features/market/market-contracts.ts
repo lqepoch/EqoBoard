@@ -225,9 +225,7 @@ export function decodeQuoteResponse(value: unknown): QuoteResponse | null {
   });
 }
 
-export function parseOccContractSymbol(
-  value: string,
-): Readonly<{
+export function parseOccContractSymbol(value: string): Readonly<{
   underlyingRoot: string;
   yymmdd: string;
   right: "call" | "put";

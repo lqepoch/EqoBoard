@@ -1,7 +1,12 @@
 import type { AuthUiSnapshot, Permission } from "../../lib/contracts/auth";
 import { parseResearchAiResponse } from "../research/ai";
 import { WidgetDataReadError } from "../../widgets/sdk/data";
-import type { WidgetActionClient, WidgetActionId } from "../../widgets/sdk/actions";
+import type {
+  WidgetActionClient,
+  WidgetActionId,
+  WidgetActionInput,
+  WidgetActionOutput,
+} from "../../widgets/sdk/actions";
 import { buildNativeActionRequest, type NativeActionMap } from "./operations";
 import type { NativeFetch } from "./read-client";
 import { decodePortfolio, decodePortfolioTransaction } from "./portfolio-decoder";
@@ -66,9 +71,9 @@ export function createNativeActionClient(
   return Object.freeze({
     async invoke<ActionId extends keyof NativeActionMap & WidgetActionId>(
       actionId: ActionId,
-      input: NativeActionMap[ActionId]["input"],
+      input: WidgetActionInput<NativeActionMap, ActionId>,
       options: Readonly<{ signal: AbortSignal }>,
-    ): Promise<NativeActionMap[ActionId]["output"]> {
+    ): Promise<WidgetActionOutput<NativeActionMap, ActionId>> {
       if (options.signal.aborted) throw new WidgetDataReadError("cancelled");
       const request = buildNativeActionRequest(actionId, input);
       if (!request) throw new WidgetDataReadError("request-failed");
@@ -140,25 +145,25 @@ export function createNativeActionClient(
           ) {
             throw new WidgetDataReadError("request-failed");
           }
-          return undefined as NativeActionMap[ActionId]["output"];
+          return undefined as WidgetActionOutput<NativeActionMap, ActionId>;
         }
         const result = await readActionJson(response, 64 * 1024, options.signal);
         if (actionId === "research.ai") {
           const decoded = parseResearchAiResponse(result);
           if (!decoded) throw new WidgetDataReadError("request-failed");
-          return decoded as NativeActionMap[ActionId]["output"];
+          return decoded as WidgetActionOutput<NativeActionMap, ActionId>;
         }
         if (actionId === "portfolio.create") {
           const decoded = decodePortfolio(result);
           if (!decoded) throw new WidgetDataReadError("request-failed");
-          return decoded as NativeActionMap[ActionId]["output"];
+          return decoded as WidgetActionOutput<NativeActionMap, ActionId>;
         }
         if (actionId === "portfolio.transaction.create") {
           const decoded = decodePortfolioTransaction(result);
           if (!decoded) throw new WidgetDataReadError("request-failed");
-          return decoded as NativeActionMap[ActionId]["output"];
+          return decoded as WidgetActionOutput<NativeActionMap, ActionId>;
         }
-        return result as NativeActionMap[ActionId]["output"];
+        return result as WidgetActionOutput<NativeActionMap, ActionId>;
       } catch (error) {
         if (options.signal.aborted) throw new WidgetDataReadError("cancelled");
         if (error instanceof WidgetDataReadError) throw error;

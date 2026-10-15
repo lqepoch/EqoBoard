@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 
-import { readProviderJson, readProviderText, finiteNumber } from "./transport";
+import { finiteNumber, readProviderText } from "./transport";
 import type { ProviderResult } from "./types";
 
 export type InsiderTransaction = Readonly<{
@@ -164,7 +164,7 @@ async function parseFiling(
   contact: string,
 ): Promise<InsiderTransaction[]> {
   const accessionNoDashes = filing.accessionNumber.replace(/-/gu, "");
-  const primaryDocument = filing.primaryDocument.split("/").at(-1)!;
+  const primaryDocument = filing.primaryDocument.split("/").at(-1) ?? filing.primaryDocument;
   const url = new URL(
     `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accessionNoDashes}/${primaryDocument}`,
   );
@@ -252,7 +252,9 @@ async function mapLimited<T, Result>(
         const current = index++;
         if (current >= items.length) return;
         try {
-          results[current] = { status: "fulfilled", value: await run(items[current]!) };
+          const item = items.at(current);
+          if (item === undefined) throw new Error("research-work-item-missing");
+          results[current] = { status: "fulfilled", value: await run(item) };
         } catch (reason) {
           results[current] = { status: "rejected", reason };
         }

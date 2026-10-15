@@ -12,7 +12,6 @@ import { authorizeRequest, noStoreJson, signMdpMarketReadDelegation } from "./bf
 import { copyBytesToArrayBuffer } from "./http-body";
 import { consumePrincipalRateLimit, consumeServiceRateLimit } from "./rate-limit";
 import { createUpstreamDeadline, mdpBaseUrl, readJsonResponseBounded } from "./service-http";
-import type { ServerPrincipal } from "./auth";
 
 export const MDP_BAR_SCHEMA_ID = "lqepoch.us_equity_trade_bar_1m.v1" as const;
 export const MDP_BAR_SCHEMA_SHA256 =

@@ -9,7 +9,10 @@ import type { WorkspaceStoreHook } from "../../stores/workspace/store";
 import type { WidgetRegistry, WidgetInstanceResolution } from "../../widgets/registry/types";
 import type { NativeActionMap, NativeDataOperationMap } from "../../features/data/operations";
 import type { MarketHostSnapshot } from "../../stores/market/market-store";
-import { useWidgetRefreshScheduler } from "../../features/data/MarketDataHost";
+import {
+  useWidgetDirectReadClient,
+  useWidgetRefreshScheduler,
+} from "../../features/data/MarketDataHost";
 import { resolveWidgetInputs } from "../../widgets/sdk/host";
 import { projectWidgetAuthorization } from "../../widgets/sdk/auth";
 import { WidgetErrorBoundary } from "../../widgets/sdk/WidgetErrorBoundary";
@@ -116,7 +119,6 @@ function WidgetRenderer({
   resolution,
   workspace,
   eventBus,
-  data,
   actions,
   market,
   onConfigChange,
@@ -127,7 +129,6 @@ function WidgetRenderer({
   resolution: Extract<WidgetInstanceResolution, { status: "ready" }>;
   workspace: WorkspaceV1;
   eventBus: WidgetEventBusHost;
-  data: WidgetDataClient<NativeDataOperationMap>;
   actions: WidgetActionClient<NativeActionMap>;
   market: WidgetMarketReader<MarketHostSnapshot>;
   onConfigChange(next: unknown): void;
@@ -143,6 +144,11 @@ function WidgetRenderer({
     instanceId: instance.instanceId,
     hidden: documentHidden,
   });
+  const directData = useWidgetDirectReadClient(
+    resolution.registration.manifest.refresh,
+    lifecycle,
+    { instanceId: instance.instanceId, hidden: documentHidden },
+  );
   const authProjection = useMemo(() => projectWidgetAuthorization(auth), [auth]);
   const host = useMemo(
     () =>
@@ -150,7 +156,7 @@ function WidgetRenderer({
         {
           auth: authProjection,
           events,
-          data,
+          data: directData,
           actions,
           refresh,
           market,
@@ -164,7 +170,7 @@ function WidgetRenderer({
     [
       authProjection,
       events,
-      data,
+      directData,
       actions,
       refresh,
       market,
@@ -185,9 +191,7 @@ function WidgetRenderer({
     NativeActionMap,
     MarketHostSnapshot
   >;
-  const Component = resolution.registration.Component as unknown as ComponentType<
-    NativeWidgetProps
-  >;
+  const Component = resolution.registration.Component as ComponentType<NativeWidgetProps>;
   const props: NativeWidgetProps = {
     instance,
     config: resolution.config as WidgetInstanceV1["config"],
@@ -214,11 +218,10 @@ function WidgetCard({
   registry,
   store,
   eventBus,
-  data,
   actions,
   market,
   onWidgetError,
-}: WorkspaceGridProps & Readonly<{ instance: WidgetInstanceV1; canEdit: boolean }>) {
+}: Omit<WorkspaceGridProps, "data"> & Readonly<{ instance: WidgetInstanceV1; canEdit: boolean }>) {
   const resolution = registry.resolveInstance(instance);
   const [fixedSymbol, setFixedSymbol] = useState(
     instance.symbolBinding?.mode === "fixed" ? instance.symbolBinding.symbol : "",
@@ -272,10 +275,9 @@ function WidgetCard({
           <h3>{title}</h3>
           <span className="workspace-widget__kind">{manifestId}</span>
         </div>
-        <div
+        <section
           aria-label={`${title} controls`}
           className="workspace-widget__actions"
-          role="group"
         >
           {canEdit && (
             <>
@@ -308,13 +310,12 @@ function WidgetCard({
               </button>
             </>
           )}
-        </div>
+        </section>
       </header>
       {canEdit && (
-        <div
+        <section
           aria-label={`${title} layout controls`}
           className="workspace-widget__layout-controls"
-          role="group"
         >
           <button aria-label={`Move ${title} left`} onClick={() => move("ArrowLeft")} type="button">
             ←
@@ -348,7 +349,7 @@ function WidgetCard({
           >
             + height
           </button>
-        </div>
+        </section>
       )}
       {bindingSupported && canEdit && (
         <form
@@ -402,7 +403,6 @@ function WidgetCard({
           <WidgetRenderer
             actions={actions}
             auth={auth}
-            data={data}
             eventBus={eventBus}
             instance={instance}
             market={market}
@@ -433,6 +433,17 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
     : props.tab.widgets;
   const isStacked = width > 0 && width < 720;
   const layout = useMemo(() => toRglLayout(props.tab.placements), [props.tab.placements]);
+  const widgetCardProps = {
+    auth: props.auth,
+    registry: props.registry,
+    workspace: props.workspace,
+    tab: props.tab,
+    store: props.store,
+    eventBus: props.eventBus,
+    actions: props.actions,
+    market: props.market,
+    onWidgetError: props.onWidgetError,
+  };
 
   function commitLayout(next: Layout[]): void {
     const current = props.store.getState().document;
@@ -471,7 +482,7 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
           {visibleWidgets.map((instance) => (
             <WidgetCard
               key={instance.instanceId}
-              {...props}
+              {...widgetCardProps}
               canEdit={props.store.getState().canEdit}
               instance={instance}
             />
@@ -482,7 +493,7 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
           {visibleWidgets.map((instance) => (
             <WidgetCard
               key={instance.instanceId}
-              {...props}
+              {...widgetCardProps}
               canEdit={props.store.getState().canEdit}
               instance={instance}
             />
@@ -511,7 +522,11 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
         >
           {visibleWidgets.map((instance) => (
             <div key={instance.instanceId} className="workspace-grid__item">
-              <WidgetCard {...props} canEdit={props.store.getState().canEdit} instance={instance} />
+              <WidgetCard
+                {...widgetCardProps}
+                canEdit={props.store.getState().canEdit}
+                instance={instance}
+              />
             </div>
           ))}
         </GridLayout>

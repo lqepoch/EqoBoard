@@ -172,6 +172,11 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
   ) {
     reject("$.selectedQueryId", "invalid-value");
   }
+  const selectedQueryIdInput = input.selectedQueryId;
+  const selectedQueryId =
+    typeof selectedQueryIdInput === "string" && QUERY_ID.test(selectedQueryIdInput)
+      ? selectedQueryIdInput.toLowerCase()
+      : null;
 
   const queries: SavedResearchQueryV1[] = [];
   if (
@@ -276,11 +281,7 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
     if (ids.has(query.id)) reject("$.queries", "duplicate-id");
     ids.add(query.id);
   }
-  if (
-    typeof input.selectedQueryId === "string" &&
-    QUERY_ID.test(input.selectedQueryId) &&
-    !ids.has(input.selectedQueryId.toLowerCase())
-  ) {
+  if (selectedQueryId !== null && !ids.has(selectedQueryId)) {
     reject("$.selectedQueryId", "invalid-reference");
   }
 
@@ -310,10 +311,8 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
   ) {
     reject("$.compareQueryIds", "invalid-reference");
   }
-  if (typeof input.selectedQueryId === "string" && QUERY_ID.test(input.selectedQueryId)) {
-    const selectedView = queries.find(
-      (query) => query.id === input.selectedQueryId!.toLowerCase(),
-    )?.viewId;
+  if (selectedQueryId !== null) {
+    const selectedView = queries.find((query) => query.id === selectedQueryId)?.viewId;
     if (
       selectedView &&
       compareQueryIds.some(
@@ -328,8 +327,7 @@ export function parseResearchQueryConfig(input: unknown): ResearchQueryConfigRes
   const config: ResearchQueryConfigV1 = {
     schemaVersion: RESEARCH_QUERY_CONFIG_VERSION,
     queries,
-    selectedQueryId:
-      typeof input.selectedQueryId === "string" ? input.selectedQueryId.toLowerCase() : null,
+    selectedQueryId,
     compareQueryIds,
   };
   if (

@@ -182,8 +182,16 @@ function boundedString(value, maximum = 1_024) {
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= maximum &&
-    !/[\u0000-\u001f\u007f]/u.test(value)
+    !containsControlCharacters(value)
   );
+}
+
+function containsControlCharacters(value) {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x1f || codePoint === 0x7f) return true;
+  }
+  return false;
 }
 
 function validS256(value) {
@@ -215,12 +223,12 @@ function createOidcServer() {
   const codes = new Map();
   const accessTokens = new Map();
 
-  function prune(map, maximumAgeMs) {
+  function prune(map, maximumAgeMs, maximumCount) {
     const cutoff = Date.now() - maximumAgeMs;
     for (const [key, value] of map) {
       if (value.createdAt < cutoff) map.delete(key);
     }
-    while (map.size > MAX_AUTH_TRANSACTIONS) map.delete(map.keys().next().value);
+    while (map.size > maximumCount) map.delete(map.keys().next().value);
   }
 
   function signedIdToken(user, nonce) {
@@ -295,7 +303,7 @@ function createOidcServer() {
         requestState.codeChallengeMethod === "S256" &&
         validCallbackUrl(requestState.redirectUri, publicOrigins);
       if (!valid) return sendText(response, 400, "Invalid OIDC authorization request.");
-      prune(transactions, 5 * 60_000);
+      prune(transactions, 5 * 60_000, MAX_AUTH_TRANSACTIONS);
       if (transactions.size >= MAX_AUTH_TRANSACTIONS)
         return sendText(response, 429, "Too many pending fixture sign-ins.");
       const transactionId = randomBytes(24).toString("base64url");
@@ -356,7 +364,7 @@ function createOidcServer() {
                 email: "reader@native-e2e.invalid",
                 roles: ["eqoboard-market-reader"],
               };
-      prune(codes, 5 * 60_000);
+      prune(codes, 5 * 60_000, MAX_AUTH_CODES);
       if (codes.size >= MAX_AUTH_CODES)
         return sendText(response, 429, "Too many pending fixture authorizations.");
       const code = randomBytes(32).toString("base64url");
@@ -440,9 +448,9 @@ function createOidcServer() {
       const challenge = createHash("sha256").update(verifier).digest("base64url");
       if (!sameBytes(challenge, authorizationCode.codeChallenge))
         return sendJson(response, 400, { error: "invalid_grant" });
-      prune(accessTokens, 5 * 60_000);
       const accessToken = randomBytes(32).toString("base64url");
       accessTokens.set(accessToken, { user: authorizationCode.user, createdAt: Date.now() });
+      prune(accessTokens, 5 * 60_000, MAX_ACCESS_TOKENS);
       return sendJson(response, 200, {
         access_token: accessToken,
         token_type: "Bearer",

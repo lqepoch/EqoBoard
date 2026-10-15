@@ -316,8 +316,8 @@ export function attachSipSnapshots(
   const snapshots = new Map<string, Record<string, unknown>>();
   for (const raw of batch.snapshots) {
     const value = record(raw);
-    const symbol = value?.symbol;
-    if (typeof symbol === "string") snapshots.set(symbol.toUpperCase(), value!);
+    if (value && typeof value.symbol === "string")
+      snapshots.set(value.symbol.toUpperCase(), value);
   }
   let priced = 0;
   let timed = 0;
@@ -377,11 +377,10 @@ export function filterMarketData(
     data.market === "eu" ? row.marketCapEur : row.marketCap;
   let rows = data.rows.filter((row) => {
     if (input.sector && row.sector !== input.sector) return false;
-    if (
-      input.marketCapMin !== undefined &&
-      (marketCapValue(row) === null || marketCapValue(row)! < input.marketCapMin)
-    )
-      return false;
+    if (input.marketCapMin !== undefined) {
+      const marketCap = marketCapValue(row);
+      if (marketCap === null || marketCap < input.marketCapMin) return false;
+    }
     if (
       input.changeMin !== undefined &&
       (row.changePercent === null || row.changePercent < input.changeMin)
@@ -412,16 +411,15 @@ export function filterMarketData(
 }
 
 export function toHeatmap(data: ResearchMarketData): ResearchMarketData {
-  const sorted = [...data.rows]
-    .filter((row) => {
-      const value = data.market === "eu" ? row.marketCapEur : row.marketCap;
-      return typeof value === "number" && Number.isFinite(value) && value > 0;
+  const sorted = data.rows
+    .flatMap((row) => {
+      const marketCap = data.market === "eu" ? row.marketCapEur : row.marketCap;
+      return typeof marketCap === "number" && Number.isFinite(marketCap) && marketCap > 0
+        ? [{ row, marketCap }]
+        : [];
     })
-    .sort((left, right) => {
-      const a = data.market === "eu" ? left.marketCapEur! : left.marketCap!;
-      const b = data.market === "eu" ? right.marketCapEur! : right.marketCap!;
-      return b - a;
-    });
+    .sort((left, right) => right.marketCap - left.marketCap)
+    .map(({ row }) => row);
   const rows = sorted.slice(0, 150);
   return Object.freeze({ ...data, rows, truncated: data.truncated || sorted.length > rows.length });
 }

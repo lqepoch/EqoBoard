@@ -254,6 +254,7 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
   expect(initialBody.revision).toMatch(/^(0|[1-9][0-9]*)$/u);
   const etag = initial.headers().etag;
   expect(etag).toBe(`"${initialBody.revision}"`);
+  if (!etag) throw new Error("Workspace GET must provide the strong ETag used by its revision.");
 
   const missingRevision = await page.request.put(putWorkspaceUrl(), {
     headers: {
@@ -275,7 +276,7 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
   const crossOrigin = await writeWorkspace(
     page,
     "cross-origin-must-not-save",
-    etag!,
+    etag,
     "000000000002",
     "https://attacker.invalid",
   );
@@ -283,8 +284,8 @@ test("@api signed OIDC ownership, workspace CAS, forged identity headers, logout
   expect(await crossOrigin.json()).toEqual({ error: "origin_rejected" });
 
   const race = await Promise.all([
-    writeWorkspace(page, "writer-cas-a", etag!, "000000000003"),
-    writeWorkspace(page, "writer-cas-b", etag!, "000000000004"),
+    writeWorkspace(page, "writer-cas-a", etag, "000000000003"),
+    writeWorkspace(page, "writer-cas-b", etag, "000000000004"),
   ]);
   expect(race.map((result) => result.status()).sort()).toEqual([200, 412]);
   const writerCurrent = await page.request.get(putWorkspaceUrl(), {

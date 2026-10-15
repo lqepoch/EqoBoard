@@ -15,6 +15,7 @@ import {
   type WidgetNoActionMap,
 } from "./actions";
 import { toWidgetRuntimeError } from "./errors";
+import { isBudgetedWidgetDataClient } from "./budgetedData";
 import {
   WidgetDataReadError,
   type WidgetDataClient,
@@ -122,6 +123,74 @@ function readCapabilities(value: unknown): CapabilityLists {
   }
 }
 
+async function runWithinActiveGeneration<T>(
+  lifecycle: WidgetHostContext["lifecycle"],
+  callerSignal: AbortSignal,
+  dispatch: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const snapshot = lifecycle.getSnapshot();
+  if (snapshot.phase === "disposed") throw new WidgetDataReadError("disposed");
+  if (snapshot.phase !== "active" || snapshot.signal.aborted)
+    throw new WidgetDataReadError("suspended");
+  if (callerSignal.aborted) throw new WidgetDataReadError("cancelled");
+
+  const controller = new AbortController();
+  const signals = new Set([snapshot.signal, callerSignal]);
+  let rejectCancellation: ((error: WidgetDataReadError) => void) | undefined;
+  const onAbort = () => {
+    controller.abort();
+    rejectCancellation?.(new WidgetDataReadError("cancelled"));
+  };
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    rejectCancellation = reject;
+    for (const signal of signals) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  });
+  const work = Promise.resolve().then(() => {
+    const current = lifecycle.getSnapshot();
+    if (
+      controller.signal.aborted ||
+      current.phase !== "active" ||
+      current.generation !== snapshot.generation
+    ) {
+      throw new WidgetDataReadError("cancelled");
+    }
+    return dispatch(controller.signal);
+  });
+  void work.catch(() => undefined);
+  try {
+    const value = await Promise.race([work, cancelled]);
+    const current = lifecycle.getSnapshot();
+    if (
+      current.phase !== "active" ||
+      current.generation !== snapshot.generation ||
+      snapshot.signal.aborted ||
+      callerSignal.aborted
+    ) {
+      throw new WidgetDataReadError("cancelled");
+    }
+    return value;
+  } catch (error) {
+    const current = lifecycle.getSnapshot();
+    if (
+      controller.signal.aborted ||
+      current.phase !== "active" ||
+      current.generation !== snapshot.generation ||
+      callerSignal.aborted
+    ) {
+      throw new WidgetDataReadError("cancelled");
+    }
+    throw error;
+  } finally {
+    for (const signal of signals) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 /** Builds an immutable per-instance context from services owned by the app host. */
 export function createWidgetHostContext<
   TOperations extends { readonly [K in keyof TOperations]: WidgetOperationDefinition },
@@ -188,7 +257,11 @@ export function scopeWidgetHostContext<
       options: Readonly<{ signal: AbortSignal }>,
     ): Promise<TOperations[K]["output"]> {
       if (!readOperations.has(operationId)) throw new WidgetDataReadError("request-failed");
-      return host.data.read(operationId, input, options);
+      if (!isBudgetedWidgetDataClient(host.data))
+        throw new WidgetDataReadError("request-failed");
+      return runWithinActiveGeneration(host.lifecycle, options.signal, (signal) =>
+        host.data.read(operationId, input, { signal }),
+      );
     },
   });
   const refresh: WidgetRefreshScheduler<TOperations> = Object.freeze({
@@ -216,7 +289,9 @@ export function scopeWidgetHostContext<
       options: Readonly<{ signal: AbortSignal }>,
     ): Promise<WidgetActionOutput<TActions, K>> {
       if (!allowedActions.has(actionId)) throw new WidgetDataReadError("request-failed");
-      return host.actions.invoke(actionId, input, options);
+      return runWithinActiveGeneration(host.lifecycle, options.signal, (signal) =>
+        host.actions.invoke(actionId, input, { signal }),
+      );
     },
   });
   return Object.freeze({ ...host, data, actions: actionClient, refresh });

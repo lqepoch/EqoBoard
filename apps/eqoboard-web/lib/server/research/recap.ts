@@ -208,7 +208,10 @@ function sectorRows(rows: readonly ResearchMarketRow[]): ResearchRecapSector[] {
         .map((row) => row.priceAsOf)
         .filter((value): value is string => value !== null)
         .sort();
-      const average = values.reduce((sum, row) => sum + row.changePercent!, 0) / values.length;
+      const changes = values
+        .map((row) => row.changePercent)
+        .filter((change): change is number => change !== null);
+      const average = changes.reduce((sum, change) => sum + change, 0) / values.length;
       return Object.freeze({
         sector,
         averageChangePercent: metric(

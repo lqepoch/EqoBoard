@@ -52,7 +52,7 @@ function exactKeys(params: URLSearchParams, allowed: readonly string[]): boolean
 
 function single(params: URLSearchParams, name: string): string | null {
   const values = params.getAll(name);
-  return values.length === 1 ? values[0]! : values.length === 0 ? null : "";
+  return values.length === 1 ? (values.at(0) ?? "") : values.length === 0 ? null : "";
 }
 
 function symbol(value: string | null): string | null {

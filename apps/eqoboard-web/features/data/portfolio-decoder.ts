@@ -16,9 +16,7 @@ function exactRecord(value: unknown, fields: readonly string[]): Record<string, 
     const keys = Reflect.ownKeys(value);
     if (
       keys.length !== fields.length ||
-      keys.some(
-        (key) => typeof key !== "string" || !fields.includes(key),
-      ) ||
+      keys.some((key) => typeof key !== "string" || !fields.includes(key)) ||
       !hasOnlyEnumerableDataProperties(value)
     )
       return null;

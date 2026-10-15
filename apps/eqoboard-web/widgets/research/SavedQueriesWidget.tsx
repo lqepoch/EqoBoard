@@ -247,10 +247,6 @@ export function SavedQueriesWidget(
   const { state: comparisons, refresh } = useQueryComparisons(host, config, hasReadPermission);
   const selectedQuery = config.queries.find((query) => query.id === config.selectedQueryId) ?? null;
   const allowedFields = RESEARCH_FILTER_FIELDS[viewId] as readonly ResearchFilterField[];
-  const viewQueries = useMemo(
-    () => config.queries.filter((query) => query.viewId === viewId),
-    [config.queries, viewId],
-  );
 
   function update(next: SavedQueriesConfigV1): void {
     changeConfig(onConfigChange, next);
@@ -417,7 +413,7 @@ export function SavedQueriesWidget(
         </p>
       ) : null}
       <div className={styles.savedQueries}>
-        <div className={styles.queryList} role="region" aria-label="Saved queries">
+        <section className={styles.queryList} aria-label="Saved queries">
           {config.queries.length === 0 ? (
             <p className={styles.empty}>No saved queries yet.</p>
           ) : null}
@@ -458,7 +454,7 @@ export function SavedQueriesWidget(
               </button>
             </article>
           ))}
-        </div>
+        </section>
         <div>
           {comparisons.status === "loading" ? (
             <p className={styles.empty} role="status">

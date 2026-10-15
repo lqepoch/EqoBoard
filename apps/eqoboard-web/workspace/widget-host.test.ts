@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WidgetActionMap } from "../widgets/sdk/actions";
 import type { WidgetHostContext } from "../widgets/sdk/contracts";
-import type { WidgetScheduledReadState } from "../widgets/sdk/data";
+import type { WidgetDataClient, WidgetScheduledReadState } from "../widgets/sdk/data";
+import { createBudgetedWidgetDataClient } from "../widgets/sdk/budgetedData";
 import { createWidgetEventBus } from "../widgets/sdk/events";
 import { createWidgetLifecycleController } from "../widgets/sdk/lifecycle";
+import { createWidgetPollBudget } from "../widgets/sdk/pollBudget";
 import { createWorkspaceWidgetHostContext } from "./widget-host";
 
 type WorkspaceHostTestOperations = {
@@ -21,11 +23,40 @@ describe("workspace per-widget host join", () => {
     const readDispatch = vi.fn(async (operationId: string) => operationId);
     const actionDispatch = vi.fn(async (actionId: string) => actionId);
     const refreshDispatch = vi.fn(() => () => undefined);
+    const lifecycle = createWidgetLifecycleController();
+    const instanceId = "80e310b0-4a9e-4b0b-b500-01a1a5d06e0d";
+    const rawData = {
+      read: async <K extends keyof WorkspaceHostTestOperations & string>(
+        operationId: K,
+        _input: WorkspaceHostTestOperations[K]["input"],
+        _options: Readonly<{ signal: AbortSignal }>,
+      ): Promise<WorkspaceHostTestOperations[K]["output"]> => readDispatch(operationId),
+    } satisfies WidgetDataClient<WorkspaceHostTestOperations>;
+    const data = createBudgetedWidgetDataClient(
+      rawData,
+      createWidgetPollBudget({
+        maxConcurrentGlobal: 4,
+        maxConcurrentPerOperation: 2,
+        maxConcurrentPerWidget: 1,
+        maxRequestsPerMinuteGlobal: 20,
+        maxRequestsPerMinutePerUser: 20,
+        maxRequestsPerMinutePerOperation: 10,
+        maxRequestsPerMinutePerWidget: 10,
+        minimumIntervalMs: 0,
+      }),
+      {
+        scopeKey: "opaque-workspace-host-test-partition",
+        instanceId,
+        manifestRefresh: { mode: "none" },
+        lifecycle,
+        hidden: false,
+      },
+    );
     const eventBus = createWidgetEventBus({ onCommand: () => ({ accepted: true }) });
     const services = {
       auth: { authenticated: true, permissions: [] },
-      events: eventBus.forInstance("80e310b0-4a9e-4b0b-b500-01a1a5d06e0d"),
-      data: { read: readDispatch },
+      events: eventBus.forInstance(instanceId),
+      data,
       actions: { invoke: actionDispatch },
       refresh: { observe: refreshDispatch },
       market: { getSnapshot: () => "snapshot", subscribe: () => () => undefined },
@@ -40,7 +71,7 @@ describe("workspace per-widget host join", () => {
     };
     const host = createWorkspaceWidgetHostContext(
       services,
-      createWidgetLifecycleController(),
+      lifecycle,
       registrationCapabilities,
     );
     const signal = new AbortController().signal;

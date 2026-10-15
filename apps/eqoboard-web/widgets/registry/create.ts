@@ -175,8 +175,7 @@ export function createWidgetRegistry(entries: readonly AnyWidgetRegistration[]):
       if (
         !entry ||
         typeof entry !== "object" ||
-        entry.Component === undefined ||
-        entry.Component === null ||
+        typeof entry.Component !== "function" ||
         typeof entry.parseConfig !== "function" ||
         typeof entry.createDefaultConfig !== "function"
       ) {

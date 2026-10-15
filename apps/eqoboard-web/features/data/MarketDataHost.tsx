@@ -18,6 +18,7 @@ import {
 } from "../../stores/market/market-store";
 import type { WidgetLifecycle, WidgetRefreshPolicyV1 } from "../../widgets/sdk/contracts";
 import type { WidgetActionClient } from "../../widgets/sdk/actions";
+import { createBudgetedWidgetDataClient } from "../../widgets/sdk/budgetedData";
 import type {
   WidgetDataClient,
   WidgetMarketReader,
@@ -41,7 +42,7 @@ import { isTerminalMarketRuntime } from "./runtime-policy";
 const POLL_BUDGET = Object.freeze({
   maxConcurrentGlobal: 8,
   maxConcurrentPerOperation: 3,
-  maxConcurrentPerWidget: 1 as const,
+  maxConcurrentPerWidget: 3 as const,
   maxRequestsPerMinuteGlobal: 120,
   maxRequestsPerMinutePerUser: 90,
   maxRequestsPerMinutePerOperation: 30,
@@ -208,6 +209,38 @@ export function useWidgetDataClient(): WidgetDataClient<NativeDataOperationMap> 
   return useMarketDataHost().data;
 }
 
+/**
+ * Per-widget direct reads use the same host budget as scheduled refreshes.
+ * Keep the refresh scheduler on the raw client so each request is charged once.
+ */
+export function useWidgetDirectReadClient(
+  policy: WidgetRefreshPolicyV1,
+  lifecycle: WidgetLifecycle,
+  scope: RefreshScope,
+): WidgetDataClient<NativeDataOperationMap> {
+  const services = useMarketDataHost();
+  const scopeKey = services.auth.storagePartition ?? "anonymous";
+  return useMemo(
+    () =>
+      createBudgetedWidgetDataClient(services.data, services.pollBudget, {
+        scopeKey,
+        instanceId: scope.instanceId,
+        manifestRefresh: policy,
+        lifecycle,
+        hidden: scope.hidden,
+      }),
+    [
+      services.data,
+      services.pollBudget,
+      scopeKey,
+      scope.instanceId,
+      scope.hidden,
+      policy,
+      lifecycle,
+    ],
+  );
+}
+
 /** Host-owned closed POST actions; there is no submit/live action ID. */
 export function useWidgetActionClient(): WidgetActionClient<NativeActionMap> {
   return useMarketDataHost().actions;
@@ -232,24 +265,18 @@ export function useWidgetRefreshScheduler(
 ): WidgetRefreshScheduler<NativeDataOperationMap> {
   const services = useMarketDataHost();
   const scopeKey = services.auth.storagePartition ?? "anonymous";
+  const { instanceId, hidden } = scope;
   return useMemo(
     () =>
       createNativeRefreshScheduler(
         services.data,
         policy,
         lifecycle,
-        scope,
+        { instanceId, hidden },
         services.pollBudget,
         scopeKey,
       ),
-    [
-      services.data,
-      services.pollBudget,
-      policy,
-      lifecycle,
-      scope,
-      scopeKey,
-    ],
+    [services.data, services.pollBudget, policy, lifecycle, instanceId, hidden, scopeKey],
   );
 }
 
@@ -275,12 +302,5 @@ export function useMarketLease(
       unsubscribe();
       leaseCoordinator.removeConsumer(instanceId, feed);
     };
-  }, [
-    leaseCoordinator,
-    canSubscribe,
-    instanceId,
-    feed,
-    symbols,
-    lifecycle,
-  ]);
+  }, [leaseCoordinator, canSubscribe, instanceId, feed, symbols, lifecycle]);
 }

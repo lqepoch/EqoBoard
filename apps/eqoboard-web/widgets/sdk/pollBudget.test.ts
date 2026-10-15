@@ -50,6 +50,9 @@ describe("widget poll budget", () => {
     expect(() => createWidgetPollBudget({ ...config, maxConcurrentGlobal: 129 })).toThrowError(
       TypeError,
     );
+    expect(() => createWidgetPollBudget({ ...config, maxConcurrentPerWidget: 4 })).toThrowError(
+      TypeError,
+    );
   });
 
   it("rejects runtime policy values that bypass a parsed manifest ceiling", async () => {
@@ -62,6 +65,24 @@ describe("widget poll budget", () => {
         maxRequestsPerMinute: 10_000,
         maxConcurrentRequests: 1,
         whenHidden: "continue",
+      } as WidgetPollRequest["policy"],
+    });
+    await expect(budget.run(malformed, operation)).rejects.toMatchObject({
+      code: "request-failed",
+    });
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("accepts only the frozen single or manual-three direct concurrency policies", async () => {
+    const budget = createWidgetPollBudget({ ...config, maxConcurrentPerWidget: 3 });
+    const operation = vi.fn(async () => "unreachable");
+    const malformed = pollRequest(widgetInstanceId(1), undefined, {
+      policy: {
+        mode: "poll",
+        minIntervalMs: 250,
+        maxRequestsPerMinute: 10,
+        maxConcurrentRequests: 2,
+        whenHidden: "pause",
       } as WidgetPollRequest["policy"],
     });
     await expect(budget.run(malformed, operation)).rejects.toMatchObject({

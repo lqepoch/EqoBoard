@@ -39,6 +39,68 @@ describe("native market store", () => {
     expect(store.getSnapshot().feeds.stocks.freshness).toBe("stale");
   });
 
+  it("detaches and deeply freezes nested Gateway fields without changing numbers", () => {
+    const preciseNumber = 0.10000000000000002;
+    const providerFields = {
+      venue: "XNAS",
+      quote: {
+        observed: preciseNumber,
+        venues: ["XNAS", "ARCX"],
+      },
+    };
+    const raw = quote({ extra_provider_field: providerFields });
+    const store = new MarketStore(() => 10_000);
+    store.acceptBatch([raw], 10_000);
+
+    const storedEvent = store.getSnapshot().stockQuotes.SPY;
+    const storedFields = storedEvent?.extra_provider_field as typeof providerFields;
+    expect(storedEvent).not.toBe(raw);
+    expect(storedFields).not.toBe(providerFields);
+    expect(storedFields.quote).not.toBe(providerFields.quote);
+    expect(storedFields.quote.venues).not.toBe(providerFields.quote.venues);
+    expect(Object.isFrozen(storedEvent)).toBe(true);
+    expect(Object.isFrozen(storedFields)).toBe(true);
+    expect(Object.isFrozen(storedFields.quote)).toBe(true);
+    expect(Object.isFrozen(storedFields.quote.venues)).toBe(true);
+    expect(Object.is(storedFields.quote.observed, preciseNumber)).toBe(true);
+
+    providerFields.venue = "MUTATED";
+    providerFields.quote.observed = 0.2;
+    providerFields.quote.venues.push("MUTATED");
+    expect(storedFields.venue).toBe("XNAS");
+    expect(Object.is(storedFields.quote.observed, preciseNumber)).toBe(true);
+    expect(storedFields.quote.venues).toEqual(["XNAS", "ARCX"]);
+    expect(Reflect.set(storedFields.quote, "observed", 0.3)).toBe(false);
+    expect(Reflect.set(storedFields.quote.venues, "0", "MUTATED")).toBe(false);
+  });
+
+  it("rejects cyclic nested payloads before they enter the snapshot", () => {
+    const circular = quote() as unknown as Record<string, unknown>;
+    circular.self = circular;
+    const store = new MarketStore(() => 10_000);
+
+    store.acceptBatch([circular], 10_000);
+
+    expect(store.getSnapshot().lastSequence).toBeNull();
+    expect(store.getSnapshot().stockQuotes).toEqual({});
+  });
+
+  it("rejects nested payloads beyond the bounded record depth", () => {
+    const tooDeep = quote() as unknown as Record<string, unknown>;
+    let cursor = tooDeep;
+    for (let index = 0; index < 17; index += 1) {
+      const child: Record<string, unknown> = {};
+      cursor.nested = child;
+      cursor = child;
+    }
+    const store = new MarketStore(() => 10_000);
+
+    store.acceptBatch([tooDeep], 10_000);
+
+    expect(store.getSnapshot().lastSequence).toBeNull();
+    expect(store.getSnapshot().stockQuotes).toEqual({});
+  });
+
   it("keeps the instance-wide watermark when a sequenced event has an invalid display identity", () => {
     const store = new MarketStore(() => 10_000);
     store.acceptBatch([quote({ local_sequence: 1 })], 10_000);
@@ -121,8 +183,10 @@ describe("native market store", () => {
       expires_in_seconds: 90,
       generation: 2,
       state: "lease_active",
+      metadata: { source: "gateway" },
     };
     store.setLeaseAck("options", 2, 16, ack, targetKey);
+    ack.metadata.source = "mutated after acceptance";
     now += 1_000;
     store.setLeaseAck(
       "options",
@@ -137,7 +201,16 @@ describe("native market store", () => {
     expect(lease.requestedCount).toBe(22);
     expect(lease.leasedCount).toBe(16);
     expect(lease.omittedCount).toBe(6);
-    expect(lease.rawAck).toEqual(ack);
+    expect(lease.rawAck).toEqual({
+      active: 16,
+      max: 16,
+      expires_in_seconds: 90,
+      generation: 2,
+      state: "lease_active",
+      metadata: { source: "gateway" },
+    });
+    expect(Object.isFrozen(lease.rawAck)).toBe(true);
+    expect(Object.isFrozen((lease.rawAck as { metadata: object }).metadata)).toBe(true);
     expect(lease.membershipVerification).toBe("unverified");
   });
 

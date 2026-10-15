@@ -1,6 +1,6 @@
 import type { WorkspaceV1 } from "../../workspace/model";
 import { createId } from "../../workspace/model";
-import { parseWorkspaceDocument } from "../../workspace/schema";
+import { hasControlCharacters, parseWorkspaceDocument } from "../../workspace/schema";
 
 const DATABASE_NAME = "eqoboard-native-workspace-recovery";
 const DATABASE_VERSION = 2;
@@ -15,7 +15,6 @@ const RECOVERY_REASONS = new Set<RecoveryReason>([
   "import",
   "restore",
 ]);
-const PARTITION_PATTERN = /^[^\u0000-\u001f\u007f]{1,256}$/u;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export type RecoveryReason = "save" | "replace" | "reset" | "delete" | "import" | "restore";
@@ -33,6 +32,12 @@ export interface WorkspaceBackupStore {
   save(partition: string, workspace: WorkspaceV1, reason: RecoveryReason): Promise<void>;
   list(partition: string, workspaceId: string): Promise<readonly WorkspaceRecoveryPoint[]>;
   get(partition: string, recoveryPointId: string): Promise<WorkspaceRecoveryPoint | null>;
+}
+
+function isValidPartition(value: unknown): value is string {
+  if (typeof value !== "string" || hasControlCharacters(value)) return false;
+  const length = Array.from(value).length;
+  return length >= 1 && length <= 256;
 }
 
 function validatedWorkspace(value: unknown): WorkspaceV1 | null {
@@ -60,8 +65,7 @@ function parseRecoveryPoint(value: unknown): WorkspaceRecoveryPoint | null {
   if (
     typeof point.id !== "string" ||
     !UUID_PATTERN.test(point.id) ||
-    typeof point.partition !== "string" ||
-    !PARTITION_PATTERN.test(point.partition) ||
+    !isValidPartition(point.partition) ||
     typeof point.workspaceId !== "string" ||
     !UUID_PATTERN.test(point.workspaceId) ||
     !Number.isSafeInteger(point.createdAt) ||
@@ -89,8 +93,14 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
+      const transaction = request.transaction;
+      if (!transaction) {
+        db.close();
+        reject(new Error("Could not start workspace recovery storage upgrade."));
+        return;
+      }
       const store = db.objectStoreNames.contains(STORE_NAME)
-        ? request.transaction!.objectStore(STORE_NAME)
+        ? transaction.objectStore(STORE_NAME)
         : db.createObjectStore(STORE_NAME, { keyPath: "id" });
       if (!store.indexNames.contains("partition-workspace")) {
         store.createIndex("partition-workspace", ["partition", "workspaceId"], { unique: false });
@@ -121,8 +131,7 @@ export class IndexedDbWorkspaceBackupStore implements WorkspaceBackupStore {
   async save(partition: string, workspace: WorkspaceV1, reason: RecoveryReason): Promise<void> {
     const validated = validatedWorkspace(workspace);
     if (
-      typeof partition !== "string" ||
-      !PARTITION_PATTERN.test(partition) ||
+      !isValidPartition(partition) ||
       !validated ||
       !RECOVERY_REASONS.has(reason)
     ) {
@@ -188,8 +197,7 @@ export class IndexedDbWorkspaceBackupStore implements WorkspaceBackupStore {
 
   async list(partition: string, workspaceId: string): Promise<readonly WorkspaceRecoveryPoint[]> {
     if (
-      typeof partition !== "string" ||
-      !PARTITION_PATTERN.test(partition) ||
+      !isValidPartition(partition) ||
       typeof workspaceId !== "string" ||
       !UUID_PATTERN.test(workspaceId)
     )
@@ -220,7 +228,7 @@ export class IndexedDbWorkspaceBackupStore implements WorkspaceBackupStore {
   }
 
   async get(partition: string, recoveryPointId: string): Promise<WorkspaceRecoveryPoint | null> {
-    if (typeof partition !== "string" || !PARTITION_PATTERN.test(partition) || !recoveryPointId)
+    if (!isValidPartition(partition) || !recoveryPointId)
       return null;
     const db = await openDatabase();
     try {

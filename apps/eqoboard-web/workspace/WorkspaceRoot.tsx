@@ -199,9 +199,8 @@ function WorkspaceSyncControls({ state }: { state: WorkspaceStoreState }) {
   };
 
   return (
-    <div
+    <section
       className={`workspace-sync workspace-sync--${state.syncStatus}`}
-      role="group"
       aria-label="Workspace sync status"
     >
       <span aria-live="polite">{statusLabel[state.syncStatus]}</span>
@@ -256,7 +255,7 @@ function WorkspaceSyncControls({ state }: { state: WorkspaceStoreState }) {
           </p>
         )}
       </details>
-    </div>
+    </section>
   );
 }
 

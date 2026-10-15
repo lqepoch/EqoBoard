@@ -97,7 +97,8 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   expect(download.suggestedFilename()).toBe("eqoboard-workspaces.json");
   const downloadPath = await download.path();
   expect(downloadPath).toBeTruthy();
-  const serialized = await readFile(downloadPath!, "utf8");
+  if (!downloadPath) throw new Error("The browser did not retain the workspace export.");
+  const serialized = await readFile(downloadPath, "utf8");
   const exportPayloadBytes = Buffer.byteLength(serialized, "utf8");
   const envelope = JSON.parse(serialized) as Record<string, unknown>;
   expect(Object.keys(envelope).sort()).toEqual(["document", "format", "schemaVersion"]);

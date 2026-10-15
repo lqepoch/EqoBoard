@@ -69,12 +69,11 @@ function record(value: unknown): Record<string, unknown> | null {
     const keys = Reflect.ownKeys(value);
     const descriptors = Object.getOwnPropertyDescriptors(value);
     if (
-      keys.some(
-        (key) =>
-          typeof key !== "string" ||
-          !descriptors[key]?.enumerable ||
-          !("value" in descriptors[key]!),
-      )
+      keys.some((key) => {
+        if (typeof key !== "string") return true;
+        const descriptor = descriptors[key];
+        return !descriptor?.enumerable || !("value" in descriptor);
+      })
     )
       return null;
     return value as Record<string, unknown>;

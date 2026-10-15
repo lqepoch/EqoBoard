@@ -65,8 +65,10 @@ describe("market-cap treemap layout", () => {
     expect(areas.get("AAA")).toBeCloseTo(0.75);
     expect(areas.get("BBB")).toBeCloseTo(0.25);
     expect([...areas.values()].reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
-    expect((layout.cells[0]!.width * layout.cells[0]!.height) / 10_000).toBeCloseTo(0.75);
-    expect((layout.cells[1]!.width * layout.cells[1]!.height) / 10_000).toBeCloseTo(0.25);
+    const [largestCell, smallerCell] = layout.cells;
+    if (!largestCell || !smallerCell) throw new Error("expected two weighted cells");
+    expect((largestCell.width * largestCell.height) / 10_000).toBeCloseTo(0.75);
+    expect((smallerCell.width * smallerCell.height) / 10_000).toBeCloseTo(0.25);
   });
 
   it("uses the EUR-converted cap for European market areas and preserves its source date", () => {

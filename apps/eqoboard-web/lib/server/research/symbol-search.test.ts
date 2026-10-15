@@ -25,7 +25,9 @@ describe("fixed TradingView symbol-search adapter", () => {
     });
 
     const result = await loadTradingViewSymbolSearch("AAPL");
-    const [requestUrl, options] = mocks.readProviderJson.mock.calls[0]!;
+    const request = mocks.readProviderJson.mock.calls.at(0);
+    if (!request) throw new Error("expected one TradingView provider request");
+    const [requestUrl, options] = request;
     const url = requestUrl as URL;
 
     expect(url.origin).toBe("https://symbol-search.tradingview.com");

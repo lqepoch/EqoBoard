@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { NativeActionMap, NativeDataOperationMap } from "@/features/data/operations";
 import type {
   ManualPortfolioPositionV1,
@@ -54,7 +54,8 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
   const [executedAt, setExecutedAt] = useState(localDateTimeValue);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0n);
+  const latestReloadKey = useRef(0n);
   const canWrite = host.auth.authenticated && host.auth.permissions.includes("workspace:write");
   const selected = useMemo(
     () => portfolios.find((item) => item.id === selectedId) ?? null,
@@ -62,8 +63,9 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
   );
 
   const reloadPortfolios = useCallback(
-    async (signal: AbortSignal) => {
+    async (signal: AbortSignal, generation: bigint) => {
       const next = await host.data.read("portfolio.list", {}, { signal });
+      if (signal.aborted || generation !== latestReloadKey.current) return;
       setPortfolios(next);
       setSelectedId((current) =>
         next.some((item) => item.id === current) ? current : (next[0]?.id ?? null),
@@ -79,8 +81,8 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
     const cancel = () => controller.abort();
     lifecycle.signal.addEventListener("abort", cancel, { once: true });
     setError(null);
-    void reloadPortfolios(controller.signal).catch((cause: unknown) => {
-      if (controller.signal.aborted) return;
+    void reloadPortfolios(controller.signal, reloadKey).catch((cause: unknown) => {
+      if (controller.signal.aborted || reloadKey !== latestReloadKey.current) return;
       setError(asErrorMessage(cause));
       host.reportError({ code: "data-unavailable", retryable: true });
     });
@@ -113,12 +115,12 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
       ),
     ])
       .then(([nextPositions, nextTransactions]) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || reloadKey !== latestReloadKey.current) return;
         setPositions(nextPositions);
         setTransactions(nextTransactions);
       })
       .catch((cause: unknown) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || reloadKey !== latestReloadKey.current) return;
         setError(asErrorMessage(cause));
         host.reportError({ code: "data-unavailable", retryable: true });
       });
@@ -128,7 +130,11 @@ export function PortfolioWidget({ host }: PortfolioWidgetProps) {
     };
   }, [host.data, host.lifecycle, host.reportError, reloadKey, selectedId]);
 
-  const refresh = useCallback(() => setReloadKey((current) => current + 1), []);
+  const refresh = useCallback(() => {
+    const nextGeneration = latestReloadKey.current + 1n;
+    latestReloadKey.current = nextGeneration;
+    setReloadKey(nextGeneration);
+  }, []);
 
   async function runMutation(action: (signal: AbortSignal) => Promise<void>): Promise<void> {
     const lifecycle = host.lifecycle.getSnapshot();

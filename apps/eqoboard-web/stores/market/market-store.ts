@@ -1,7 +1,4 @@
-import {
-  hasControlCharacters,
-  hasOnlyEnumerableDataProperties,
-} from "../../features/data/validation";
+import { hasControlCharacters } from "../../features/data/validation";
 
 export type MarketFeedName = "stocks" | "options";
 export type MarketTransportState =
@@ -12,7 +9,7 @@ export type MarketTransportState =
   | "unavailable";
 export type MarketFreshness = "unknown" | "fresh" | "stale";
 
-/** Original Gateway JSON retained as received; this is not a second wire DTO. */
+/** Gateway JSON fields stay verbatim in a bounded immutable copy, not a second wire DTO. */
 export type GatewayMarketRecord = Readonly<Record<string, unknown>>;
 
 export type MarketFeedSnapshot = Readonly<{
@@ -55,6 +52,19 @@ const QUOTE_LIMIT = 1_000;
 const FRESHNESS_MS = 5_000;
 const STOCK_SYMBOL = /^[A-Z][A-Z0-9.-]{0,11}$/u;
 const OPTION_SYMBOL = /^[A-Z0-9.]{1,10}\d{6}[CP]\d{8}$/u;
+const MAX_EVENT_DEPTH = 16;
+const MAX_EVENT_NODES = 20_000;
+const MAX_EVENT_STRING_CHARS = 64 * 1024;
+const MAX_EVENT_TOTAL_STRING_CHARS = 256 * 1024;
+const MAX_EVENT_OBJECT_KEYS = 512;
+const MAX_EVENT_ARRAY_LENGTH = 4_096;
+const INVALID_JSON_VALUE = Symbol("invalid-json-value");
+
+type CloneBudget = {
+  nodes: number;
+  stringChars: number;
+  seen: WeakSet<object>;
+};
 
 function emptyFeed(): MarketFeedSnapshot {
   return Object.freeze({
@@ -97,16 +107,107 @@ function emptySnapshot(): MarketHostSnapshot {
   });
 }
 
-function record(value: unknown): GatewayMarketRecord | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+function cloneJsonValue(
+  value: unknown,
+  budget: CloneBudget,
+  depth = 0,
+): unknown | typeof INVALID_JSON_VALUE {
+  budget.nodes += 1;
+  if (budget.nodes > MAX_EVENT_NODES || depth > MAX_EVENT_DEPTH) return INVALID_JSON_VALUE;
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : INVALID_JSON_VALUE;
+  if (typeof value === "string") {
+    budget.stringChars += value.length;
+    return value.length <= MAX_EVENT_STRING_CHARS &&
+      budget.stringChars <= MAX_EVENT_TOTAL_STRING_CHARS
+      ? value
+      : INVALID_JSON_VALUE;
+  }
+  if (typeof value !== "object") return INVALID_JSON_VALUE;
+
   try {
     const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    if (!hasOnlyEnumerableDataProperties(value)) return null;
-    return value as GatewayMarketRecord;
+    if (budget.seen.has(value)) return INVALID_JSON_VALUE;
+    budget.seen.add(value);
+
+    if (Array.isArray(value)) {
+      if (prototype !== Array.prototype) return INVALID_JSON_VALUE;
+      const keys = Reflect.ownKeys(value);
+      if (keys.length > MAX_EVENT_ARRAY_LENGTH + 1) return INVALID_JSON_VALUE;
+      const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(value as object);
+      const lengthDescriptor = descriptors.length;
+      if (
+        !lengthDescriptor ||
+        typeof lengthDescriptor.value !== "number" ||
+        !Number.isSafeInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value > MAX_EVENT_ARRAY_LENGTH ||
+        keys.length !== lengthDescriptor.value + 1
+      ) {
+        return INVALID_JSON_VALUE;
+      }
+
+      const clone = new Array<unknown>(lengthDescriptor.value);
+      for (const key of keys) {
+        if (key === "length") continue;
+        if (
+          typeof key !== "string" ||
+          !/^(0|[1-9]\d*)$/u.test(key) ||
+          Number(key) >= lengthDescriptor.value
+        ) {
+          return INVALID_JSON_VALUE;
+        }
+        const descriptor = descriptors[key];
+        if (!descriptor?.enumerable || !("value" in descriptor)) return INVALID_JSON_VALUE;
+        const child = cloneJsonValue(descriptor.value, budget, depth + 1);
+        if (child === INVALID_JSON_VALUE) return INVALID_JSON_VALUE;
+        Object.defineProperty(clone, key, {
+          configurable: true,
+          enumerable: true,
+          value: child,
+          writable: true,
+        });
+      }
+      return Object.freeze(clone);
+    }
+
+    if (prototype !== Object.prototype && prototype !== null) return INVALID_JSON_VALUE;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > MAX_EVENT_OBJECT_KEYS || keys.some((key) => typeof key !== "string"))
+      return INVALID_JSON_VALUE;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const clone = Object.create(prototype) as Record<string, unknown>;
+    for (const key of keys as string[]) {
+      if (key.length > 512) return INVALID_JSON_VALUE;
+      budget.stringChars += key.length;
+      if (budget.stringChars > MAX_EVENT_TOTAL_STRING_CHARS) return INVALID_JSON_VALUE;
+      const descriptor = descriptors[key];
+      if (!descriptor?.enumerable || !("value" in descriptor)) return INVALID_JSON_VALUE;
+      const child = cloneJsonValue(descriptor.value, budget, depth + 1);
+      if (child === INVALID_JSON_VALUE) return INVALID_JSON_VALUE;
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: true,
+        value: child,
+        writable: true,
+      });
+    }
+    return Object.freeze(clone);
   } catch {
-    return null;
+    return INVALID_JSON_VALUE;
   }
+}
+
+function immutableJsonValue(value: unknown): unknown {
+  const clone = cloneJsonValue(value, { nodes: 0, stringChars: 0, seen: new WeakSet() });
+  return clone === INVALID_JSON_VALUE ? null : clone;
+}
+
+function record(value: unknown): GatewayMarketRecord | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const clone = cloneJsonValue(value, { nodes: 0, stringChars: 0, seen: new WeakSet() });
+  return clone !== INVALID_JSON_VALUE && clone !== null && typeof clone === "object"
+    ? (clone as GatewayMarketRecord)
+    : null;
 }
 
 function safePositiveInteger(value: unknown): value is number {
@@ -252,7 +353,7 @@ export class MarketStore {
         ...current,
         generation,
         acknowledgedAt: this.#now(),
-        rawAck,
+        rawAck: immutableJsonValue(rawAck),
         leasedCount: activeCount,
         coverage,
       }),
@@ -275,7 +376,7 @@ export class MarketStore {
     );
   }
 
-  /** Validates the Gateway-wide ordering metadata and stores accepted event objects unchanged. */
+  /** Validates Gateway ordering metadata and stores a bounded immutable copy of each accepted event. */
   acceptBatch(batch: readonly unknown[], receivedAt = this.#now()): void {
     if (!Number.isFinite(receivedAt)) return;
     const parsed = batch

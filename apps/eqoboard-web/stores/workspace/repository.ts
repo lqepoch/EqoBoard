@@ -5,7 +5,7 @@ import {
   type WorkspaceRepositorySnapshot,
   type WorkspaceV1,
 } from "../../workspace/model";
-import { parseWorkspaceDocument } from "../../workspace/schema";
+import { hasControlCharacters, parseWorkspaceDocument } from "../../workspace/schema";
 import {
   IndexedDbWorkspaceBackupStore,
   type RecoveryReason,
@@ -69,13 +69,16 @@ function parseRevision(value: unknown): string | null {
 }
 
 function isStrongEntityTag(value: string | null): value is string {
+  const opaqueTag = value?.slice(1, -1);
   return (
     value !== null &&
     value.length >= 2 &&
     value.length <= 512 &&
     value.startsWith('"') &&
     value.endsWith('"') &&
-    !/[\u0000-\u001f\u007f"]/u.test(value.slice(1, -1))
+    opaqueTag !== undefined &&
+    !hasControlCharacters(opaqueTag) &&
+    !opaqueTag.includes('"')
   );
 }
 

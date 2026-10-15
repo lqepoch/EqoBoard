@@ -89,12 +89,11 @@ function plainRecord(value: unknown): Record<string, unknown> | null {
     const keys = Reflect.ownKeys(value);
     const descriptors = Object.getOwnPropertyDescriptors(value);
     if (
-      keys.some(
-        (key) =>
-          typeof key !== "string" ||
-          !descriptors[key]?.enumerable ||
-          !("value" in descriptors[key]!),
-      )
+      keys.some((key) => {
+        if (typeof key !== "string") return true;
+        const descriptor = descriptors[key];
+        return !descriptor?.enumerable || !("value" in descriptor);
+      })
     )
       return null;
     return value as Record<string, unknown>;
@@ -296,6 +295,7 @@ export function yfinanceResearchEvidence(
   const hasSyntheticFixtureMarker = adapterVersions.some((version) =>
     version.startsWith("bounded-synthetic-e2e"),
   );
+  const singleProviderTime = providerTimes.length === 1 ? (providerTimes.at(0) ?? "unknown") : null;
   const safeAdapterVersions = adapterVersions.map((version) =>
     /^[A-Za-z0-9][A-Za-z0-9._:+/-]{0,119}$/u.test(version)
       ? version
@@ -307,11 +307,8 @@ export function yfinanceResearchEvidence(
     provider: "yfinance",
     feed: "daily observations",
     asOf:
-      providerTimes.length === 1
-        ? providerTimes[0]!
-        : providerTimes.length > 1
-          ? "mixed source observation times"
-          : "unknown",
+      singleProviderTime ??
+      (providerTimes.length > 1 ? "mixed source observation times" : "unknown"),
     requestedWindow: `${config.range} · ${start} → ${end}`,
     effectiveResolution: "1d",
     coverage: `MDP coverage not asserted; ${projection.bars.length} plotted rows across ${pages.length} page(s); returned ${returned.join(", ") || "none"}; missing ${missing.join(", ") || "none"}${rejected ? `; ${rejected} rows omitted for invalid/missing OHLCV` : ""}${pendingCursor ? "; older cursor available by explicit request" : ""}${paginationBlocked ? "; pagination stopped after a repeated/invalid cursor" : ""}`,
@@ -321,7 +318,7 @@ export function yfinanceResearchEvidence(
       { label: "Adjustment", value: `${config.adjustment}; provider semantics unconfirmed` },
       {
         label: "Source observed at",
-        value: providerTimes.length === 1 ? providerTimes[0]! : "mixed / unknown",
+        value: singleProviderTime ?? "mixed / unknown",
       },
       {
         label: "Provider fetch",

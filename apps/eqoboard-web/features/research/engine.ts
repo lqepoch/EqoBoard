@@ -32,8 +32,7 @@ function count(value: unknown): value is number {
 export function parseEngineStatus(value: unknown): EngineStatusResponseV1 | null {
   const status = record(value);
   if (
-    !status ||
-    status.$typeName !== "lqepoch.engine.v1.EngineStatusResponseV1" ||
+    status?.$typeName !== "lqepoch.engine.v1.EngineStatusResponseV1" ||
     status.apiVersion !== "v1" ||
     !label(status.service) ||
     !label(status.serviceReadiness) ||
@@ -55,8 +54,7 @@ export function parseEngineStatus(value: unknown): EngineStatusResponseV1 | null
 export function parseSyntheticOfflinePreview(value: unknown): SyntheticOfflinePreviewV1 | null {
   const preview = record(value);
   if (
-    !preview ||
-    preview.$typeName !== "lqepoch.engine.v1.SyntheticOfflinePreviewV1" ||
+    preview?.$typeName !== "lqepoch.engine.v1.SyntheticOfflinePreviewV1" ||
     preview.sourceMode !== "synthetic_offline" ||
     preview.sourceProvenance !== "synthetic_only" ||
     preview.executionEnabled !== false ||

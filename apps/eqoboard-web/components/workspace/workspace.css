@@ -195,20 +195,20 @@
   min-width: 0;
 }
 
-.workspace-tab {
-  min-height: 38px !important;
-  border-color: transparent !important;
-  border-bottom-color: var(--eq-border) !important;
-  border-radius: var(--eq-radius-sm) var(--eq-radius-sm) 0 0 !important;
-  background: transparent !important;
-  color: var(--eq-text-muted) !important;
+.workspace-root button.workspace-tab {
+  min-height: 38px;
+  border-color: transparent;
+  border-bottom-color: var(--eq-border);
+  border-radius: var(--eq-radius-sm) var(--eq-radius-sm) 0 0;
+  background: transparent;
+  color: var(--eq-text-muted);
 }
 
-.workspace-tab--active {
-  border-color: var(--eq-border-strong) !important;
-  border-bottom-color: var(--eq-accent) !important;
-  background: var(--eq-surface) !important;
-  color: var(--eq-text) !important;
+.workspace-root button.workspace-tab--active {
+  border-color: var(--eq-border-strong);
+  border-bottom-color: var(--eq-accent);
+  background: var(--eq-surface);
+  color: var(--eq-text);
 }
 
 .workspace-tab-actions {
@@ -276,8 +276,8 @@
   flex-wrap: wrap;
 }
 
-.workspace-templates form label,
-.workspace-template-actions label {
+.workspace-template-actions label,
+.workspace-templates form label {
   color: var(--eq-text-muted);
   font-size: 11px;
 }
@@ -305,7 +305,7 @@
   font-weight: 600;
 }
 
-.workspace-file-button input {
+.workspace-root .workspace-file-button input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -460,7 +460,7 @@
   font-size: 10px;
 }
 
-.workspace-widget__binding input {
+.workspace-root .workspace-widget__binding input {
   width: 72px;
   min-height: 26px;
   font-family: var(--eq-font-mono);
@@ -567,8 +567,8 @@
   opacity: 0.75;
 }
 
-.react-resizable-handle::after {
-  border-color: var(--eq-accent) !important;
+.workspace-root .react-resizable-handle::after {
+  border-color: var(--eq-accent);
 }
 
 @media (max-width: 720px) {

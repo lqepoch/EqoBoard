@@ -106,7 +106,7 @@ export function parseCsv(text: string): string[][] {
   let cell = "";
   let quoted = false;
   for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]!;
+    const char = text.charAt(index);
     if (quoted) {
       if (char === '"' && text[index + 1] === '"') {
         cell += '"';

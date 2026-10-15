@@ -99,7 +99,7 @@ function parseSchemaVersionConfig(
   | Readonly<{ ok: true; value: Readonly<{ schemaVersion: 1 }> }>
   | Readonly<{ ok: false; code: "config-invalid" }> {
   const record = exactDataRecord(value, ["schemaVersion"]);
-  if (!record || record.schemaVersion !== 1) return { ok: false, code: "config-invalid" };
+  if (record?.schemaVersion !== 1) return { ok: false, code: "config-invalid" };
   return { ok: true, value: Object.freeze({ schemaVersion: 1 }) };
 }
 
@@ -133,7 +133,8 @@ function createViewManifest(
 function createViewRegistration(
   view: ResearchViewId,
 ): WidgetRegistration<ResearchViewConfigV1, ResearchDataOperationMap, WidgetNoActionMap> {
-  const definition = RESEARCH_VIEW_DEFINITIONS.find((entry) => entry.id === view)!;
+  const definition = RESEARCH_VIEW_DEFINITIONS.find((entry) => entry.id === view);
+  if (!definition) throw new Error("unknown-research-view");
   const withSymbol =
     view === "news" ||
     view === "earnings-calendar" ||

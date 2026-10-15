@@ -6,7 +6,7 @@ import { AllCommunityModule, ModuleRegistry, themeQuartz } from "ag-grid-communi
 import type { ColDef, GridApi, GridReadyEvent } from "ag-grid-community";
 
 import { ResourceState } from "@/components/shell/ResourceState";
-import { useMarketLease, useMarketSnapshot } from "@/features/data/MarketDataHost";
+import { useMarketLease } from "@/features/data/MarketDataHost";
 import { hasControlCharacters } from "@/features/data/validation";
 import type { MarketHostSnapshot } from "@/stores/market/market-store";
 import type { WidgetProps } from "@/widgets/sdk/contracts";
@@ -14,7 +14,7 @@ import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
 import type { WidgetOperationMap } from "@/widgets/sdk/data";
 import type { NativeDataOperationMap } from "@/features/data/operations";
 import type { StockSnapshotRow } from "@/features/market/market-contracts";
-import { useQuoteSnapshots } from "./hooks";
+import { useMarketSnapshot, useQuoteSnapshots } from "./hooks";
 import type { QuoteWidgetHost } from "./hooks";
 import type { EmptyMarketConfigV1 } from "./config";
 import styles from "./market-widgets.module.css";
@@ -476,8 +476,8 @@ function StockFeedState({ host }: Readonly<{ host: QuoteWidgetHost }>) {
       detail={`transport ${feed.transportState}; connection epoch ${feed.connectionEpoch ?? "unknown"}; last local sequence ${feed.lastSequence ?? "unknown"}; Gateway lease acknowledgement exposes counts only, exact active symbols are unverified.`}
       metadata={
         <span data-state={leaseState}>
-          lease {leaseState}; selected {feed.selectedCount}; acknowledged {feed.leasedCount};
-          omitted {feed.omittedCount}; exact membership unverified
+          lease {leaseState} · selected {feed.selectedCount} · acknowledged {feed.leasedCount} ·
+          omitted {feed.omittedCount} · exact membership unverified
         </span>
       }
     />

@@ -47,12 +47,7 @@ export function ResourceState({
       {content}
     </div>
   ) : (
-    <div
-      aria-label={`${title}: ${label}`}
-      className="eq-resource-state"
-      data-state={state}
-      role="group"
-    >
+    <div className="eq-resource-state" data-state={state}>
       {content}
     </div>
   );

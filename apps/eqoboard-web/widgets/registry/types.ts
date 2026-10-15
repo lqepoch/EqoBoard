@@ -44,8 +44,11 @@ export interface WidgetRegistration<
 /** Internal erased form after static config and host generics are retained in the entry. */
 export type AnyWidgetRegistration = Readonly<{
   manifest: WidgetManifestV1;
-  /** Never props make the erased component assignable without weakening to `any`. */
-  Component: ComponentType<never>;
+  /**
+   * Config and host generics are erased at registry lookup. Only a validated
+   * `ready` renderer boundary may narrow this statically registered component.
+   */
+  Component: unknown;
   allowedReadOperations: readonly string[];
   allowedActions: readonly WidgetActionId[];
   parseConfig(value: unknown): ConfigParseResult<unknown>;

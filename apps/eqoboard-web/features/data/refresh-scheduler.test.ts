@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { NativeDataOperationMap } from "./operations";
 import { createNativeRefreshScheduler } from "./refresh-scheduler";
 import { createWidgetPollBudget } from "../../widgets/sdk/pollBudget";
+import type { WidgetPollBudget, WidgetPollRequest } from "../../widgets/sdk/pollBudget";
 import { createWidgetLifecycleController } from "../../widgets/sdk/lifecycle";
 import type { WidgetDataClient } from "../../widgets/sdk/data";
 
@@ -20,7 +21,9 @@ describe("native refresh scheduler", () => {
   it("serializes concurrent per-widget observers through the shared one-request budget", async () => {
     let activeReads = 0;
     let maximumConcurrentReads = 0;
+    let readCalls = 0;
     const read = async (): Promise<unknown> => {
+      readCalls += 1;
       activeReads += 1;
       maximumConcurrentReads = Math.max(maximumConcurrentReads, activeReads);
       activeReads -= 1;
@@ -38,12 +41,19 @@ describe("native refresh scheduler", () => {
       maxRequestsPerMinutePerWidget: 30,
       minimumIntervalMs: 1_000,
     });
+    let budgetCalls = 0;
+    const countedBudget: WidgetPollBudget = {
+      run<T>(request: WidgetPollRequest, operation: (signal: AbortSignal) => Promise<T>) {
+        budgetCalls += 1;
+        return budget.run(request, operation);
+      },
+    };
     const scheduler = createNativeRefreshScheduler(
       data,
       POLICY,
       lifecycle,
       { instanceId: INSTANCE_ID, hidden: false },
-      budget,
+      countedBudget,
       "scope-test",
     );
     const firstStates: string[] = [];
@@ -67,6 +77,8 @@ describe("native refresh scheduler", () => {
     lifecycle.dispose();
 
     expect(maximumConcurrentReads).toBe(1);
+    expect(readCalls).toBe(2);
+    expect(budgetCalls).toBe(readCalls);
     expect(firstStates).toContain("ready");
     expect(secondStates).toContain("ready");
   });

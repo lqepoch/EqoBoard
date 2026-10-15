@@ -255,7 +255,9 @@ test("@component command-palette keyboard selection updates the active workspace
   );
   expect(fulfilledSearches).toHaveLength(1);
   expect(symbolSearchRequests).toHaveLength(1);
-  expect(new URL(symbolSearchRequests[0]!).searchParams.get("query")).toBe("AAPL");
+  const symbolSearchRequest = symbolSearchRequests[0];
+  if (!symbolSearchRequest) throw new Error("Expected one fulfilled symbol-search request.");
+  expect(new URL(symbolSearchRequest).searchParams.get("query")).toBe("AAPL");
   expect(externalRequests).toEqual([]);
 
   // Restore the prior workspace symbol so this browser case leaves no user-data change behind.
