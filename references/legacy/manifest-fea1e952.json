@@ -1,0 +1,2992 @@
+{
+  "schemaVersion": 2,
+  "kind": "eqoboard-legacy-integrity-baseline",
+  "baseline": {
+    "commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+    "tree": "986dd808560016965e73edc1869603b621b4286e",
+    "objectFormat": "sha1",
+    "acceptance": "source-tagged-tree-merged-to-main-not-native-parity-or-release-acceptance",
+    "sourceTag": {
+      "tag": "migration/eqoboard-native-source-20261015-fea1e95",
+      "tagObject": "9d606d11fa95ffa696aa009b52695d2c349f6a97",
+      "commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6"
+    },
+    "mergedMain": {
+      "commit": "e5f0f6b7531eb73356eb4059d5cef9e37584b259",
+      "tree": "986dd808560016965e73edc1869603b621b4286e"
+    },
+    "premergeMainPreflight": {
+      "tag": "migration/eqoboard-native-20261015-740765ec",
+      "tagObject": "636253df34f3d7d458e4236564db5be153628ad5",
+      "commit": "740765ec824988eda24822b943c5604f8d565ebf"
+    }
+  },
+  "scope": {
+    "protectedRoots": [
+      "apps/gateway/openbb",
+      "apps/openterminal",
+      "third_party/licenses/openbb-workspace",
+      "tools/openbb"
+    ],
+    "protectedFiles": [
+      ".agents/skills/openbb-workspace/SKILL.md",
+      "LICENSE",
+      "apps/gateway/src/openbb.rs",
+      "apps/gateway/src/openbb_tests.rs",
+      "compose.openbb.e2e.yaml",
+      "compose.openbb.release.yaml",
+      "compose.openbb.yaml",
+      "docs/OPENBB_SUPPLY_CHAIN.md",
+      "docs/THIRD_PARTY.md",
+      "docs/UPSTREAM_AUDIT.md",
+      "docs/evidence/openbb-local-runtime-acceptance.json",
+      "tests/test_openbb_community.py",
+      "tests/test_openbb_docker_save_oci.py",
+      "tests/test_openbb_supply_chain.py",
+      "tests/test_openbb_upstream_diff.py",
+      "third_party/upstreams.lock.json",
+      "tools/openbb-lite-e2e.sh",
+      "tools/openbb-sanitize-e2e-logs.mjs"
+    ],
+    "excludedPaths": [
+      ".github/workflows/openbb.yml",
+      "apps/eqoboard-web",
+      "docs/migration/FEATURE_INVENTORY.md",
+      "references/README.md",
+      "references/legacy",
+      "tests/fixtures/auto_merge/openbb-optional-check-runs.json",
+      "tests/test_legacy_integrity.mjs",
+      "tests/test_native_build_boundary.py",
+      "tools/ci/openbb-ci-gate.mjs",
+      "tools/ci/openbb-ci-gate.test.mjs",
+      "tools/ci/openbb-ci-route.mjs",
+      "tools/ci/openbb-ci-route.test.mjs",
+      "tools/migration/legacy-integrity.mjs",
+      "tools/native-web-compose-e2e.sh",
+      "tools/native-web-sbom.sh"
+    ],
+    "mutableSharedPaths": [
+      ".github/workflows/openbb.yml",
+      "tests/fixtures/auto_merge/openbb-optional-check-runs.json",
+      "tools/ci/openbb-ci-gate.mjs",
+      "tools/ci/openbb-ci-gate.test.mjs",
+      "tools/ci/openbb-ci-route.mjs",
+      "tools/ci/openbb-ci-route.test.mjs"
+    ],
+    "coverage": "all tracked files under protectedRoots plus protectedFiles at the pinned source commit"
+  },
+  "fileCount": 233,
+  "provenance": {
+    "openTerminal": {
+      "repository": "ErTasselli/OpenTerminal",
+      "commit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+      "license": "MIT",
+      "downstreamPrefix": "apps/openterminal",
+      "archiveSha256": null,
+      "archiveHashStatus": "not-bound-by-upstreams-lock-at-frozen-baseline",
+      "licensePath": "apps/openterminal/LICENSE"
+    },
+    "agGridCommunity": {
+      "package": "ag-grid-community",
+      "version": "36.2.0",
+      "license": "MIT",
+      "downstreamPath": "apps/openterminal/web/components/widgets/OptionsWidget.tsx"
+    },
+    "openbbWorkspace": {
+      "repository": "OpenBB-finance/workspace",
+      "commit": "be00e95019a55d57af146919ee46b7e1a4859226",
+      "license": "Apache-2.0",
+      "archivedAt": "2026-10-01",
+      "downstreamPrefix": "apps/gateway/openbb",
+      "sourceArchive": {
+        "format": "github-codeload-tar.gz",
+        "url": "https://codeload.github.com/OpenBB-finance/workspace/tar.gz/be00e95019a55d57af146919ee46b7e1a4859226",
+        "sha256": "4171aa8984c7c63e171239f8cda72c4bc950f1e068de33577035dc8e5d63e6a4"
+      },
+      "licenseFiles": [
+        {
+          "upstreamPath": "LICENSE",
+          "localPath": "third_party/licenses/openbb-workspace/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "upstreamPath": "NOTICE",
+          "localPath": "third_party/licenses/openbb-workspace/NOTICE",
+          "sha256": "7ead59cd1679b65fb3be5d056b6415564f9c6849b37401c0f0b5020b9dce4c8b"
+        }
+      ],
+      "communityRecipe": {
+        "path": "tools/openbb/community/Dockerfile",
+        "sha256": "efc91f79ceb8a94b2b43a6a600d43b6dd96e8fedd47d6dfdf86c829e629dcc1f",
+        "variant": "lite-community",
+        "runner": {
+          "path": "tools/openbb/community/apply_patch.py",
+          "sha256": "dbed49593c85bb0ce39ba0040a13dc600bb7d653a08feb35100618499b6c02ac"
+        },
+        "patchFiles": [
+          {
+            "path": "tools/openbb/community/patches/community.patch",
+            "sha256": "b850ecc06dd9438dbb61a00756149ffb700be82c8ff3711bc1513028cb01d8ca"
+          }
+        ],
+        "supportFiles": [
+          {
+            "path": "tools/openbb/community/Dockerfile",
+            "sha256": "efc91f79ceb8a94b2b43a6a600d43b6dd96e8fedd47d6dfdf86c829e629dcc1f"
+          },
+          {
+            "path": "tools/openbb/community/apply_patch.py",
+            "sha256": "dbed49593c85bb0ce39ba0040a13dc600bb7d653a08feb35100618499b6c02ac"
+          },
+          {
+            "path": "tools/openbb/community/patches/community.patch",
+            "sha256": "b850ecc06dd9438dbb61a00756149ffb700be82c8ff3711bc1513028cb01d8ca"
+          },
+          {
+            "path": "tools/openbb/community/patches/community.patch.json",
+            "sha256": "a825ff64bc39f87d2e2eadd33b5aa007fbe28b30b74763b2ad75538ee4a01297"
+          }
+        ]
+      },
+      "knownBuildFindings": [
+        "commercial-grid-and-chart-packages",
+        "commercial-enterprise-code-remains",
+        "embedded-openbb-pro-enterprise-key",
+        "highcharts-commercial-license",
+        "upstream-dockerfile-lockfile-mismatch",
+        "upstream-poetry-lock-fallback",
+        "mutable-container-base-images",
+        "source-archive-not-verified-in-image-build",
+        "license-notice-not-copied-into-image"
+      ]
+    }
+  },
+  "licenseArtifacts": [
+    {
+      "path": "LICENSE",
+      "license": "MIT",
+      "provenanceRef": "eqoboard-repository-license",
+      "lockedSha256": null,
+      "sha256": "7fe2b117b088ffb96298def5c5599a67d0cfb10bcffd0b926df21d9353cb7f37"
+    },
+    {
+      "path": "apps/openterminal/LICENSE",
+      "license": "MIT",
+      "provenanceRef": "open-terminal-legacy",
+      "lockedSha256": null,
+      "sha256": "fc4c6ba276448615c3bc38a151030c130cf775ced3ea599e3b026e1cfe544f50"
+    },
+    {
+      "path": "third_party/licenses/openbb-workspace/LICENSE",
+      "license": "Apache-2.0",
+      "provenanceRef": "openbb-apache-license-and-notice",
+      "lockedSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "third_party/licenses/openbb-workspace/NOTICE",
+      "license": "NOTICE",
+      "provenanceRef": "openbb-apache-license-and-notice",
+      "lockedSha256": "7ead59cd1679b65fb3be5d056b6415564f9c6849b37401c0f0b5020b9dce4c8b",
+      "sha256": "7ead59cd1679b65fb3be5d056b6415564f9c6849b37401c0f0b5020b9dce4c8b"
+    }
+  ],
+  "files": [
+    {
+      "path": ".agents/skills/openbb-workspace/SKILL.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "d715bfcac04d7055d0813dec6e5cc5b9df498959",
+      "bytes": 6744,
+      "sha256": "358f7e069c88fbe819a64dfa8a701e5c1131c7322e8e75ed174bc0f7d94ebf98",
+      "featureIds": [
+        "openbb-workspace-maintenance-skill"
+      ],
+      "provenanceRef": "openbb-workspace-maintenance-skill"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b615e130b400f11a534097c455c699e60a91ad38",
+      "bytes": 1065,
+      "sha256": "7fe2b117b088ffb96298def5c5599a67d0cfb10bcffd0b926df21d9353cb7f37",
+      "featureIds": [
+        "eqoboard-repository-license"
+      ],
+      "provenanceRef": "eqoboard-repository-license"
+    },
+    {
+      "path": "apps/gateway/openbb/apps.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "6782af8e09d47be3cdebbdad7ceb315deefa50c2",
+      "bytes": 1195,
+      "sha256": "8a5a96b889532691d7376f8849ef2dc80bf6cc9dfc70c1e6ae41f758b61b12e1",
+      "featureIds": [
+        "legacy-openbb-gateway-integration"
+      ],
+      "provenanceRef": "openbb-gateway-integration"
+    },
+    {
+      "path": "apps/gateway/openbb/widgets.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2832649ff189681f06ff98820e49c8d30382a3eb",
+      "bytes": 9575,
+      "sha256": "39bcc86f115fcc486538d24d3b1868107468109a40ecb1b1ee742ce00889d7f9",
+      "featureIds": [
+        "legacy-openbb-gateway-integration"
+      ],
+      "provenanceRef": "openbb-gateway-integration"
+    },
+    {
+      "path": "apps/gateway/src/openbb.rs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3e656242f9537c9d61c32ad2a95fcd9aea2eb16a",
+      "bytes": 12219,
+      "sha256": "2af97a4abae15aee43d5eb1430fdb693300dad7c4138b31f6ffcc5c05ebc6824",
+      "featureIds": [
+        "legacy-openbb-gateway-implementation"
+      ],
+      "provenanceRef": "openbb-gateway-implementation"
+    },
+    {
+      "path": "apps/gateway/src/openbb_tests.rs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "f1a4129ef3ebb5b15c05f3810baefafae453509f",
+      "bytes": 32687,
+      "sha256": "01060450ad9d3e587bfdf55ad7953eacecc114102b3e9205a50755fc59a47096",
+      "featureIds": [
+        "legacy-openbb-gateway-implementation"
+      ],
+      "provenanceRef": "openbb-gateway-implementation"
+    },
+    {
+      "path": "apps/openterminal/AGENTS.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2df7c12f09b941b7294cf1d312d81a1a1c603e09",
+      "bytes": 12128,
+      "sha256": "c734d1f3331aa37cf5932e5e05091340f73bfeae0885f45b32b85d572856bcae",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/Dockerfile",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1007824b83ade44695ea4120c7c5dca66aea9a9e",
+      "bytes": 2324,
+      "sha256": "839c57a0d4b3df655ce5723ed987dc700cef96efab379d2c44b3f44fa38ec991",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "326ef69d8dee9e9c3e95e0c0ad0f95c95e0ce2a2",
+      "bytes": 1082,
+      "sha256": "fc4c6ba276448615c3bc38a151030c130cf775ced3ea599e3b026e1cfe544f50",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2a953847b10b0591a059eb154774b8aff06e08e9",
+      "bytes": 16238,
+      "sha256": "ecbafdac91ec9f9f31488aeee177e37bb82ad52ece774fc913053e5d054f03ce",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/docs/MARKET_BFF_ROUTING.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "4274c3ff7d3fe7debd7b497941b6c7fb52434e84",
+      "bytes": 6643,
+      "sha256": "2c1ec51a7b3a16337b83f24d29bc2e7d197c5ad570491186a3b9be55f61de238",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/docs/YFINANCE_RESEARCH_CHART.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9a227d531d112391ce7a51535880168955ea2a91",
+      "bytes": 4972,
+      "sha256": "c7eb835940d9bd3e272581679ca597ddf6f5d22e005781f23805ab0d43d1a07a",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/openbb-research-ingress.conf",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "34aff7f94ddef2e15c6f26c47fa56d7ca1683f52",
+      "bytes": 5090,
+      "sha256": "595d80ce0f3996aa40dfdeea754857be44b5064734fafcbdcc4f6b0794ab4d46",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "c8004ddb0854455fddd93ebe593baf5bdd618e38",
+      "bytes": 228366,
+      "sha256": "d969127ac4d9e35db09ebeacf2ac9eff7862cea6a735cc5e53512297fd30c71b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/package.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "44d6cd374fdb3b3d85dc5a66ebaf15158e269c3b",
+      "bytes": 931,
+      "sha256": "05997bda5f32892ff1f68837bdfe63af9ef87bbc39f92e4fb9a75c6f37aad233",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/package.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "d7513e26397ae2df8d991eb8e4e036c40b257c5c",
+      "bytes": 740,
+      "sha256": "85913f8cf8978bc343f4086925e4a067de556db7be3251c17f9e81db55d5f0ad",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/auth.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "db068d49f53d2c81ab6a1797c12b4244636b6378",
+      "bytes": 6408,
+      "sha256": "d31cf77d683508e42d2069246263d8a0a58f2a253ec0f46624829ea26bef095c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/auth.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "8a1fb7620332498f29dcf541ab0515f51c45f1b8",
+      "bytes": 6397,
+      "sha256": "b072731518a7580473738bee70768569be725cac31a624d93722e1a821193143",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/cache.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "126034aceb0cb5a185773b484c8f378312146d55",
+      "bytes": 1639,
+      "sha256": "ae92e41d9f82b805bc0576f7d56db02853bccaeafc70c49a33bd82fea74378c9",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/cache.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b9b1190ab615f64755b65409078ea6f348a75739",
+      "bytes": 2364,
+      "sha256": "549071165dbd6e8a9e12c85f6871366035fc034462c89775fef7381885177818",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/concurrency.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "998b6c010326fae896993417349cb0212bba3097",
+      "bytes": 1030,
+      "sha256": "212605db75f742ebdb44be58795dfd5df39aed60aefbd2f59d3a5917b070f32f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/concurrency.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1dc7d5056a7760e873f678ec1d8ccd147bc7aafd",
+      "bytes": 691,
+      "sha256": "e9451eb94f4fbb955fb46b06fc4b4e5b09e247c3c2cbd206b795512b25ef9e91",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/db.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "43545405f3eb86bf23cc79a85736c76d7a8b861d",
+      "bytes": 3386,
+      "sha256": "03d48d2f0db65a5db7131b5c0308b509a763416cd4b8079c29e4ae39c8bd0661",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/db.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "a4dfca976f21c804799510d6d9debd98c730e6bf",
+      "bytes": 4442,
+      "sha256": "a906933f1d67dcab54a5ce317650695f84dc8e200eb2ec758d607187ffdc1d2f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/index.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9a35dc1639bcf208c5861bd0096f23b640da2474",
+      "bytes": 3851,
+      "sha256": "dd428ef9dce7e7d48824ce09c09ccf2cfcab1d7177e0c257d178044fd826e5aa",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/binance.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "c5bb3880b87f98308cc1f4b19996dd4b9133a5a4",
+      "bytes": 1790,
+      "sha256": "b1c889c09a663470d479f94d30857687496dbb2449b8553e543b148410a38d2b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/binance.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9265c50f7308ca6512fc325f3994fb138ca37bb5",
+      "bytes": 4087,
+      "sha256": "cf61698bd7a7333c1797cd07b7b50d09e15fd873dd37db7d21edd55b71e3aa89",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/coingecko.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "713a03c381c2e6ee42de46b722dda8a41c1d0f93",
+      "bytes": 1519,
+      "sha256": "a53721a2fc3c191bf4020b85ff55a4d5375b0d41be0106e4f595af9710b638e5",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/ecb.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "d29c08aac1a1a12586a3b2edccf2d8d32fdfb192",
+      "bytes": 2438,
+      "sha256": "b23cd34db36bc8b2efae7c75c9db9494bd12aaf811cf1bd3dc1b428100008d0c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/ecb.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "93a456d776440b7b8e2dd9ba4dbbeca9e4eda50a",
+      "bytes": 1772,
+      "sha256": "ba39dfa64a7484aadaae77424760c9637677d321738b3079c3ce8677e01151cb",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/econcalendar.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "972546ada72639c34370449876c3c2cf13136ebd",
+      "bytes": 5723,
+      "sha256": "b455eaaba05b169a587f54e7e633306c605cec94e8a5d1061095a642ee38c76f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/eqo-sip.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ef27a1a8e561bd7183807f08eac6dd025978a43c",
+      "bytes": 3442,
+      "sha256": "ed14d970d5109833b22505c2b6bf8b17b93d8cabddf555209296b4bfc7244023",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/eqo-sip.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "05016f99cb377edc78f4fdebc3e55500cb016f42",
+      "bytes": 9811,
+      "sha256": "23b9af38f38c1976c4741853a265893424d629428539304229315f9717fee966",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/finra.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1d34f49281a1618d48c6a04c61a6f0c2c541c880",
+      "bytes": 2130,
+      "sha256": "8f3f8997a683b5667da6913e17c53cda3d07b4aaacb3b35eda14d975c1b49a61",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/fred.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3eae89da619147b79dfe28cf78cf16c716664768",
+      "bytes": 1003,
+      "sha256": "38076119c097f224668f87bfae9a87d51cfa677c752dce172a044d2dc66460a2",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/market-source.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5f1e8449da318c28070f2a067df14e6d5aa99e88",
+      "bytes": 1940,
+      "sha256": "c917d48f8114ac0291f173b8b116f52ba51e2f13aed0147fc92cf31d317d050c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/market-source.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e46c749b6134de075c18af8a8fbb9927ee6eaf83",
+      "bytes": 1286,
+      "sha256": "672eced2388a5b9152f3597e29436023cfc3e89274cf5578568baf4f2eac768a",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/market-symbol.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "a752cc1e2b7e1e661337289c1750dd651a88bc29",
+      "bytes": 1362,
+      "sha256": "fdc77b03a49c7d8d3e508250dab5da37a86651b85b7dd1f5da283a8befcdc323",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/market-symbol.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "f9d041849d70eea0a50c71212d719aaf26938ddc",
+      "bytes": 1465,
+      "sha256": "53b13a6d99fc301ec4ebe562b0edaf2848b7fac3172c17a2bb4cce106c6eeb22",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/market-time.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "03747d7c9be85a0eaf717639f5f3b48238bcf925",
+      "bytes": 2017,
+      "sha256": "e2eb10b13bcdec8e1516cc5c7c3b0e196fc5683b7d192173d212f45b64556db0",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/market-time.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "d83880fd1f13ba45f88880b40729b2bcb9ad188f",
+      "bytes": 2697,
+      "sha256": "7dcfe6f4ff26d1f806a4663ccebbc06edd653cda99404d67ea4a9b24ada2191f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/nasdaq.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1cb17d2f34eff7b3d4cc2013c76d37100da1591d",
+      "bytes": 9012,
+      "sha256": "849c235487aef9bb30184c60505bbdea913b3c3a542d460b90ba955c7a667e9a",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/news.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ec817e9261cf8e3888f706eb6bd01b6ec5b915cb",
+      "bytes": 1965,
+      "sha256": "5fbcf5cdf924935dbd16acd8e874f51beb391741346f3af9ebb548ef7365c616",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/registry.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "58bcf65dbbafa1e9a4f26294273bb130f93c2bb3",
+      "bytes": 1561,
+      "sha256": "7992cd145cbb9f0128118483ece922657c8af6901777b198ae4263bc5579dc83",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/secedgar.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5afc38eb0e5fd0c6ac5a4079ea735e2cd95f32b0",
+      "bytes": 5905,
+      "sha256": "6e43420c231baecd64374113650b4b8b40cdb5c8244ca2d1a5557a1dac147d2e",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/snapshot-watermarks.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "4c11345f1be4cb6fdaeb6df389b07919410da2f2",
+      "bytes": 1318,
+      "sha256": "5a6476040c1add788cf4209cac44e581e784186cbc21a37de093fcadc598365f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/snapshot-watermarks.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1484c707cc98cf946e5fbc77f434e7a3175eb613",
+      "bytes": 1660,
+      "sha256": "dc6e236e8319aacfcb5621d3c3807181284f9bbe0bc8be5c861039fffac5268c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/stooq.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b493271c7d770b873d5294008b1f721a1dcb789a",
+      "bytes": 2327,
+      "sha256": "2bc81544da005dba9a609a0c695e51273eb1f6feac8f4471b2bc9cb66007ddb9",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/tradingview.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "273dca00d5241271ee172c393210d2e7a4f3c6c2",
+      "bytes": 2485,
+      "sha256": "9f577435e17d6ce43736106eb50769e2b52fa0f97c1e60a6b38f597f8879f43d",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/tradingview.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2fba099d1a530e19b185863d7cf0ee1c88460927",
+      "bytes": 12437,
+      "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/providers/yahoo.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "44ffed214f6de369965c09a1046685dc34339588",
+      "bytes": 10572,
+      "sha256": "4b76b7392fc97cfae8771e00f55090a1d636d34519c902a2c49f1492d4af3195",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/rateLimit.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "797a48ca1f6b572cc3120b5008ada04f06174807",
+      "bytes": 1841,
+      "sha256": "9503be5c1913eb59c91d0b2ae478bd846b7d226448107e6744380094c781e976",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/rateLimit.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "c08071b2ef1e5365c09ce4287a09a67d9d22fb71",
+      "bytes": 1548,
+      "sha256": "92c889965eb28f516a94c046c21356e16a3f741430213e59562f5a7f7c80aa6b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/ai.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "f67f46dd0bc2e7f2e52e7ed0ab690f434f48310c",
+      "bytes": 2164,
+      "sha256": "028191e8d0e42e14fb88ca3568dbc072866250251eef454c51ccff11addd73bf",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/market-http.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2cd3cbe9ce9c3c886fec265a953c18d0e4d70eb1",
+      "bytes": 22437,
+      "sha256": "8fead9656ee3ee34406a3959b1ec6c7d9925b291ae70fbd28f3ffaf9f3df7e8e",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/market-store.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "0ad09a4f6a2c2a9bdba2fac18f664335054ae06a",
+      "bytes": 22731,
+      "sha256": "2a0db21f97887e0997fd5e4b2ed158b9b151308479033b2b89b924d55eb29ae3",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/market.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "08cabcbbd59ffb9a514b2909b47c253282d82acb",
+      "bytes": 2100,
+      "sha256": "991462a1b51f070ab624f985b594be84262476ac21249fc9493a14189d196039",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/market.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b94b45847c5d805b0169dd799aa76e330ddb7e90",
+      "bytes": 44696,
+      "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/order-contract.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5c8940e17b45097015e992517c27ffd203a046f2",
+      "bytes": 4467,
+      "sha256": "d38022b423a87d50d6ea95d17acf9675a157aa746f4fc79d24071138276266df",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/portfolio.test.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "670829679bd931321562a82b76b8a5dfe23246a3",
+      "bytes": 6522,
+      "sha256": "dc7014397b0d1ac7f96dcdb9011cfd6dfce1cf19a960b872380e0eb1c2e30394",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/src/routes/portfolio.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3292f014571069c6b941483e00eb9fc186948b28",
+      "bytes": 6926,
+      "sha256": "22885167ab225349cf0e2bb3850129f34a51500ee48167e7b8cb8f6f6006b503",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/server/tsconfig.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5c16af2dc1de62cb48fb5fae0052f1b425d53a81",
+      "bytes": 413,
+      "sha256": "a3010131495108025efe493438f959b73e00d7a9e41316b23c9aea41e463b227",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/[...path]/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "6e750e85e07757aaacd778ae531795514955e457",
+      "bytes": 11501,
+      "sha256": "dd1e46484b6fa341cf4ea6b3417f47f0c971a5dca43eea38ecb70eac7d8699bf",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/auth/[...nextauth]/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "d4000ed212935cc792885273bc166bbeb8ade25f",
+      "bytes": 2080,
+      "sha256": "b20d3be82bd59cf25ef7a0b93fcce1365630e16e8a8dd8e452890c4571195bea",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/engine/preview/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "43a92d1355739f5ad494d2efda3c02a5496dca27",
+      "bytes": 604,
+      "sha256": "4412e29da214868a0112bc6da00c12e096ceb32305cc52b63d491b63c5838dfb",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/engine/status/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ca7d64b2536849290562f94f9860c8e017b7f584",
+      "bytes": 603,
+      "sha256": "c53ae2861a53d6908b478bfda9f4d9f79b360750f80e0c0daa57aefcedbbe545",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/live/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e68f85fc01931eb70529c35ae6061747dc323fbc",
+      "bytes": 3693,
+      "sha256": "95735e395e9292f042941a33ce7aa29b2d97f6de26cdaf160340c6eaf286ab7d",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/market-data/datasets/[datasetId]/bars/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "4db92036c946a2bbcabbef2d3f5f7851f37378a8",
+      "bytes": 815,
+      "sha256": "513cf1560be3dfb029732148227d96e93adba1206198cf384fd33b9d5d25070f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/options/subscribe/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "bd0eaa4c365df63695cc562fdad87bad328391d5",
+      "bytes": 2580,
+      "sha256": "9b79eaa9465f455b755662586593d2b260fe54bf48ffe24b2fd30b243fe1d0b7",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/orders/[action]/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ac274163192b5511b820dfade5c17b5fd396b448",
+      "bytes": 2442,
+      "sha256": "25605164b1ea3422977d6db9cdd231cf579bd5a73b12f2140005516eae103850",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/research/predictions/[runId]/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "8f0a6de90d41106324b1f6de045cc5dba4b60ed0",
+      "bytes": 831,
+      "sha256": "3245cc64562c9da3b26f7739953e3f03a8bcabae82753e320f89a90698439b99",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/eqo/stocks/subscribe/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "41e128497ed064e5fe29dcfe0693b78e2110af08",
+      "bytes": 2630,
+      "sha256": "1927da79275f00ed1a9212b999416eeef69080209f384fed688fc5315fbf4663",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/futu/[...action]/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "bac57b1f49b8a60ffee1af85f4edef712a1da10b",
+      "bytes": 28543,
+      "sha256": "0a73087e0f1a137e1af1bd97bc66f451e4ceada0d544a5f797583a6f218c4d1a",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/healthz/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "09f1968e233df29fced738a04a988af1384a7114",
+      "bytes": 319,
+      "sha256": "80a17d8430054cf3878c3dd509f1bb449caeb73caf1cf780d568ebc283237b54",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/history/[symbol]/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2ec730ef2ad03d405db4bdc589208bbdb7ae49dd",
+      "bytes": 808,
+      "sha256": "62f67628ffb8f1dc026aa78283356e71077c01be35055bda8057b622b5e96e5c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/openbb/[...path]/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "32d82672918e9f2548b90bb5572e1372080b462a",
+      "bytes": 7313,
+      "sha256": "ae8ed2bb7f785270158cff6bf22e8a597917577c3993f535d3e4de251a56b7df",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/readyz/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e2041e4fb5117c9fddb20442cb0e4a1d987cd613",
+      "bytes": 688,
+      "sha256": "42514318e470abcf8b50a926d43ff1858530d2f8a550cdbf659d2d308ce94207",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/research/auth-check/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "76bc8db807ce80a9cfed0777f5d7623e1ba34ba8",
+      "bytes": 463,
+      "sha256": "95ee95ab21e2bb78e38fda5a49ffd6d28ffdf24a55b501ea553cd5d2d90747a1",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/api/research/yfinance/daily/route.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "09f4d27cb11b477f6f3a4afeedbc6bb05f2dcbce",
+      "bytes": 660,
+      "sha256": "f12cb97ed87d1ad0eee5b3943901c35b2e28f794a94fb6f58d1ebb8aa2039a45",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/e2e/order-outcome/page.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ad5dd33a8195e2443c29ee6a35634873d275821c",
+      "bytes": 395,
+      "sha256": "d43d6562fa7752b94b3a43e34f606f66a01a9b88d56eec67c7533cc2e8c455da",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/error.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "74864a0dd8da169e4746d1baca2551cb2aab3ae7",
+      "bytes": 567,
+      "sha256": "8cbc192c6baf32f5357b8129a7d9884bbcbdb9edc28d485075a26f640e8c3aa7",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/global-error.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "8efeb85882c42954ba7960199a436be66524a65f",
+      "bytes": 581,
+      "sha256": "fe903ac2f1301e8e5136931ea0aa63e9a9ec73eda4754e1c2741b517ed64e156",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/globals.css",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "88b88a6675bd4c3ddd0d1eb5c024e2f2d5a5d755",
+      "bytes": 3775,
+      "sha256": "60be7cf83ff90fa268b5443f3bc101ce75ed89c6633507f08bb9858afcc4f9b7",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/layout.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9aa8682dffd625c0765333467c5489fdf3577a0b",
+      "bytes": 412,
+      "sha256": "788bba97bf4309b01cebcd87828bc2b595952dab03ce6fbcd8419a3ef8c50866",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/page.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1705a5857ddcd1ed34e37da90c30d74ed14a0f23",
+      "bytes": 2351,
+      "sha256": "a56c0c941749dd272a2a8ad2edd0325943dcea7f7c0b268d025ef83f332f57fa",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/providers.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "369d0a2176df4764a6ae3c333d702cd593392b29",
+      "bytes": 529,
+      "sha256": "f1cc94d61d4808f317c72627394fcdcf9ff4c325eaa6870b0c9d8ed4e19ede86",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/app/research/yfinance/[symbol]/page.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1469ecff370adc837747066334174d0df34d6c88",
+      "bytes": 2537,
+      "sha256": "3af8c1f9aaf819dce85adfc222738a208ab623c1637c04f4ad40706b8bf0b2fa",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/auth.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "d8d8c4f6629a4359110cee270db62d50c94b52f1",
+      "bytes": 14923,
+      "sha256": "15a5e8ce2960baa6e308ff85778762f2cfbacce5ba22eb1079d4b69e9c6a92b3",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/CommandPalette.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "61bd6672ccac8a069c81f1a9586bd8918fcaf8b9",
+      "bytes": 4618,
+      "sha256": "cc4603560aad9ec78a55042f8eb88b6d5b36195cb4ea7ac1e84e093d9c979153",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/Flash.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "4ec58cffd84c27ba429e0feab840505cfd53012a",
+      "bytes": 1074,
+      "sha256": "f1a0ef90d3a98740c1676bdf839aef1628bc1bd2c512d74ca365d093eab7f80d",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/MarketStreamProvider.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e494a7a1bb6232e5a52d7fb2a4ae82c0e8717476",
+      "bytes": 3259,
+      "sha256": "d0d1d3ca4ee9b6fbf87eef155eb3ea13ceba4308312c8ac7081cb109361d4d52",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/Sidebar.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e01981a01b83bd6d27cbd6acb9979cccc073d4e8",
+      "bytes": 2835,
+      "sha256": "28b90060b9d9bf2f8c0373f7d77b74610f0a8d8be652c50ffb3e866b124ae063",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/SignInButton.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3d34aa5c4220f8ebb7be87f76b71de8895539996",
+      "bytes": 349,
+      "sha256": "9ff23a1e0ff0b2ce0575515308f81d6feefb31223cc57565aaa018d57ac366c0",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/SignOutButton.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "34748eb1458dc8b6a1d3961dd47500ee56633578",
+      "bytes": 204,
+      "sha256": "ea554eac948f452340a104a4727ee697d987c480d853e06956f5fc02ecf4da50",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/Terminal.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "fa06a9af5d9e732cc791bd01f4eea415cbd35587",
+      "bytes": 3167,
+      "sha256": "15e766cd29eff242b62e0d1d5463e9f2f2ef87fa23b8d1ca59d4bca3540d8bce",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/TerminalShell.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "06593cd5811dfea09641a2e6ac6bb6d975c77a10",
+      "bytes": 1023,
+      "sha256": "82f85b3c50bd76695b4dd1ace26ec73dd2b0197b1641fcc25a125dc6dcdaca16",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/TopBar.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "0cfe0c72d001f8cc047f174108785ceef0e2438b",
+      "bytes": 4832,
+      "sha256": "b543dfe6bbfd84d7f36d24ce3be3bc0a5f80819b558f1c6f261975719dd5826c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/WidgetErrorBoundary.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1c32b4d132f8b4b5dcefc0d8bb8275ffec659409",
+      "bytes": 1101,
+      "sha256": "596c25f4ab9514c8d053eeadb6d28959da888a61c0b80d5b0c480d2d3f413a4b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/Workspace.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "48358f1e8c8c0a632052e1b6abfe496f79dc73e1",
+      "bytes": 6936,
+      "sha256": "dcec31a9aa52c1183fd1577c430503eb7dcd097af6c59ee1b022cb00e71ec01f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/research/YfinanceResearchChartPage.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5440ae5ab144be7e624f18fbc60e376050c645db",
+      "bytes": 1724,
+      "sha256": "1afca3381a7833cc91999c07e39352d579eb0654d678127c26db6cc45669ed7e",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/terminal/MainChartPanel.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "98189c355eb50ae35bab7b7360b918cdc75e92b5",
+      "bytes": 37072,
+      "sha256": "5da154c3c82de57db24639c80beb90ebfcdc11452773cddbcca05ffbea44d069",
+      "featureIds": [
+        "legacy-pro-panel:mainchartpanel"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/terminal/ModernTerminal.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2f4e88c2d073bb446348a95a8ca50473ab108419",
+      "bytes": 2437,
+      "sha256": "a06f8112e0c468dc6c65fac702cc06f16f930aea2c787bf0825388d4a9ed328f",
+      "featureIds": [
+        "legacy-pro-panel:modernterminal"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/terminal/OrderBookPanel.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ad608a95bf925eec36276e92d0e277edde0b9519",
+      "bytes": 8125,
+      "sha256": "94bc8bafdc05e413898b9c82b036cb048e74bf2fc161603a3a0cf30e132bdaac",
+      "featureIds": [
+        "legacy-pro-panel:orderbookpanel"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/terminal/PaperTradingPanel.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "15ac21ca45cc305eee69ab7a9e3cbe20a965d0dc",
+      "bytes": 11021,
+      "sha256": "72caa8867ae071749b444d5e1e6ef5258e9a64c048791474bc31d60104b73e86",
+      "featureIds": [
+        "legacy-pro-panel:papertradingpanel"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/terminal/TerminalHeader.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "da7ce82b334c39f661b457cbc02017eddd71476a",
+      "bytes": 12815,
+      "sha256": "52fd85cab0351e4911b15c87142a92ca761eaab46c761a9a0f97c67ebe4b9c7d",
+      "featureIds": [
+        "legacy-pro-panel:terminalheader"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/terminal/TerminalStatusBar.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "249fc32a458faa97699773ad30ebba68726361df",
+      "bytes": 2949,
+      "sha256": "a44e73faf658879edccf384c958cc77f873ac06ebbe194d6ed24ada82fd7c084",
+      "featureIds": [
+        "legacy-pro-panel:terminalstatusbar"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/terminal/WatchlistPanel.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e138c223e7258cfd3b5b98f8aab0b6749fabf5ab",
+      "bytes": 8619,
+      "sha256": "c913cc8545b1e228ed77cb22166335ab1a6b769a0ccb2c952a523f52fc663e47",
+      "featureIds": [
+        "legacy-pro-panel:watchlistpanel"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/AiWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "6ca4b7cc9c740d50af883ee87f6ad11dde0dce60",
+      "bytes": 2670,
+      "sha256": "5e14ac7f7389331dede5e9a525daf8306a6d34c227bc12528e31cbed20bb1c0b",
+      "featureIds": [
+        "legacy-widget:ai"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/CalendarWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "992bff4e39f20cb6680cf88495bf791f77ed9c1e",
+      "bytes": 10228,
+      "sha256": "74cd0d8ad3a9a16e33c3f5a6aeb7fe11641ac18c8c92b3c27bbe1d21b97e7863",
+      "featureIds": [
+        "legacy-widget:calendar"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/ChartWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ade3d71d58df827a7795323bc966bd08d99172be",
+      "bytes": 39500,
+      "sha256": "d33a5297708d9dd72e0926211b363e1468cbcddf4369483a73a0eb0e030d8251",
+      "featureIds": [
+        "legacy-widget:chart"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/CryptoWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "7286ef6ded513d49ad49dffcb20711b44fe342a2",
+      "bytes": 3206,
+      "sha256": "a89ab7191dd35278cecdcebdfeb59dfa3c6e8e16c2855dd54e8349f0a7d52529",
+      "featureIds": [
+        "legacy-widget:crypto"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/EngineOfflinePreviewWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "568db067e9625857544b1428aae40d16a6a47ece",
+      "bytes": 6433,
+      "sha256": "2f6959501d387b3988465e863967d07b1a0471fb2222cbd585f925355563cd54",
+      "featureIds": [
+        "legacy-widget:engine-offline-preview"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/HeatmapWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "c656acc956b2605b6802e8f199d34cb9956a3e7f",
+      "bytes": 5915,
+      "sha256": "cf2313eae60735962db51c47bd7c4dbae558fbe03911d326fc7d2283cbb09fa9",
+      "featureIds": [
+        "legacy-widget:heatmap"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/InsiderWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "a9d5f12ecb0806a5ea9854ad13286007bef3eb3c",
+      "bytes": 3217,
+      "sha256": "85bf9406a5232f4021c991c73125a213d6734aa8874b0b3e9bc5b0e2284409c6",
+      "featureIds": [
+        "legacy-widget:insider"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/IvSkewWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "74e2adbe9795df73519d5eb5402f1ca14db444b3",
+      "bytes": 3234,
+      "sha256": "09d81ee6028d9ecfe56e2dd6bc07d8fe957005d0eb344a7e478eff77d987d617",
+      "featureIds": [
+        "legacy-widget:iv-skew"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/MacroWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2ea018debe853ad80d3448625f4a4f90d5644632",
+      "bytes": 5357,
+      "sha256": "6dc8ad6f4d2a481f04252be1695dfe20af35eaa2b043929c9b88357c1656f611",
+      "featureIds": [
+        "legacy-widget:macro"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/MarketFeedStatus.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "00eb613502f4a7bb30cff73c40d1621c542360fc",
+      "bytes": 3239,
+      "sha256": "b12b67cace014ca66fd5f1a3beef8f46b7afbae5669173c3714c0d2c874668b7",
+      "featureIds": [
+        "legacy-helper:market-feed-status"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/NewsWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "6ad10f6be7f1deb88f64306843b3f087213af723",
+      "bytes": 1942,
+      "sha256": "fdd9db75fee1f86490411c33cd62e188d34e0a5ffcda90af402f37a9a01446d4",
+      "featureIds": [
+        "legacy-widget:news"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/OptionTapeWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ffbbee629e98dcc4f5ed037cfbd9928b132e0e4b",
+      "bytes": 2695,
+      "sha256": "fc0a3508d76e0fb04bdfad66ac0913ddd557a1a09b4cca77d2f7c07635e2dd66",
+      "featureIds": [
+        "legacy-widget:option-tape"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/OptionsWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "36f2ac1f6ff09202ee434a1843c8c8823f00b6b6",
+      "bytes": 16745,
+      "sha256": "15831be81d6dfbb3b96af26d9c6d700f75de2eb4c5f56e6d51670b80bdd80171",
+      "featureIds": [
+        "legacy-widget:options"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/OrderOutcomePanel.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "0a733755bfa85b9da261a5712ca0176e7382aeb2",
+      "bytes": 1013,
+      "sha256": "2137a8dcab180d3ca646a9da0d92abb703ae0c71c9013620df59e296b9b057c1",
+      "featureIds": [
+        "legacy-helper:order-outcome"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/PortfolioWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "0284d82f9eede1339193b4dcaf878955bf4c2297",
+      "bytes": 6653,
+      "sha256": "bc9c005add0e5ff2e63a5abd3f19d5abdeda709a5c9cef12983d31013c3c61ef",
+      "featureIds": [
+        "legacy-widget:portfolio"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/QuoteWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e6fe55d64bbf420f5f47e2e93185c71c0b3f836d",
+      "bytes": 6680,
+      "sha256": "4b0135f2856aff54415bbc7ecf31562f930887bb7cfe2c8cec4f5fbcd0b4e594",
+      "featureIds": [
+        "legacy-widget:quote"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/RecapWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3ee0557e649c0cba78a0690f61f914d07460a934",
+      "bytes": 5957,
+      "sha256": "b617230c031804b01c10bafa646b3d3f65af52593c89be401c26beee34c99589",
+      "featureIds": [
+        "legacy-widget:recap"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/ResearchPredictionsWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5c52fbf911446b5f5b2bfdc99c81e46495e15337",
+      "bytes": 6495,
+      "sha256": "d131e7aec0251e9de1d08afdda0da8338d608baebd5e5c3358cfcd1f3ecc04c4",
+      "featureIds": [
+        "legacy-widget:research-predictions"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/ScreenerWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "fb758d1d1b3b71081071707633b117c443a796d2",
+      "bytes": 4934,
+      "sha256": "ea4a778e2dae158de282ffe5779ea09da70b175924e4d1a6aa7d0ce271d406a1",
+      "featureIds": [
+        "legacy-widget:screener"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/TvWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "c9092dc18fefd57d639f87981e096b3097068272",
+      "bytes": 2648,
+      "sha256": "78f5b6d90319d7929ed886318dca5bdbed710bf8938e2aead2d1db406594ba7b",
+      "featureIds": [
+        "legacy-widget:tv"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/VerticalSpreadWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "cdbc9d162f2e4279786e46ac6eac8cd2a747d767",
+      "bytes": 12470,
+      "sha256": "92b2e94cafc0e9aeea44db3510d79579fb66ea0ed2207fec79e9e3ed537a3b60",
+      "featureIds": [
+        "legacy-widget:vertical-spread"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/components/widgets/WatchlistWidget.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "04853a973b7d1d882a9fc5359311a7be1e6a1e29",
+      "bytes": 5229,
+      "sha256": "bbc5f642eedd628b08a436f0e4655536313bb87b320bf93eb1ee900fd593a7ed",
+      "featureIds": [
+        "legacy-widget:watchlist"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/access-boundary.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "696eabe8f0837b9e77b467ea95985e9d46d58037",
+      "bytes": 17998,
+      "sha256": "ee0162d186f855d4da9a78af2171ff34e7bf4daaa422ba1cfecf5966e98167fd",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/compose-e2e-server.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "cfc4e2e2a863cd74ed26a8ef8b9bb2d5a69270ef",
+      "bytes": 1637,
+      "sha256": "ba1bd599fe34571ddfe95bb68619d632afd1f59667eca7908776cbcb00f0e464",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/engine-offline-preview.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9a32cc083a0fc090b3ea2b77fd8e6e197e9c75f5",
+      "bytes": 7215,
+      "sha256": "6f3bff7c0ab504392501d5e54635b00c71263d7149abc71797297cea6ac735d4",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/fixtures.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "446e5d70a8066234aeed7d7784437608374d3f14",
+      "bytes": 5228,
+      "sha256": "5edc6901bedae3f22c0f2cdffadb331d6e97b19d1879d9bc7def158a0d9cf7eb",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/fixtures/engine-status-response-v1.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "488a0d796cc320ee58f6d0307d3d2982bca92e9d",
+      "bytes": 484,
+      "sha256": "e6a28bf7dc51cfe38a84a8a7b7be15b3ed294e3043e2a4e88f32f97667c24152",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/fixtures/prediction-envelope-v1.synthetic.protojson",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "77640379c86995127287bb6f1574b4f0cda89ab1",
+      "bytes": 3123,
+      "sha256": "248a089642e3e43c5395b29369853f78cb71272f2fd3d04aed66d45a51a52f1f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/fixtures/synthetic-offline-preview-v1.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2a9dbb606f1f89def69bc55d0ea066255fb9ac0f",
+      "bytes": 579,
+      "sha256": "4d5c1b5864a666f075de98ef98469d4b3018280a35b7ee657219f30ce5b512e0",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/isolated-env.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3085b23a708badba9c0293ff60b24202ab266e82",
+      "bytes": 952,
+      "sha256": "750b9b3a3b592d7bfca4f78bab361bc1adc1a0d0de50d4a94716600839e10f8c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-bars-bff.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "59f99da9de528c34a146ef4ce9f27e1ccaf3d1b8",
+      "bytes": 18995,
+      "sha256": "bbdc2e622acb7ad71b0dfa371b097f3b25deaf9ccdf0dda8a464a2f7f64a96be",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-data-bff.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3d47277fa66463c48b7a5e8df2111a0b0297361a",
+      "bytes": 12239,
+      "sha256": "77fa25ab465cf0adbd8bfeaa56f7ec5065e2d562e4389630b10c25e4a16d9eed",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-data-chart-history.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "fab05729837f1224ad0ce78e49ceb122f98ad00c",
+      "bytes": 56139,
+      "sha256": "ded8e0c7de9e8ad978387cefa40b5e7f8bc3701e3c64b9b864e1bad75ce14cd7",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-data-chart.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "c72a3e16c780ed2f9f151d21907bb2e5e571743c",
+      "bytes": 2551,
+      "sha256": "c12106d9b53e18d594c28e2491d80ed1dda537cc64d6107fe0385de858bf76ed",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-freshness.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "74cfbd7689bbe9895efa71fe944ca16773e4c5d0",
+      "bytes": 11612,
+      "sha256": "5cb8f3b83c78b61544a23cacd43e32ba53720e1ed5377a510d22c619aa64828a",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-order.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "44ed572e32a0015aad0870aeb59e65cc50edc38b",
+      "bytes": 7779,
+      "sha256": "fae0a5638456d25938f6f7d34239e80e512a0381a7b416a9febf87c3b3870466",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-stream.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9f968c45ac762a134863f2f23bc2c9ba9a366010",
+      "bytes": 45842,
+      "sha256": "e5ecafdceea26a481e96b6edfba88305dc2b9210037a9a3a126fcc4f3f64974f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/market-test-data.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "804cc2a7c6e498df7be8de746b1414c57650b378",
+      "bytes": 2730,
+      "sha256": "8585ae6126609c64a77c2b9e402e5639cc8db74003b13070295c38294bb6d0d9",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/mdp-upstream.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "cb5b237913d336bb7a70b37475fbc785662038f2",
+      "bytes": 850,
+      "sha256": "f2d3d78215f439256a985f9d35ed65902fccc8534cbc0dc2f0af17b4b44519a7",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/mock-openbb-alpaca.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "616ad950a85ef65ac52066fc59dd61eeed94a1b3",
+      "bytes": 8100,
+      "sha256": "eee825ed1edb5c7734fa8d567c36d29665b3e9424135285c48984c81341bb57c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/mock-openbb-oidc.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "0642f91df8be80887029bac74923ea739be3bd90",
+      "bytes": 7054,
+      "sha256": "5b3bb0475a5d2a832285fbb0a886f423a4bd2a6302006c3885202ba71f539653",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/mock-services.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e2d663ecb2cb48a25820cfa45703cfd3355558b1",
+      "bytes": 57123,
+      "sha256": "4758fa38b5ef55183b6b46e0c6d789272c42f051cc972c9a2f044a3e4088601e",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/openbb-core-availability.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "aaf28f8f9396a52d7aa2c307777f8def6cad1f84",
+      "bytes": 1367,
+      "sha256": "be26147d864291a2592e2d905a9a0c85f7196db19d891ba130fffcc173851ee0",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/openbb-lite.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e58e7fc364c07a1ddbd49f514e96d7e3aeb3a2be",
+      "bytes": 41820,
+      "sha256": "593edeb81e7c8b3fce43d5d211595c982e84d47f7bc681254400a87eeef4220b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/openbb-recovery.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9269092ddbc19a07d35ddf1326899d3a812cd7a6",
+      "bytes": 10129,
+      "sha256": "8972a4460ef33aaa870cfbdbd05aac032f508ee401089ec994d2acf4c5c94afb",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/openbb-response-capture.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5a1c6862d0b53235d260a2850e0bdd2df67df914",
+      "bytes": 2044,
+      "sha256": "715109c552915e9651e6d7b160feeb795110c07af729fed034fc774c384f80fe",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/order-outcome-probe.tsx",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "80094f858340ab99ed9ca42076ab24c2655f4635",
+      "bytes": 1170,
+      "sha256": "4340e97bddd5f302e02f493fba20f2326232e39d1eb5b15d2dc9c06f153a965b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/quant-upstream.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "57f3199ecf72030b3882061a0c14023f22034c9d",
+      "bytes": 852,
+      "sha256": "3f7c7ae828b6e9bc6aa4d16f3dcfa087b5d10c9dbaeb75a4176eb4178a35d61b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/research-bff.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "13c0873d89640f5fb2eeb8f075a6507914c8dd7f",
+      "bytes": 45262,
+      "sha256": "2760ac5b21621d9c4d2c765484954eab406e0b00a57198fd9bdd6d696875390b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/research-navigation.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "c32226a49c0ea13c07bbb8b26b75d9559e33675d",
+      "bytes": 3384,
+      "sha256": "7bc7f9e5c853f25414a939ffc92b33165b2fb83c9272730ee69d01c5ce936d35",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/research-origin.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ba08e11c103b7f7a2643591c0853e52d1c6ac3a0",
+      "bytes": 1244,
+      "sha256": "d652a82c6998b3bc6cebaa9f05f83329c0a744e018e47e31d80fe9a2b66926ea",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/e2e/research-prediction.spec.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "7036bc153432d6d050819595659591b2516fce04",
+      "bytes": 12238,
+      "sha256": "c6747baff87c916237ae570e70ffba282f2b2471bada09e871ff862e79a4dd15",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/api-key.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "34b69ba227eb67d66fedc7cc08b5409f58abeafb",
+      "bytes": 196,
+      "sha256": "39594afe4a06391ccd4398506e054992b0bb3983d9522874023238ac81248442",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/api.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "02dc2e8fb9449a7cc84d137576d8facdc78828ae",
+      "bytes": 3939,
+      "sha256": "f1516b81637da5838ba22160a444718df427b3270f9329014d1345700a8292b9",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/chart-history.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "78002a2d1c65e428c993074e658d4380782d287e",
+      "bytes": 14120,
+      "sha256": "0ed7902ed96da9c8793eb58ff6626f8b88404343fed91ee7dbe549b8662ed98f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/client-abort.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2a8a36858b649dcf842344ed643a0d5c8d61346f",
+      "bytes": 1616,
+      "sha256": "3cf7c17ad17afde95baecc8c782248a82c3302ea3d5ea89a828ac77567fec9e4",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/client-abort.test.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "3c44ada93571eef28235022af8e4b1cfdc0575cc",
+      "bytes": 2220,
+      "sha256": "64925420c089b8a1daf0fabfdac6da377851a278b0d66ed28d0e6fbc2d512c08",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/engine-preview.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "011022ec1305fa69ac46680542f950ca9fcdf719",
+      "bytes": 6073,
+      "sha256": "95e14fa7587cd8209cc071bb0c5d363e36dfd3905dc9bace3675604077aa6537",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/eqo-auth.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "81565e44001d61bcb96c8a1b5031363fdeab5dd5",
+      "bytes": 18283,
+      "sha256": "dd200126fb720c162429ae3e2b6fbb28abdd0155813a4e5a0343ccb2e175b896",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/eqo-market.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "0bb07e4be954cec0c636f6504aec45a3cd6b96e3",
+      "bytes": 14320,
+      "sha256": "2b5242e1f898ea01934a2e7fffaf9217c86e3dfdff1892a1203317bf01f93524",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/futu-native-client.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ad8f0c752f97dfcf399abd090a4c4bbe62d9c5c4",
+      "bytes": 12793,
+      "sha256": "392657a5f0ac0c84a1fbf88d8933cad77e0cd1b9c71464dcd253742b43f8f7c1",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/http-response.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2c27c921e35fe3ec141f9e720765854df327be0b",
+      "bytes": 813,
+      "sha256": "40966410a6e8c7925418fff90ead90cfa72c8118f47980194bbc8b908bf574a7",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/indicators.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "89ed1e1e98babbf9bd9b844ad38d6c7bd176b65f",
+      "bytes": 3637,
+      "sha256": "b223dff2bece3fd5ff485dbf31552e3784091bd96bc487017761c99a432e2d29",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/links.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "d5d87176bc8beb4cd7b2e55b0944847f797b0994",
+      "bytes": 373,
+      "sha256": "83ba583a8e79811df2ae981b7f409db25e2fd3a31ef4ba931c9c6e95dd9c50b6",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/local-access.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ac76e3857294ec70390733d0087ddc020bcc0320",
+      "bytes": 1986,
+      "sha256": "ed85f64343204bba297bb08aa890f38dc53805e3edeb453e95f9176aa314bd8b",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/market-bars-bff.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "742d945d3df8f01a2331ce596dd4e86827c1ac69",
+      "bytes": 18725,
+      "sha256": "e1ea30b014b2bd78448af0574b5044ce5570f54818393e9d713137470b055156",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/market-bars-contract.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "aa201644a46deccf58f64e7f68b94a267084ddd3",
+      "bytes": 20605,
+      "sha256": "925c1b5d254d5444c8290b84152487c75f0d5a9eb4935df5eeb7419758e20442",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/mdp-market-data-contract.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e6ff777791453ed3dbb21af2e4f4fb6b6d8fc7a7",
+      "bytes": 2006,
+      "sha256": "7503054096b9b9fb4fb0c4c68b45097619fd5c0fca5c62a18528c4260fe38b04",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/mdp-market-data.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "23c1b59d2f261dc47ab672fac4f6d8ab0621d93d",
+      "bytes": 20210,
+      "sha256": "80af4a52c785a939f3ae7604d7d9cf32f31ad83b6a88ea0f1a4b09c3dd1fcc96",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/order-api.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "ddcd319ad9ae89bb1e269cf3183b57b84369273a",
+      "bytes": 3021,
+      "sha256": "8d1ee56923663462b72fe283700729e7cefa90e5214e4c4b0d170dc6b41daea0",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/order-contract.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "17223a36dd3e79b2aca218fe36dd84e733e40f11",
+      "bytes": 5380,
+      "sha256": "085e015cc67b37f38faa93232d3597a6a1ddc8d45144f7c8452b512b0ea8e5fb",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/permissions.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e96875e5653f036b18e9ca69d0a97abe41bd7c4b",
+      "bytes": 1481,
+      "sha256": "4c20250084397f462849eee0c449a3001be5c83272442efa1c4a53d493bc2a8c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/quant-prediction-contract.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "51ec7b35b92c8c54ed72fe2cc60a315b67a860ea",
+      "bytes": 1138,
+      "sha256": "61af9a18291597935dd89ae9df25f02db063b538c08d263b1595d76f0e09a318",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/quant-predictions.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b5971afd34ad2e9326eeb3c834219c5184f5f4eb",
+      "bytes": 11261,
+      "sha256": "71726a1b34f7917d89bda86c56216dea70b11cee119f5e1f3c3dfed89568209f",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/research-origin.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e404575f5cf5af07285f82b9fb34b26833a54d86",
+      "bytes": 868,
+      "sha256": "03cc50360acefe31ef49ca0323e600eb168ee2501684c194ebc999cff8cee731",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/research-route-access.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1ff6f0f430cc0522bc9bafe0db6986160f673833",
+      "bytes": 2605,
+      "sha256": "94be42ac63ce7115c5f3a7458c1bde1073b8d3858fa5e61c2040bdc5e567a103",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/symbol.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "75ee48a39f433cc194fb305e33435c0a7b2aa325",
+      "bytes": 776,
+      "sha256": "a1fb056516471588ab357d07890a27f127617bdbb68a6ae672be1de36acfbc09",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/tick-aggregator.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "670e5ed62534136e8de7adcc1df99e124ee451d1",
+      "bytes": 22636,
+      "sha256": "b6e14175e94315e1882241b021976b7a4ead99023250f63f9aa33411ee5cb0b2",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/yfinance-research-bff.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e75982bf160fba8751bb983e2dbc8ff188715c86",
+      "bytes": 9200,
+      "sha256": "6fd95c188697b1a4c3af1ba176b6ddb983aade73e64fde6bbff81f0ebe337026",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/yfinance-research-contract.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "cc0fac4156f4d76b4f83d5d32083935d7df0a89b",
+      "bytes": 22764,
+      "sha256": "d45d0001670b133308aaab604d89be4b43912082e59f08bc2d4cde3b43874aca",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/lib/yfinance-research-history.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b9a96f39b5b2acccf1039c55fe66b0c0d3e8858a",
+      "bytes": 9761,
+      "sha256": "392f56971b3635228627cdd178f56e6355910acabafe948e9b76cf1b79b9ebc3",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/middleware.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "8737ca1aa71d8a38518a637a6029df6560f37e1f",
+      "bytes": 1253,
+      "sha256": "664d6da02ad2535da63d5758c3e3738fa2efeaec1a26272d068ba153d496b198",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/next-auth.d.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2a73c931b20ab3fd050bf2d5e805001d579ed558",
+      "bytes": 444,
+      "sha256": "2b6e8be127695d97f8f3c5068040d8337c4db28ad4c1d94d70c6282332a00dec",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/next-env.d.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "830fb594ca2970a827555c28a253b097367e08d8",
+      "bytes": 262,
+      "sha256": "85ae5aee75f011967cf2d25cbc342f62d69314e9d925f7f4aa3456fc2cffcca6",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/next.config.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "aa8419983f620d8e0903ceab840b136026a30198",
+      "bytes": 139,
+      "sha256": "e8da334de26988693643b9419d52bc97881e380a1661791113379f04e48b98ff",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/package.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b35cbcb1d10b2bca78f115f02f4d3974e0a5ba08",
+      "bytes": 1220,
+      "sha256": "06c78a289a9fc840b6d368f0429446aa365502e0bbf5516025fec77c714090d7",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/playwright.compose.config.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "105a6d0a9a6fda1834e1d7fcfb156b55519e0518",
+      "bytes": 583,
+      "sha256": "de978ff33b11c282331c865dd286aa38aa0b3b4cb7b945913f85aa4109ff0c79",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/playwright.config.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2a019059eef4b4ebb2640ff90d0532530ab7035f",
+      "bytes": 3683,
+      "sha256": "77de9b050c91c82b738f3405858fdb70622c29c8921ec5ac5773ea1525901054",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/playwright.openbb.config.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "721c9aee734ec8e50c2ea7522b9ac88f2a87e52d",
+      "bytes": 1196,
+      "sha256": "a53f4b61e0e5c557ab70ca2d4b8c47ee2b284002991dbd5217278e818e64226d",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/playwright.research.config.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "f9beda708c1e931e32dcdef88742df838efb759b",
+      "bytes": 5739,
+      "sha256": "06d17496006c053c2b58ea178e8ac823316f98c21cca6793ece8de49ae3e91db",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/postcss.config.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "61e36849cf7cfa9f1f71b4a3964a4953e3e243d3",
+      "bytes": 94,
+      "sha256": "dfac7ac2d86d326a0e5adb024e7943c181393ed17a5fcb8f0315b24c7da6ddde",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/store/market.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "0e2251c4736376387df70e8ca3b52f19f5dfcf6f",
+      "bytes": 44739,
+      "sha256": "ad5e8ac99715e43b11fb833fba0c06d5f44d52afc5285598c3d8050bb626ffdb",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/store/terminal.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2f7f9ba8b57be3ca0e552424452cd850256facbf",
+      "bytes": 6145,
+      "sha256": "ad0ebb55ff18685ceb1fc974c5e12fed6b5daeb26f1f47dd7bbaae417dd8c67c",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/store/trading-terminal.ts",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "09c73ff6d87b3f84675e79c91e945cf5143aed90",
+      "bytes": 8839,
+      "sha256": "e7f6564d2a35594d12f4b7c216459e55884ee04ce6b23117ef4669a97b0ca3ef",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "apps/openterminal/web/tsconfig.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1be12a9e104871d612ecdaf739a883854c6b8ae8",
+      "bytes": 602,
+      "sha256": "0ce2ca55670e39f825e8358399621c20b480ac403e4d5cadd612a54c5f1b7771",
+      "featureIds": [
+        "legacy-openterminal-app"
+      ],
+      "provenanceRef": "open-terminal-legacy"
+    },
+    {
+      "path": "compose.openbb.e2e.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "7a317463f156cc5cbc0db322aa11cd1371a9a746",
+      "bytes": 4270,
+      "sha256": "1c8e0e5a7820944a10c8f01fa7dd757c5419ed17dca9c05fd966d18cb92768ae",
+      "featureIds": [
+        "openbb-runtime-compose"
+      ],
+      "provenanceRef": "openbb-runtime-test-harness"
+    },
+    {
+      "path": "compose.openbb.release.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "12e3103b516d850a39262afb3e1edf96cef69f71",
+      "bytes": 399,
+      "sha256": "f3bec833b7bca7c128152a39f6ddb130a39342ff4fce1e5aa1966af8ca747676",
+      "featureIds": [
+        "openbb-runtime-compose"
+      ],
+      "provenanceRef": "openbb-runtime-test-harness"
+    },
+    {
+      "path": "compose.openbb.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "2e113995a2738ed802d23da901406dc9cfb3abe4",
+      "bytes": 3561,
+      "sha256": "9b3057b197b3526157cace428303505831d7425f06b23aeaa70bc122da641656",
+      "featureIds": [
+        "openbb-runtime-compose"
+      ],
+      "provenanceRef": "openbb-runtime-test-harness"
+    },
+    {
+      "path": "docs/OPENBB_SUPPLY_CHAIN.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1fb5da65829aaf930a2047ee8b2b94a091264dc7",
+      "bytes": 18014,
+      "sha256": "ec9c036d22a1b469257f8d0fa805451c6f923ef7650ad7f327e321e59f2bb4aa",
+      "featureIds": [
+        "openbb-provenance-documentation"
+      ],
+      "provenanceRef": "openbb-provenance-documentation"
+    },
+    {
+      "path": "docs/THIRD_PARTY.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "629e32287e142a40e882fc0797c786f631af6f5d",
+      "bytes": 15993,
+      "sha256": "8bdc3cc64c8f355e4488bd3e45a83233b78aa6566750a2cc6965962ede192a68",
+      "featureIds": [
+        "openbb-provenance-documentation"
+      ],
+      "provenanceRef": "locked-provenance-and-license-record"
+    },
+    {
+      "path": "docs/UPSTREAM_AUDIT.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "5e4bb6adc00a6e22a93dc03179f1d63968dd3f3f",
+      "bytes": 46664,
+      "sha256": "618b289390a6e830af61af27c742be239caa70ae7000e69b177ba83ddded49f4",
+      "featureIds": [
+        "openbb-provenance-documentation"
+      ],
+      "provenanceRef": "openbb-provenance-documentation"
+    },
+    {
+      "path": "docs/evidence/openbb-local-runtime-acceptance.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "efe0856919be721d93e0e460cd364b1754a4bc40",
+      "bytes": 4426,
+      "sha256": "1cd60d2d5ba4cbb213b71cf6ec236467e9faafcb964713414921c1613082c2a9",
+      "featureIds": [
+        "openbb-provenance-documentation"
+      ],
+      "provenanceRef": "locked-provenance-and-license-record"
+    },
+    {
+      "path": "tests/test_openbb_community.py",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "7512406917bc17a6527e0c860861e37e97cd4bbb",
+      "bytes": 5430,
+      "sha256": "7e2eaa6b26c9d0e8ac342ea4cf038c1851a6cce78e46470d6552607da83f7149",
+      "featureIds": [
+        "legacy-openbb-tests"
+      ],
+      "provenanceRef": "openbb-source-and-community-tests"
+    },
+    {
+      "path": "tests/test_openbb_docker_save_oci.py",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "17a50df39fdb2b4378401aa7ba29f595a74f4532",
+      "bytes": 9766,
+      "sha256": "f99f0becf4940b3d5462f3907920b33d57b6f027eca586c471c2438d1a8eb3a9",
+      "featureIds": [
+        "legacy-openbb-tests"
+      ],
+      "provenanceRef": "openbb-source-and-community-tests"
+    },
+    {
+      "path": "tests/test_openbb_supply_chain.py",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "a77383b15b374f2c32da1be720b9addc8f4e9df0",
+      "bytes": 33279,
+      "sha256": "a67affcec72c6a121ab0fe1d27a9dcafc9f18201bf3291f12260144cf627aefc",
+      "featureIds": [
+        "legacy-openbb-tests"
+      ],
+      "provenanceRef": "openbb-source-and-community-tests"
+    },
+    {
+      "path": "tests/test_openbb_upstream_diff.py",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "385ef0a5bae3831546486f081d2b762191272a9d",
+      "bytes": 18822,
+      "sha256": "d798e4c9dfb13635bad80f27f5faf1e792280500421ccb5601dbabeae27e12f9",
+      "featureIds": [
+        "legacy-openbb-tests"
+      ],
+      "provenanceRef": "openbb-source-and-community-tests"
+    },
+    {
+      "path": "third_party/licenses/openbb-workspace/LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "featureIds": [
+        "openbb-license-notice"
+      ],
+      "provenanceRef": "openbb-apache-license-and-notice"
+    },
+    {
+      "path": "third_party/licenses/openbb-workspace/NOTICE",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "b576938ee0d268aef42ffcfd68de014d5e436730",
+      "bytes": 465,
+      "sha256": "7ead59cd1679b65fb3be5d056b6415564f9c6849b37401c0f0b5020b9dce4c8b",
+      "featureIds": [
+        "openbb-license-notice"
+      ],
+      "provenanceRef": "openbb-apache-license-and-notice"
+    },
+    {
+      "path": "third_party/upstreams.lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "15d96e8c15a2527b5aa840971e9760f790978735",
+      "bytes": 7699,
+      "sha256": "b68f919a7b2ace5820dc817f4852cba47b9fc2f1724bf536cba8c83e97fd9e6e",
+      "featureIds": [
+        "third-party-source-lock"
+      ],
+      "provenanceRef": "locked-provenance-and-license-record"
+    },
+    {
+      "path": "tools/openbb-lite-e2e.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "19661a616a3874f917a4b127b90f5f22844f1a35",
+      "bytes": 29662,
+      "sha256": "6909c0f719587c239206a39c0e06b08fd771816127076bd4a17018ae84029e62",
+      "featureIds": [
+        "openbb-runtime-test-helper"
+      ],
+      "provenanceRef": "openbb-runtime-test-harness"
+    },
+    {
+      "path": "tools/openbb-sanitize-e2e-logs.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "e38a55b12c746e843852881d8e536c601fc1543a",
+      "bytes": 1246,
+      "sha256": "c319084f75e6e97ab725bf17fca594ac2a2555d4cf701e8fd4613d245b64dd44",
+      "featureIds": [
+        "openbb-runtime-test-helper"
+      ],
+      "provenanceRef": "openbb-runtime-test-harness"
+    },
+    {
+      "path": "tools/openbb/build-lite.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "cf4200696374993e459f32df18fc67b7d96bd8a5",
+      "bytes": 165,
+      "sha256": "19cea4b752aa8917a5a7a7022173af6b588ba806da06d89da967807bbb076e27",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/community/Dockerfile",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "fc30124be089f4a34b3801ba295fa0976af6b5ae",
+      "bytes": 9569,
+      "sha256": "efc91f79ceb8a94b2b43a6a600d43b6dd96e8fedd47d6dfdf86c829e629dcc1f",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/community/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "11edf501267fcfc13863f004e9853297fb6cf5e3",
+      "bytes": 4926,
+      "sha256": "8da110da0471f8cd40d9fa72b89b1fdca9cf42de9df348284759e63e858d5130",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/community/apply_patch.py",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "f9499c810e5390f9e31e8d631bd231ef4d2cc95f",
+      "bytes": 14937,
+      "sha256": "dbed49593c85bb0ce39ba0040a13dc600bb7d653a08feb35100618499b6c02ac",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/community/patches/community.patch",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "9c3837b8675e2b288ea323861dd8ec9c20ac4c29",
+      "bytes": 60716,
+      "sha256": "b850ecc06dd9438dbb61a00756149ffb700be82c8ff3711bc1513028cb01d8ca",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/community/patches/community.patch.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "7f09659ce8edcb1f7a8058698aec5e846fea2d8c",
+      "bytes": 11684,
+      "sha256": "a825ff64bc39f87d2e2eadd33b5aa007fbe28b30b74763b2ad75538ee4a01297",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/fetch-upstream.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "d33729af10863369a965d5e94121dc13a1afa4ab",
+      "bytes": 160,
+      "sha256": "6c25c1ed15809f88ae67f805a1f5d0dfaee8e188ed281456a2261223df5c8d70",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/openbb-release-compose.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "77634bda72bd36637f25a2586240302fb5927b8d",
+      "bytes": 1528,
+      "sha256": "c397acffaa8aa6534c1ca00042cd15888ff7a2756af883948337b6d30af15f19",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/openbb_upstream.py",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "1db0db7e18ff2ce0c236583c6c3da542d49c12fd",
+      "bytes": 66632,
+      "sha256": "033ffe277105b2b1e2432bc1b6d0c669674ab4f77f440c1038b5c1999d908aba",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/patched-source-sbom.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "786c4c281f6340633c37804b255e790b84446a1e",
+      "bytes": 174,
+      "sha256": "c44fcbd09888e1ddd7cd144183bbab010d8f89663098b5ce05ab4ac4e02d3989",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/source-sbom.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "0f5467f06f7c62606bd0fe07c56ca4ebb8f5d58a",
+      "bytes": 166,
+      "sha256": "b7d7fbff2a139f66d4a39bb290ae44d591028aad20ca637a4fdd49709c57f616",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/toolchain.lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "28fbcc8561fa8b160464a6dcca9f1be3892c846b",
+      "bytes": 930,
+      "sha256": "aa0a2db6617fcc705d530dae60c9fa97a75a72c2e7bec5fc781311194785cc7b",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/upstream-diff.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "d96df3bda220e09cd402109508a80829f03a1ce7",
+      "bytes": 168,
+      "sha256": "3b2e19f908362873095f3dc3b6ea9deae35684d25de3d0cf61064390a9618543",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/verify-upstream.sh",
+      "mode": "100755",
+      "type": "blob",
+      "gitBlobOid": "70fe150f9353398103d758492eb6d9881dc163ab",
+      "bytes": 168,
+      "sha256": "ea6c31e5934b5e5f913a0448f9270d8bb07590169a6203b321da456c60f054df",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    },
+    {
+      "path": "tools/openbb/verify_docker_save_oci.py",
+      "mode": "100644",
+      "type": "blob",
+      "gitBlobOid": "40de00873d9e74eda3624ba04c5f9594082816d1",
+      "bytes": 16739,
+      "sha256": "08fa2182655f11c8f110c9a4d22c312f185fa2c925a4a31de2e034c891842753",
+      "featureIds": [
+        "openbb-source-verification-and-community-patch"
+      ],
+      "provenanceRef": "openbb-community-source-recipe"
+    }
+  ]
+}
