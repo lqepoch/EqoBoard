@@ -1,5 +1,41 @@
 import { readFile } from "node:fs/promises";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page, type Response, type TestInfo } from "@playwright/test";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function savesActiveWorkspaceTab(
+  response: Response,
+  endpoint: string,
+  workspaceId: string,
+  tabId: string,
+): boolean {
+  const request = response.request();
+  if (response.url() !== endpoint || request.method() !== "PUT") return false;
+  const body = request.postData();
+  if (!body) return false;
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body) as unknown;
+  } catch {
+    return false;
+  }
+
+  if (!isRecord(payload)) return false;
+  const documentValue = payload.document;
+  if (!isRecord(documentValue)) return false;
+  const document = documentValue;
+  if (document.activeWorkspaceId !== workspaceId || !Array.isArray(document.workspaces)) {
+    return false;
+  }
+  const workspaces: readonly unknown[] = document.workspaces;
+  return workspaces.some(
+    (workspace) =>
+      isRecord(workspace) && workspace.id === workspaceId && workspace.activeTabId === tabId,
+  );
+}
 
 function webOrigin(): string {
   const origin = process.env.E2E_WEB_ORIGIN;
@@ -75,13 +111,27 @@ test("signed-in workspace tabs survive reload and export contains layout-only da
   );
   const workspaceMutationSaveMs = Date.now() - saveStartedAt;
 
+  const newTab = tabs.getByRole("tab", { name: "New tab", exact: true });
+  const newTabElementId = await newTab.getAttribute("id");
+  if (typeof newTabElementId !== "string" || !newTabElementId.startsWith("workspace-tab-")) {
+    throw new Error("The New tab control did not expose its workspace tab identity.");
+  }
+  const newTabId = newTabElementId.slice("workspace-tab-".length);
+  if (!newTabId) throw new Error("The New tab control exposed an empty tab identity.");
+  const workspaceEndpoint = new URL("/api/workspaces", webOrigin()).toString();
+  const activeTabSave = page.waitForResponse((response) =>
+    savesActiveWorkspaceTab(response, workspaceEndpoint, workspaceId, newTabId),
+  );
   const duplicateTab = tabs.getByRole("tab", { name: "New tab copy", exact: true });
   await duplicateTab.focus();
   await page.keyboard.press("ArrowLeft");
-  await expect(tabs.getByRole("tab", { name: "New tab", exact: true })).toBeFocused();
-  await expect(tabs.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
+  await expect(newTab).toBeFocused();
+  await expect(newTab).toHaveAttribute("aria-selected", "true");
+  const activeTabSaveResponse = await activeTabSave;
+  expect(activeTabSaveResponse.status()).toBe(200);
+  expect(activeTabSaveResponse.headers().etag).toMatch(/^"\d+"$/u);
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
   );
 
   const reloadStartedAt = Date.now();
