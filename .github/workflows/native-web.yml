@@ -138,6 +138,9 @@ jobs:
           file: ./apps/eqoboard-web/Dockerfile
           target: runtime
           tags: eqoboard-native-web:ci
+          labels: |
+            org.opencontainers.image.source=https://github.com/lqepoch/EqoBoard
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha || github.sha }}
           builder: ${{ steps.buildx.outputs.name }}
           load: true
           push: false
@@ -166,6 +169,8 @@ jobs:
         working-directory: .
         env:
           NATIVE_WEB_IMAGE: eqoboard-native-web:ci
+          NATIVE_IMAGE_CONFIG_DIGEST: ${{ steps.native_image.outputs.imageid }}
+          NATIVE_IMAGE_BUILD_DIGEST: ${{ steps.native_image.outputs.digest }}
         run: bash tools/native-web-sbom.sh
       - name: Propose formatting fixes without changing tested source
         if: failure() && steps.install.outcome == 'success'

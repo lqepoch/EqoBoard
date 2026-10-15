@@ -722,12 +722,38 @@ for name in research_forbidden_secrets:
 
         sbom_helper = helpers[1].read_text(encoding="utf-8")
         self.assertIn('syft scan "dir:$app_dir"', sbom_helper)
-        self.assertIn('syft scan "docker:$NATIVE_WEB_IMAGE"', sbom_helper)
+        self.assertIn('syft scan "docker:$NATIVE_IMAGE_CONFIG_DIGEST"', sbom_helper)
+        self.assertNotIn('syft scan "docker:$NATIVE_WEB_IMAGE"', sbom_helper)
         self.assertEqual(sbom_helper.count('--source-version "$NATIVE_CANDIDATE_SHA"'), 2)
         self.assertNotIn('--source-version "$GITHUB_SHA"', sbom_helper)
         self.assertIn('printf \'Candidate: `%s`\\n\\n\' "$NATIVE_CANDIDATE_SHA"', sbom_helper)
         self.assertIn("SPDX-2.3", sbom_helper)
         self.assertIn("RUNNER_TEMP", sbom_helper)
+        self.assertIn(
+            'NATIVE_IMAGE_CONFIG_DIGEST:?NATIVE_IMAGE_CONFIG_DIGEST must identify the built image config',
+            sbom_helper,
+        )
+        self.assertIn(
+            'NATIVE_IMAGE_BUILD_DIGEST:?NATIVE_IMAGE_BUILD_DIGEST must identify the build output manifest',
+            sbom_helper,
+        )
+        self.assertIn('^sha256:[0-9a-f]{64}$', sbom_helper)
+        self.assertIn('docker image inspect "$NATIVE_WEB_IMAGE" --format', sbom_helper)
+        self.assertIn(
+            'actual_image_config_digest" != "$NATIVE_IMAGE_CONFIG_DIGEST"',
+            sbom_helper,
+        )
+        self.assertIn('actual_image_revision" != "$NATIVE_CANDIDATE_SHA"', sbom_helper)
+        self.assertIn('org.opencontainers.image.revision', sbom_helper)
+        self.assertIn('"configDigest": config_digest', sbom_helper)
+        self.assertIn('"buildDigest": build_digest', sbom_helper)
+        self.assertIn('"tree": candidate_tree', sbom_helper)
+        self.assertIn('"packageLockSha256": lock_sha256', sbom_helper)
+        self.assertIn('artifact(source_path, "source-and-lock-inventory")', sbom_helper)
+        self.assertIn('artifact(image_path, "production-runtime-image-inventory")', sbom_helper)
+        self.assertIn('"releaseAcceptance": "NOT_RELEASE"', sbom_helper)
+        self.assertIn('"licenseClosure": "NOT_CLAIMED"', sbom_helper)
+        self.assertIn('"$(basename "$identity_receipt")" > SHA256SUMS', sbom_helper)
 
         format_helper = helpers[2].read_text(encoding="utf-8")
         self.assertIn('git -C "$repo_root" archive --format=tar "$NATIVE_CANDIDATE_SHA" -- apps/eqoboard-web', format_helper)
