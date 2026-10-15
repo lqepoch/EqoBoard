@@ -6,6 +6,7 @@ import { createWorkspaceStore } from "../../stores/workspace/store";
 import type {
   WorkspaceClientRepository,
   WorkspaceClientSnapshot,
+  WorkspaceSaveResult,
 } from "../../stores/workspace/repository";
 
 function document(
@@ -70,6 +71,87 @@ function fakeRepository(
     recoveryPoints: vi.fn(async () => []),
     recoveryPoint: vi.fn(async () => null),
   };
+}
+
+function clientSnapshot(
+  document: WorkspaceDocumentV1,
+  revision: string,
+): WorkspaceClientSnapshot {
+  return { schemaVersion: 1, revision, document, etag: `"${revision}"` };
+}
+
+function deferredSaveRepository(initial: WorkspaceDocumentV1) {
+  let current = clientSnapshot(initial, "0");
+  let completeSave: ((result: WorkspaceSaveResult) => void) | null = null;
+  let shouldDeferLoad = false;
+  let completeLoad:
+    | ((result: Awaited<ReturnType<WorkspaceClientRepository["load"]>>) => void)
+    | null = null;
+  const save = vi.fn<WorkspaceClientRepository["save"]>(
+    () =>
+      new Promise<WorkspaceSaveResult>((resolve) => {
+        completeSave = resolve;
+      }),
+  );
+  const load = vi.fn<WorkspaceClientRepository["load"]>(() => {
+    if (shouldDeferLoad) {
+      shouldDeferLoad = false;
+      return new Promise<Awaited<ReturnType<WorkspaceClientRepository["load"]>>>((resolve) => {
+        completeLoad = resolve;
+      });
+    }
+    return Promise.resolve({ ok: true as const, value: current });
+  });
+  const repository: WorkspaceClientRepository = {
+    partition: "opaque-acceptance-partition",
+    canRead: true,
+    canWrite: true,
+    load,
+    save,
+    backup: vi.fn(async () => undefined),
+    recoveryPoints: vi.fn(async () => []),
+    recoveryPoint: vi.fn(async () => null),
+  };
+
+  return {
+    repository,
+    save,
+    setCurrent(snapshot: WorkspaceClientSnapshot) {
+      current = snapshot;
+    },
+    deferNextLoad() {
+      shouldDeferLoad = true;
+    },
+    resolveLoad(snapshot: WorkspaceClientSnapshot) {
+      if (!completeLoad) throw new Error("The deferred workspace read has not started.");
+      const resolve = completeLoad;
+      completeLoad = null;
+      resolve({ ok: true, value: snapshot });
+    },
+    completeSave(snapshot: WorkspaceClientSnapshot) {
+      if (!completeSave) throw new Error("The workspace save has not started.");
+      const resolve = completeSave;
+      completeSave = null;
+      resolve({ ok: true, snapshot });
+    },
+  };
+}
+
+class TestWorkspaceBroadcastChannel {
+  static latest: TestWorkspaceBroadcastChannel | null = null;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
+
+  constructor() {
+    TestWorkspaceBroadcastChannel.latest = this;
+  }
+
+  close(): void {}
+
+  postMessage(): void {}
+
+  dispatch(data: unknown): void {
+    this.onmessage?.({ data } as MessageEvent<unknown>);
+  }
 }
 
 describe("workspace migration store acceptance", () => {
@@ -186,6 +268,150 @@ describe("workspace migration store acceptance", () => {
     expect(store.getState().document).toEqual(current);
     expect(repository.save).not.toHaveBeenCalled();
     expect(backup).toHaveBeenCalledWith(current.workspaces[0], "import");
+    store.getState().dispose();
+  });
+
+  it("keeps a reloaded newer revision when an older save response arrives late", async () => {
+    const initial = document("Initial");
+    const latest = document("Latest from another tab");
+    const deferred = deferredSaveRepository(initial);
+    const store = createWorkspaceStore(
+      auth(["workspace:read", "workspace:write"]),
+      createWidgetRegistry([]),
+      { repository: deferred.repository, debounceMs: 60_000 },
+    );
+    await store.getState().hydrate();
+
+    expect(store.getState().setActiveSymbol(initial.activeWorkspaceId, "AAPL")).toBe(true);
+    const saveRequest = store.getState().saveNow();
+    await Promise.resolve();
+    const saveCall = deferred.save.mock.calls[0];
+    expect(saveCall).toBeDefined();
+    if (!saveCall) throw new Error("The workspace save did not start.");
+
+    deferred.setCurrent(clientSnapshot(latest, "2"));
+    await store.getState().reloadRemote();
+    expect(store.getState()).toMatchObject({ revision: "2", etag: '"2"', document: latest });
+    expect(store.getState().setActiveSymbol(initial.activeWorkspaceId, "DIA")).toBe(true);
+
+    deferred.completeSave(clientSnapshot(saveCall[0], "1"));
+    await saveRequest;
+
+    expect(store.getState()).toMatchObject({
+      revision: "2",
+      etag: '"2"',
+      dirty: true,
+      syncStatus: "pending",
+      remoteConflict: null,
+    });
+    expect(
+      store
+        .getState()
+        .document?.workspaces.find((workspace) => workspace.id === initial.activeWorkspaceId)
+        ?.marketContext.activeSymbol,
+    ).toBe("DIA");
+    store.getState().dispose();
+  });
+
+  it("keeps a newer observed conflict when an older successful save response arrives", async () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("BroadcastChannel", TestWorkspaceBroadcastChannel);
+    TestWorkspaceBroadcastChannel.latest = null;
+    const initial = document("Initial");
+    const latest = document("Latest from another tab");
+    const deferred = deferredSaveRepository(initial);
+    const store = createWorkspaceStore(
+      auth(["workspace:read", "workspace:write"]),
+      createWidgetRegistry([]),
+      { repository: deferred.repository, debounceMs: 60_000 },
+    );
+    await store.getState().hydrate();
+
+    expect(store.getState().setActiveSymbol(initial.activeWorkspaceId, "AAPL")).toBe(true);
+    const saveRequest = store.getState().saveNow();
+    await Promise.resolve();
+    const saveCall = deferred.save.mock.calls[0];
+    expect(saveCall).toBeDefined();
+    if (!saveCall) throw new Error("The workspace save did not start.");
+
+    deferred.setCurrent(clientSnapshot(latest, "2"));
+    const channel = TestWorkspaceBroadcastChannel.latest;
+    expect(channel).not.toBeNull();
+    channel?.dispatch({
+      type: "workspace.changed.v1",
+      workspaceId: initial.activeWorkspaceId,
+      revision: "2",
+    });
+    await Promise.resolve();
+    expect(store.getState()).toMatchObject({
+      syncStatus: "conflict",
+      remoteConflict: { revision: "2", document: latest },
+    });
+    expect(store.getState().setActiveSymbol(initial.activeWorkspaceId, "DIA")).toBe(true);
+
+    deferred.completeSave(clientSnapshot(saveCall[0], "1"));
+    await saveRequest;
+
+    expect(store.getState()).toMatchObject({
+      revision: "0",
+      etag: '"0"',
+      syncStatus: "conflict",
+      dirty: true,
+      remoteConflict: { revision: "2", document: latest },
+    });
+    expect(
+      store
+        .getState()
+        .document?.workspaces.find((workspace) => workspace.id === initial.activeWorkspaceId)
+        ?.marketContext.activeSymbol,
+    ).toBe("DIA");
+    store.getState().dispose();
+  });
+
+  it("ignores a delayed cross-tab read after this tab has saved a higher revision", async () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("BroadcastChannel", TestWorkspaceBroadcastChannel);
+    TestWorkspaceBroadcastChannel.latest = null;
+    const initial = document("Initial");
+    const deferred = deferredSaveRepository(initial);
+    deferred.setCurrent(clientSnapshot(initial, "1"));
+    const store = createWorkspaceStore(
+      auth(["workspace:read", "workspace:write"]),
+      createWidgetRegistry([]),
+      { repository: deferred.repository, debounceMs: 60_000 },
+    );
+    await store.getState().hydrate();
+
+    deferred.deferNextLoad();
+    TestWorkspaceBroadcastChannel.latest?.dispatch({
+      type: "workspace.changed.v1",
+      workspaceId: initial.activeWorkspaceId,
+      revision: "2",
+    });
+    await Promise.resolve();
+
+    expect(store.getState().setActiveSymbol(initial.activeWorkspaceId, "AAPL")).toBe(true);
+    const saveRequest = store.getState().saveNow();
+    await Promise.resolve();
+    const saveCall = deferred.save.mock.calls[0];
+    expect(saveCall).toBeDefined();
+    if (!saveCall) throw new Error("The workspace save did not start.");
+    const savedSnapshot = clientSnapshot(saveCall[0], "2");
+    deferred.setCurrent(savedSnapshot);
+    deferred.completeSave(savedSnapshot);
+    await saveRequest;
+
+    deferred.resolveLoad(clientSnapshot(initial, "1"));
+    await Promise.resolve();
+
+    expect(store.getState()).toMatchObject({
+      revision: "2",
+      etag: '"2"',
+      document: saveCall[0],
+      dirty: false,
+      syncStatus: "saved",
+      remoteConflict: null,
+    });
     store.getState().dispose();
   });
 });

@@ -187,6 +187,11 @@ function parseRemoteMessage(
   );
 }
 
+function compareRevisions(left: string, right: string): number {
+  if (left.length !== right.length) return left.length < right.length ? -1 : 1;
+  return left === right ? 0 : left < right ? -1 : 1;
+}
+
 /** Per-auth-snapshot Zustand store. The browser partition is cache-only; the BFF owns identity. */
 export function createWorkspaceStore(
   auth: AuthUiSnapshot,
@@ -227,14 +232,16 @@ export function createWorkspaceStore(
       return false;
     }
     mutationVersion += 1;
+    const current = store.getState();
+    const conflictUnresolved = current.syncStatus === "conflict" || current.remoteConflict !== null;
     store.setState({
       document: parsed.value,
       dirty: true,
-      syncStatus: "pending",
-      error: null,
-      remoteConflict: null,
+      syncStatus: conflictUnresolved ? "conflict" : "pending",
+      error: conflictUnresolved ? current.error : null,
+      remoteConflict: current.remoteConflict,
     });
-    scheduleSave();
+    if (!conflictUnresolved) scheduleSave();
     return true;
   }
 
@@ -261,6 +268,8 @@ export function createWorkspaceStore(
     const latest = await repository.load();
     if (disposed || sequence !== remoteReadSequence) return;
     if (!latest.ok) {
+      clearSaveTimer();
+      saveAgain = false;
       store.setState({
         syncStatus: "conflict",
         error: "Another tab saved this workspace. Reload the latest version to continue.",
@@ -268,7 +277,17 @@ export function createWorkspaceStore(
       return;
     }
     const current = store.getState();
+    const knownRevision =
+      current.remoteConflict !== null &&
+      (current.revision === null ||
+        compareRevisions(current.remoteConflict.revision, current.revision) > 0)
+        ? current.remoteConflict.revision
+        : current.revision;
+    if (knownRevision !== null && compareRevisions(latest.value.revision, knownRevision) <= 0)
+      return;
     if (current.dirty || current.syncStatus === "saving") {
+      clearSaveTimer();
+      saveAgain = false;
       store.setState({
         remoteConflict: latest.value,
         syncStatus: "conflict",
@@ -419,6 +438,36 @@ export function createWorkspaceStore(
         return;
       }
       const now = get();
+      const currentRevisionIsNewer =
+        now.revision !== null && compareRevisions(now.revision, result.snapshot.revision) > 0;
+      const conflictRevisionIsNewer =
+        now.remoteConflict !== null &&
+        compareRevisions(now.remoteConflict.revision, result.snapshot.revision) > 0 &&
+        (now.revision === null ||
+          compareRevisions(now.remoteConflict.revision, now.revision) >= 0);
+      if (conflictRevisionIsNewer) {
+        clearSaveTimer();
+        saveAgain = false;
+        set({
+          syncStatus: "conflict",
+          error:
+            "Another tab saved a newer workspace version. Reload it or save your edits as a new workspace.",
+        });
+        return;
+      }
+      if (currentRevisionIsNewer) {
+        const shouldResave = now.dirty;
+        saveAgain = false;
+        clearSaveTimer();
+        if (now.syncStatus === "saving") {
+          set({ syncStatus: shouldResave ? "pending" : "saved" });
+        }
+        if (shouldResave && get().syncStatus !== "conflict") {
+          if (get().syncStatus !== "pending") set({ syncStatus: "pending" });
+          scheduleSave();
+        }
+        return;
+      }
       const unchanged = version === mutationVersion;
       set({
         revision: result.snapshot.revision,
