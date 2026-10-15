@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { enumerateNoticeArtifacts } from "./native-license-audit.mjs";
+import { enumerateNoticeArtifacts, readRegularFileNoFollow } from "./native-license-audit.mjs";
 import {
   compareRuntimeExcludedInventory,
   isRuntimeExcludedPackageName,
@@ -46,6 +46,23 @@ test("license audit includes nested notice files with content hashes and skips s
         symlink: true,
       },
     ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("license artifact reader reads regular files and rejects symlinks without following them", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "native-license-read-"));
+  const regularFile = path.join(root, "LICENSE");
+  const targetFile = path.join(root, "outside-license");
+  const symlinkFile = path.join(root, "NOTICE.txt");
+  try {
+    writeFileSync(regularFile, "license text\n");
+    writeFileSync(targetFile, "external license text\n");
+    symlinkSync(targetFile, symlinkFile);
+
+    assert.deepEqual(readRegularFileNoFollow(regularFile), Buffer.from("license text\n"));
+    assert.throws(() => readRegularFileNoFollow(symlinkFile));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

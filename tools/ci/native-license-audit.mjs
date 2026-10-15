@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Validate lock metadata and pinned license texts. Runtime legal clearance is a separate image-bound gate.
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -27,6 +27,22 @@ const NOTICE_FILENAME = /^(?:licen[sc]e|notice|copying)(?:[._-]|$)/iu;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const COMMIT = /^[a-f0-9]{40}$/u;
 
+/** Open one regular file without following a final-component symlink, then read from that descriptor. */
+export function readRegularFileNoFollow(filePath) {
+  if (typeof constants.O_NOFOLLOW !== "number" || constants.O_NOFOLLOW === 0) {
+    throw new Error("O_NOFOLLOW is unavailable; refusing to read license artifacts");
+  }
+
+  const flags = constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0);
+  const descriptor = openSync(filePath, flags);
+  try {
+    if (!fstatSync(descriptor).isFile()) throw new Error("file is not a regular file");
+    return readFileSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 /** Recursively list package license/notice files without following package symlinks. */
 export function enumerateNoticeArtifacts(packageRoot) {
   const root = path.resolve(packageRoot);
@@ -49,7 +65,19 @@ export function enumerateNoticeArtifacts(packageRoot) {
       if (entry.isDirectory()) {
         walk(filePath);
       } else if (entry.isFile() && NOTICE_FILENAME.test(entry.name)) {
-        const bytes = readFileSync(filePath);
+        let bytes;
+        try {
+          bytes = readRegularFileNoFollow(filePath);
+        } catch (error) {
+          if (error.code !== "ELOOP") throw error;
+          found.push({
+            path: path.relative(root, filePath).split(path.sep).join("/"),
+            sha256: null,
+            bytes: null,
+            symlink: true,
+          });
+          continue;
+        }
         found.push({
           path: path.relative(root, filePath).split(path.sep).join("/"),
           sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -210,9 +238,7 @@ function runAudit() {
           continue;
         }
         try {
-          const stat = lstatSync(artifactPath);
-          if (!stat.isFile()) throw new Error("license artifact is not a regular file");
-          const bytes = readFileSync(artifactPath);
+          const bytes = readRegularFileNoFollow(artifactPath);
           const actualHash = createHash("sha256").update(bytes).digest("hex");
           if (actualHash !== artifact.sha256 || bytes.byteLength !== artifact.bytes) {
             fail(artifact.path, "license text artifact hash or byte length differs from receipt", {
@@ -225,7 +251,10 @@ function runAudit() {
             verifiedSourceTexts += 1;
           }
         } catch (error) {
-          fail(artifact.path, "license text artifact is missing or unreadable", { error: error.message });
+          const reason = error.code === "ELOOP"
+            ? "license text artifact is a symlink or was replaced with one"
+            : "license text artifact is missing, unreadable, or not a regular file";
+          fail(artifact.path, reason, { error: error.message });
         }
       }
     }
