@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -71,6 +73,59 @@ def compose_service_block(compose_text: str, service_name: str) -> str:
             end = index
             break
     return "\n".join(lines[start:end])
+
+
+def native_compose_environment_validator() -> str:
+    helper_path = REPO_ROOT / "tools" / "native-web-compose-e2e.sh"
+    source = helper_path.read_text(encoding="utf-8")
+    prefix = "dc config --format json | python3 -c '\n"
+    suffix = "\n' \"$expected_web_origin\""
+    start = source.index(prefix) + len(prefix)
+    end = source.index(suffix, start)
+    return source[start:end]
+
+
+def native_compose_security_fixture() -> dict[str, object]:
+    web_origin = "http://127.0.0.1:3440"
+    research_origin = "http://localhost:3441"
+    terminal_session = "terminal-session-secret"
+    research_session = "research-session-secret"
+    terminal_gateway = "terminal-gateway-signer-secret"
+    research_mdp = "research-mdp-signer-secret"
+    return {
+        "services": {
+            "native-web": {
+                "image": "eqoboard-native-web:candidate",
+                "environment": {
+                    "NEXTAUTH_URL": web_origin,
+                    "EQO_PUBLIC_ORIGIN": web_origin,
+                    "NEXTAUTH_SECRET": terminal_session,
+                    "EQO_GATEWAY_JWT_SECRET": terminal_gateway,
+                },
+            },
+            "native-research": {
+                "image": "eqoboard-native-web:candidate",
+                "environment": {
+                    "NEXTAUTH_URL": research_origin,
+                    "EQO_PUBLIC_ORIGIN": research_origin,
+                    "NEXTAUTH_SECRET": research_session,
+                    "EQO_MDP_URL": "http://market-data-platform:4452",
+                    "MDP_RESEARCH_JWT_SECRET": research_mdp,
+                },
+            },
+            "native-mock-oidc": {
+                "environment": {
+                    "EQO_PUBLIC_ORIGINS": f"{web_origin},{research_origin}",
+                },
+            },
+            "native-mock-gateway": {
+                "environment": {"EQO_GATEWAY_JWT_SECRET": terminal_gateway},
+            },
+            "market-data-platform": {
+                "environment": {"MDP_RESEARCH_JWT_SECRET": research_mdp},
+            },
+        },
+    }
 
 
 def is_test_source(path: Path, app_root: Path) -> bool:
@@ -318,6 +373,106 @@ export const provenance = Object.freeze({
             [],
             "native source contains a byte-identical copy of the protected Pro route",
         )
+
+    def test_compose_e2e_validates_the_frozen_research_signer_boundary(self) -> None:
+        validator = native_compose_environment_validator()
+        web_origin = "http://127.0.0.1:3440"
+        research_origin = "http://localhost:3441"
+        oidc_origins = f"{web_origin},{research_origin}"
+
+        def run_validator(config: dict[str, object]) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, "-c", validator, web_origin, research_origin, oidc_origins],
+                input=json.dumps(config),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        valid = native_compose_security_fixture()
+        accepted = run_validator(valid)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
+        invalid_cases: list[tuple[str, dict[str, object], str]] = []
+        for name in (
+            "EQO_RUST_URL",
+            "EQO_GATEWAY_JWT_SECRET",
+            "EQO_RESEARCH_JWT_SECRET",
+            "MDP_TERMINAL_JWT_SECRET",
+            "ENGINE_RESEARCH_JWT_SECRET",
+            "EQO_ENGINE_URL",
+            "QUANT_RESEARCH_JWT_SECRET",
+            "ALPACA_SECRET",
+        ):
+            candidate = json.loads(json.dumps(valid))
+            candidate["services"]["native-research"]["environment"][name] = "unexpected-secret"
+            invalid_cases.append(
+                (
+                    f"research rejects {name}",
+                    candidate,
+                    f"native-research must not receive {name}",
+                )
+            )
+
+        candidate = json.loads(json.dumps(valid))
+        candidate["services"]["native-web"]["environment"]["EQO_GATEWAY_JWT_SECRET"] = (
+            candidate["services"]["native-web"]["environment"]["NEXTAUTH_SECRET"]
+        )
+        invalid_cases.append(
+            (
+                "terminal Gateway signer cannot reuse a session key",
+                candidate,
+                "terminal Gateway signer must be distinct from both app session secrets",
+            )
+        )
+
+        candidate = json.loads(json.dumps(valid))
+        candidate["services"]["native-mock-gateway"]["environment"]["EQO_GATEWAY_JWT_SECRET"] = (
+            "different-gateway-fixture-secret"
+        )
+        invalid_cases.append(
+            (
+                "Gateway fixture verifies the terminal signer",
+                candidate,
+                    "Gateway fixture must verify the terminal Gateway signer",
+            )
+        )
+
+        for reused_name in ("terminal session", "research session", "terminal Gateway signer"):
+            candidate = json.loads(json.dumps(valid))
+            if reused_name == "terminal session":
+                reused = candidate["services"]["native-web"]["environment"]["NEXTAUTH_SECRET"]
+            elif reused_name == "research session":
+                reused = candidate["services"]["native-research"]["environment"]["NEXTAUTH_SECRET"]
+            else:
+                reused = candidate["services"]["native-web"]["environment"]["EQO_GATEWAY_JWT_SECRET"]
+            candidate["services"]["native-research"]["environment"]["MDP_RESEARCH_JWT_SECRET"] = reused
+            candidate["services"]["market-data-platform"]["environment"]["MDP_RESEARCH_JWT_SECRET"] = reused
+            invalid_cases.append(
+                (
+                    f"MDP signer differs from {reused_name}",
+                    candidate,
+                    "MDP delegation secret must differ from both sessions and terminal Gateway signer",
+                )
+            )
+
+        candidate = json.loads(json.dumps(valid))
+        candidate["services"]["market-data-platform"]["environment"]["MDP_RESEARCH_JWT_SECRET"] = (
+            "different-mdp-fixture-secret"
+        )
+        invalid_cases.append(
+            (
+                "MDP fixture verifies the Research signer",
+                candidate,
+                "research app and MDP fixture must share only the MDP delegation secret",
+            )
+        )
+
+        for label, candidate, expected_error in invalid_cases:
+            with self.subTest(label=label):
+                rejected = run_validator(candidate)
+                self.assertNotEqual(rejected.returncode, 0, f"accepted invalid fixture: {label}")
+                self.assertIn(expected_error, rejected.stderr)
 
     def test_container_context_is_the_native_app_only(self) -> None:
         dockerfile = APP_ROOT / "Dockerfile"

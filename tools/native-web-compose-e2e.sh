@@ -132,22 +132,56 @@ if not services.get("native-web", {}).get("image") or services.get("native-web",
     raise SystemExit("native-web and native-research must use the same production image")
 if not terminal.get("NEXTAUTH_SECRET") or not research.get("NEXTAUTH_SECRET") or terminal["NEXTAUTH_SECRET"] == research["NEXTAUTH_SECRET"]:
     raise SystemExit("terminal and research NextAuth secrets must be separate server-only values")
-if not terminal.get("EQO_GATEWAY_JWT_SECRET") or not research.get("EQO_RESEARCH_JWT_SECRET"):
-    raise SystemExit("terminal and research Gateway signers must use separate server-only secrets")
-if terminal["EQO_GATEWAY_JWT_SECRET"] == research["EQO_RESEARCH_JWT_SECRET"]:
-    raise SystemExit("terminal and research Gateway signer secrets must be distinct")
+terminal_gateway_secret = terminal.get("EQO_GATEWAY_JWT_SECRET")
+if not terminal_gateway_secret:
+    raise SystemExit("native-web must receive its terminal Gateway signer")
+if terminal_gateway_secret in {terminal.get("NEXTAUTH_SECRET"), research.get("NEXTAUTH_SECRET")}:
+    raise SystemExit("terminal Gateway signer must be distinct from both app session secrets")
+gateway = environment("native-mock-gateway")
+if not gateway:
+    raise SystemExit("native-mock-gateway service is required")
+if gateway.get("EQO_GATEWAY_JWT_SECRET") != terminal_gateway_secret:
+    raise SystemExit("Gateway fixture must verify the terminal Gateway signer")
+if gateway.get("EQO_RESEARCH_JWT_SECRET"):
+    raise SystemExit("Gateway fixture must not receive a Research Gateway signer")
+
+research_forbidden_secrets = (
+    "EQO_RUST_URL",
+    "EQO_GATEWAY_JWT_SECRET",
+    "EQO_RESEARCH_JWT_SECRET",
+    "MDP_TERMINAL_JWT_SECRET",
+    "QUANT_TERMINAL_JWT_SECRET",
+    "ENGINE_TERMINAL_JWT_SECRET",
+    "ENGINE_RESEARCH_JWT_SECRET",
+    "QUANT_RESEARCH_JWT_SECRET",
+    "EQO_ENGINE_URL",
+    "EQO_QUANT_RESEARCH_URL",
+    "EQO_RESEARCH_API_KEY",
+    "EQO_ACCESS_TOKEN",
+    "ALPACA_KEY",
+    "ALPACA_SECRET",
+    "EQO_ADAPTER_ALPACA_TOKEN",
+    "EQO_ADAPTER_IBKR_TOKEN",
+    "EQO_ADAPTER_SCHWAB_TOKEN",
+    "ANTHROPIC_API_KEY",
+)
+for name in research_forbidden_secrets:
+    if research.get(name):
+        raise SystemExit(f"native-research must not receive {name}")
+
 if not research.get("MDP_RESEARCH_JWT_SECRET"):
     raise SystemExit("native-research must receive its isolated MDP delegation secret")
 if research.get("EQO_MDP_URL") != "http://market-data-platform:4452":
     raise SystemExit("native-research must target the isolated market-data-platform fixture")
 mdp = environment("market-data-platform")
-gateway = environment("native-mock-gateway")
 if not mdp.get("MDP_RESEARCH_JWT_SECRET") or mdp["MDP_RESEARCH_JWT_SECRET"] != research["MDP_RESEARCH_JWT_SECRET"]:
     raise SystemExit("research app and MDP fixture must share only the MDP delegation secret")
-if mdp.get("MDP_RESEARCH_JWT_SECRET") in {terminal.get("NEXTAUTH_SECRET"), research.get("NEXTAUTH_SECRET"), research.get("EQO_RESEARCH_JWT_SECRET")}:
-    raise SystemExit("MDP delegation secret must be distinct from app session and research signer secrets")
-if gateway.get("EQO_GATEWAY_JWT_SECRET") != terminal["EQO_GATEWAY_JWT_SECRET"] or gateway.get("EQO_RESEARCH_JWT_SECRET") != research["EQO_RESEARCH_JWT_SECRET"]:
-    raise SystemExit("Gateway fixture must verify the independently signed terminal and research delegations")
+if mdp["MDP_RESEARCH_JWT_SECRET"] in {
+    terminal.get("NEXTAUTH_SECRET"),
+    research.get("NEXTAUTH_SECRET"),
+    terminal_gateway_secret,
+}:
+    raise SystemExit("MDP delegation secret must differ from both sessions and terminal Gateway signer")
 ' "$expected_web_origin" "$expected_research_origin" "$expected_oidc_origins"
 dc up --detach --wait --wait-timeout 180
 
