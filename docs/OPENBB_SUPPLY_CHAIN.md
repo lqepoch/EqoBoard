@@ -12,6 +12,8 @@ The independent workflow is [`.github/workflows/openbb.yml`](../.github/workflow
 
 The `OpenBB source supply chain` lane verifies the pinned source archive and license records, generates upstream and community-patched source SPDX SBOMs, and records the drift report. The `OpenBB native runtime E2E` lane builds the pinned Lite image and runs the isolated container/browser acceptance. Manual `workflow_dispatch` and the weekly schedule run both lanes. These Actions results bind the current candidate's source checks, two source-only SBOMs, tested image, and browser evidence. The workflow does not produce a runtime image SBOM or approve release/deployment; those gates remain separate. Consequently, local development builds or runs are not CI, release, or deployment evidence. The workflow uses public sources and synthetic test fixtures only, with no market-data credentials.
 
+For pull requests and pushes, the route compares names with Git rename and copy detection enabled, including unchanged copy sources. Both source and destination paths are classified. Git warnings, command failures, timeouts, or missing, malformed, ambiguous, or unavailable diff data select both heavy lanes.
+
 ## Verify and review source changes
 
 For a PR or candidate source update, use the source artifacts and logs from the

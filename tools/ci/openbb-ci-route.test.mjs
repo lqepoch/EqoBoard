@@ -8,7 +8,7 @@ import { classifyNameStatus, classifyOpenbbCi } from "./openbb-ci-route.mjs";
 
 const SAFE_WIDGET = "apps/openterminal/web/components/widgets/ChartWidget.tsx";
 
-function withRepo(callback, initialPaths = [SAFE_WIDGET]) {
+function withRepo(callback, initialPaths = [SAFE_WIDGET], initialContents = {}) {
   const root = mkdtempSync(join(tmpdir(), "eqoboard-openbb-ci-route-"));
   const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: "pipe" }).trim();
   try {
@@ -18,7 +18,7 @@ function withRepo(callback, initialPaths = [SAFE_WIDGET]) {
     for (const path of initialPaths) {
       const target = join(root, path);
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, "base\n");
+      writeFileSync(target, initialContents[path] ?? "base\n");
     }
     git("add", ".");
     git("commit", "-qm", "base");
@@ -198,6 +198,43 @@ test("renames route both the old and new path names", () => {
     commit(git, "move file into Gateway manifest path");
     assert.deepEqual(classify(), { source: false, runtime: true, reason: "related-paths" });
   }, [SAFE_WIDGET, "README.md"]);
+});
+
+test("copies from unchanged shared paths route both the source and destination", () => {
+  const sharedPath = ".github/workflows/openbb.yml";
+  withRepo(({ root, git, classify }) => {
+    const copiedPath = "docs/copied-workflow-notes.md";
+    mkdirSync(dirname(join(root, copiedPath)), { recursive: true });
+    writeFileSync(join(root, copiedPath), readFileSync(join(root, sharedPath)));
+    commit(git, "copy shared workflow input");
+    assert.deepEqual(classify(), { source: true, runtime: true, reason: "related-paths" });
+  }, [sharedPath]);
+});
+
+test("rename and copy limit warnings fail closed instead of skipping the source path", () => {
+  const sourcePaths = [
+    "apps/gateway/src/policy-a.rs",
+    "apps/gateway/src/policy-b.rs",
+    "apps/gateway/src/policy-c.rs",
+  ];
+  const sharedContent = "shared route policy alpha beta gamma delta epsilon zeta eta theta iota kappa lambda\n";
+  const initialContents = Object.fromEntries(sourcePaths.map((path) => [path, sharedContent]));
+  withRepo(({ root, git, baseSha, classify }) => {
+    git("config", "diff.renameLimit", "1");
+    for (const index of sourcePaths.keys()) {
+      const destination = `docs/copied-policy-${index}.md`;
+      modify(root, destination, `${sharedContent.trimEnd()} revised-${index}\n`);
+    }
+    commit(git, "add inexact copies under a constrained rename limit");
+
+    const headSha = git("rev-parse", "HEAD");
+    const limitedDiff = spawnSync("git", [
+      "diff", "--name-status", "-z", "--find-renames", "--find-copies-harder", baseSha, headSha,
+    ], { cwd: root, encoding: "buffer" });
+    assert.equal(limitedDiff.status, 0);
+    assert.ok(limitedDiff.stderr.length > 0, "fixture must exercise Git's copy-detection warning");
+    assert.deepEqual(classify(), { source: true, runtime: true, reason: "diff-unavailable" });
+  }, sourcePaths, initialContents);
 });
 
 test("deletes and additions preserve the related path route", () => {
