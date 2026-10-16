@@ -1045,7 +1045,7 @@
       "source_provenance": {
         "classification": "first-party independent regression tests",
         "adapted_sources": [],
-        "notes": "Independent tests for exact local MDP URL/delegation routing and shared option-tape subscriptions; existing source owners remain unchanged. No third-party or legacy application source copied."
+        "notes": "Independent tests for exact local MDP URL/delegation routing, shared option-tape subscriptions, and synthetic Core Bars empty-head continuation/rendering; existing source owners remain unchanged. No third-party or legacy application source copied."
       },
       "dependencies": {
         "added": [],
@@ -1056,6 +1056,7 @@
       },
       "files": [
         "apps/eqoboard-web/app/api/history/[symbol]/route.test.ts",
+        "apps/eqoboard-web/e2e/core-bars-continuation.spec.ts",
         "apps/eqoboard-web/e2e/option-tape-shared-subscription.spec.ts",
         "apps/eqoboard-web/lib/server/service-http.test.ts"
       ],

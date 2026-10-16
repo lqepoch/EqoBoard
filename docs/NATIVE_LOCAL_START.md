@@ -90,6 +90,9 @@ pwsh -File tools/start-native-local.ps1 -RepoRoot . -PackagePath data/native-loc
 固定 MDP 来源见 `third_party/mdp-runtime.json`；内层源码/文件清单与外层完整清单交叉验证。
 MDP 源项目采用 MIT；包内保留其 `LICENSE` 和依赖 `NOTICE.txt`，不将第三方实现
 声明为 EqoBoard 原创。该来源记录不能替代整个静态链接闭包或数据商业使用权验收。
+固定 MDP 包含失败分段续页修复：近期 Futu 失败页仍保留缺口，若存在旧计划段则提供
+`Load older bars` 的续页，继续读取原计划的 Alpaca 历史；不替换失败分段的来源。
+空首屏不代表所有旧历史均不可用，所有页读取后仍须保留失败段的 partial/unknown。
 Web 仅收到自身签名/会话与必要配置；Futu key 只给 Gateway/SDK，显式启用的 Alpaca
 只读历史 key 只给 MDP。启用 Core Bars 时按 Gateway→MDP→Web 启动，端口分别为
 8080、8088、3000，均实际绑定 `127.0.0.1`；已有端口或未知进程占用时拒绝覆盖。
