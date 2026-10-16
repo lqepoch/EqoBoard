@@ -1,4 +1,4 @@
-# PR64/65 审查与本机运行交付边界
+# PR64/65/66 审查与本机运行交付边界
 
 日期：2026-10-16。迁移 Epic #60；完整旧功能映射见
 [FEATURE_INVENTORY.md](FEATURE_INVENTORY.md)，逐项实现/验收差距见
@@ -84,7 +84,10 @@ SBOM 与文件哈希证明库存和字节身份，不证明全部静态组件 no
 后续 Core Bars 本机接线以固定 MDP 源码 pin 和三服务 Windows 包交付，源码/运行检查需
 绑定该 PR 最终 head。MDP 独立 [PR24](https://github.com/lqepoch/market-data-platform/pull/24)
 已合并，测试与主分支树一致；不把它的 CI 当作 EqoBoard 新 head 或真实历史数据验收。
-当前图表是否成功还需验证日历、委托和实际 Provider 响应，Quote 成功不替代历史链路证据。
+MDP [PR26](https://github.com/lqepoch/market-data-platform/pull/26) 随后修复失败的近期
+Futu 计划段吞掉后续 Alpaca OLD 段游标的问题：失败页保留 gap/unknown，并允许继续
+读取原有计划的下一段，不改变来源优先级或增加自动回退。该源码已合并并固定到本机包。
+当前图表是否成功仍需验证日历、委托和实际 Provider 响应，Quote 成功不替代历史链路证据。
 
 - 完整旧/新功能对照、非空真实 Provider 数据与故障恢复验收。
 - Futu HTTP ACK 与 SDK 实际订阅完成的精确 ready/error 契约。
@@ -92,8 +95,9 @@ SBOM 与文件哈希证明库存和字节身份，不证明全部静态组件 no
 - 同环境成对性能与实测预算、真实用户数据身份迁移及生产回滚演练。
 - 所有选定 OpenBB 高价值研究能力的真实来源与稳定性验收。
 
-没有修改其它仓库的源码或合并无关 Draft；锁定的 Core/connector 提交已在各自
-main 历史中。九仓 Draft 治理方案仍不取代当前契约。
+关联市场后端的改动仅限 MDP PR24 的 Windows 交付和 PR26 的既定历史计划续页修复；
+未合并无关 Draft。锁定的 Core/connector 提交已在各自 main 历史中。
+九仓 Draft 治理方案仍不取代当前契约。
 
 ## 单项旧测试授权与原件保护
 
