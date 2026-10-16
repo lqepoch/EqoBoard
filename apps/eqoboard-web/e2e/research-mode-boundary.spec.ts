@@ -131,7 +131,12 @@ async function installResearchFetchObserver(page: Page) {
   // immediately and unchanged. https://crbug.com/568852319
   // https://chromium-review.googlesource.com/c/chromium/src/+/8508456
   await page.addInitScript(
-    ({ apiPath, maxRequests, maxBytes, maxUrlChars }: {
+    ({
+      apiPath,
+      maxRequests,
+      maxBytes,
+      maxUrlChars,
+    }: {
       apiPath: string;
       maxRequests: number;
       maxBytes: number;
@@ -231,8 +236,9 @@ async function installResearchFetchObserver(page: Page) {
           return originalFetch.call(window, input, init);
         }
 
-        const method = (init?.method ?? (input instanceof Request ? input.method : "GET"))
-          .toUpperCase();
+        const method = (
+          init?.method ?? (input instanceof Request ? input.method : "GET")
+        ).toUpperCase();
         const record: ResearchFetchObservationRecord = {
           id: state.records.length + 1,
           requestUrl: url.href,
@@ -308,8 +314,7 @@ async function readObservedResearchResponse<T>(
       const target = window as ResearchObservationWindow;
       const state = target.__eqoResearchFetchObservations;
       if (!state) return { state: "failed", errorClass: "observer-unavailable" };
-      if (state.fatalErrorClass)
-        return { state: "failed", errorClass: state.fatalErrorClass };
+      if (state.fatalErrorClass) return { state: "failed", errorClass: state.fatalErrorClass };
       // A fetch rejected before receiving headers has no Playwright Response
       // to pair with, so it must not make a later response for the same URL
       // look duplicated.
@@ -344,9 +349,7 @@ async function readObservedResearchResponse<T>(
 
   const bytes = Buffer.from(observation.bodyBase64 as string, "base64");
   expect(bytes.byteLength, `${label} exact byte length`).toBe(observation.byteLength);
-  expect(bytes.toString("base64"), `${label} canonical raw bytes`).toBe(
-    observation.bodyBase64,
-  );
+  expect(bytes.toString("base64"), `${label} canonical raw bytes`).toBe(observation.bodyBase64);
   let body: T;
   try {
     body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as T;
