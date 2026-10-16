@@ -51,7 +51,9 @@ export function AccountControl() {
     );
   }
 
-  const displayName = auth.displayName?.trim() || "Signed in";
+  const isLocalWorkstation = auth.identityType === "local-workstation";
+  const displayName =
+    auth.displayName?.trim() || (isLocalWorkstation ? "Local workstation" : "Signed in");
 
   return (
     <div className="eq-account-control">
@@ -65,15 +67,19 @@ export function AccountControl() {
         </summary>
         <div className="eq-account-menu__panel">
           <div className="eq-account-menu__identity">{displayName}</div>
-          <div className="eq-account-menu__status">Authenticated session</div>
-          <button
-            className="eq-account-menu__action"
-            disabled={pending}
-            onClick={() => void runAction(signOut)}
-            type="button"
-          >
-            {pending ? "Signing out…" : "Sign out"}
-          </button>
+          <div className="eq-account-menu__status" data-testid="local-workstation-status">
+            {isLocalWorkstation ? "Loopback-only local access" : "Authenticated session"}
+          </div>
+          {isLocalWorkstation ? null : (
+            <button
+              className="eq-account-menu__action"
+              disabled={pending}
+              onClick={() => void runAction(signOut)}
+              type="button"
+            >
+              {pending ? "Signing out…" : "Sign out"}
+            </button>
+          )}
           {failure ? (
             <div className="eq-account-menu__error" role="alert">
               {failure}

@@ -58,9 +58,11 @@ export function useAuthActions(): AuthActions {
   const queryClient = useQueryClient();
   const auth = useAuth();
   const signIn = useCallback(async () => {
+    if (auth.identityType === "local-workstation") return;
     await nextAuthSignIn("eqo-oidc", { callbackUrl: "/" });
-  }, []);
+  }, [auth.identityType]);
   const signOut = useCallback(async () => {
+    if (auth.identityType === "local-workstation") return;
     await nextAuthSignOut({ callbackUrl: "/", redirect: false });
     queryClient.clear();
     if (auth.storagePartition !== null && typeof BroadcastChannel !== "undefined") {
@@ -69,7 +71,7 @@ export function useAuthActions(): AuthActions {
       channel.close();
     }
     window.location.replace("/");
-  }, [auth.storagePartition, queryClient]);
+  }, [auth.identityType, auth.storagePartition, queryClient]);
   return useMemo(() => ({ signIn, signOut }), [signIn, signOut]);
 }
 

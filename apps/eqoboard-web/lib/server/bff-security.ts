@@ -4,7 +4,13 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { SignJWT } from "jose";
 import { NextResponse } from "next/server";
 import { isPermission, type Permission } from "../contracts/auth";
-import { isOidcConfigured, publicAppOrigin } from "../../auth";
+import {
+  isLocalWorkstationRequestAllowed,
+  isOidcConfigured,
+  localWorkstationModeEnabled,
+  localWorkstationModeRequested,
+  publicAppOrigin,
+} from "../../auth";
 import { getServerPrincipal, type ServerPrincipal } from "./auth";
 import {
   getNativeRuntimeMode,
@@ -63,22 +69,39 @@ function isWriteMethod(method: string): boolean {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
 }
 
+function validateLocalWorkstationBoundary(request: Request): NextResponse | null {
+  if (!localWorkstationModeRequested()) return null;
+  if (!localWorkstationModeEnabled()) return jsonError(503, "identity_unavailable");
+  if (!isLocalWorkstationRequestAllowed(request)) return jsonError(403, "origin_rejected");
+  return null;
+}
+
 /** Enforce browser origin/site isolation before any identity or downstream work. */
 export function validateRequestBoundary(
   request: Request,
   options: { requireJson?: boolean } = {},
 ): NextResponse | null {
+  const localBoundaryError = validateLocalWorkstationBoundary(request);
+  if (localBoundaryError) return localBoundaryError;
   const method = request.method.toUpperCase();
   const isWrite = isWriteMethod(method);
   const expectedOrigin = publicAppOrigin();
   const origin = request.headers.get("origin");
   const site = request.headers.get("sec-fetch-site");
   const mode = request.headers.get("sec-fetch-mode");
+  const localMode = localWorkstationModeRequested();
 
   if (origin !== null && (!expectedOrigin || origin !== expectedOrigin))
     return jsonError(403, "origin_rejected");
   if (site !== null && site !== "same-origin") return jsonError(403, "origin_rejected");
-  if (mode !== null && isWrite && mode !== "same-origin") return jsonError(403, "origin_rejected");
+  if (
+    mode !== null &&
+    isWrite &&
+    mode !== "same-origin" &&
+    !(localMode && mode === "cors")
+  ) {
+    return jsonError(403, "origin_rejected");
+  }
   if (isWrite && (!expectedOrigin || origin !== expectedOrigin))
     return jsonError(403, "origin_rejected");
 
@@ -104,6 +127,8 @@ export function validateRequestBoundary(
 }
 
 export function validateSameOriginWrite(request: Request): NextResponse | null {
+  const localBoundaryError = validateLocalWorkstationBoundary(request);
+  if (localBoundaryError) return localBoundaryError;
   if (!isWriteMethod(request.method)) return null;
   const expectedOrigin = publicAppOrigin();
   const origin = request.headers.get("origin");
@@ -130,7 +155,11 @@ export async function authorizeRequest(
   ) {
     return { ok: false, response: jsonError(404, "not_found") };
   }
-  if (!isPermission(permission) || !isOidcConfigured()) {
+  const localMode = localWorkstationModeRequested();
+  if (
+    !isPermission(permission) ||
+    (localMode ? !localWorkstationModeEnabled() : !isOidcConfigured())
+  ) {
     return { ok: false, response: jsonError(503, "identity_unavailable") };
   }
   const principal = await getServerPrincipal(request);

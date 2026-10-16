@@ -1,7 +1,11 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { publicAppOrigin } from "@/auth";
+import {
+  localWorkstationModeEnabled,
+  localWorkstationModeRequested,
+  publicAppOrigin,
+} from "@/auth";
 
 export type NativeRuntimeMode = "terminal" | "research";
 
@@ -80,6 +84,12 @@ function configuredSigningSecretsAreValid(): boolean {
 
 function profileIsolated(mode: NativeRuntimeMode | null): boolean {
   if (!mode) return false;
+  if (
+    localWorkstationModeRequested() &&
+    (mode !== "terminal" || !localWorkstationModeEnabled())
+  ) {
+    return false;
+  }
   const oppositeProfile = mode === "terminal" ? RESEARCH_ONLY_ENV : TERMINAL_ONLY_ENV;
   if (
     oppositeProfile.some(isConfigured) ||

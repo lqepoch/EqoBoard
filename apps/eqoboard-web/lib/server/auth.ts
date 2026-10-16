@@ -5,7 +5,16 @@ import { headers } from "next/headers";
 import { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { isPermission, type AuthUiSnapshot, type Permission } from "../contracts/auth";
-import { authCookieName, currentOidcIssuer, isOidcConfigured, publicAppOrigin } from "../../auth";
+import {
+  authCookieName,
+  currentOidcIssuer,
+  isLocalWorkstationRequestAllowed,
+  isOidcConfigured,
+  localWorkstationOrigin,
+  localWorkstationModeEnabled,
+  localWorkstationModeRequested,
+  publicAppOrigin,
+} from "../../auth";
 import { allowlistedRoles, permissionsForRoles } from "./permissions";
 import {
   getNativeRuntimeMode,
@@ -35,6 +44,16 @@ const RESEARCH_UI_PERMISSIONS: readonly Permission[] = [
   "market:read",
   "research:read",
   "research:private-read",
+];
+
+const LOCAL_WORKSTATION_PERMISSIONS: readonly Permission[] = [
+  "market:read",
+  "market:stream",
+  "market:subscribe",
+  "orders:preview",
+  "research:read",
+  "workspace:read",
+  "workspace:write",
 ];
 
 export function principalFromClaims(
@@ -110,6 +129,19 @@ async function getSessionClaims(request?: Request): Promise<PrincipalClaims | nu
 
 /** Read only the signed, encrypted NextAuth cookie; never trust browser identity headers. */
 export async function getServerPrincipal(request?: Request): Promise<ServerPrincipal | null> {
+  if (localWorkstationModeRequested()) {
+    const issuerOrigin = localWorkstationOrigin();
+    if (!issuerOrigin || !localWorkstationModeEnabled() || !nativeRuntimeReadiness().ready)
+      return null;
+    const localRequest = request ?? requestForServerComponent(await headers());
+    if (!isLocalWorkstationRequestAllowed(localRequest)) return null;
+    return {
+      identityIssuer: `${issuerOrigin}/local-workstation`,
+      subject: "local-workstation",
+      permissions: LOCAL_WORKSTATION_PERMISSIONS,
+      sessionExpiresAt: Date.now() + 60_000,
+    };
+  }
   return principalFromClaims(await getSessionClaims(request));
 }
 
@@ -168,16 +200,34 @@ function anonymousSnapshot(
     permissions: [],
     storagePartition: null,
     ...(mode === null ? {} : { runtimeMode: mode }),
-    researchOrigin: mode === "terminal" ? nativeResearchPublicOrigin() : null,
+    researchOrigin:
+      localWorkstationModeRequested() || mode !== "terminal"
+        ? null
+        : nativeResearchPublicOrigin(),
   };
 }
 
 /** Server-rendered, non-authoritative UI state. This value never authorizes an API call. */
 export async function getAuthUiSnapshot(): Promise<AuthUiSnapshot> {
   const mode = getNativeRuntimeMode();
-  if (mode === null || !nativeRuntimeReadiness().ready || !isOidcConfigured()) {
+  if (mode === null || !nativeRuntimeReadiness().ready) {
     return anonymousSnapshot("identity-unavailable", mode);
   }
+  if (localWorkstationModeRequested()) {
+    const principal = await getServerPrincipal();
+    if (!principal) return anonymousSnapshot("identity-unavailable", mode);
+    return {
+      status: "authenticated",
+      authenticated: true,
+      displayName: "Local workstation",
+      identityType: "local-workstation",
+      permissions: [...principal.permissions],
+      storagePartition: storagePartition(principal, mode),
+      runtimeMode: mode,
+      researchOrigin: null,
+    };
+  }
+  if (!isOidcConfigured()) return anonymousSnapshot("identity-unavailable", mode);
   const claims = await getSessionClaims();
   if (!claims) return anonymousSnapshot("sign-in-required", mode);
   const principal = principalFromClaims(claims);
@@ -191,6 +241,7 @@ export async function getAuthUiSnapshot(): Promise<AuthUiSnapshot> {
   return {
     status: "authenticated",
     authenticated: true,
+    identityType: "oidc",
     displayName: cleanDisplayName(
       (claims as PrincipalClaims & { nativeDisplayName?: unknown }).nativeDisplayName,
     ),

@@ -3,9 +3,10 @@ import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 
 const authMocks = vi.hoisted(() => ({ getToken: vi.fn() }));
+const requestMocks = vi.hoisted(() => ({ headers: new Headers() }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
+vi.mock("next/headers", () => ({ headers: async () => requestMocks.headers }));
 vi.mock("next-auth/jwt", () => authMocks);
 
 const { getAuthUiSnapshot, ownerKeyForPrincipal } = await import("./auth");
@@ -14,9 +15,11 @@ const { authorizeRequest } = await import("./bff-security");
 afterEach(() => {
   vi.unstubAllEnvs();
   authMocks.getToken.mockReset();
+  requestMocks.headers = new Headers();
 });
 
 function setOidcEnvironment(mode: "terminal" | "research"): void {
+  vi.stubEnv("EQO_LOCAL_ACCESS", "");
   vi.stubEnv("EQO_BFF_MODE", mode);
   vi.stubEnv("EQO_OIDC_ISSUER", "https://id.example.test/native");
   vi.stubEnv("EQO_OIDC_CLIENT_ID", "native-client");
@@ -33,6 +36,44 @@ function setOidcEnvironment(mode: "terminal" | "research"): void {
   } else {
     vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));
   }
+}
+
+function setLocalWorkstationEnvironment(): void {
+  for (const name of [
+    "EQO_GATEWAY_JWT_SECRET",
+    "MDP_TERMINAL_JWT_SECRET",
+    "QUANT_TERMINAL_JWT_SECRET",
+    "ENGINE_TERMINAL_JWT_SECRET",
+    "EQO_RESEARCH_JWT_SECRET",
+    "MDP_RESEARCH_JWT_SECRET",
+    "QUANT_RESEARCH_JWT_SECRET",
+    "ENGINE_RESEARCH_JWT_SECRET",
+    "EQO_RESEARCH_API_KEY",
+    "ALPACA_KEY",
+    "ALPACA_SECRET",
+    "EQO_ADAPTER_ALPACA_TOKEN",
+    "EQO_ADAPTER_IBKR_TOKEN",
+    "EQO_ADAPTER_SCHWAB_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "EQO_OIDC_CLIENT_SECRET",
+    "EQO_OPENBB_OIDC_CLIENT_SECRET",
+  ])
+    vi.stubEnv(name, "");
+  vi.stubEnv("EQO_LOCAL_ACCESS", "true");
+  vi.stubEnv("EQO_LOCAL_BIND", "127.0.0.1");
+  vi.stubEnv("HOSTNAME", "127.0.0.1");
+  vi.stubEnv("PORT", "3000");
+  vi.stubEnv("EQO_BFF_MODE", "terminal");
+  vi.stubEnv("EQO_PUBLIC_ORIGIN", "http://127.0.0.1:3000");
+  vi.stubEnv("NEXTAUTH_URL", "http://127.0.0.1:3000");
+  vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
+  requestMocks.headers = new Headers({
+    host: "127.0.0.1:3000",
+    "x-forwarded-host": "127.0.0.1:3000",
+    "x-forwarded-proto": "http",
+    "x-forwarded-port": "3000",
+    "x-forwarded-for": "127.0.0.1",
+  });
 }
 
 describe("server auth UI snapshot", () => {
@@ -227,5 +268,124 @@ describe("server auth UI snapshot", () => {
     vi.stubEnv("NEXTAUTH_SECRET", "z".repeat(64));
     const afterSecretRotation = await getAuthUiSnapshot();
     expect(afterSecretRotation.storagePartition).not.toBe(first.storagePartition);
+  });
+
+  it("projects local workstation identity without OIDC claims and limits its permissions", async () => {
+    setLocalWorkstationEnvironment();
+
+    const local = await getAuthUiSnapshot();
+    expect(local).toMatchObject({
+      status: "authenticated",
+      authenticated: true,
+      displayName: "Local workstation",
+      identityType: "local-workstation",
+      runtimeMode: "terminal",
+      researchOrigin: null,
+      permissions: [
+        "market:read",
+        "market:stream",
+        "market:subscribe",
+        "orders:preview",
+        "research:read",
+        "workspace:read",
+        "workspace:write",
+      ],
+    });
+    expect(local.storagePartition).toMatch(/^native-terminal-v1-[0-9a-f]{64}$/u);
+    expect(local.permissions).not.toContain("paper:submit");
+    expect(local.permissions).not.toContain("research:ai");
+    expect(local.permissions).not.toContain("engine:offline-read");
+    expect(authMocks.getToken).not.toHaveBeenCalled();
+
+    const forgedHost = await authorizeRequest(
+      new Request("http://127.0.0.1:3000/api/quotes", {
+        headers: {
+          host: "127.0.0.1:3000",
+          "x-forwarded-host": "attacker.example",
+          "x-forwarded-proto": "http",
+          "x-forwarded-port": "3000",
+        },
+      }),
+      "market:read",
+    );
+    expect(forgedHost.ok).toBe(false);
+    if (!forgedHost.ok) expect(forgedHost.response.status).toBe(403);
+
+    const csrfRejected = await authorizeRequest(
+      new Request("http://127.0.0.1:3000/api/workspaces", {
+        method: "POST",
+        headers: {
+          host: "127.0.0.1:3000",
+          "x-forwarded-host": "127.0.0.1:3000",
+          "x-forwarded-proto": "http",
+          "x-forwarded-port": "3000",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      }),
+      "workspace:write",
+    );
+    expect(csrfRejected.ok).toBe(false);
+    if (!csrfRejected.ok) expect(csrfRejected.response.status).toBe(403);
+
+    const writeHeaders = {
+      host: "127.0.0.1:3000",
+      "x-forwarded-host": "127.0.0.1:3000",
+      "x-forwarded-proto": "http",
+      "x-forwarded-port": "3000",
+      Origin: "http://127.0.0.1:3000",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-Mode": "cors",
+      "Content-Type": "application/json",
+    };
+    const orderPreview = await authorizeRequest(
+      new Request("http://127.0.0.1:3000/api/eqo/orders/preview", {
+        method: "POST",
+        headers: writeHeaders,
+        body: "{}",
+      }),
+      "orders:preview",
+    );
+    expect(orderPreview.ok).toBe(true);
+
+    const crossOriginWrite = await authorizeRequest(
+      new Request("http://127.0.0.1:3000/api/eqo/orders/preview", {
+        method: "POST",
+        headers: { ...writeHeaders, Origin: "http://attacker.example" },
+        body: "{}",
+      }),
+      "orders:preview",
+    );
+    expect(crossOriginWrite.ok).toBe(false);
+    if (!crossOriginWrite.ok) expect(crossOriginWrite.response.status).toBe(403);
+
+    for (const permission of ["paper:submit", "research:ai", "engine:offline-read"] as const) {
+      const denied = await authorizeRequest(
+        new Request("http://127.0.0.1:3000/api/quotes", {
+          headers: {
+            host: "127.0.0.1:3000",
+            "x-forwarded-host": "127.0.0.1:3000",
+            "x-forwarded-proto": "http",
+            "x-forwarded-port": "3000",
+          },
+        }),
+        permission,
+      );
+      expect(denied.ok).toBe(false);
+      if (!denied.ok) expect(denied.response.status).toBe(403);
+    }
+  });
+
+  it("does not project local identity for a remote Host or a forged forwarded host", async () => {
+    setLocalWorkstationEnvironment();
+    requestMocks.headers.set("host", "attacker.example");
+    const remote = await getAuthUiSnapshot();
+    expect(remote).toMatchObject({ status: "identity-unavailable", authenticated: false });
+
+    requestMocks.headers.set("host", "127.0.0.1:3000");
+    requestMocks.headers.set("x-forwarded-host", "attacker.example");
+    const forwarded = await getAuthUiSnapshot();
+    expect(forwarded).toMatchObject({ status: "identity-unavailable", authenticated: false });
+    expect(authMocks.getToken).not.toHaveBeenCalled();
   });
 });
