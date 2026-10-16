@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { NextResponse } from "next/server";
+import type { NextResponse } from "next/server";
 import {
   expectedYfinanceResearchRequest,
   validateYfinanceResearchResponse,
@@ -10,7 +10,6 @@ import {
   type YfinanceResearchInput,
 } from "@/features/research/yfinance-contract";
 import { authorizeRequest, noStoreJson, signMdpResearchReadDelegation } from "./bff-security";
-import { copyBytesToArrayBuffer } from "./http-body";
 import { requireRuntimeMode } from "./runtime-mode";
 import { consumePrincipalRateLimit, consumeServiceRateLimit } from "./rate-limit";
 import { createUpstreamDeadline, mdpBaseUrl, readJsonResponseBounded } from "./service-http";
@@ -221,14 +220,9 @@ export async function getYfinanceDaily(request: Request): Promise<NextResponse> 
     if (!validateYfinanceResearchResponse(body.value, expected)) {
       return noStoreJson({ error: "invalid_research_observation_response" }, 502);
     }
-    return new NextResponse(copyBytesToArrayBuffer(body.bytes), {
-      status: 200,
-      headers: {
-        "Cache-Control": "no-store",
-        "Content-Type": "application/json; charset=utf-8",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    // Use the shared JSON response path after full bounded contract validation.
+    // Research provenance belongs to the payload, not the outer JSON encoding.
+    return noStoreJson(body.value);
   } catch {
     return noStoreJson(
       { error: deadline.timedOut() ? "research_query_timeout" : "market_data_service_unavailable" },
