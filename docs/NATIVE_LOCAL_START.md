@@ -73,6 +73,10 @@ ACL 写入仅更新 DACL，不重写 owner 或审计 section；现有 owner 必�
 用户，写后继续核对仅当前用户和 SYSTEM 的显式完整控制权限。无需为日志
 权限修复请求管理员提升。Actions 日志记录实际 token 上下文，管理员 Runner
 的通过不能冒称标准用户 token 验收。
+Gateway 的 SDK 子进程仍清空继承环境，仅在 Windows 额外传递操作系统
+`SystemRoot`：固定 Node 的 crypto 初始化需要该变量，缺失时可在执行 JS 前
+以原生断言退出。该操作系统变量不授予任何 Provider 或签名权限。Windows
+Actions 还需检查唯一 SDK 子进程持续存活；无 OpenD 时 disconnected 仍是正确状态。
 
 打开 `http://127.0.0.1:3000`。确认 Gateway `/healthz` 和 Web `/api/healthz` 正常后，
 单独查看行情连接状态；HTTP liveness 不代表 Provider 权限、订阅就绪或数据新鲜。

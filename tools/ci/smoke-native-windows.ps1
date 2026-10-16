@@ -42,6 +42,113 @@ function Set-SmokePrivateAcl([string]$Path) {
         [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]$item, $acl)
     }
 }
+
+function Assert-RecordedGatewayProcess(
+    [int]$ProcessId,
+    [string]$ExpectedStartTicks,
+    [string]$ExpectedExecutablePath
+) {
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $process -or $process.HasExited) { throw 'The recorded Gateway process exited.' }
+    $startTicks = $process.StartTime.ToUniversalTime().Ticks.ToString(
+        [Globalization.CultureInfo]::InvariantCulture
+    )
+    $executablePath = [IO.Path]::GetFullPath($process.MainModule.FileName)
+    if ($startTicks -cne $ExpectedStartTicks -or
+        -not [String]::Equals(
+            $executablePath,
+            $ExpectedExecutablePath,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+        throw 'The recorded Gateway process identity changed.'
+    }
+    return $process
+}
+
+function Assert-FutuWorkerSurvivesStartup(
+    [string]$FixtureRoot,
+    [string]$PackagePath,
+    [string]$ExpectedNodePath,
+    [string]$CandidateSha
+) {
+    $gatewayRecordPath = Join-Path $FixtureRoot 'data/native-local/pid/gateway.json'
+    if (-not (Test-Path -LiteralPath $gatewayRecordPath -PathType Leaf)) {
+        throw 'The packaged Gateway PID record is missing.'
+    }
+    $record = Get-Content -LiteralPath $gatewayRecordPath -Raw | ConvertFrom-Json
+    $gatewayProcessId = 0
+    if ($record.role -cne 'gateway' -or
+        $record.candidateSha -cne $CandidateSha -or
+        -not [int]::TryParse([string]$record.processId, [ref]$gatewayProcessId) -or
+        $gatewayProcessId -lt 1) {
+        throw 'The packaged Gateway PID record is invalid.'
+    }
+
+    $expectedGatewayPath = [IO.Path]::GetFullPath(
+        (Join-Path $PackagePath 'gateway/eqo-gateway.exe')
+    )
+    $expectedNodePath = [IO.Path]::GetFullPath($ExpectedNodePath)
+    $expectedStartTicks = [string]$record.startTimeUtcTicks
+    $startupDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    $workerId = 0
+
+    while ([DateTime]::UtcNow -lt $startupDeadline -and $workerId -eq 0) {
+        [void](Assert-RecordedGatewayProcess -ProcessId $gatewayProcessId `
+            -ExpectedStartTicks $expectedStartTicks `
+            -ExpectedExecutablePath $expectedGatewayPath)
+
+        $children = @(
+            Get-CimInstance -ClassName Win32_Process `
+                -Filter "ParentProcessId = $gatewayProcessId" `
+                -Property ProcessId, ParentProcessId, Name, ExecutablePath `
+                -ErrorAction Stop |
+                Where-Object { $_.Name -ieq 'node.exe' }
+        )
+        if ($children.Count -gt 1) { throw 'Gateway has multiple Node.js child processes.' }
+        if ($children.Count -eq 1) {
+            $childPath = [IO.Path]::GetFullPath([string]$children[0].ExecutablePath)
+            if (-not [String]::Equals(
+                $childPath,
+                $expectedNodePath,
+                [StringComparison]::OrdinalIgnoreCase
+            )) {
+                throw 'The Futu worker executable does not match the official Node.js runtime.'
+            }
+            $workerId = [int]$children[0].ProcessId
+        } else {
+            Start-Sleep -Milliseconds 250
+        }
+    }
+    if ($workerId -lt 1) { throw 'The Gateway Futu SDK worker did not start.' }
+
+    $stabilityDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ([DateTime]::UtcNow -lt $stabilityDeadline) {
+        [void](Assert-RecordedGatewayProcess -ProcessId $gatewayProcessId `
+            -ExpectedStartTicks $expectedStartTicks `
+            -ExpectedExecutablePath $expectedGatewayPath)
+        $children = @(
+            Get-CimInstance -ClassName Win32_Process `
+                -Filter "ParentProcessId = $gatewayProcessId" `
+                -Property ProcessId, ParentProcessId, Name, ExecutablePath `
+                -ErrorAction Stop |
+                Where-Object { $_.Name -ieq 'node.exe' }
+        )
+        if ($children.Count -ne 1 -or [int]$children[0].ProcessId -ne $workerId) {
+            throw 'The Gateway Futu SDK worker exited or was replaced during startup.'
+        }
+        $childPath = [IO.Path]::GetFullPath([string]$children[0].ExecutablePath)
+        if (-not [String]::Equals(
+            $childPath,
+            $expectedNodePath,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw 'The Futu worker executable changed during startup.'
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    Write-Host 'Futu SDK worker survived startup check; provider connectivity remains unverified.'
+}
+
 Set-SmokePrivateAcl $fixtureRoot
 if ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -84,8 +191,11 @@ try {
     $env:ALPACA_KEY = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_KEY'
     $env:ALPACA_SECRET = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_SECRET'
     $env:EQO_RESEARCH_JWT_SECRET = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_RESEARCH'
-    & (Join-Path $repo 'tools/start-native-local.ps1') -PackagePath $PackagePath -RepoRoot $fixtureRoot -EnvPath $envPath -NodePath (Get-Command node).Source -ExpectedCandidateSha $CandidateSha
+    $nodePath = (Get-Command node -ErrorAction Stop).Source
+    & (Join-Path $repo 'tools/start-native-local.ps1') -PackagePath $PackagePath -RepoRoot $fixtureRoot -EnvPath $envPath -NodePath $nodePath -ExpectedCandidateSha $CandidateSha
     if ($LASTEXITCODE) { throw 'Packaged runtime startup failed' }
+    Assert-FutuWorkerSurvivesStartup -FixtureRoot $fixtureRoot `
+        -PackagePath $PackagePath -ExpectedNodePath $nodePath -CandidateSha $CandidateSha
     $env:E2E_LOCAL_ORIGIN = 'http://127.0.0.1:3000'
     Push-Location (Join-Path $repo 'apps/eqoboard-web')
     try {

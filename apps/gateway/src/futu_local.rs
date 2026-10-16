@@ -142,6 +142,15 @@ impl FutuLocal {
                 command.env(key, value);
             }
         }
+        // Node's Windows crypto initialization needs SystemRoot even before JS runs.
+        // Keep env_clear: provider/signing credentials outside this allowlist stay out.
+        #[cfg(windows)]
+        {
+            let system_root = std::env::var_os("SystemRoot")
+                .filter(|value| !value.is_empty())
+                .ok_or("Futu SDK requires Windows SystemRoot")?;
+            command.env("SystemRoot", system_root);
+        }
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
