@@ -195,9 +195,7 @@ test("@component synthetic Core Bars continuation renders older rows without era
     const retryDelay = (await retryNotice.innerText()).match(/Try again in (\d+) seconds\./u);
     expect(retryDelay).not.toBeNull();
     if (!retryDelay) throw new Error("Expected the host budget retry delay.");
-    await page.clock.setFixedTime(
-      new Date(budgetTime.getTime() + Number(retryDelay[1]) * 1_000),
-    );
+    await page.clock.setFixedTime(new Date(budgetTime.getTime() + Number(retryDelay[1]) * 1_000));
 
     const olderRead = page.waitForResponse((response) => {
       const url = new URL(response.url());
