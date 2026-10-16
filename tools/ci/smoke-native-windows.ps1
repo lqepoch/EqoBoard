@@ -45,7 +45,7 @@ function Set-SmokePrivateAcl([string]$Path) {
     }
 }
 
-function Assert-RecordedGatewayProcess(
+function Assert-RecordedProcess(
     [int]$ProcessId,
     [string]$ExpectedStartTicks,
     [string]$ExpectedExecutablePath
@@ -85,6 +85,202 @@ function Assert-RecordedGatewayProcess(
     return $process
 }
 
+function Assert-OwnedLoopbackListener([int]$Port, [int]$ProcessId) {
+    $listeners = @(
+        Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+    )
+    if ($listeners.Count -eq 0) { throw "No listener owns expected local port $Port." }
+    foreach ($listener in $listeners) {
+        if ($listener.LocalAddress -cne '127.0.0.1' -or $listener.OwningProcess -ne $ProcessId) {
+            throw "Port $Port is not exclusively bound to its recorded loopback process."
+        }
+    }
+}
+
+function Get-AclFingerprint([string]$Path) {
+    $acl = Get-Acl -LiteralPath $Path
+    return [Convert]::ToBase64String($acl.GetSecurityDescriptorBinaryForm())
+}
+
+function Assert-FileBytesEqual([string]$Path, [byte[]]$ExpectedBytes) {
+    $actual = [IO.File]::ReadAllBytes($Path)
+    if ([Convert]::ToBase64String($actual) -cne [Convert]::ToBase64String($ExpectedBytes)) {
+        throw 'A smoke-test file was not restored byte-for-byte.'
+    }
+}
+
+function Invoke-StopNativeLocal([string]$FixtureRoot, [int]$TimeoutMilliseconds) {
+    $pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
+    $stopPath = Join-Path $repo 'tools/stop-native-local.ps1'
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $pwshPath
+    $startInfo.WorkingDirectory = $repo
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $stopPath, '-RepoRoot', $FixtureRoot)) {
+        [void]$startInfo.ArgumentList.Add($argument)
+    }
+    $child = [Diagnostics.Process]::Start($startInfo)
+    if (-not $child) { throw 'The isolated stop check could not start.' }
+    $stdoutTask = $child.StandardOutput.ReadToEndAsync()
+    $stderrTask = $child.StandardError.ReadToEndAsync()
+    try {
+        if (-not $child.WaitForExit($TimeoutMilliseconds)) {
+            $child.Kill($true)
+            [void]$child.WaitForExit(5000)
+            throw 'The isolated stop check exceeded its bounded deadline.'
+        }
+        [void]$child.WaitForExit()
+        [void]$stdoutTask.GetAwaiter().GetResult()
+        [void]$stderrTask.GetAwaiter().GetResult()
+        return $child.ExitCode
+    } finally {
+        if (-not $child.HasExited) {
+            $child.Kill($true)
+            [void]$child.WaitForExit(5000)
+        }
+        $child.Dispose()
+    }
+}
+
+function Assert-OriginalServicesRemainRunning($Identities) {
+    foreach ($identity in $Identities) {
+        [void](Assert-RecordedProcess -ProcessId $identity.ProcessId `
+            -ExpectedStartTicks $identity.StartTimeUtcTicks `
+            -ExpectedExecutablePath $identity.ExecutablePath)
+        Assert-OwnedLoopbackListener -Port $identity.Port -ProcessId $identity.ProcessId
+    }
+}
+
+function Assert-OriginalServicesStopped($Identities) {
+    foreach ($identity in $Identities) {
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        $originalStillRunning = $false
+        while ([DateTime]::UtcNow -lt $deadline) {
+            $process = $null
+            try { $process = [Diagnostics.Process]::GetProcessById($identity.ProcessId) }
+            catch [ArgumentException] { break }
+            if ($process.HasExited) { break }
+            $startTicks = $process.StartTime.ToUniversalTime().Ticks.ToString(
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+            if ($startTicks -cne $identity.StartTimeUtcTicks) { break }
+            $path = $process.MainModule.FileName
+            if (-not $path) { throw 'Could not verify a stopped service identity.' }
+            $path = [IO.Path]::GetFullPath($path)
+            if (-not [String]::Equals(
+                $path,
+                $identity.ExecutablePath,
+                [StringComparison]::OrdinalIgnoreCase
+            )) { break }
+            $originalStillRunning = $true
+            Start-Sleep -Milliseconds 100
+        }
+        if ($originalStillRunning) {
+            $process = Get-Process -Id $identity.ProcessId -ErrorAction SilentlyContinue
+            if ($process -and -not $process.HasExited) {
+                $actualTicks = $process.StartTime.ToUniversalTime().Ticks.ToString(
+                    [Globalization.CultureInfo]::InvariantCulture
+                )
+                if ($actualTicks -ceq $identity.StartTimeUtcTicks) {
+                    $actualPath = [IO.Path]::GetFullPath($process.MainModule.FileName)
+                    if ([String]::Equals(
+                        $actualPath,
+                        $identity.ExecutablePath,
+                        [StringComparison]::OrdinalIgnoreCase
+                    )) { throw 'An original native service identity remained active after stop.' }
+                }
+            }
+        }
+    }
+}
+
+function Assert-NativeServicesSurviveStartup(
+    [string]$FixtureRoot,
+    [string]$PackagePath,
+    [string]$CandidateSha,
+    [string]$ExpectedNodePath
+) {
+    $dataRoot = Join-Path $FixtureRoot 'data/native-local'
+    $statePath = Join-Path $dataRoot 'state.json'
+    if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
+        throw 'The aggregate native-local process state is missing.'
+    }
+    $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+    $manifestPath = Join-Path $PackagePath 'SHA256SUMS'
+    $expectedPackageManifestSha = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($state.schemaVersion -ne 2 -or
+        $state.candidateSha -cne $CandidateSha -or
+        $state.packageManifestSha256 -cne $expectedPackageManifestSha) {
+        throw 'The aggregate state is not bound to the expected runtime package.'
+    }
+
+    $expectedExecutables = @{
+        gateway = [IO.Path]::GetFullPath((Join-Path $PackagePath 'gateway/eqo-gateway.exe'))
+        mdp = [IO.Path]::GetFullPath((Join-Path $PackagePath 'mdp/mdp.exe'))
+        web = [IO.Path]::GetFullPath($ExpectedNodePath)
+    }
+    $expectedPorts = @{ gateway = 8080; mdp = 8088; web = 3000 }
+    $identities = [System.Collections.Generic.List[object]]::new()
+    $stateProcesses = @($state.processes)
+    $expectedRoles = @('gateway', 'mdp', 'web')
+    if ($stateProcesses.Count -ne $expectedRoles.Count -or
+        @($stateProcesses.role | Where-Object { $_ -notin $expectedRoles }).Count -ne 0 -or
+        @($expectedRoles | Where-Object { $_ -notin $stateProcesses.role }).Count -ne 0) {
+        throw 'The aggregate state does not contain exactly the three expected service roles.'
+    }
+
+    foreach ($role in $expectedRoles) {
+        $pidRecordPath = Join-Path $dataRoot "pid/$role.json"
+        if (-not (Test-Path -LiteralPath $pidRecordPath -PathType Leaf)) {
+            throw "The recorded $role process identity is missing."
+        }
+        $record = Get-Content -LiteralPath $pidRecordPath -Raw | ConvertFrom-Json
+        $processId = 0
+        if ($record.role -cne $role -or
+            $record.candidateSha -cne $CandidateSha -or
+            $record.packageManifestSha256 -cne $expectedPackageManifestSha -or
+            -not [int]::TryParse([string]$record.processId, [ref]$processId) -or
+            $processId -lt 1 -or
+            $record.startTimeUtcTicks -cnotmatch '^[0-9]+$' -or
+            [IO.Path]::GetFullPath([string]$record.executablePath) -cne $expectedExecutables[$role]) {
+            throw "The recorded $role process identity does not match this package."
+        }
+        $stateRecord = @($stateProcesses | Where-Object { $_.role -ceq $role })
+        if ($stateRecord.Count -ne 1 -or
+            [int]$stateRecord[0].processId -ne $processId -or
+            $stateRecord[0].startTimeUtcTicks -cne $record.startTimeUtcTicks -or
+            $stateRecord[0].executablePath -cne $record.executablePath -or
+            $stateRecord[0].packageManifestSha256 -cne $expectedPackageManifestSha) {
+            throw "The $role aggregate and PID records do not agree."
+        }
+        [void](Assert-RecordedProcess -ProcessId $processId `
+            -ExpectedStartTicks ([string]$record.startTimeUtcTicks) `
+            -ExpectedExecutablePath $expectedExecutables[$role])
+        Assert-OwnedLoopbackListener -Port $expectedPorts[$role] -ProcessId $processId
+        $identities.Add([pscustomobject]@{
+            Role = $role
+            ProcessId = $processId
+            StartTimeUtcTicks = [string]$record.startTimeUtcTicks
+            ExecutablePath = $expectedExecutables[$role]
+            Port = $expectedPorts[$role]
+        })
+    }
+
+    $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8088/healthz' -TimeoutSec 3
+    if ($health.status -cne 'alive') { throw 'MDP health did not report alive.' }
+    $readiness = Invoke-RestMethod -Uri 'http://127.0.0.1:8088/readyz' -TimeoutSec 3
+    if ($readiness.status -cne 'ready' -or
+        $readiness.market_ready -ne $false -or
+        $readiness.market_calendar_configured -ne $false -or
+        $readiness.source_entitlement -cne 'unverified') {
+        throw 'MDP readiness did not report the expected fail-closed no-calendar state.'
+    }
+    return @($identities.ToArray())
+}
+
 function Assert-FutuWorkerSurvivesStartup(
     [string]$FixtureRoot,
     [string]$PackagePath,
@@ -113,7 +309,7 @@ function Assert-FutuWorkerSurvivesStartup(
     $workerId = 0
 
     while ([DateTime]::UtcNow -lt $startupDeadline -and $workerId -eq 0) {
-        [void](Assert-RecordedGatewayProcess -ProcessId $gatewayProcessId `
+        [void](Assert-RecordedProcess -ProcessId $gatewayProcessId `
             -ExpectedStartTicks $expectedStartTicks `
             -ExpectedExecutablePath $expectedGatewayPath)
 
@@ -143,7 +339,7 @@ function Assert-FutuWorkerSurvivesStartup(
 
     $stabilityDeadline = [DateTime]::UtcNow.AddSeconds(5)
     while ([DateTime]::UtcNow -lt $stabilityDeadline) {
-        [void](Assert-RecordedGatewayProcess -ProcessId $gatewayProcessId `
+        [void](Assert-RecordedProcess -ProcessId $gatewayProcessId `
             -ExpectedStartTicks $expectedStartTicks `
             -ExpectedExecutablePath $expectedGatewayPath)
         $children = @(
@@ -198,6 +394,10 @@ $envPath = Join-Path $fixtureRoot '.env'
     'EQO_PUBLIC_ORIGIN=http://127.0.0.1:3000'
     'NEXTAUTH_URL=http://127.0.0.1:3000'
     'EQO_RUST_URL=http://127.0.0.1:8080'
+    'EQO_MDP_URL=http://127.0.0.1:8088'
+    'EQO_LOCAL_CORE_BARS=true'
+    "MDP_TERMINAL_JWT_SECRET=$(New-TestSecret)"
+    "MDP_RESEARCH_JWT_SECRET=$(New-TestSecret)"
     "EQO_GATEWAY_JWT_SECRET=$(New-TestSecret)"
     "EQO_RESEARCH_JWT_SECRET=$(New-TestSecret)"
     "NEXTAUTH_SECRET=$(New-TestSecret)"
@@ -206,6 +406,12 @@ Set-SmokePrivateAcl $envPath
 $priorAlpacaKey = $env:ALPACA_KEY
 $priorAlpacaSecret = $env:ALPACA_SECRET
 $priorResearchSecret = $env:EQO_RESEARCH_JWT_SECRET
+$manifestPath = Join-Path $PackagePath 'SHA256SUMS'
+$webPidPath = Join-Path $fixtureRoot 'data/native-local/pid/web.json'
+$manifestBackup = $null
+$webPidBackup = $null
+$webPidAclFingerprint = $null
+$serviceIdentities = @()
 try {
     # Inherited provider/research secrets must not reach the terminal Web.
     $env:ALPACA_KEY = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_KEY'
@@ -214,6 +420,9 @@ try {
     $nodePath = (Get-Command node -ErrorAction Stop).Source
     & (Join-Path $repo 'tools/start-native-local.ps1') -PackagePath $PackagePath -RepoRoot $fixtureRoot -EnvPath $envPath -NodePath $nodePath -ExpectedCandidateSha $CandidateSha
     if ($LASTEXITCODE) { throw 'Packaged runtime startup failed' }
+    $serviceIdentities = @(Assert-NativeServicesSurviveStartup -FixtureRoot $fixtureRoot `
+        -PackagePath $PackagePath -CandidateSha $CandidateSha -ExpectedNodePath $nodePath
+    )
     Assert-FutuWorkerSurvivesStartup -FixtureRoot $fixtureRoot `
         -PackagePath $PackagePath -ExpectedNodePath $nodePath -CandidateSha $CandidateSha
     $env:E2E_LOCAL_ORIGIN = 'http://127.0.0.1:3000'
@@ -222,9 +431,99 @@ try {
         npx playwright test --config playwright.local.config.ts
         if ($LASTEXITCODE) { throw 'Packaged workstation browser acceptance failed' }
     } finally { Pop-Location }
+
+    if ($serviceIdentities.Count -ne 3) {
+        throw 'The startup smoke did not retain all three service identities.'
+    }
+
+    $manifestBackup = [IO.File]::ReadAllBytes($manifestPath)
+    try {
+        $invalidManifestLine = [Environment]::NewLine + 'invalid-stop-negative-case' + [Environment]::NewLine
+        [IO.File]::AppendAllText(
+            $manifestPath,
+            $invalidManifestLine,
+            [Text.UTF8Encoding]::new($false)
+        )
+        $stopExitCode = Invoke-StopNativeLocal -FixtureRoot $fixtureRoot -TimeoutMilliseconds 15000
+        if ($stopExitCode -eq 0) {
+            throw 'The manifest-mismatch stop negative case unexpectedly succeeded.'
+        }
+        Assert-OriginalServicesRemainRunning $serviceIdentities
+        Write-Host 'STOP_NEGATIVE_CASE=manifest_mismatch_rejected'
+    } finally {
+        [IO.File]::WriteAllBytes($manifestPath, $manifestBackup)
+        Assert-FileBytesEqual -Path $manifestPath -ExpectedBytes $manifestBackup
+    }
+
+    $webPidBackup = [IO.File]::ReadAllBytes($webPidPath)
+    $webPidAclFingerprint = Get-AclFingerprint $webPidPath
+    try {
+        $webPidText = [Text.UTF8Encoding]::new($false).GetString($webPidBackup)
+        $ticksPattern = '"startTimeUtcTicks"\s*:\s*"(?<ticks>[0-9]+)"'
+        $ticksMatch = [regex]::Match($webPidText, $ticksPattern)
+        if (-not $ticksMatch.Success -or
+            [regex]::Matches($webPidText, $ticksPattern).Count -ne 1) {
+            throw 'The web PID record does not contain one exact start-time field.'
+        }
+        $originalTicks = [long]::Parse(
+            $ticksMatch.Groups['ticks'].Value,
+            [Globalization.CultureInfo]::InvariantCulture
+        )
+        $replacementTicks = if ($originalTicks -lt [long]::MaxValue) {
+            ($originalTicks + 1).ToString([Globalization.CultureInfo]::InvariantCulture)
+        } else {
+            ($originalTicks - 1).ToString([Globalization.CultureInfo]::InvariantCulture)
+        }
+        $valueGroup = $ticksMatch.Groups['ticks']
+        $mutatedWebPidText = $webPidText.Substring(0, $valueGroup.Index) +
+            $replacementTicks +
+            $webPidText.Substring($valueGroup.Index + $valueGroup.Length)
+        [IO.File]::WriteAllText(
+            $webPidPath,
+            $mutatedWebPidText,
+            [Text.UTF8Encoding]::new($false)
+        )
+        if ((Get-AclFingerprint $webPidPath) -cne $webPidAclFingerprint) {
+            throw 'The PID mismatch case changed its private ACL.'
+        }
+        $stopExitCode = Invoke-StopNativeLocal -FixtureRoot $fixtureRoot -TimeoutMilliseconds 15000
+        if ($stopExitCode -eq 0) {
+            throw 'The PID-state mismatch stop negative case unexpectedly succeeded.'
+        }
+        Assert-OriginalServicesRemainRunning $serviceIdentities
+        Write-Host 'STOP_NEGATIVE_CASE=pid_state_mismatch_rejected'
+    } finally {
+        [IO.File]::WriteAllBytes($webPidPath, $webPidBackup)
+        Assert-FileBytesEqual -Path $webPidPath -ExpectedBytes $webPidBackup
+        if ((Get-AclFingerprint $webPidPath) -cne $webPidAclFingerprint) {
+            throw 'Restoring the PID record changed its private ACL.'
+        }
+    }
 } finally {
     try {
-        & (Join-Path $repo 'tools/stop-native-local.ps1') -RepoRoot $fixtureRoot
+        try {
+            if ($null -ne $manifestBackup) {
+                [IO.File]::WriteAllBytes($manifestPath, $manifestBackup)
+                Assert-FileBytesEqual -Path $manifestPath -ExpectedBytes $manifestBackup
+            }
+            if ($null -ne $webPidBackup) {
+                [IO.File]::WriteAllBytes($webPidPath, $webPidBackup)
+                Assert-FileBytesEqual -Path $webPidPath -ExpectedBytes $webPidBackup
+                if ($null -ne $webPidAclFingerprint -and
+                    (Get-AclFingerprint $webPidPath) -cne $webPidAclFingerprint) {
+                    throw 'The final PID record restore changed its private ACL.'
+                }
+            }
+        } finally {
+            $finalStopExitCode = Invoke-StopNativeLocal -FixtureRoot $fixtureRoot -TimeoutMilliseconds 60000
+            if ($finalStopExitCode -ne 0) {
+                throw 'The normal final native-local stop did not succeed.'
+            }
+            if ($serviceIdentities.Count -gt 0) {
+                Assert-OriginalServicesStopped $serviceIdentities
+                Write-Host 'STOP_FINAL_CASE=original_service_identities_stopped'
+            }
+        }
     } finally {
         $env:ALPACA_KEY = $priorAlpacaKey
         $env:ALPACA_SECRET = $priorAlpacaSecret

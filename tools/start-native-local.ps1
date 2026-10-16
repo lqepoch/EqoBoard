@@ -18,6 +18,8 @@ $script:FixedOrigin = 'http://127.0.0.1:3000'
 $script:GatewayBind = '127.0.0.1:8080'
 $script:WebPort = 3000
 $script:GatewayPort = 8080
+$script:MdpPort = 8088
+$script:PackageManifestSha256 = $null
 $script:StartedAtUtc = [DateTime]::UtcNow.ToString('O')
 $script:DataRoot = $null
 $script:RepositoryRoot = $null
@@ -300,7 +302,38 @@ function Assert-Package([string]$PackageRoot, [string]$ExpectedSha) {
         $relative = [IO.Path]::GetRelativePath($full, $file.FullName).Replace('\', '/')
         if (-not $listed.ContainsKey($relative)) { Fail 'The runtime checksum manifest omits a package file.' }
     }
-    return [pscustomobject]@{ Root = $full; Metadata = $metadata }
+    $hasMdp = $null -ne $metadata.PSObject.Properties['mdpSourceSha']
+    if ($hasMdp) {
+        $pinPath = Join-Path $PSScriptRoot '../third_party/mdp-runtime.json'
+        $pin = Get-Content -LiteralPath $pinPath -Raw | ConvertFrom-Json
+        $mdpRoot = Join-Path $full 'mdp'
+        $mdpMetadata = Get-Content -LiteralPath (Join-Path $mdpRoot 'runtime.json') -Raw | ConvertFrom-Json
+        $innerManifest = (Get-FileHash -LiteralPath (Join-Path $mdpRoot 'SHA256SUMS') -Algorithm SHA256).Hash.ToLowerInvariant()
+        $mdpFiles = @(Get-ChildItem -LiteralPath $mdpRoot -Force -Recurse -File)
+        if ($pin.schemaVersion -ne 1 -or $pin.repository -cne 'lqepoch/market-data-platform' -or
+            $metadata.mdpSourceSha -cne $pin.revision -or
+            $metadata.mdpSourceManifestSha256 -cne $pin.sourceManifestSha256 -or
+            $metadata.mdpManifestSha256 -cne $innerManifest -or
+            $mdpMetadata.candidateSha -cne $pin.revision -or
+            $mdpMetadata.sourceManifestSha256 -cne $pin.sourceManifestSha256 -or
+            $mdpMetadata.releaseAcceptance -cne 'LOCAL_EVALUATION_ONLY' -or
+            $mdpMetadata.target -cne $pin.target -or $mdpFiles.Count -ne 5) {
+            Fail 'The Core Bars backend does not match its reviewed source pin.'
+        }
+        foreach ($name in @('mdp.exe', 'runtime.json', 'SHA256SUMS', 'LICENSE', 'NOTICE.txt')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $mdpRoot $name) -PathType Leaf)) {
+                Fail 'The Core Bars backend package is incomplete.'
+            }
+        }
+    } elseif (Test-Path -LiteralPath (Join-Path $full 'mdp')) {
+        Fail 'An undeclared Core Bars backend is present in the runtime package.'
+    }
+    return [pscustomobject]@{
+        Root = $full
+        Metadata = $metadata
+        HasMdp = $hasMdp
+        ManifestSha256 = (Get-FileHash -LiteralPath $checksumPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
 }
 
 function Resolve-Node([string]$Path) {
@@ -410,11 +443,12 @@ function Write-PrivateJson([string]$Path, $Value) {
 
 function Write-RunState([string]$Root, [string]$Package, [string]$CandidateSha, [string]$Status) {
     $state = [ordered]@{
-        schemaVersion = 1
+        schemaVersion = 2
         status = $Status
         candidateSha = $CandidateSha
         repoRoot = $script:RepositoryRoot
         packagePath = $Package
+        packageManifestSha256 = $script:PackageManifestSha256
         startedAtUtc = $script:StartedAtUtc
         processes = @($script:ManagedRecords.ToArray())
     }
@@ -455,6 +489,7 @@ function Start-TrackedService(
             executablePath = $identity.ExecutablePath
             workingDirectory = [IO.Path]::GetFullPath($WorkingDirectory)
             candidateSha = $CandidateSha
+            packageManifestSha256 = $script:PackageManifestSha256
             stdoutLog = $stdout
             stderrLog = $stderr
         }
@@ -504,6 +539,7 @@ try {
     $script:RepositoryRoot = $repo
     if ([string]::IsNullOrWhiteSpace($EnvPath)) { $EnvPath = Join-Path $repo '.env' }
     $package = Assert-Package -PackageRoot $PackagePath -ExpectedSha $ExpectedCandidateSha
+    $script:PackageManifestSha256 = $package.ManifestSha256
     $script:Phase = 'validate-node'
     $node = Resolve-Node -Path $NodePath
 
@@ -558,6 +594,67 @@ try {
         }
     }
 
+    $coreBarsSetting = Get-EnvValue $values 'EQO_LOCAL_CORE_BARS' 'false'
+    $alpacaHistorySetting = Get-EnvValue $values 'EQO_LOCAL_ALPACA_HISTORY' 'false'
+    if ($coreBarsSetting -cnotin @('true', 'false') -or $alpacaHistorySetting -cnotin @('true', 'false')) {
+        Fail 'Local history flags must explicitly be true or false.'
+    }
+    $coreBarsEnabled = $coreBarsSetting -ceq 'true'
+    if (-not $coreBarsEnabled -and $alpacaHistorySetting -ceq 'true') {
+        Fail 'Alpaca history requires the Core Bars local profile.'
+    }
+    $mdpTerminalSecret = ''
+    $mdpResearchSecret = ''
+    $calendarPath = ''
+    $calendarSha = ''
+    if ($coreBarsEnabled) {
+        if (-not $package.HasMdp) { Fail 'Core Bars requires a verified package containing its pinned MDP backend.' }
+        Assert-EnvFixed $values 'EQO_MDP_URL' 'http://127.0.0.1:8088'
+        if ($values.ContainsKey('MDP_MARKET_BARS_ENABLED') -and $values['MDP_MARKET_BARS_ENABLED'] -cne 'true') {
+            Fail 'The explicit Core Bars profile requires its MDP runtime to be enabled.'
+        }
+        $mdpTerminalSecret = Get-EnvValue $values 'MDP_TERMINAL_JWT_SECRET'
+        $mdpResearchSecret = Get-EnvValue $values 'MDP_RESEARCH_JWT_SECRET'
+        foreach ($secret in @($mdpTerminalSecret, $mdpResearchSecret)) {
+            if ($secret.Length -lt 64 -or $secret -cnotmatch '^[\x21-\x7e]+$') {
+                Fail 'Local MDP verifier secrets must be at least 64 printable ASCII characters.'
+            }
+        }
+        $secretNames = @(
+            'EQO_GATEWAY_JWT_SECRET', 'EQO_RESEARCH_JWT_SECRET', 'NEXTAUTH_SECRET',
+            'MDP_TERMINAL_JWT_SECRET', 'MDP_RESEARCH_JWT_SECRET', 'MDP_MARKET_CURSOR_SIGNING_KEY',
+            'QUANT_TERMINAL_JWT_SECRET', 'QUANT_RESEARCH_JWT_SECRET', 'ENGINE_TERMINAL_JWT_SECRET',
+            'OIDC_CLIENT_SECRET', 'ALPACA_KEY', 'ALPACA_SECRET', 'FUTU_OPEND_WEBSOCKET_KEY'
+        )
+        foreach ($name in $secretNames) {
+            if ($name -cne 'MDP_TERMINAL_JWT_SECRET' -and (Get-EnvValue $values $name) -ceq $mdpTerminalSecret) {
+                Fail 'The MDP terminal signer must not reuse another service or Provider credential.'
+            }
+            if ($name -cne 'MDP_RESEARCH_JWT_SECRET' -and (Get-EnvValue $values $name) -ceq $mdpResearchSecret) {
+                Fail 'The MDP research verifier must not reuse another service or Provider credential.'
+            }
+        }
+        $calendarPath = Get-EnvValue $values 'MDP_MARKET_CALENDAR_FILE'
+        $calendarSha = Get-EnvValue $values 'MDP_MARKET_CALENDAR_SHA256'
+        if ([bool]$calendarPath -ne [bool]$calendarSha) { Fail 'Calendar file and SHA-256 must be configured together.' }
+        if ($calendarPath) {
+            $calendarPath = Assert-NoReparsePath -Path $calendarPath -MustExist
+            $privatePrefix = (Join-Path $repo 'data/native-local').TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+            if (-not $calendarPath.StartsWith($privatePrefix, [StringComparison]::OrdinalIgnoreCase) -or
+                $calendarSha -cnotmatch '^[0-9a-f]{64}$' -or
+                (Get-Item -LiteralPath $calendarPath).Length -gt 16MB -or
+                (Get-FileHash -LiteralPath $calendarPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $calendarSha) {
+                Fail 'The private operator calendar does not match its bounded SHA-256 pin.'
+            }
+            Ensure-PrivateFile $calendarPath
+        }
+        if ($alpacaHistorySetting -ceq 'true') {
+            if (-not (Get-EnvValue $values 'ALPACA_KEY') -or -not (Get-EnvValue $values 'ALPACA_SECRET')) {
+                Fail 'The explicit Alpaca history profile requires both server-side credentials.'
+            }
+        }
+    }
+
     $script:Phase = 'prepare-private-state'
     $dataRoot = Ensure-PrivateDirectory (Join-Path $repo 'data/native-local')
     $script:DataRoot = $dataRoot
@@ -567,7 +664,7 @@ try {
     $logsDir = Ensure-PrivateDirectory (Join-Path $dataRoot 'logs')
     $pidDir = Ensure-PrivateDirectory (Join-Path $dataRoot 'pid')
     $homeRoot = Ensure-PrivateDirectory (Join-Path $stateDir 'home')
-    foreach ($name in @('web', 'gateway')) {
+    foreach ($name in @('web', 'gateway', 'mdp')) {
         $serviceHome = Ensure-PrivateDirectory (Join-Path $homeRoot $name)
         [void](Ensure-PrivateDirectory (Join-Path $serviceHome 'AppData/Roaming'))
         [void](Ensure-PrivateDirectory (Join-Path $serviceHome 'AppData/Local'))
@@ -582,6 +679,7 @@ try {
     $script:Phase = 'validate-loopback-ports'
     Assert-PortAvailable $script:GatewayPort
     Assert-PortAvailable $script:WebPort
+    if ($coreBarsEnabled) { Assert-PortAvailable $script:MdpPort }
 
     $nodeDirectory = Split-Path -Parent $node
     $gatewayDirectory = Join-Path $package.Root 'gateway'
@@ -621,6 +719,27 @@ try {
         EQO_EXECUTION_MODE = 'disabled'
         EQOBOARD_DATA_DIR = $workspaceData
     }
+    if ($coreBarsEnabled) {
+        $webEnvironment['EQO_LOCAL_CORE_BARS'] = 'true'
+        $webEnvironment['EQO_MDP_URL'] = 'http://127.0.0.1:8088'
+        $webEnvironment['MDP_TERMINAL_JWT_SECRET'] = $mdpTerminalSecret
+        $mdpArchiveRoot = Ensure-PrivateDirectory (Join-Path $dataRoot 'mdp/local-test-archive')
+        $mdpQueryCache = Ensure-PrivateDirectory (Join-Path $dataRoot 'mdp/query-cache')
+        $mdpEnvironment = New-ServiceEnvironment -NodeDirectory $nodeDirectory -PrivateHome (Join-Path $homeRoot 'mdp') -Values @{
+            MDP_TERMINAL_JWT_SECRET = $mdpTerminalSecret
+            MDP_RESEARCH_JWT_SECRET = $mdpResearchSecret
+            MDP_MARKET_BARS_ENABLED = 'true'
+            MDP_FUTU_GATEWAY_PORT = [string]$script:GatewayPort
+        }
+        if ($calendarPath) {
+            $mdpEnvironment['MDP_MARKET_CALENDAR_FILE'] = $calendarPath
+            $mdpEnvironment['MDP_MARKET_CALENDAR_SHA256'] = $calendarSha
+        }
+        if ($alpacaHistorySetting -ceq 'true') {
+            $mdpEnvironment['ALPACA_KEY'] = Get-EnvValue $values 'ALPACA_KEY'
+            $mdpEnvironment['ALPACA_SECRET'] = Get-EnvValue $values 'ALPACA_SECRET'
+        }
+    }
 
     $gatewayExe = Join-Path $gatewayDirectory 'eqo-gateway.exe'
     $script:Phase = 'start-gateway'
@@ -640,6 +759,22 @@ try {
         Fail 'Gateway did not bind its expected loopback listener.'
     }
 
+    if ($coreBarsEnabled) {
+        $script:Phase = 'start-core-bars'
+        $mdpDirectory = Join-Path $package.Root 'mdp'
+        $mdpStarted = Start-TrackedService -Role 'mdp' -Executable (Join-Path $mdpDirectory 'mdp.exe') `
+            -Arguments @('serve', '--bind', '127.0.0.1:8088', '--local-test-root', $mdpArchiveRoot, '--cache-dir', $mdpQueryCache) `
+            -WorkingDirectory $mdpDirectory -Environment $mdpEnvironment `
+            -CandidateSha $package.Metadata.candidateSha -Root $dataRoot -Package $package.Root
+        [void](Wait-HttpJson -Uri 'http://127.0.0.1:8088/healthz' -TimeoutSeconds 30)
+        $mdpReady = Wait-HttpJson -Uri 'http://127.0.0.1:8088/readyz' -TimeoutSeconds 30
+        if ($mdpReady.status -cne 'ready' -or $mdpReady.market_ready -ne $false -or
+            $mdpReady.source_entitlement -cne 'unverified' -or
+            $mdpReady.market_calendar_configured -ne [bool]$calendarPath -or
+            -not (Assert-OwnedListener -Port $script:MdpPort -ProcessId $mdpStarted.Record.processId)) {
+            Fail 'The Core Bars service did not establish its exact loopback transport/auth profile.'
+        }
+    }
     $script:Phase = 'start-web'
     $webStarted = Start-TrackedService -Role 'web' -Executable $node -Arguments @((Join-Path $webDirectory 'server.js')) `
         -WorkingDirectory $webDirectory -Environment $webEnvironment `
@@ -651,7 +786,10 @@ try {
     }
     $script:Phase = 'persist-running-state'
     Write-RunState -Root $dataRoot -Package $package.Root -CandidateSha $package.Metadata.candidateSha -Status 'running'
-    Write-Output 'Native local Web and Gateway are running on loopback; execution remains disabled.'
+    Write-Output 'Native local services are running on loopback; execution remains disabled.'
+    if ($coreBarsEnabled -and -not $calendarPath) {
+        Write-Output 'Core Bars transport is configured without a calendar; history remains unavailable.'
+    }
 } catch {
     $allStopped = $true
     for ($index = $script:ManagedProcesses.Count - 1; $index -ge 0; $index--) {

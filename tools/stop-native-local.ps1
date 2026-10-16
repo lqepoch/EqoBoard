@@ -92,7 +92,7 @@ function Read-PrivateJson([string]$Path) {
     return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
 }
 
-function Normalize-Record($Record, [string]$ExpectedRole, [string]$CandidateSha, [string]$PackageRoot, [string]$DataRoot) {
+function Normalize-Record($Record, [string]$ExpectedRole, [string]$CandidateSha, [string]$PackageRoot, [string]$DataRoot, [string]$ManifestSha) {
     $processId = 0
     if ($Record.role -cne $ExpectedRole -or
         -not [int]::TryParse([string]$Record.processId, [ref]$processId) -or $processId -lt 1 -or
@@ -102,10 +102,16 @@ function Normalize-Record($Record, [string]$ExpectedRole, [string]$CandidateSha,
         [string]::IsNullOrWhiteSpace([string]$Record.workingDirectory)) {
         Fail 'A native local process record is invalid.'
     }
+    if ($ManifestSha -and ($null -eq $Record.PSObject.Properties['packageManifestSha256'] -or
+        $Record.packageManifestSha256 -cne $ManifestSha)) {
+        Fail 'The process record does not match the aggregate runtime manifest.'
+    }
     $executable = Assert-NoReparsePath -Path ([string]$Record.executablePath) -MustExist
     $working = Assert-NoReparsePath -Path ([string]$Record.workingDirectory) -MustExist
     $expectedWorking = if ($ExpectedRole -ceq 'gateway') {
         Join-Path $PackageRoot 'gateway'
+    } elseif ($ExpectedRole -ceq 'mdp') {
+        Join-Path $PackageRoot 'mdp'
     } else {
         Join-Path $PackageRoot 'web'
     }
@@ -116,6 +122,10 @@ function Normalize-Record($Record, [string]$ExpectedRole, [string]$CandidateSha,
         $expectedExecutable = Join-Path $PackageRoot 'gateway/eqo-gateway.exe'
         if ($executable -cne [IO.Path]::GetFullPath($expectedExecutable)) {
             Fail 'Gateway process identity does not match the recorded runtime package.'
+        }
+    } elseif ($ExpectedRole -ceq 'mdp') {
+        if ($executable -cne [IO.Path]::GetFullPath((Join-Path $PackageRoot 'mdp/mdp.exe'))) {
+            Fail 'Core Bars process identity does not match the recorded runtime package.'
         }
     } elseif ([IO.Path]::GetFileName($executable) -cne 'node.exe') {
         Fail 'Web process identity is not the validated Node executable.'
@@ -136,6 +146,7 @@ function Normalize-Record($Record, [string]$ExpectedRole, [string]$CandidateSha,
         executablePath = $executable
         workingDirectory = $working
         candidateSha = [string]$Record.candidateSha
+        packageManifestSha256 = $ManifestSha
         stdoutLog = [string]$Record.stdoutLog
         stderrLog = [string]$Record.stderrLog
     }
@@ -146,7 +157,8 @@ function Assert-SameIdentity($Left, $Right) {
         $Left.startTimeUtcTicks -cne $Right.startTimeUtcTicks -or
         $Left.executablePath -cne $Right.executablePath -or
         $Left.workingDirectory -cne $Right.workingDirectory -or
-        $Left.candidateSha -cne $Right.candidateSha) {
+        $Left.candidateSha -cne $Right.candidateSha -or
+        $Left.packageManifestSha256 -cne $Right.packageManifestSha256) {
         Fail 'The process and aggregate state records do not agree; refusing to stop anything.'
     }
 }
@@ -187,15 +199,26 @@ try {
     if (Test-Path -LiteralPath $pidDir) { Assert-PrivateAcl -Path $pidDir -Directory }
 
     $state = $null
+    $manifestSha = ''
+    $allowedRoles = @('gateway', 'web')
     if (Test-Path -LiteralPath $statePath) { $state = Read-PrivateJson $statePath }
     if ($state) {
-        if ($state.schemaVersion -ne 1 -or
+        if ($state.schemaVersion -notin @(1, 2) -or
             $state.repoRoot -cne $repo -or
             $state.candidateSha -cnotmatch '^[0-9a-f]{40}$') {
             Fail 'The native local state file does not belong to this repo root.'
         }
         $packageRoot = Assert-NoReparsePath -Path ([string]$state.packagePath) -MustExist
         if (-not (Get-Item -LiteralPath $packageRoot).PSIsContainer) { Fail 'Recorded runtime package is unavailable.' }
+        if ($state.schemaVersion -eq 2) {
+            $manifestSha = [string]$state.packageManifestSha256
+            $manifestPath = Assert-NoReparsePath -Path (Join-Path $packageRoot 'SHA256SUMS') -MustExist
+            if ($manifestSha -cnotmatch '^[0-9a-f]{64}$' -or
+                (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $manifestSha) {
+                Fail 'The recorded runtime manifest was changed; no process was stopped.'
+            }
+            $allowedRoles = @('web', 'mdp', 'gateway')
+        }
     } else {
         $packageRoot = ''
     }
@@ -205,22 +228,22 @@ try {
     if ($state) {
         foreach ($raw in @($state.processes)) {
             $role = [string]$raw.role
-            if ($role -notin @('gateway', 'web') -or $records.ContainsKey($role)) {
+            if ($role -cnotin $allowedRoles -or $records.ContainsKey($role)) {
                 Fail 'The native local state contains duplicate or unknown process roles.'
             }
             $records[$role] = Normalize-Record -Record $raw -ExpectedRole $role `
-                -CandidateSha ([string]$state.candidateSha) -PackageRoot $packageRoot -DataRoot $dataRoot
+                -CandidateSha ([string]$state.candidateSha) -PackageRoot $packageRoot -DataRoot $dataRoot -ManifestSha $manifestSha
         }
     }
     if (Test-Path -LiteralPath $pidDir) {
         foreach ($file in Get-ChildItem -LiteralPath $pidDir -Filter '*.json' -File -Force) {
             Assert-PrivateAcl -Path $file.FullName
             $role = [IO.Path]::GetFileNameWithoutExtension($file.Name)
-            if ($role -notin @('gateway', 'web')) { Fail 'The native local PID directory contains an unknown record.' }
+            if ($role -cnotin $allowedRoles) { Fail 'The native local PID directory contains an unknown record.' }
             if (-not $state) { Fail 'A PID record exists without its aggregate state; refusing automatic recovery.' }
             $raw = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
             $pidRecord = Normalize-Record -Record $raw -ExpectedRole $role `
-                -CandidateSha ([string]$state.candidateSha) -PackageRoot $packageRoot -DataRoot $dataRoot
+                -CandidateSha ([string]$state.candidateSha) -PackageRoot $packageRoot -DataRoot $dataRoot -ManifestSha $manifestSha
             if ($records.ContainsKey($role)) {
                 Assert-SameIdentity -Left $records[$role] -Right $pidRecord
             } else {
@@ -231,7 +254,7 @@ try {
 
     $stopFailures = [System.Collections.Generic.List[string]]::new()
     $script:Phase = 'stop-verified-processes'
-    foreach ($role in @('gateway', 'web')) {
+    foreach ($role in @('web', 'mdp', 'gateway')) {
         if ($records.ContainsKey($role)) {
             try { [void](Stop-VerifiedProcess $records[$role]) }
             catch { $stopFailures.Add($role) }
@@ -247,7 +270,7 @@ try {
         }
     }
     if (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force }
-    Write-Output 'Native local Web, Gateway and their owned child processes have stopped; local data and logs were retained.'
+    Write-Output 'Native local services and their owned child processes have stopped; local data and logs were retained.'
 } catch {
     $exceptionType = $_.Exception.GetType().FullName
     $line = $_.InvocationInfo.ScriptLineNumber

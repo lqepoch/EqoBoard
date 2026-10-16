@@ -209,6 +209,20 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Read fixed Core Bars backend source
+        id: mdp-pin
+        shell: pwsh
+        run: |
+          $pin = Get-Content third_party/mdp-runtime.json -Raw | ConvertFrom-Json
+          if ($pin.schemaVersion -ne 1 -or $pin.repository -cne 'lqepoch/market-data-platform' -or $pin.revision -cnotmatch '^[0-9a-f]{40}$' -or $pin.sourceManifestSha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid MDP source pin' }
+          "revision=$($pin.revision)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Check out pinned public Core Bars backend
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: lqepoch/market-data-platform
+          ref: ${{ steps.mdp-pin.outputs.revision }}
+          path: data/ci-mdp-source
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.3
@@ -228,6 +242,9 @@ jobs:
           # The action sets CACHE_ON_FAILURE from this input; an env override is lost.
           # Fingerprinted build cache is separate from acceptance of the full lane.
           cache-on-failure: true
+          workspaces: |
+            . -> target
+            data/ci-mdp-source -> target
       - name: Install exact Windows dependency graphs
         shell: pwsh
         run: |
@@ -247,12 +264,24 @@ jobs:
           Join-Path $env:RUNNER_TEMP 'nasm/nasm-2.16.03' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build Windows Gateway
         run: cargo build --locked --release -p eqo-gateway
+      - name: Build and verify pinned Core Bars runtime
+        working-directory: data/ci-mdp-source
+        shell: pwsh
+        env:
+          MDP_CANDIDATE_SHA: ${{ steps.mdp-pin.outputs.revision }}
+        run: |
+          cargo build --locked --release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/windows_runtime.py package --binary target/release/market-data-platform.exe --output "$env:RUNNER_TEMP/mdp-windows" --candidate $env:MDP_CANDIDATE_SHA
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python scripts/windows_runtime.py smoke --package "$env:RUNNER_TEMP/mdp-windows/runtime" --candidate $env:MDP_CANDIDATE_SHA
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Build Windows standalone Web
         working-directory: apps/eqoboard-web
         run: npm run build
       - name: Package immutable local-evaluation runtime
         shell: pwsh
-        run: tools/ci/package-native-windows.ps1 -OutputPath "$env:RUNNER_TEMP/native-windows" -CandidateSha $env:NATIVE_CANDIDATE_SHA
+        run: tools/ci/package-native-windows.ps1 -OutputPath "$env:RUNNER_TEMP/native-windows" -CandidateSha $env:NATIVE_CANDIDATE_SHA -MdpRuntimePath "$env:RUNNER_TEMP/mdp-windows/runtime"
       - name: Install Windows browser
         working-directory: apps/eqoboard-web
         run: npx playwright install chromium
