@@ -149,7 +149,7 @@ function Ensure-PrivateDirectory([string]$Path) {
                 Fail 'A required data directory is not a real directory.'
             }
         } else {
-            [void](New-Item -ItemType Directory -LiteralPath $current)
+            [void][IO.Directory]::CreateDirectory($current)
         }
     }
     Set-PrivateAcl -Path $full -Directory
@@ -391,7 +391,9 @@ function Start-TrackedService(
     $stderr = Join-Path $Root "$logToken.stderr.log"
     $quotedArguments = @($Arguments | ForEach-Object { '"' + $_.Replace('"', '\"') + '"' })
     $argumentLine = $quotedArguments -join ' '
-    $process = Start-Process -FilePath $Executable -ArgumentList $argumentLine `
+    $argumentParameters = @{}
+    if ($argumentLine.Length -gt 0) { $argumentParameters.ArgumentList = $argumentLine }
+    $process = Start-Process -FilePath $Executable @argumentParameters `
         -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
         -Environment $Environment -UseNewEnvironment
