@@ -1,8 +1,10 @@
 import "server-only";
 
 import { isIP } from "node:net";
+import { localWorkstationModeRequested } from "@/auth";
 import { readBoundedResponse } from "./gateway";
 import { copyBytesToArrayBuffer } from "./http-body";
+import { localCoreBarsModeEnabled } from "./runtime-mode";
 
 export type UpstreamDeadline = Readonly<{
   signal: AbortSignal;
@@ -56,6 +58,11 @@ export function parseFixedServiceBaseUrl(
 }
 
 export function mdpBaseUrl(): URL | null {
+  if (localWorkstationModeRequested()) {
+    const localUrl = "http://127.0.0.1:8088";
+    if (!localCoreBarsModeEnabled() || process.env.EQO_MDP_URL !== localUrl) return null;
+    return new URL(localUrl);
+  }
   return parseFixedServiceBaseUrl(process.env.EQO_MDP_URL, new Set(["market-data-platform"]));
 }
 

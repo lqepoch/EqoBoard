@@ -4,6 +4,7 @@ vi.mock("server-only", () => ({}));
 
 import {
   getNativeRuntimeMode,
+  localCoreBarsModeEnabled,
   nativeResearchPublicOrigin,
   nativeRuntimeAllowsAuthorizedRoute,
   nativeRuntimeReadiness,
@@ -33,6 +34,7 @@ function clearProfileEnvironment(): void {
     "EQO_OIDC_CLIENT_SECRET",
     "EQO_OPENBB_OIDC_CLIENT_SECRET",
     "EQO_LOCAL_ACCESS",
+    "EQO_LOCAL_CORE_BARS",
     "EQO_LOCAL_BIND",
     "HOSTNAME",
     "PORT",
@@ -74,6 +76,26 @@ function localWorkstationProfile(mode: "terminal" | "research"): void {
 }
 
 describe("Native runtime profiles", () => {
+  it("enables local Core Bars only for an explicit valid terminal workstation profile", () => {
+    localWorkstationProfile("terminal");
+    expect(localCoreBarsModeEnabled()).toBe(false);
+
+    vi.stubEnv("EQO_LOCAL_CORE_BARS", "true");
+    expect(localCoreBarsModeEnabled()).toBe(true);
+
+    vi.stubEnv("EQO_LOCAL_CORE_BARS", "TRUE");
+    expect(localCoreBarsModeEnabled()).toBe(false);
+
+    localWorkstationProfile("research");
+    vi.stubEnv("EQO_LOCAL_CORE_BARS", "true");
+    expect(localCoreBarsModeEnabled()).toBe(false);
+
+    clearProfileEnvironment();
+    vi.stubEnv("EQO_BFF_MODE", "terminal");
+    vi.stubEnv("EQO_LOCAL_CORE_BARS", "true");
+    expect(localCoreBarsModeEnabled()).toBe(false);
+  });
+
   it("fails closed when runtime mode is missing or unknown", () => {
     vi.stubEnv("EQO_BFF_MODE", "");
     expect(getNativeRuntimeMode()).toBeNull();

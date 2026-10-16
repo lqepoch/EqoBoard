@@ -15,6 +15,7 @@ import {
 import { getServerPrincipal, type ServerPrincipal } from "./auth";
 import {
   getNativeRuntimeMode,
+  localCoreBarsModeEnabled,
   nativeRuntimeAllowsAuthorizedRoute,
   nativeRuntimeReadiness,
 } from "./runtime-mode";
@@ -361,7 +362,7 @@ async function signDelegation(
   ) {
     return { ok: false, response: jsonError(503, "identity_unavailable") };
   }
-  if (localMode && !isLocalWorkstationGatewayDelegation(principal, options)) {
+  if (localMode && !isLocalWorkstationDelegation(principal, options)) {
     return { ok: false, response: jsonError(403, "forbidden") };
   }
   if (!validSigningKey(options.secret) || !distinctServiceKey(options.secret, options.secretName)) {
@@ -391,7 +392,7 @@ async function signDelegation(
   }
 }
 
-function isLocalWorkstationGatewayDelegation(
+function isLocalWorkstationDelegation(
   principal: ServerPrincipal,
   options: Readonly<{
     issuer: string;
@@ -408,19 +409,26 @@ function isLocalWorkstationGatewayDelegation(
     !Number.isSafeInteger(principal.sessionExpiresAt) ||
     principal.sessionExpiresAt <= Date.now() + 1_000 ||
     !Array.isArray(principal.permissions) ||
-    options.issuer !== "eqoboard-openterminal" ||
-    options.keyId !== "bff" ||
-    options.audience !== "eqoboard-gateway" ||
     options.scope.length !== 1
   ) {
     return false;
   }
   const scope = options.scope[0];
-  return Boolean(
-    scope &&
-      LOCAL_WORKSTATION_GATEWAY_SCOPES.includes(scope as Permission) &&
-      principal.permissions.includes(scope as Permission),
-  );
+  if (!scope || !principal.permissions.includes(scope as Permission)) return false;
+
+  const gatewayDelegation =
+    options.issuer === "eqoboard-openterminal" &&
+    options.keyId === "bff" &&
+    options.audience === "eqoboard-gateway" &&
+    LOCAL_WORKSTATION_GATEWAY_SCOPES.includes(scope as Permission);
+  const mdpCoreBarsDelegation =
+    localCoreBarsModeEnabled() &&
+    options.issuer === "eqoboard-openterminal" &&
+    options.keyId === "mdp-terminal" &&
+    options.audience === "lqepoch-market-data" &&
+    scope === "market:read";
+
+  return gatewayDelegation || mdpCoreBarsDelegation;
 }
 
 export async function authorizeGatewayRequest(
