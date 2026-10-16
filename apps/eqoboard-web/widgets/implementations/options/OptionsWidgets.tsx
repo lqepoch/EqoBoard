@@ -35,7 +35,8 @@ type OptionGridRow = Readonly<
     liveAskSize: number | null;
     liveSource: string;
     liveEntitlement: string;
-    liveAt: string | null;
+    liveAt: string;
+    liveReceivedAt: string;
     snapshotEvidence: string;
   }
 >;
@@ -95,7 +96,8 @@ const CHAIN_COLUMNS: readonly ColDef<OptionGridRow>[] = Object.freeze([
     minWidth: 190,
     valueGetter: ({ data }) => data?.modelAsOf ?? "unknown",
   },
-  { field: "liveAt", headerName: "Stream quote time", minWidth: 190 },
+  { field: "liveAt", headerName: "Stream event time", minWidth: 190 },
+  { field: "liveReceivedAt", headerName: "Gateway received time", minWidth: 190 },
   { field: "liveSource", headerName: "Stream source", minWidth: 160 },
   { field: "liveEntitlement", headerName: "Stream entitlement", minWidth: 150 },
 ]);
@@ -169,7 +171,8 @@ function rowFromContract(contract: OptionContractRow, evidence: string): OptionG
     liveAskSize: null,
     liveSource: "unknown",
     liveEntitlement: "unknown",
-    liveAt: null,
+    liveAt: "unknown",
+    liveReceivedAt: "unknown",
     snapshotEvidence: evidence,
   });
 }
@@ -225,7 +228,8 @@ export function applyOptionEvents(
         liveAskSize: null,
         liveSource: "unknown",
         liveEntitlement: "unknown",
-        liveAt: null,
+        liveAt: "unknown",
+        liveReceivedAt: "unknown",
       });
       rows.set(symbol, cleared);
       updatesBySymbol.set(symbol, cleared);
@@ -273,12 +277,8 @@ export function applyOptionEvents(
       liveAskSize: askSize,
       liveSource: source,
       liveEntitlement: entitlement,
-      liveAt:
-        typeof event.event_time === "string"
-          ? event.event_time
-          : typeof event.received_at === "string"
-            ? event.received_at
-            : null,
+      liveAt: textValue(event, "event_time"),
+      liveReceivedAt: textValue(event, "received_at"),
     });
     sequences.set(symbol, event.local_sequence);
     rows.set(symbol, next);
@@ -778,6 +778,11 @@ export function OptionTapeWidget({ host, inputs }: OptionTapeWidgetProps) {
       <p className={styles.marketFootnote}>
         Recent option trade prints for {symbol || "the active symbol"}. Aggressor side is
         unavailable and is not inferred.
+      </p>
+      <p className={styles.marketFootnote}>
+        This tape only listens to the shared options stream; it does not request contracts itself.
+        Live prints depend on contracts leased by other active widgets such as Option Chain or IV
+        Skew. Tape-specific coverage is unknown.
       </p>
       <section className={styles.marketGrid} aria-label="Option tape community grid">
         <AgGridReact<OptionTapeRow>

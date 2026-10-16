@@ -4,12 +4,15 @@ description: 实现高频、可信、可操作的期权链 AG Grid 双边报价�
 ---
 # Option Chain UI Skill
 
-路径：`apps/openterminal/web/components/widgets/OptionsWidget.tsx`、`IvSkewWidget.tsx`、
-`OptionTapeWidget.tsx`、`VerticalSpreadWidget.tsx` 与 `web/store/market.ts`。
+原生开发路径：`apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx`、
+`widgets/implementations/market/registry.tsx` 与共享市场宿主。旧 OpenTerminal 对应 Widget
+只作为受保护参考，不作为新增 UI 修改目标；原生边界同时遵循 `native-terminal` Skill。
 优先 AG Grid Community 的 row ID=strike、applyTransactionAsync 批量更新；不要对每个 Quote 都 React setState 整表。
 必须显示 call/put 双侧、strike、Bid/Ask、IV/Delta、数据源、授权/ACK/覆盖/新鲜度错误和分页截断。
 OPRA 只标注 quote/trade feed。IV/Greeks 属 Alpaca REST option snapshot vendor/model 字段，不是 OPRA 原生字段；缺少独立模型时间时显示 `model as-of unknown`，不能借用 quote/trade event time 或 Gateway response time。
-期权订阅按稳定 OCC membership 续租。membership 更新与释放时客户端发送递增 generation，释放使用空 membership tombstone；只有 Gateway 回报可核验的 active generation 与实际集合后，才能声称旧 renew/cleanup 不会复活或删除新租约。当前 Gateway 基线忽略客户端 generation，真实服务端租约竞态仍属 #3。
+行情 event time 与 Gateway received-at 分开显示；缺少 event time 保持 unknown，不能以接收时间回填。
+Option Tape 只观察共享宿主已有期权订阅时，必须明确说明订阅依赖与覆盖未知；空表不能声称市场没有成交，也不能为填表隐式订阅全市场。
+期权订阅按稳定 OCC membership 续租。membership 更新与释放时客户端发送递增 generation，释放使用空 membership tombstone；只有 Gateway 回报可核验的 active generation 与实际集合后，才能声称旧 renew/cleanup 不会复活或删除新租约。当前 Gateway 已拒绝同 consumer 的过期 generation 和同代次不同集合；这些源码检查不替代跨进程租约到期、ACK 与真实 Provider 恢复验收，相关剩余门槛见 #3。
 Underlying ATM 只使用 Gateway 返回的 SIP snapshot；缺少可信来源身份时可以显示 REST underlying 数值但必须标 source unknown、不可声明 LIVE。SIP 不可用就显示 unavailable，不得用链中位 strike 或其他数据源伪造。
 Gateway feed ACK、source/instance/time DTO 尚未在当前 Rust 基线完成时，UI 将上游确认与 freshness 显示为 unknown/pending。Web/Node 的离线浏览器 fixture 只验 Next/组件契约，不证明 Rust OPRA 或真实账户权限。
 禁止假设两腿中间价可成交；不得把零 IV 或 null 转成数值 0。

@@ -215,7 +215,7 @@ const ivManifest = emptyManifest(
 const tapeManifest = emptyManifest(
   tapeId,
   "Option tape",
-  "Recent Gateway option trade events with source metadata and unknown aggressor side.",
+  "Trades from shared active option subscriptions; coverage and aggressor side remain unknown.",
   "eqoboard.market.option-tape.v1",
   WIDE_SIZE,
   SYMBOL_INPUT,
