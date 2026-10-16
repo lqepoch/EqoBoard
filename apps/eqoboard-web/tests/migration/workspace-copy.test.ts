@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cloneTab, cloneWorkspace, createWorkspaceFromTemplate } from "../../workspace/transforms";
+import {
+  cloneDocumentWorkspaces,
+  cloneTab,
+  cloneWorkspace,
+  createWorkspaceFromTemplate,
+} from "../../workspace/transforms";
 import type { WorkspaceDocumentV1 } from "../../workspace/model";
 
 function workspaceDocument(): WorkspaceDocumentV1 {
@@ -71,6 +76,39 @@ describe("workspace copy/migration identity rules", () => {
     expect(copy.tabs[0].widgets[0].instanceId).not.toBe(source.tabs[0].widgets[0].instanceId);
     expect(copy.tabs[0].placements[0].i).toBe(copy.tabs[0].widgets[0].instanceId);
     expect(copy.marketContext).toEqual(source.marketContext);
+  });
+
+  it("preserves the selected workspace when cloning an imported document", () => {
+    const first = workspaceDocument();
+    const firstWorkspace = first.workspaces[0];
+    const secondWorkspaceId = "44444444-4444-4444-8444-444444444444";
+    const secondTabId = "55555555-5555-4555-8555-555555555555";
+    const secondWorkspace = {
+      ...firstWorkspace,
+      id: secondWorkspaceId,
+      name: "Second workspace",
+      activeTabId: secondTabId,
+      tabs: [
+        {
+          id: secondTabId,
+          name: "Research",
+          widgets: [],
+          placements: [],
+          maximizedInstanceId: null,
+        },
+      ],
+    };
+    const imported = {
+      ...first,
+      activeWorkspaceId: secondWorkspaceId,
+      workspaces: [firstWorkspace, secondWorkspace],
+    };
+
+    const copy = cloneDocumentWorkspaces(imported);
+
+    expect(copy.workspaces).toHaveLength(2);
+    expect(copy.activeWorkspaceId).toBe(copy.workspaces[1].id);
+    expect(copy.activeWorkspaceId).not.toBe(secondWorkspaceId);
   });
 
   it("creates a workspace from a template with fresh nested identities", () => {

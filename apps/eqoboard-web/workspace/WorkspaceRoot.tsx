@@ -673,7 +673,7 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
                 if (store.getState().saveTemplate(workspace.id, templateName)) setTemplateName("");
               }}
             >
-              <label htmlFor="workspace-template-name">Save active workspace as a template</label>
+              <label htmlFor="workspace-template-name">Save active tab as a template</label>
               <input
                 id="workspace-template-name"
                 maxLength={48}

@@ -108,10 +108,19 @@ export function createTemplateFromWorkspace(
 }
 
 export function cloneDocumentWorkspaces(document: WorkspaceDocumentV1): WorkspaceDocumentV1 {
+  const workspaceIdMap = new Map<string, string>();
   const workspaces = document.workspaces.map((workspace) => cloneWorkspace(workspace));
+  document.workspaces.forEach((workspace, index) => {
+    const cloned = workspaces[index];
+    if (cloned) workspaceIdMap.set(workspace.id, cloned.id);
+  });
+  const activeWorkspaceId = workspaceIdMap.get(document.activeWorkspaceId);
+  if (!activeWorkspaceId) {
+    throw new Error("Workspace clone invariant failed: active workspace was not mapped.");
+  }
   return {
     schemaVersion: 1,
-    activeWorkspaceId: workspaces[0].id,
+    activeWorkspaceId,
     workspaces,
     userTemplates: document.userTemplates.map((template) => cloneTemplate(template)),
   };

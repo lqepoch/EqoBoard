@@ -594,6 +594,10 @@ export function createWorkspaceStore(
     selectWorkspace(workspaceId) {
       const document = get().document;
       if (!document?.workspaces.some((workspace) => workspace.id === workspaceId)) return false;
+      if (!repository.canWrite) {
+        set({ document: { ...document, activeWorkspaceId: workspaceId } });
+        return true;
+      }
       return persist({ ...document, activeWorkspaceId: workspaceId });
     },
 
@@ -655,7 +659,12 @@ export function createWorkspaceStore(
       const document = get().document;
       const workspace = activeWorkspace(document, workspaceId);
       if (!document || !workspace?.tabs.some((tab) => tab.id === tabId)) return false;
-      return persist(replaceWorkspaceInDocument(document, { ...workspace, activeTabId: tabId }));
+      const next = replaceWorkspaceInDocument(document, { ...workspace, activeTabId: tabId });
+      if (!repository.canWrite) {
+        set({ document: next });
+        return true;
+      }
+      return persist(next);
     },
 
     createTab(workspaceId, requestedName = "New tab") {

@@ -197,6 +197,59 @@ describe("workspace migration store acceptance", () => {
     store.getState().dispose();
   });
 
+  it("allows read-only owners to switch workspaces and tabs without saving selection state", async () => {
+    const current = document("Current");
+    const secondWorkspaceId = "33333333-3333-4333-8333-333333333333";
+    const secondTabId = "44444444-4444-4444-8444-444444444444";
+    const otherTabId = "55555555-5555-4555-8555-555555555555";
+    const readOnlyDocument: WorkspaceDocumentV1 = {
+      ...current,
+      workspaces: [
+        ...current.workspaces,
+        {
+          id: secondWorkspaceId,
+          name: "Second workspace",
+          activeTabId: secondTabId,
+          marketContext: { activeSymbol: "DIA", watchlist: ["DIA"] },
+          tabs: [
+            {
+              id: secondTabId,
+              name: "Overview",
+              widgets: [],
+              placements: [],
+              maximizedInstanceId: null,
+            },
+            {
+              id: otherTabId,
+              name: "Research",
+              widgets: [],
+              placements: [],
+              maximizedInstanceId: null,
+            },
+          ],
+        },
+      ],
+    };
+    const repository = fakeRepository(readOnlyDocument, false);
+    const store = createWorkspaceStore(auth(["workspace:read"]), createWidgetRegistry([]), {
+      repository,
+    });
+    await store.getState().hydrate();
+
+    expect(store.getState().canEdit).toBe(false);
+    expect(store.getState().selectWorkspace(secondWorkspaceId)).toBe(true);
+    expect(store.getState().document?.activeWorkspaceId).toBe(secondWorkspaceId);
+    expect(store.getState().selectTab(secondWorkspaceId, otherTabId)).toBe(true);
+    expect(
+      store
+        .getState()
+        .document?.workspaces.find((workspace) => workspace.id === secondWorkspaceId)?.activeTabId,
+    ).toBe(otherTabId);
+    expect(store.getState()).toMatchObject({ dirty: false, syncStatus: "saved", revision: "0" });
+    expect(repository.save).not.toHaveBeenCalled();
+    store.getState().dispose();
+  });
+
   it("imports a copied document with fresh server-owned workspace, tab, and widget IDs", async () => {
     const current = document("Current", "11111111-1111-4111-8111-111111111111");
     const imported = document("Imported", "33333333-3333-4333-8333-333333333333");
