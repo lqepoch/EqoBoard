@@ -72,7 +72,9 @@ Web 仅收到自身签名/会话与必要配置，Alpaca 与 Futu 凭据只传�
 状态、日志和独立数据库保存在根目录 `data/native-local/`，目录由独占 Windows ACL
 保护。旧 SQLite 不迁入、不认领。
 ACL 写入仅更新 DACL，不重写 owner 或审计 section；现有 owner 必须是当前
-用户，写后继续核对仅当前用户和 SYSTEM 的显式完整控制权限。无需为日志
+用户，或仅当当前 token 的管理员角色实际启用时为 Builtin Administrators
+（Windows 管理员创建对象的默认 owner）。其他 owner 拒绝；写后继续核对
+仅当前用户和 SYSTEM 的显式完整控制权限。无需为日志
 权限修复请求管理员提升。Actions 日志记录实际 token 上下文，管理员 Runner
 的通过不能冒称标准用户 token 验收。
 Gateway 的 SDK 子进程仍清空继承环境，仅在 Windows 额外传递操作系统

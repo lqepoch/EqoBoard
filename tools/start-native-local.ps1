@@ -119,7 +119,18 @@ function Assert-PrivateAcl([string]$Path, [switch]$Directory) {
     if (-not $acl.AreAccessRulesProtected) { Fail 'A private path has inheritable ACL entries.' }
     $sids = Get-PrivateSids
     $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier])
-    if (-not $owner.Equals($sids.User)) { Fail 'A private path is not owned by the current user.' }
+    $administrators = [Security.Principal.SecurityIdentifier]::new(
+        [Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null
+    )
+    $principal = [Security.Principal.WindowsPrincipal]::new(
+        [Security.Principal.WindowsIdentity]::GetCurrent()
+    )
+    $trustedAdminOwner = $owner.Equals($administrators) -and $principal.IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if (-not $owner.Equals($sids.User) -and -not $trustedAdminOwner) {
+        Fail 'A private path has an untrusted owner.'
+    }
     $expected = @($sids.User.Value, $sids.System.Value)
     $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
     if ($rules.Count -ne 2) { Fail 'A private path has unexpected ACL entries.' }
