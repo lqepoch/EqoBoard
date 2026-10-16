@@ -49,7 +49,9 @@ class NativeSecretScanContractTests(unittest.TestCase):
         self.assertIn('positive_status != 0', self.helper)
         self.assertIn('negative_status != 1', self.helper)
         self.assertIn("grep -qi 'generic-api-key'", self.helper)
-        self.assertIn("secrets.choice(alphabet) for _ in range(48)", self.helper)
+        self.assertIn('alphabet = string.digits + "QX"', self.helper)
+        self.assertIn("characters = list(alphabet * 4)", self.helper)
+        self.assertIn("secrets.SystemRandom().shuffle(characters)", self.helper)
         self.assertNotIn("ghp_", self.helper)
         self.assertNotIn("AKIA", self.helper)
 

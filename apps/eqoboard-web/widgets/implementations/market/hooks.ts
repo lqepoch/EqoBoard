@@ -65,7 +65,11 @@ export function planStockQuoteRead(
   capacity: MarketStockLeaseCapacity,
 ): StockQuoteReadPlan {
   if (!stockLeaseRequired)
-    return { status: "read", symbols: Object.freeze([...symbols]), omittedSymbols: Object.freeze([]) };
+    return {
+      status: "read",
+      symbols: Object.freeze([...symbols]),
+      omittedSymbols: Object.freeze([]),
+    };
   if (capacity.status === "unknown" || capacity.status === "pending")
     return { status: "wait", detail: "Waiting for Gateway stock subscription capacity." };
   if (capacity.status === "unavailable")
@@ -95,26 +99,27 @@ export function planStockQuoteRead(
   return { status: "read", symbols: selectedSymbols, omittedSymbols };
 }
 
-function readStockLeaseState(host: Pick<MarketWidgetHost, "market">): Readonly<{
+function readStockLeaseState(market: MarketWidgetHost["market"]): Readonly<{
   lease: MarketLeaseSnapshot;
   capacity: MarketStockLeaseCapacity;
 }> {
-  const snapshot = host.market.getSnapshot();
+  const snapshot = market.getSnapshot();
   return { lease: snapshot.leases.stocks, capacity: snapshot.stockLeaseCapacity };
 }
 
 function useStockLeaseState(host: Pick<MarketWidgetHost, "market">) {
-  const [state, setState] = useState(() => readStockLeaseState(host));
+  const { market } = host;
+  const [state, setState] = useState(() => readStockLeaseState(market));
   useEffect(() => {
-    let current = readStockLeaseState(host);
+    let current = readStockLeaseState(market);
     setState(current);
-    return host.market.subscribe(() => {
-      const next = readStockLeaseState(host);
+    return market.subscribe(() => {
+      const next = readStockLeaseState(market);
       if (next.lease === current.lease && next.capacity === current.capacity) return;
       current = next;
       setState(next);
     });
-  }, [host.market]);
+  }, [market]);
   return state;
 }
 
@@ -196,13 +201,7 @@ export function useQuoteSnapshots(
         }
       },
     );
-  }, [
-    host.refresh,
-    safeSymbols,
-    stockLeaseRequired,
-    stockLease.lease,
-    stockLease.capacity,
-  ]);
+  }, [host.refresh, safeSymbols, stockLeaseRequired, stockLease.lease, stockLease.capacity]);
 
   return state;
 }
@@ -240,7 +239,12 @@ export function useOptionsResource(
   const valid = isCanonicalTicker(symbol) && /^\d{4}-\d{2}-\d{2}$/u.test(expiry);
   const underlyingPrice = snapshotPrice;
   const stockLeaseSymbols = useMemo(() => (valid ? [symbol] : []), [symbol, valid]);
-  const stockLeaseRequired = useMarketLease(instanceId, "stocks", stockLeaseSymbols, host.lifecycle);
+  const stockLeaseRequired = useMarketLease(
+    instanceId,
+    "stocks",
+    stockLeaseSymbols,
+    host.lifecycle,
+  );
 
   useEffect(() => {
     const sync = () => {

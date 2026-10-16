@@ -6,9 +6,7 @@ import type {
 } from "../../../stores/market/market-store";
 import { planStockQuoteRead } from "./hooks";
 
-function lease(
-  overrides: Partial<MarketLeaseSnapshot> = {},
-): MarketLeaseSnapshot {
+function lease(overrides: Partial<MarketLeaseSnapshot> = {}): MarketLeaseSnapshot {
   return {
     generation: 0,
     acknowledgedAt: null,
@@ -24,25 +22,20 @@ function lease(
   };
 }
 
-function capacity(
-  overrides: Partial<MarketStockLeaseCapacity> = {},
-): MarketStockLeaseCapacity {
+function capacity(overrides: Partial<MarketStockLeaseCapacity> = {}): MarketStockLeaseCapacity {
   return { status: "available", limit: 32, fixedSymbols: ["QQQ", "SPY"], ...overrides };
 }
 
 describe("stock quote lease gate", () => {
   it("waits for the authoritative capacity and lease acknowledgement before reading", () => {
     const symbols = ["AAPL"];
-    expect(planStockQuoteRead(symbols, true, lease(), capacity({ status: "pending", limit: null }))).toMatchObject({
+    expect(
+      planStockQuoteRead(symbols, true, lease(), capacity({ status: "pending", limit: null })),
+    ).toMatchObject({
       status: "wait",
     });
     expect(
-      planStockQuoteRead(
-        symbols,
-        true,
-        lease({ coverage: "pending" }),
-        capacity(),
-      ),
+      planStockQuoteRead(symbols, true, lease({ coverage: "pending" }), capacity()),
     ).toMatchObject({ status: "wait" });
     expect(
       planStockQuoteRead(symbols, true, lease(), capacity({ status: "unavailable", limit: null })),

@@ -388,20 +388,17 @@ export class MarketLeaseCoordinator {
     const fixedRequested = capacity.fixedSymbols.filter((symbol) => requestedSet.has(symbol));
     const fixedSet = new Set(capacity.fixedSymbols);
     const extras = requested.filter((symbol) => !fixedSet.has(symbol));
-    const selectedLimit = Math.max(0, Math.min(capacity.limit, limit) - capacity.fixedSymbols.length);
+    const selectedLimit = Math.max(
+      0,
+      Math.min(capacity.limit, limit) - capacity.fixedSymbols.length,
+    );
     return Object.freeze([...fixedRequested, ...extras.slice(0, selectedLimit)]);
   }
 
   #publishTargets(feed: LeaseKind): void {
     const requested = aggregate(this.#consumers, feed);
     const selected = this.#selectedTargets(feed, requested);
-    this.#store.setLeaseTargets(
-      feed,
-      requested.length,
-      selected.length,
-      key(selected),
-      selected,
-    );
+    this.#store.setLeaseTargets(feed, requested.length, selected.length, key(selected), selected);
   }
 
   async #reconcile(feed: LeaseKind, renewal: boolean): Promise<void> {
@@ -435,12 +432,7 @@ export class MarketLeaseCoordinator {
               symbols: selected,
             };
       const ack = await this.#send(feed, input, controller.signal);
-      if (
-        this.#disposed ||
-        runToken !== this.#runToken ||
-        state.controller !== controller
-      )
-        return;
+      if (this.#disposed || runToken !== this.#runToken || state.controller !== controller) return;
       const activeCount = acknowledgedActiveCount(feed, generation, ack);
       if (activeCount === null) throw new Error("invalid-lease-ack");
       state.sentKey = desiredKey;

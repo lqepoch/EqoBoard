@@ -121,7 +121,7 @@ describe("shared market lease coordinator", () => {
     coordinator.setConsumer(instanceId, "stocks", symbols);
     await vi.advanceTimersByTimeAsync(50);
     expect(sent).toHaveLength(0);
-    expect(store.getSnapshot().leases.stocks.coverage).toBe("pending");
+    expect(store.getSnapshot().leases.stocks.coverage).toBe("unknown");
 
     const status = { max_stock_subscriptions: 32, stock_symbols: ["QQQ", "SPY"] };
     coordinator.setStockCapacityFromStatus(status);
@@ -143,7 +143,10 @@ describe("shared market lease coordinator", () => {
 
     coordinator.gatewayInstanceChanged();
     expect(store.getSnapshot().stockLeaseCapacity.status).toBe("pending");
-    expect(store.getSnapshot().leases.stocks).toMatchObject({ coverage: "pending", leasedCount: 0 });
+    expect(store.getSnapshot().leases.stocks).toMatchObject({
+      coverage: "pending",
+      leasedCount: 0,
+    });
     coordinator.setStockCapacityFromStatus(status);
     await vi.advanceTimersByTimeAsync(50);
     expect(sent).toHaveLength(2);

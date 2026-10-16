@@ -163,13 +163,7 @@ describe("native market store", () => {
     const targetKey = JSON.stringify(selectedSymbols);
     store.setStockLeaseCapacity("available", 32, ["QQQ", "SPY"]);
     store.setLeaseTargets("stocks", 3, 3, targetKey, selectedSymbols);
-    store.setLeaseAck(
-      "stocks",
-      0,
-      3,
-      { active: 3, max: 32, expires_in_seconds: 90 },
-      targetKey,
-    );
+    store.setLeaseAck("stocks", 0, 3, { active: 3, max: 32, expires_in_seconds: 90 }, targetKey);
 
     store.acceptBatch([
       quote({ gateway_instance_id: "gateway-b", local_sequence: 1, connection_epoch: 1 }),
@@ -259,13 +253,7 @@ describe("native market store", () => {
     store.setStockLeaseCapacity("pending");
     store.setLeaseTargets("stocks", 50, selectedSymbols.length, targetKey, selectedSymbols);
     store.setStockLeaseCapacity("available", 32, ["QQQ", "SPY"]);
-    store.setLeaseAck(
-      "stocks",
-      0,
-      5,
-      { active: 5, max: 32, expires_in_seconds: 90 },
-      targetKey,
-    );
+    store.setLeaseAck("stocks", 0, 5, { active: 5, max: 32, expires_in_seconds: 90 }, targetKey);
 
     expect(store.getSnapshot().stockLeaseCapacity).toEqual({
       status: "available",

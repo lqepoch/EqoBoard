@@ -128,15 +128,21 @@ if (( wrong_path_status != 1 )) || ! grep -qi 'generic-api-key' "$wrong_path_log
   exit 1
 fi
 
-# Generate a high-entropy, obviously synthetic generic API-key-shaped value at
-# runtime. It is never printed, committed, included in a report, or uploaded.
+# Generate a balanced synthetic control. Unrestricted random text can contain
+# a default generic-rule stopword or fall below its entropy threshold. The
+# pinned rule's only stopwords over digits/Q/X are six zeros or six Xs; four
+# copies of each of twelve symbols cannot contain either, and entropy is
+# log2(12) > 3.5. The scanner policy itself remains unchanged.
+# The value is never printed, committed, included in a report, or uploaded.
 python3 - "$fixture_path" <<'PY'
 import secrets
 import string
 import sys
 
-alphabet = string.ascii_letters + string.digits
-candidate = "".join(secrets.choice(alphabet) for _ in range(48))
+alphabet = string.digits + "QX"
+characters = list(alphabet * 4)
+secrets.SystemRandom().shuffle(characters)
+candidate = "".join(characters)
 with open(sys.argv[1], "a", encoding="utf-8") as fixture:
     fixture.write(f'\nexport const scannerControl = {{ api_key: "{candidate}" }};\n')
 PY
