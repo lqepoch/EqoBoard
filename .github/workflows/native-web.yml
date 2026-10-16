@@ -121,6 +121,7 @@ jobs:
         working-directory: .
         run: |
           node --test tools/ci/native-license-policy.test.mjs tools/ci/native-runtime-package-audit.test.mjs
+          node --test tools/ci/native-binary-inventory.test.mjs
           node tools/ci/native-license-audit.mjs
       - name: Build independent production app
         run: npm run build

@@ -240,12 +240,24 @@ esac
 source_sbom="$output_dir/eqoboard-web-source.spdx.json"
 image_sbom="$output_dir/eqoboard-web-image.spdx.json"
 identity_receipt="$output_dir/native-image-identity.json"
-for artifact_path in "$source_sbom" "$image_sbom" "$identity_receipt" "$output_dir/SHA256SUMS"; do
+binary_inventory="$output_dir/native-binary-inventory.json"
+for artifact_path in "$source_sbom" "$image_sbom" "$binary_inventory" "$identity_receipt" "$output_dir/SHA256SUMS"; do
   if [[ -e "$artifact_path" || -L "$artifact_path" ]]; then
     printf 'Refusing to overwrite an existing native SBOM artifact: %s\n' "$artifact_path" >&2
     exit 2
   fi
 done
+
+# Inspect bytes in the same immutable image, without network, host mounts,
+# credentials, or executing any discovered native module. This supplements
+# Syft's package metadata; hashes do not establish license clearance.
+docker run --rm -i --pull=never --network=none --read-only \
+  --cap-drop=ALL --security-opt=no-new-privileges:true --pids-limit=64 \
+  --memory=256m --cpus=1 --entrypoint=node \
+  --env "NATIVE_CANDIDATE_SHA=$NATIVE_CANDIDATE_SHA" \
+  --env "NATIVE_IMAGE_CONFIG_DIGEST=$NATIVE_IMAGE_CONFIG_DIGEST" \
+  "$NATIVE_IMAGE_CONFIG_DIGEST" --input-type=module - \
+  < "$repo_root/tools/ci/native-binary-inventory.mjs" > "$binary_inventory"
 
 syft scan "dir:$app_dir" \
   --source-name eqoboard-web \
@@ -305,14 +317,28 @@ PY
 
 python3 - "$NATIVE_CANDIDATE_SHA" "$candidate_tree" "$candidate_lock_sha256" \
   "$NATIVE_WEB_IMAGE" "$NATIVE_IMAGE_CONFIG_DIGEST" "$NATIVE_IMAGE_BUILD_DIGEST" \
-  "$actual_image_revision" "$source_sbom" "$image_sbom" "$identity_receipt" <<'PY'
+  "$actual_image_revision" "$source_sbom" "$image_sbom" "$binary_inventory" "$identity_receipt" <<'PY'
 import hashlib
 import json
 import pathlib
+import re
 import sys
 
 (candidate_sha, candidate_tree, lock_sha256, image_reference, config_digest,
- build_digest, revision_label, source_path, image_path, receipt_path) = sys.argv[1:]
+ build_digest, revision_label, source_path, image_path, binary_path, receipt_path) = sys.argv[1:]
+
+binary_inventory = json.loads(pathlib.Path(binary_path).read_text(encoding="utf-8"))
+if (binary_inventory.get("candidateSha") != candidate_sha
+        or binary_inventory.get("imageConfigDigest") != config_digest
+        or binary_inventory.get("licenseClosure") != "NOT_CLAIMED"):
+    raise SystemExit("Native binary inventory is not bound to the candidate image")
+binary_files = binary_inventory.get("files")
+if (not isinstance(binary_files, list) or not binary_files
+        or any(not isinstance(row, dict)
+               or not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", "")))
+               or not isinstance(row.get("bytes"), int) or row["bytes"] <= 0
+               for row in binary_files)):
+    raise SystemExit("Native binary inventory is empty or missing real file hashes")
 
 def artifact(path: str, classification: str) -> dict[str, str]:
     file_path = pathlib.Path(path)
@@ -342,6 +368,7 @@ receipt = {
         "revisionLabel": revision_label,
         "scanReference": f"docker:{config_digest}",
         "sbom": artifact(image_path, "production-runtime-image-inventory"),
+        "nativeBinaries": artifact(binary_path, "runtime-native-file-identity-not-license-clearance"),
     },
     "releaseAcceptance": "NOT_RELEASE",
     "licenseClosure": "NOT_CLAIMED",
@@ -353,7 +380,7 @@ PY
 
 (
   cd "$output_dir"
-  sha256sum "$(basename "$source_sbom")" "$(basename "$image_sbom")" \
+  sha256sum "$(basename "$source_sbom")" "$(basename "$image_sbom")" "$(basename "$binary_inventory")" \
     "$(basename "$identity_receipt")" > SHA256SUMS
 )
 
