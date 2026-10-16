@@ -18,7 +18,7 @@ description: 维护 apps/desk 本地股票与期权行情台：富途 OpenD 报�
 2. 改服务端时，检查密钥只从根 `.env` 读取，不输出值；`/api/*` 响应不包含密钥。
 3. 改数据语义（周期、聚合、缓存、标注）时，同时更新 `apps/desk/AGENTS.md` 与 `docs/MARKET_SOURCES.md`。
 4. 语法检查：`node --check` 检查 `src/*.mjs` 与 `public/app.js`，使用仓库内 Node 22.23.3。
-5. 启动或重启：`DESK_PORT=3000`，只绑定 `127.0.0.1`。
+5. 启动或重启：`DESK_PORT=3000 <node.exe> --env-file-if-exists=../../.env src/server.mjs`（在 `apps/desk` 下），只绑定 `127.0.0.1`。应用不读取 `.env` 文件，只读进程环境变量。
 6. 核对接口（见 `apps/desk/AGENTS.md`"检查清单"），再核对页面数值。截图在该面板上可能被缩放，不能只凭截图判断布局。
 7. 汇报时区分"已验证的真实数据"与"缺口"，缺失数值显示 `—`，不得用模拟值填充。
 

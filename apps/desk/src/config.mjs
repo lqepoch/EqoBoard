@@ -1,29 +1,17 @@
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+// Configuration comes from process.env only. The root .env is loaded by Node at start-up
+// (`node --env-file-if-exists=../../.env src/server.mjs`, see apps/desk/AGENTS.md), so the
+// application never reads a file itself and no file data reaches an outbound request.
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const REPO_ROOT = path.resolve(HERE, '../../..');
+// Alpaca's own trading hosts only; a bad environment value cannot send the keys anywhere else.
+const ALPACA_TRADING_BASES = new Set(['https://paper-api.alpaca.markets', 'https://api.alpaca.markets']);
 
-/** Reads KEY=VALUE lines from the repo-root .env. Values stay inside this process. */
-export function readDotEnv(file = path.join(REPO_ROOT, '.env')) {
-  const out = {};
-  if (!existsSync(file)) return out;
-  for (const raw of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const eq = line.indexOf('=');
-    if (eq < 1) continue;
-    out[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
-  }
-  return out;
-}
-
-export function loadConfig(env = readDotEnv()) {
-  const port = Number(process.env.DESK_PORT ?? 3000);
+export function loadConfig(env = process.env) {
+  const port = Number(env.DESK_PORT ?? 3000);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('DESK_PORT invalid');
   const futuHost = env.FUTU_OPEND_HOST ?? '127.0.0.1';
   if (futuHost !== '127.0.0.1' && futuHost !== 'localhost') throw new Error('FUTU_OPEND_HOST must be loopback');
+  const tradingBase = env.APCA_API_BASE_URL ?? 'https://paper-api.alpaca.markets';
+  if (!ALPACA_TRADING_BASES.has(tradingBase)) throw new Error('APCA_API_BASE_URL must be an Alpaca trading host');
   return {
     port,
     futu: {
@@ -35,7 +23,7 @@ export function loadConfig(env = readDotEnv()) {
     alpaca: {
       key: env.ALPACA_KEY ?? '',
       secret: env.ALPACA_SECRET ?? '',
-      tradingBase: env.APCA_API_BASE_URL ?? 'https://paper-api.alpaca.markets',
+      tradingBase,
       dataBase: 'https://data.alpaca.markets',
       feed: 'indicative',
     },

@@ -1064,6 +1064,34 @@
         "apps/eqoboard-web/AGENTS.md",
         "third_party/mdp-runtime.json"
       ]
+    },
+    {
+      "agent": "native_dark_market_desk",
+      "base_commit": "6da371d041bf280f0834ca351bdc202c13c8c312",
+      "source_provenance": {
+        "classification": "first-party independent implementation",
+        "adapted_sources": [],
+        "notes": "Dark market desk restyle: the market status pill, the stock tape widget with its pure helpers and styles, and an AG Grid theme. No OpenTerminal, legacy, or third-party source file was copied or adapted. grid-theme consumes themeQuartz from the existing ag-grid-community dependency; test fixtures use source labels as data only."
+      },
+      "dependencies": {
+        "added": [],
+        "consumed": [
+          "ag-grid-community (existing, 36.2.0)",
+          "react",
+          "vitest (adjacent pure tests only)"
+        ]
+      },
+      "files": [
+        "apps/eqoboard-web/components/shell/MarketStatusPill.tsx",
+        "apps/eqoboard-web/widgets/implementations/market/StockTapeWidget.tsx",
+        "apps/eqoboard-web/widgets/implementations/market/grid-theme.ts",
+        "apps/eqoboard-web/widgets/implementations/market/stock-tape.module.css",
+        "apps/eqoboard-web/widgets/implementations/market/stock-tape.test.ts",
+        "apps/eqoboard-web/widgets/implementations/market/stock-tape.ts"
+      ],
+      "auditSources": [
+        "apps/eqoboard-web/AGENTS.md"
+      ]
     }
   ],
   "rootIntegration": {

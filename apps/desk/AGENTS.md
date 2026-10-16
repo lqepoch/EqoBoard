@@ -64,7 +64,7 @@
 ## 运行
 
 - Node：使用仓库内 `data/native-local/node-download/node-v22.23.3-win-x64/node.exe`（22.23.3，与 `futu-api` 的 engines 要求一致）。
-- 启动：在 `apps/desk` 下执行 `DESK_PORT=3000 <node.exe> src/server.mjs`。端口默认 3000，服务只绑定 `127.0.0.1`，并校验 `Host` 头为 `127.0.0.1` 或 `localhost`。
+- 启动：在 `apps/desk` 下执行 `DESK_PORT=3000 <node.exe> --env-file-if-exists=../../.env src/server.mjs`（`npm start` 使用同样的参数）。根目录 `.env` 由 Node 在启动时载入环境变量，应用本身不读取文件；缺少 `.env` 时功能以不可用状态启动，不回退到其它来源。端口默认 3000，服务只绑定 `127.0.0.1`，并校验 `Host` 头为 `127.0.0.1` 或 `localhost`。
 - 依赖：`npm install`，版本已锁定（见 `package.json`）。
 - 配置：根目录 `.env` 中的 `FUTU_OPEND_HOST`、`FUTU_OPEND_WEBSOCKET_PORT`、`FUTU_OPEND_WEBSOCKET_SSL`、`FUTU_OPEND_WEBSOCKET_KEY`、`ALPACA_KEY`、`ALPACA_SECRET`、`APCA_API_BASE_URL`。不要把这些值输出到终端、日志或文档。
 
