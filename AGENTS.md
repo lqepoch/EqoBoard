@@ -30,3 +30,4 @@
 - 原生 `EQOBOARD_DATA_DIR` 独立于旧 SQLite。未配置时相关持久接口准确 unavailable；禁止自动迁入/认领旧数据。Workspace CAS、备份、显式旧布局预览/导入必须保持身份边界。
 - 原生验收仅由 `Native Web CI` 执行。缺失已提交的 package-lock 或其根依赖与 package 声明不匹配时，bootstrap artifact仅是待审查提案，gate必须失败。未通过新旧对照、成对性能和回滚证据不得切换默认部署。公共 Runner 无真实市场密钥或 Provider 验收；本地不启动 build、Next dev、Docker 或浏览器测试。
 - `.agents/skills/native-terminal/SKILL.md` 适用于新终端；旧 OpenTerminal/OpenBB Skill仅用于历史参考或明确的可选旧模块维护，不能覆盖本迁移目标与旧源码保护。
+- 用户明确要求本机启动时，可按 `docs/NATIVE_LOCAL_START.md` 运行 Actions 构建并校验的 Windows standalone/Gateway 产物；只做运行与健康检查，不在本机 build、Next dev、Docker 或跑验收测试。凭据仅存 ignored `.env`，按服务白名单分流；本机免登录必须严格 loopback，生产默认仍 OIDC。

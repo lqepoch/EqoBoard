@@ -1,5 +1,8 @@
 # EqoBoard
 
+Windows 本机启动原生候选见 [运行说明](docs/NATIVE_LOCAL_START.md)：使用 GitHub
+Actions 预编译包，根目录 ignored `.env`，受控 loopback 身份；不本地构建或启用交易。
+
 可二次开发的美股股票 + 期权终端。默认主 UI 复用 **OpenTerminal** 的 MIT Workspace/Widget/Chart 体系；期权链使用 **AG Grid Community**；生产美股/期权数据路径通过 Rust Gateway 请求 Alpaca **SIP/OPRA**。可选 OpenBB Lite 研究工作台由独立 Research BFF 和受控入口提供，不替代主终端。
 
 ## 核心组合

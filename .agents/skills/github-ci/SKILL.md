@@ -38,6 +38,8 @@ GitHub `combined status` 默认每页 30 条，不可作为完整状态集合。
 
 ## Native Web migration lane
 
+Native Windows runtime and local launch lane 在 windows-2025 固定 Node 22.23.3 / Rust 1.99.0 构建独立 standalone 和 Gateway，安装精确 Futu SDK-only 锁，打包文件SHA-256与候选元数据并实际执行loopback本机身份/保存/跨源浏览器验收；无真实Provider凭据。Native gate 同时要求 Linux、lock 和 Windows lane 成功。可下载包仅 LOCAL_EVALUATION_ONLY，许可与生产门槛保留；不运行本机build或上传私有.env。
+
 `Native Web CI` (`.github/workflows/native-web.yml`) 独立验证 `apps/eqoboard-web`，app-only Docker context，不拉取旧应用运行时。`Native web validation gate` 汇总 lock bootstrap 与 package/runtime 检查，任何失败、缺失或跳过都阻止合并。缺少已提交 lock 或其根依赖与 package 声明不匹配时，只上传待审核 bootstrap lock并失败；已有 lock 作为依赖裁剪输入，避免无关版本重解，不将临时生成依赖计入验收。终端/Research使用同一个原生镜像、独立hostname与密钥，CI仅标准OIDC合成fixture。旧 core/OpenBB required checks与CodeQL继续保留；未完成迁移不得移除旧可用部署或降低已有门槛。
 
 原生 lane 使用 Gitleaks 8.30.1 的固定 linux/amd64 镜像 digest 扫描原生工作树及候选提交范围，关闭网络、只读挂载并脱敏日志。只在 GitHub Actions 启动该容器；不向扫描器传递任何组织凭据，不因测试 fixture 而全局排除密钥规则。依赖许可证检查同时核对 SPDX 语法、精确锁定的运行时排除清单、standalone/final image 文件边界与镜像 SBOM；源码依赖的许可证审计不等于 Provider 数据许可或生产发布验收。
