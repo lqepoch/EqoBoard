@@ -273,6 +273,8 @@ jobs:
           path: |
             apps/eqoboard-web/test-results/local/
             ${{ runner.temp }}/native-local-smoke/data/native-local/*.log
+            ${{ runner.temp }}/native-windows/runtime/SHA256SUMS
+            ${{ runner.temp }}/native-windows/runtime/runtime.json
           if-no-files-found: warn
           retention-days: 7
   gate:

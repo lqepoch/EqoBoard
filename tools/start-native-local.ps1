@@ -26,7 +26,9 @@ $script:CandidateSha = $null
 $script:Phase = 'preflight'
 
 function Fail([string]$Message) {
-    throw [InvalidOperationException]::new($Message)
+    $exception = [InvalidOperationException]::new($Message)
+    $exception.Data['NativeLocalReason'] = $Message
+    throw $exception
 }
 
 function Get-CanonicalPath([string]$Path) {
@@ -244,7 +246,7 @@ function Assert-Package([string]$PackageRoot, [string]$ExpectedSha) {
 
     $listed = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($line in [IO.File]::ReadAllLines($checksumPath, [Text.Encoding]::UTF8)) {
-        if ($line -notmatch '^([0-9a-f]{64})  ([A-Za-z0-9@._/+~-]+)$') {
+        if ($line -notmatch '^([0-9a-f]{64})  ([^\x00-\x1f\x7f<>:"\\|?*]+)$') {
             Fail 'The runtime checksum manifest is malformed.'
         }
         $digest = $Matches[1]
@@ -628,6 +630,9 @@ try {
     }
     $exceptionType = $_.Exception.GetType().FullName
     $line = $_.InvocationInfo.ScriptLineNumber
-    Write-Error "Native local startup failed during '$script:Phase' (type=$exceptionType, line=$line). Review private logs under data/native-local; no unrelated process was stopped."
+    $reason = if ($_.Exception.Data.Contains('NativeLocalReason')) {
+        [string]$_.Exception.Data['NativeLocalReason']
+    } else { 'Unexpected runtime error; details are omitted to protect private configuration.' }
+    Write-Error "Native local startup failed during '$script:Phase' (type=$exceptionType, line=$line): $reason Review private logs under data/native-local; no unrelated process was stopped."
     exit 1
 }
