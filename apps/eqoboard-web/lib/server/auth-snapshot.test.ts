@@ -11,9 +11,8 @@ vi.mock("next-auth/jwt", () => authMocks);
 
 const { getAuthUiSnapshot, ownerKeyForPrincipal } = await import("./auth");
 const { authorizeRequest } = await import("./bff-security");
-const { isLocalWorkstationRequestAllowed } = await vi.importActual<
-  typeof import("../../auth")
->("../../auth");
+const { isLocalWorkstationRequestAllowed } =
+  await vi.importActual<typeof import("../../auth")>("../../auth");
 
 afterEach(() => {
   vi.unstubAllEnvs();

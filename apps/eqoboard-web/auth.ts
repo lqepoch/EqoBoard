@@ -75,10 +75,7 @@ export function isLocalWorkstationRequestAllowed(request: Request): boolean {
   // accepts only that framework-internal URL representation of the same request.
   const nextNormalizedOrigin = new URL(configuredOrigin);
   nextNormalizedOrigin.hostname = "localhost";
-  if (
-    requestUrl.origin !== configuredOrigin &&
-    requestUrl.origin !== nextNormalizedOrigin.origin
-  ) {
+  if (requestUrl.origin !== configuredOrigin && requestUrl.origin !== nextNormalizedOrigin.origin) {
     return false;
   }
   if (request.headers.get("host") !== expected.host) return false;
