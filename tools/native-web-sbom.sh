@@ -251,13 +251,13 @@ done
 # Inspect bytes in the same immutable image, without network, host mounts,
 # credentials, or executing any discovered native module. This supplements
 # Syft's package metadata; hashes do not establish license clearance.
+git -C "$repo_root" show "$NATIVE_CANDIDATE_SHA:tools/ci/native-binary-inventory.mjs" | \
 docker run --rm -i --pull=never --network=none --read-only \
   --cap-drop=ALL --security-opt=no-new-privileges:true --pids-limit=64 \
   --memory=256m --cpus=1 --entrypoint=node \
   --env "NATIVE_CANDIDATE_SHA=$NATIVE_CANDIDATE_SHA" \
   --env "NATIVE_IMAGE_CONFIG_DIGEST=$NATIVE_IMAGE_CONFIG_DIGEST" \
-  "$NATIVE_IMAGE_CONFIG_DIGEST" --input-type=module - \
-  < "$repo_root/tools/ci/native-binary-inventory.mjs" > "$binary_inventory"
+  "$NATIVE_IMAGE_CONFIG_DIGEST" --input-type=module - > "$binary_inventory"
 
 syft scan "dir:$app_dir" \
   --source-name eqoboard-web \
