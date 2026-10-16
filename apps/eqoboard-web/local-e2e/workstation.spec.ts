@@ -23,6 +23,13 @@ test("packaged workstation opens without OIDC and persists an owned workspace", 
   expect(response.headers()["etag"]).toBeTruthy();
   const serialized = JSON.stringify(await response.json());
   expect(serialized).not.toContain("NATIVE_LOCAL_PROVIDER_SECRET_SENTINEL");
+  const statusResponse = await request.get("/api/status");
+  expect(statusResponse.status()).toBe(200);
+  expect(await statusResponse.json()).toMatchObject({
+    market_data_provider: "futu",
+    execution_mode: "disabled",
+    execution_enabled: false,
+  });
   expect(await page.content()).not.toContain("NATIVE_LOCAL_PROVIDER_SECRET_SENTINEL");
   expect([...new Set(origins)]).toEqual(["http://127.0.0.1:3000"]);
 });

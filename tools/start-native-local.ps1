@@ -507,6 +507,11 @@ try {
     if ($futuKey.Length -gt 4096 -or $futuKey -match '[\x00-\x1f\x7f]') {
         Fail 'The Futu key has an invalid representation.'
     }
+    foreach ($providerKey in @($futuKey, (Get-EnvValue $values 'ALPACA_KEY'), (Get-EnvValue $values 'ALPACA_SECRET'))) {
+        if ($providerKey -and $providerKey -cin @($gatewaySecret, $researchSecret, $nextAuthSecret)) {
+            Fail 'Provider credentials must not be reused as service signing secrets.'
+        }
+    }
 
     $script:Phase = 'prepare-private-state'
     $dataRoot = Ensure-PrivateDirectory (Join-Path $repo 'data/native-local')

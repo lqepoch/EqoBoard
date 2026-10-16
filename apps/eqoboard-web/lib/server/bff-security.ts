@@ -7,6 +7,7 @@ import { isPermission, type Permission } from "../contracts/auth";
 import {
   isLocalWorkstationRequestAllowed,
   isOidcConfigured,
+  localWorkstationOrigin,
   localWorkstationModeEnabled,
   localWorkstationModeRequested,
   publicAppOrigin,
@@ -24,6 +25,13 @@ const RESEARCH_RUNTIME_PERMISSIONS: readonly Permission[] = [
   "market:read",
   "research:read",
   "research:private-read",
+];
+const LOCAL_WORKSTATION_GATEWAY_SCOPES: readonly Permission[] = [
+  "market:read",
+  "market:stream",
+  "market:subscribe",
+  "orders:preview",
+  "research:read",
 ];
 
 export type AuthorizationResult =
@@ -346,12 +354,17 @@ async function signDelegation(
     scope: readonly string[];
   }>,
 ): Promise<GatewayDelegationResult> {
+  const localMode = localWorkstationModeRequested();
   if (
-    !validSigningKey(options.secret) ||
     !nativeRuntimeReadiness().ready ||
-    !isOidcConfigured() ||
-    !distinctServiceKey(options.secret, options.secretName)
+    (localMode ? !localWorkstationModeEnabled() : !isOidcConfigured())
   ) {
+    return { ok: false, response: jsonError(503, "identity_unavailable") };
+  }
+  if (localMode && !isLocalWorkstationGatewayDelegation(principal, options)) {
+    return { ok: false, response: jsonError(403, "forbidden") };
+  }
+  if (!validSigningKey(options.secret) || !distinctServiceKey(options.secret, options.secretName)) {
     return { ok: false, response: jsonError(503, "identity_unavailable") };
   }
   const issuedAt = Math.floor(Date.now() / 1000);
@@ -376,6 +389,38 @@ async function signDelegation(
   } catch {
     return { ok: false, response: jsonError(503, "identity_unavailable") };
   }
+}
+
+function isLocalWorkstationGatewayDelegation(
+  principal: ServerPrincipal,
+  options: Readonly<{
+    issuer: string;
+    keyId: string;
+    audience: string;
+    scope: readonly string[];
+  }>,
+): boolean {
+  const origin = localWorkstationOrigin();
+  if (
+    !origin ||
+    principal.identityIssuer !== `${origin}/local-workstation` ||
+    principal.subject !== "local-workstation" ||
+    !Number.isSafeInteger(principal.sessionExpiresAt) ||
+    principal.sessionExpiresAt <= Date.now() + 1_000 ||
+    !Array.isArray(principal.permissions) ||
+    options.issuer !== "eqoboard-openterminal" ||
+    options.keyId !== "bff" ||
+    options.audience !== "eqoboard-gateway" ||
+    options.scope.length !== 1
+  ) {
+    return false;
+  }
+  const scope = options.scope[0];
+  return Boolean(
+    scope &&
+      LOCAL_WORKSTATION_GATEWAY_SCOPES.includes(scope as Permission) &&
+      principal.permissions.includes(scope as Permission),
+  );
 }
 
 export async function authorizeGatewayRequest(
