@@ -10,20 +10,45 @@ $fixtureRoot = Join-Path $env:RUNNER_TEMP 'native-local-smoke'
 if (Test-Path $fixtureRoot) { throw 'Smoke fixture path already exists' }
 New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
 function Set-SmokePrivateAcl([string]$Path) {
-    $acl = Get-Acl -LiteralPath $Path
+    $sections = [Security.AccessControl.AccessControlSections]::Access
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $item = [IO.DirectoryInfo]::new($Path)
+        $acl = [IO.FileSystemAclExtensions]::GetAccessControl($item, $sections)
+    } else {
+        $item = [IO.FileInfo]::new($Path)
+        $acl = [IO.FileSystemAclExtensions]::GetAccessControl($item, $sections)
+    }
     $acl.SetAccessRuleProtection($true, $false)
-    foreach ($rule in @($acl.Access)) { $acl.RemoveAccessRuleSpecific($rule) }
-    $owner = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($rule) }
+    $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $system = [Security.Principal.SecurityIdentifier]::new(
+        [Security.Principal.WellKnownSidType]::LocalSystemSid, $null
+    )
     $inheritance = if (Test-Path -LiteralPath $Path -PathType Container) {
         [Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit'
     } else { [Security.AccessControl.InheritanceFlags]::None }
-    foreach ($identity in @($owner, 'NT AUTHORITY\SYSTEM')) {
+    foreach ($identity in @($owner, $system)) {
         $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
-            $identity, 'FullControl', $inheritance, 'None', 'Allow'))
+            $identity,
+            [Security.AccessControl.FileSystemRights]::FullControl,
+            $inheritance,
+            [Security.AccessControl.PropagationFlags]::None,
+            [Security.AccessControl.AccessControlType]::Allow
+        ))
     }
-    Set-Acl -LiteralPath $Path -AclObject $acl
+    if ($item -is [IO.DirectoryInfo]) {
+        [IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]$item, $acl)
+    } else {
+        [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]$item, $acl)
+    }
 }
 Set-SmokePrivateAcl $fixtureRoot
+if ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host 'SMOKE_TOKEN_CONTEXT=administrator'
+} else {
+    Write-Host 'SMOKE_TOKEN_CONTEXT=standard-user'
+}
 function New-TestSecret { [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant() }
 $envPath = Join-Path $fixtureRoot '.env'
 @(

@@ -77,10 +77,16 @@ function Get-PrivateSids {
 function Set-PrivateAcl([string]$Path, [switch]$Directory) {
     $full = Assert-NoReparsePath -Path $Path -MustExist
     $sids = Get-PrivateSids
-    $acl = Get-Acl -LiteralPath $full
+    $sections = [Security.AccessControl.AccessControlSections]::Access
+    if ($Directory) {
+        $item = [IO.DirectoryInfo]::new($full)
+        $acl = [IO.FileSystemAclExtensions]::GetAccessControl($item, $sections)
+    } else {
+        $item = [IO.FileInfo]::new($full)
+        $acl = [IO.FileSystemAclExtensions]::GetAccessControl($item, $sections)
+    }
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($rule) }
-    $acl.SetOwner($sids.User)
     $inheritance = if ($Directory) {
         [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
             [Security.AccessControl.InheritanceFlags]::ObjectInherit
@@ -97,7 +103,11 @@ function Set-PrivateAcl([string]$Path, [switch]$Directory) {
         )
         [void]$acl.AddAccessRule($rule)
     }
-    Set-Acl -LiteralPath $full -AclObject $acl
+    if ($Directory) {
+        [IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]$item, $acl)
+    } else {
+        [IO.FileSystemAclExtensions]::SetAccessControl([IO.FileInfo]$item, $acl)
+    }
     Assert-PrivateAcl -Path $full -Directory:$Directory
 }
 
@@ -106,6 +116,8 @@ function Assert-PrivateAcl([string]$Path, [switch]$Directory) {
     $acl = Get-Acl -LiteralPath $full
     if (-not $acl.AreAccessRulesProtected) { Fail 'A private path has inheritable ACL entries.' }
     $sids = Get-PrivateSids
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier])
+    if (-not $owner.Equals($sids.User)) { Fail 'A private path is not owned by the current user.' }
     $expected = @($sids.User.Value, $sids.System.Value)
     $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
     if ($rules.Count -ne 2) { Fail 'A private path has unexpected ACL entries.' }
