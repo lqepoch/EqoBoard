@@ -22,10 +22,10 @@ function setOidcEnvironment(mode: "terminal" | "research"): void {
   vi.stubEnv("EQO_OIDC_CLIENT_ID", "native-client");
   vi.stubEnv("EQO_OIDC_CLIENT_SECRET", "oidc-client-secret-is-not-a-signer");
   vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
-  vi.stubEnv(
-    "EQO_PUBLIC_ORIGIN",
-    mode === "terminal" ? "https://terminal.example.test" : "https://research.example.test",
-  );
+  const origin =
+    mode === "terminal" ? "https://terminal.example.test" : "https://research.example.test";
+  vi.stubEnv("EQO_PUBLIC_ORIGIN", origin);
+  vi.stubEnv("NEXTAUTH_URL", origin);
   if (mode === "terminal") {
     vi.stubEnv("EQO_GATEWAY_JWT_SECRET", "g".repeat(64));
     vi.stubEnv("MDP_TERMINAL_JWT_SECRET", "m".repeat(64));
@@ -73,6 +73,7 @@ describe("server auth UI snapshot", () => {
 
     vi.stubEnv("EQO_BFF_MODE", "research");
     vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://research.example.test");
+    vi.stubEnv("NEXTAUTH_URL", "https://research.example.test");
     vi.stubEnv("EQO_GATEWAY_JWT_SECRET", "");
     vi.stubEnv("MDP_TERMINAL_JWT_SECRET", "");
     vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));
@@ -113,6 +114,7 @@ describe("server auth UI snapshot", () => {
     });
     vi.stubEnv("EQO_BFF_MODE", "research");
     vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://research.example.test");
+    vi.stubEnv("NEXTAUTH_URL", "https://research.example.test");
     vi.stubEnv("EQO_GATEWAY_JWT_SECRET", "");
     vi.stubEnv("MDP_TERMINAL_JWT_SECRET", "");
     vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));

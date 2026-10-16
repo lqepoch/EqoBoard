@@ -15,6 +15,7 @@ function commonIdentity(): void {
   vi.stubEnv("EQO_OIDC_CLIENT_SECRET", "oidc-client-secret-not-a-signer");
   vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
   vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://native.example.test");
+  vi.stubEnv("NEXTAUTH_URL", "https://native.example.test");
 }
 
 function principal(permissions: readonly Permission[]): ServerPrincipal {

@@ -82,13 +82,16 @@ export function configuredSessionLifetime(): number | null {
 
 export function isOidcConfigured(): boolean {
   const issuer = currentOidcIssuer();
+  const publicOrigin = publicAppOrigin();
+  const nextAuthUrl = process.env.NEXTAUTH_URL;
   return Boolean(
     issuer &&
       process.env.EQO_OIDC_CLIENT_ID?.trim() &&
       process.env.EQO_OIDC_CLIENT_SECRET?.trim() &&
       process.env.NEXTAUTH_SECRET &&
       process.env.NEXTAUTH_SECRET.length >= 32 &&
-      publicAppOrigin() &&
+      publicOrigin &&
+      nextAuthUrl === publicOrigin &&
       sessionLifetimeSeconds() !== null,
   );
 }

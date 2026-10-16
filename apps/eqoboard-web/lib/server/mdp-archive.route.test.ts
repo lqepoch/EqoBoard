@@ -26,6 +26,7 @@ describe("diagnostic archive signer availability", () => {
     vi.stubEnv("EQO_OIDC_CLIENT_SECRET", "oidc-client-secret-not-a-signer");
     vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
     vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://research.example.test");
+    vi.stubEnv("NEXTAUTH_URL", "https://research.example.test");
     vi.stubEnv("EQO_MDP_URL", "http://market-data-platform:4452");
     for (const name of [
       "EQO_GATEWAY_JWT_SECRET",

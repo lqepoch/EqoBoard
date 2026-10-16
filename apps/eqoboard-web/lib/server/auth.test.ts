@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const { ownerKeyForPrincipal, principalFromClaims } = await import("./auth");
-const { authCookieName, authOptions } =
+const { authCookieName, authOptions, isOidcConfigured } =
   await vi.importActual<typeof import("../../auth")>("../../auth");
 
 afterEach(() => vi.unstubAllEnvs());
@@ -78,6 +78,32 @@ describe("server principal projection", () => {
 
     vi.stubEnv("EQO_BFF_MODE", "research");
     expect(authCookieName()).toBe("__Host-eqoboard-research.session-token");
+  });
+
+  it("requires an explicit matching NextAuth URL while keeping configured loopback origins usable", () => {
+    vi.stubEnv("EQO_OIDC_ISSUER", "https://id.example.test/native");
+    vi.stubEnv("EQO_OIDC_CLIENT_ID", "native-client");
+    vi.stubEnv("EQO_OIDC_CLIENT_SECRET", "oidc-client-secret");
+    vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
+    vi.stubEnv("EQO_SESSION_TTL_SECONDS", "3600");
+    vi.stubEnv("EQO_PUBLIC_ORIGIN", "https://terminal.example.test");
+    vi.stubEnv("NEXTAUTH_URL", "");
+
+    expect(isOidcConfigured()).toBe(false);
+    vi.stubEnv("NEXTAUTH_URL", "https://other.example.test");
+    expect(isOidcConfigured()).toBe(false);
+    vi.stubEnv("NEXTAUTH_URL", "https://terminal.example.test/other-auth-path");
+    expect(isOidcConfigured()).toBe(false);
+    vi.stubEnv("NEXTAUTH_URL", "https://user:password@terminal.example.test");
+    expect(isOidcConfigured()).toBe(false);
+    vi.stubEnv("NEXTAUTH_URL", "https://terminal.example.test");
+    expect(isOidcConfigured()).toBe(true);
+
+    vi.stubEnv("EQO_PUBLIC_ORIGIN", "http://localhost:3000");
+    vi.stubEnv("NEXTAUTH_URL", "http://localhost:3000");
+    expect(isOidcConfigured()).toBe(true);
+    vi.stubEnv("NEXTAUTH_URL", "");
+    expect(isOidcConfigured()).toBe(false);
   });
 
   it("requires PKCE, state, and nonce with realm-isolated nonce cookies", async () => {
