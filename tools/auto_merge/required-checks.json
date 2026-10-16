@@ -100,6 +100,13 @@
       "bind_to_workflow_run": true,
       "workflow_key": "native",
       "must_exist": true
+    },
+    {
+      "context": "Native Windows runtime and local launch",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "native",
+      "must_exist": true
     }
   ]
 }
