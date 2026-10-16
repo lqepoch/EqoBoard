@@ -30,5 +30,5 @@ Futu SDK 子进程保持 `env_clear` 与独立白名单；Windows 仅额外保�
 
 固定 Futu SDK 的 protobuf 可选 bytes 字段须按实际字段存在性读取：未返回的
 `nextReqKey` 继承默认值表示无续页，不作为畸形数据；显式返回的非二进制 key
-仍失败关闭。Actions 回归须使用固定 SDK 的真实 protobuf 编解码，不能只用普通
+仍失败关闭；缺失 volume 保留 null，不能使用继承零值。Actions 回归须使用固定 SDK 的真实 protobuf 编解码，不能只用普通
 对象 mock 替代该兼容性证明。不得为诊断建立并行 OpenD 连接或输出原始行情/密钥。

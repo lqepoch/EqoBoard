@@ -382,7 +382,7 @@ export class FutuHistory {
         high: numberText(row.highPrice),
         low: numberText(row.lowPrice),
         close: numberText(row.closePrice),
-        volume: volumeText(row.volume),
+        volume: Object.hasOwn(row, 'volume') ? volumeText(row.volume) : null,
       });
     }
 
