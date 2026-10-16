@@ -115,6 +115,10 @@ test("@component synthetic Core Bars continuation renders older rows without era
   await signInAt(page, origin, "writer", "/");
   await expect(page.getByTestId("workspace-root")).toBeVisible();
   const workspaceSelector = page.getByTestId("workspace-selector");
+  await expect(workspaceSelector.locator("option").first()).toBeAttached();
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
   const oldWorkspaceCount = await workspaceSelector.locator("option").count();
   await page.getByRole("button", { name: "New workspace", exact: true }).click();
   await expect(workspaceSelector.locator("option")).toHaveCount(oldWorkspaceCount + 1);
