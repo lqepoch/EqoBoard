@@ -120,9 +120,9 @@ test("@component synthetic Core Bars continuation renders older rows without era
     "All changes saved",
   );
   const previousWorkspaceId = await workspaceSelector.inputValue();
-  const previousWorkspaceIds = await workspaceSelector.locator("option").evaluateAll((options) =>
-    options.map((option) => (option as HTMLOptionElement).value),
-  );
+  const previousWorkspaceIds = await workspaceSelector
+    .locator("option")
+    .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
   let createdWorkspaceId: string | null = null;
 
   try {
@@ -138,7 +138,8 @@ test("@component synthetic Core Bars continuation renders older rows without era
     // This same-origin route returns a synthetic BFF envelope in the browser; the real BFF,
     // MDP authentication, and market providers are outside the scope of this client regression.
     await page.route(
-      (url) => url.origin === origin && /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname),
+      (url) =>
+        url.origin === origin && /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname),
       async (route) => {
         const request = pageRequest(new URL(route.request().url()));
         servedRequests.push(request);
