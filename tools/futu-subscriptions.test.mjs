@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { FutuHistory } from './futu-history.mjs';
 import { StockSubscriptions } from './futu-subscriptions.mjs';
-const require = createRequire(new URL('../apps/openterminal/server/package.json', import.meta.url));
+const require = createRequire(new URL('./futu-runtime/package.json', import.meta.url));
 function fixture({ external = 0, failRelease = false } = {}) {
   const subscribed = new Set(); const operations = [];
   return { operations, sdk: {

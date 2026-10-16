@@ -1,0 +1,19 @@
+{
+  "name": "eqoboard-futu-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "Isolated official Futu SDK dependencies for the local read-only worker",
+  "engines": {
+    "node": ">=22.23.3 <23"
+  },
+  "dependencies": {
+    "futu-api": "10.11.7108"
+  },
+  "overrides": {
+    "futu-api": {
+      "protobufjs": "7.6.6"
+    }
+  }
+}
