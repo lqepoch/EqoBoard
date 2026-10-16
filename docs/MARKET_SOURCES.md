@@ -81,3 +81,17 @@ profile has the separate `EQO_LOCAL_CORE_BARS` switch and verified MDP runtime d
 `NATIVE_LOCAL_START.md`. Quote success does not establish historical bars availability.
 
 `EQO_MDP_MARKET_BARS_ENABLED=true` routes both existing charts through the authenticated same-origin `/api/history/{symbol}` BFF and MDP Bars V1. The default is disabled. Range, resolution, session scope, adjustment and provider mode are query identities; fixed-window cursors preserve pagination. Per-row exact values and per-segment provenance remain distinct from UI float projections. Unknown entitlement/feed or provider-native adjustment stays unknown; partial coverage and daily downgrade are visible. Quotes/watchlists, legacy dataset diagnostics and execution authority retain their existing paths. See `apps/openterminal/docs/MARKET_BFF_ROUTING.md` and `docs/MARKET_CHART_ROUTING.md`. Public builds and browser E2E run in GitHub Actions on the PR head, using explicitly synthetic bounded mocks; actual provider acceptance is separate. Disable the flag and restart web for rollback.
+
+## apps/desk（本地行情台，用户需求优先）
+
+本地行情台 `apps/desk` 不经 Rust Gateway，各字段的来源与时间如下，规则以 `apps/desk/AGENTS.md` 为准。
+
+| 数据 | 来源 | 时间与缺失 |
+|---|---|---|
+| 报价快照、逐笔、摆盘 | 富途 OpenD（直连 `futu-api` 10.11.7108） | 逐笔使用富途时间戳；摆盘按接收时间记录，OpenD 不提供可核验的事件时间，不伪造。 |
+| 逐笔成交方向 | 富途 `TickerDirection` | 按原义标注"取买一 / 取卖一"，不译为主动买卖。 |
+| 右上角摘要（今开、最高、最低、昨收、成交量、市值、市盈率、52 周） | yfinance（`yahoo-finance2` 4.0.4） | 非官方接口，缺失显示 `—`。 |
+| 股票 K 线（分钟及以上，最近 20 分钟除外） | Alpaca bars，显式 `feed=iex` | 每根 K 线的源时间；IEX 成交量只统计 IEX 交易所。 |
+| 秒级与最近 20 分钟分钟线 | 富途逐笔的本地聚合（服务端缓存，秒级保留 1 小时，分钟级 20 分钟）；5 秒、10 秒由 1 秒线推导 | 聚合窗口的起止时间；无成交的秒以上一价平推，成交量为 0 并标记；只有通过跳价守护（单笔偏离上一采纳价超过 0.5% 需连续 5 笔确认）的 Automatch 成交移动价格；零股、均价（AvgPrice）、附条件（Contingent）等及被守护拒绝的成交只累计成交量。 |
+| 期权链与报价 | Alpaca 期权快照，显式 `feed=indicative` | 报价时间为源时间，滞后按实测秒数显示；IV 与希腊字母不提供，显示 `—`。 |
+| 标的价（期权页） | 富途快照 | 与期权数据分开标注来源。 |

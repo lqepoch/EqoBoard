@@ -14,7 +14,7 @@
   overflow: hidden;
   border: 1px solid var(--eq-border, #263244);
   border-radius: 6px;
-  background: #0b1019;
+  background: #0c121a;
 }
 
 .native-chart-surface__plot {
@@ -37,7 +37,7 @@
 
 .native-chart-surface__empty {
   inset: 0;
-  background: rgb(11 16 25 / 86%);
+  background: rgb(12 18 26 / 86%);
 }
 
 .native-chart-surface__updating {
@@ -45,7 +45,7 @@
   right: 8px;
   border: 1px solid var(--eq-border, #263244);
   border-radius: 4px;
-  background: rgb(11 16 25 / 92%);
+  background: rgb(12 18 26 / 92%);
 }
 
 .native-chart-surface__readout,

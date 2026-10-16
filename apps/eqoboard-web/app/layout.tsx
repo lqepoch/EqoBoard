@@ -15,7 +15,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const auth = await getAuthUiSnapshot();
 
   return (
-    <html data-theme="system" lang="en">
+    <html data-theme="dark" lang="en">
       <body>
         <Providers auth={auth}>{children}</Providers>
       </body>

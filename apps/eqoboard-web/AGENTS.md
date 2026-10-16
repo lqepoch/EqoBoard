@@ -11,7 +11,7 @@ performance, container and rollback acceptance pass on the same candidate.
 - Use the pinned trading-core package for financial wire contracts. Never make a
   second financial model or use UI floats for exact financial decisions.
 - One host owns market transport, resource budgets and subscription lifetimes.
-  Widgets consume that host; they never open provider/broker connections.
+  Widgets consume that host; they never open provider/broker connections. The local desk `apps/desk` is outside this rule (user requirement).
 - UI permissions are visibility hints. Every BFF route verifies the current
   trusted session and required permission. Keep existing service issuer,
   audience, kid, scope and key isolation. Browser bundles contain no secrets.
@@ -28,7 +28,7 @@ performance, container and rollback acceptance pass on the same candidate.
 - Keep source modules small with meaningful boundaries. Add tests beside each
   implementation and wire them into real Actions before claiming verification.
 - Public builds, typecheck, unit/component/API/browser/security/container tests
-  run in GitHub Actions. Do not run local builds, dev servers or Docker.
+  run in GitHub Actions. Local builds, dev servers and Docker are allowed when the user asks (user requirement).
 - Explicitly authorized local startup may run the verified Actions Windows
   standalone package with Node 22.23.3 and strict loopback local-workstation
   identity. Follow `docs/NATIVE_LOCAL_START.md`; never load Provider credentials

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyThemePreference,
+  DEFAULT_THEME_PREFERENCE,
   nextThemePreference,
   readThemePreference,
   writeThemePreference,
@@ -18,8 +19,8 @@ function getLocalStorage(): Storage | null {
 }
 
 export function useThemePreference() {
-  const [preference, setPreference] = useState<ThemePreference>("system");
-  const preferenceRef = useRef<ThemePreference>("system");
+  const [preference, setPreference] = useState<ThemePreference>(DEFAULT_THEME_PREFERENCE);
+  const preferenceRef = useRef<ThemePreference>(DEFAULT_THEME_PREFERENCE);
 
   useEffect(() => {
     const initial = readThemePreference(getLocalStorage());

@@ -41,6 +41,15 @@ export type WorkspaceGridProps = Readonly<{
   onWidgetError(errorCode: string): void;
 }>;
 
+/** One-click starter layout; every entry must exist in the static builtin registry. */
+const MARKET_DESK_MANIFESTS: readonly string[] = Object.freeze([
+  "eqoboard.chart",
+  "market.quote",
+  "market.stock-tape",
+  "market.watchlist",
+  "market.feed-status",
+]);
+
 const DRAG_CANCEL =
   "button,input,textarea,select,a,[contenteditable='true'],.workspace-widget__actions,.workspace-widget__binding";
 const KEY_ARROWS = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"] as const;
@@ -460,6 +469,14 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
     onWidgetError: props.onWidgetError,
   };
 
+  /** Starter layout in placement order; every widget still resolves through the static registry. */
+  function openMarketDesk(): void {
+    const actions = props.store.getState();
+    for (const manifestId of MARKET_DESK_MANIFESTS) {
+      actions.addWidget(props.workspace.id, props.tab.id, manifestId);
+    }
+  }
+
   function commitLayout(next: Layout[]): void {
     const current = props.store.getState().document;
     const workspace = current?.workspaces.find((candidate) => candidate.id === props.workspace.id);
@@ -480,7 +497,21 @@ export function WorkspaceGrid(props: WorkspaceGridProps) {
       {props.tab.widgets.length === 0 ? (
         <div className="workspace-empty-grid">
           <h2>This tab is ready for widgets</h2>
-          <p>Choose a widget from the toolbar to start a focused workspace.</p>
+          <p>
+            Open the market desk for a chart, quotes, time and sales, your watchlist and feed
+            status.
+          </p>
+          <div className="workspace-desk-starter">
+            <button
+              className="workspace-desk-starter__primary"
+              disabled={!props.store.getState().canEdit}
+              onClick={openMarketDesk}
+              type="button"
+            >
+              Open market desk
+            </button>
+          </div>
+          <p>Or choose any widget from the toolbar.</p>
         </div>
       ) : maximized ? (
         <div className="workspace-maximized-grid">

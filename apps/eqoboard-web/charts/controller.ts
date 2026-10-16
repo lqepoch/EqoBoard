@@ -44,10 +44,10 @@ type SeriesSet = {
 };
 
 const COLORS = Object.freeze({
-  up: "#26a69a",
-  down: "#ef5350",
-  line: "#5e9eff",
-  areaTop: "rgba(94,158,255,0.28)",
+  up: "#2fd49b",
+  down: "#ff6b7a",
+  line: "#5aa2ff",
+  areaTop: "rgba(90,162,255,0.28)",
   areaBottom: "rgba(94,158,255,0.015)",
   volumeUp: "rgba(38,166,154,0.52)",
   volumeDown: "rgba(239,83,80,0.52)",
@@ -131,8 +131,8 @@ export class LightweightChartController<TRow = unknown> {
       height: Math.max(1, container.clientHeight),
       autoSize: false,
       layout: {
-        background: { color: "#0b1019" },
-        textColor: "#aab4c3",
+        background: { color: "#0c121a" },
+        textColor: "#95a4b5",
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
         fontSize: 11,
         attributionLogo: true,
@@ -140,20 +140,20 @@ export class LightweightChartController<TRow = unknown> {
       localization: {
         timeFormatter: (time: Time) => formatChartAxisTimeEt(time, this.timeVisible),
       },
-      grid: { vertLines: { color: "#17202d" }, horzLines: { color: "#17202d" } },
+      grid: { vertLines: { color: "#151e2a" }, horzLines: { color: "#151e2a" } },
       crosshair: {
         mode: 0,
-        vertLine: { color: "#7c9ab8", width: 1, style: LineStyle.Dotted },
-        horzLine: { color: "#7c9ab8", width: 1, style: LineStyle.Dotted },
+        vertLine: { color: "#7d93ad", width: 1, style: LineStyle.Dotted },
+        horzLine: { color: "#7d93ad", width: 1, style: LineStyle.Dotted },
       },
       timeScale: {
-        borderColor: "#263244",
+        borderColor: "#1f2a38",
         timeVisible: this.timeVisible,
         secondsVisible: false,
         rightOffset: 5,
         tickMarkFormatter: (time: Time) => formatChartAxisTimeEt(time, this.timeVisible),
       },
-      rightPriceScale: { borderColor: "#263244", scaleMargins: { top: 0.1, bottom: 0.22 } },
+      rightPriceScale: { borderColor: "#1f2a38", scaleMargins: { top: 0.1, bottom: 0.22 } },
       handleScroll: {
         mouseWheel: false,
         pressedMouseMove: true,

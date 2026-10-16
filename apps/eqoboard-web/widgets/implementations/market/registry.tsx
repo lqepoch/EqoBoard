@@ -21,6 +21,7 @@ import {
 } from "./config";
 import { OptionsChainWidget, IvSkewWidget, OptionTapeWidget } from "../options/OptionsWidgets";
 import { VerticalPreviewWidget } from "./VerticalPreviewWidget";
+import { StockTapeWidget } from "./StockTapeWidget";
 
 const quoteOperations = ["market.quotes"] as const;
 const optionOperations = ["market.quotes", "market.options.chain"] as const;
@@ -163,6 +164,7 @@ const tapeId = "market.option-tape";
 const feedId = "market.feed-status";
 const depthId = "market.orderbook";
 const previewId = "market.vertical-preview";
+const stockTapeId = "market.stock-tape";
 
 const quoteManifest = emptyManifest(
   quoteId,
@@ -223,6 +225,26 @@ const tapeManifest = emptyManifest(
   sharedRefresh,
   "active-or-fixed",
   "eqoboard.native06.market.option-tape.v1",
+);
+const TAPE_SIZE: WidgetManifestV1["defaultSize"] = Object.freeze({
+  w: 4,
+  h: 9,
+  minW: 3,
+  minH: 5,
+  maxW: 8,
+  maxH: 12,
+});
+const stockTapeManifest = emptyManifest(
+  stockTapeId,
+  "Time & sales",
+  "Recent stock prints from the shared Gateway stock stream; no aggressor side is provided.",
+  "eqoboard.market.stock-tape.v1",
+  TAPE_SIZE,
+  SYMBOL_INPUT,
+  ["market:stream", "market:subscribe"],
+  sharedRefresh,
+  "active-or-fixed",
+  "eqoboard.native06.market.stock-tape.v1",
 );
 const feedManifest = emptyManifest(
   feedId,
@@ -327,6 +349,24 @@ function optionRegistration(
   };
 }
 
+export const stockTapeWidgetRegistration: WidgetRegistration<
+  EmptyMarketConfigV1,
+  WidgetOperationMap,
+  WidgetNoActionMap,
+  MarketHostSnapshot
+> = {
+  manifest: stockTapeManifest,
+  Component: StockTapeWidget,
+  allowedReadOperations: noReads,
+  allowedActions: noActions,
+  parseConfig: parseEmptyMarketConfig,
+  createDefaultConfig: () => EMPTY_MARKET_CONFIG,
+  provenance: provenance(
+    "eqoboard.native06.market.stock-tape.v1",
+    "apps/eqoboard-web/widgets/implementations/market/StockTapeWidget.tsx",
+  ),
+};
+
 export const optionsChainWidgetRegistration = optionRegistration(
   optionsManifest,
   OptionsChainWidget,
@@ -413,6 +453,7 @@ export const verticalPreviewWidgetRegistration: WidgetRegistration<
 export const marketWidgetRegistrations: readonly AnyWidgetRegistration[] = Object.freeze([
   quoteWidgetRegistration,
   watchlistWidgetRegistration,
+  stockTapeWidgetRegistration,
   optionsChainWidgetRegistration,
   ivSkewWidgetRegistration,
   optionTapeWidgetRegistration,

@@ -77,6 +77,7 @@ describe("native market widget registrations", () => {
     expect(marketWidgetRegistrations.map((entry) => entry.manifest.id)).toEqual([
       "market.quote",
       "market.watchlist",
+      "market.stock-tape",
       "market.options-chain",
       "market.iv-skew",
       "market.option-tape",
