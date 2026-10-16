@@ -145,3 +145,21 @@ The verifier's unit suite is tests/test_legacy_integrity.mjs. Per the migration
 coordination brief, local tests/builds are not run; the root coordinator wires
 the test lane into GitHub Actions and reports evidence for the exact candidate
 SHA.
+
+## Explicit single-file test maintenance (PR65)
+
+On 2026-10-16 the repository owner separately authorized only the restored QQQ
+cell assertion in `apps/openterminal/web/e2e/openbb-lite.spec.ts`. Its original
+41,820 bytes remain in the unchanged frozen commit/tag and in
+[`legacy/authorized-originals/pr65/openbb-lite.spec.ts`](legacy/authorized-originals/pr65/openbb-lite.spec.ts),
+SHA-256 `593edeb81e7c8b3fce43d5d211595c982e84d47f7bc681254400a87eeef4220b`.
+This is a preservation copy, outside runtime/build/TypeScript contexts.
+
+The [authorization record](../docs/evidence/legacy-integrity-authorizations/pr65-openbb-qqq-cell.json)
+binds the exact original and revised identities and the owner's narrow scope.
+The verifier pins that record's identity/digest, checks the preserved original,
+and accepts only that exact revised index/worktree file. It does not rewrite
+the immutable 233-file manifest, permit another revision, allow wildcard
+exceptions, or relax protection of any other legacy path. Removing or altering
+the record or original copy fails verification. Other changes still need their
+own explicit authorization and audit.

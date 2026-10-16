@@ -661,9 +661,7 @@ test("native OpenBB Lite login adds and loads all three EqoBoard widgets without
     }, { timeout: 45_000, message: `Native ${route} API did not recover with completed QQQ rows after the denied phase` }).toBe(true);
   }
   await captured.settle();
-  await expect.poll(async () =>
-    (await stocksWidget.locator('.ag-cell[col-id="symbol"]').allTextContents()).some((text) => text.trim() === "QQQ"),
-  ).toBe(true);
+  await expect(stocksWidget.getByRole("gridcell", { name: "QQQ", exact: true })).toBeVisible();
   await expect(barsWidget.getByRole("gridcell")).not.toHaveCount(0);
   await revealGridColumns(page, barsWidget, ["open"]);
   const recoveredOpenCells = barsWidget.locator('.ag-cell[col-id="open"]').filter({ visible: true });

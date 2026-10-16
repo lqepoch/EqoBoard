@@ -80,6 +80,20 @@ SBOM 与文件哈希证明库存和字节身份，不证明全部静态组件 no
 没有修改其它仓库的源码或合并无关 Draft；锁定的 Core/connector 提交已在各自
 main 历史中。九仓 Draft 治理方案仍不取代当前契约。
 
+## 单项旧测试授权与原件保护
+
+用户于 2026-10-16 独立授权“授权，仅修复这项旧测试并记录审计”。只将
+`apps/openterminal/web/e2e/openbb-lite.spec.ts` 中刷新恢复 QQQ 的 CSS selector
+改为限定该 Widget 的精确 `gridcell/QQQ` 可见断言；保留全部 API、数据、权限、
+来源和其它断言，不修改旧运行时代码。原件逐字节复制到
+`references/legacy/authorized-originals/pr65/openbb-lite.spec.ts`，SHA-256 为
+`593edeb81e7c8b3fce43d5d211595c982e84d47f7bc681254400a87eeef4220b`。
+
+授权记录在 `docs/evidence/legacy-integrity-authorizations/pr65-openbb-qqq-cell.json`。
+冻结 Tag/233 文件 manifest/原 Git blob 保持不变，完整性工具另核对固定摘要
+授权记录、原件以及这一修订的精确 index/worktree 身份；不接受其它旧文件改动。
+此项是已记录的当前测试修订，不能继续宣称当前所有旧路径均与基线字节相同。
+
 ## 运维与回滚
 
 配置、下载、ACL、启动/停止命令见 [NATIVE_LOCAL_START.md](../NATIVE_LOCAL_START.md)。

@@ -25,6 +25,7 @@
 ## 原生迁移与验收
 
 - 迁移 Epic #60；源码基线、功能清单见 `references/README.md` 与 `docs/migration/FEATURE_INVENTORY.md`。`references/legacy` 不进入默认应用构建、TypeScript 扫描或运行时。完整性检查读取它的哈希清单仅用于审计，不代表业务依赖。
+- PR65 仅有一项用户单独授权的旧 OpenBB 测试选择器修订，授权记录见 `docs/evidence/legacy-integrity-authorizations/pr65-openbb-qqq-cell.json`，原件完整保留于 `references/legacy/authorized-originals/pr65/`。冻结 manifest/Tag 不变；完整性工具只接受固定授权摘要和精确修订身份，不允许借此修改其它旧文件或原件。
 - 原生 Widget 为静态、已审查的 builtin 注册，不允许任意第三方可执行代码。注册需声明读操作、动作、权限和资源预算；Widget 不可另建 Provider 连接。共享只读市场快照不是完整插件沙箱。
 - Yahoo 日线仅经独立原生 research-mode 实例及研究 signer读取；终端实例不得配置研究 signer，研究实例不得配置终端/Engine/Provider 密钥。导航不同端口不能替代不同 hostname 的 cookie 隔离。所有服务密钥仍仅服务端。
 - 原生 `EQOBOARD_DATA_DIR` 独立于旧 SQLite。未配置时相关持久接口准确 unavailable；禁止自动迁入/认领旧数据。Workspace CAS、备份、显式旧布局预览/导入必须保持身份边界。
