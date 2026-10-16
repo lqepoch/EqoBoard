@@ -357,7 +357,10 @@ export class FutuHistory {
       invalid('futu_invalid_response');
     }
 
-    const nextPageKey = bytesValue(response.s2c.nextReqKey);
+    // protobufjs supplies an inherited default for an absent optional bytes
+    // field. Only a key actually present on the decoded message is a cursor.
+    const nextPageKey = Object.hasOwn(response.s2c, 'nextReqKey')
+      ? bytesValue(response.s2c.nextReqKey) : null;
     if (pageKey && nextPageKey?.equals(pageKey)) invalid('futu_invalid_response');
     if (cursorToken) this.cursors.delete(cursorToken);
     const now = this.now();

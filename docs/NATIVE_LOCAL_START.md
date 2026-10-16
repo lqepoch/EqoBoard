@@ -120,6 +120,9 @@ Actions 还需检查唯一 SDK 子进程持续存活；无 OpenD 时 disconnecte
 Futu 历史的 `futu_invalid_response` 表示已接收数据未通过验证，保留 HTTP 502；
 `futu_read_failed` 仍表示未分类的读取失败。两者均不暴露 SDK 原始消息或行情，
 不能仅凭这些错误推断账户权限；行情快照可读也不证明历史路径成功。
+固定 SDK 的 protobuf 解码器会为未返回的可选 `nextReqKey` 提供继承默认值；
+读取器以实际字段存在性区分最后一页，不把该默认值当作畸形游标。
+实际返回的游标仍只接受二进制 bytes，显式数组、字符串等错误类型继续拒绝。
 
 ## 停止与回滚
 

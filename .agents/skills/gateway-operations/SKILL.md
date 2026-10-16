@@ -27,3 +27,8 @@ Futu SDK 子进程保持 `env_clear` 与独立白名单；Windows 仅额外保�
 本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。
 
 统一股票历史路由使用 MDP `/v1/market/bars` 与 Core Bars V1；旧 dataset V1 的 diagnostic 限制保留。Gateway 的 Futu `/api/v1/stocks/bars` 复用唯一 FutuLocal 子进程，只读历史分页，start/end 成对且 UTC 半开；无授权、缺 volume 或不支持时段不得补画数据。MDP bearer 使用独立 `lqepoch-market-data` audience 验证 MDP 读取；Futu 转发用的 Gateway delegation 不能认证 MDP，MDP 不持 Gateway signer。两类短时 JWT 都不包含签名 key。本机 Core Bars 显式开关与三服务 profile 见 native-terminal Skill，Windows 不开启 Parquet inline decode。
+
+固定 Futu SDK 的 protobuf 可选 bytes 字段须按实际字段存在性读取：未返回的
+`nextReqKey` 继承默认值表示无续页，不作为畸形数据；显式返回的非二进制 key
+仍失败关闭。Actions 回归须使用固定 SDK 的真实 protobuf 编解码，不能只用普通
+对象 mock 替代该兼容性证明。不得为诊断建立并行 OpenD 连接或输出原始行情/密钥。
