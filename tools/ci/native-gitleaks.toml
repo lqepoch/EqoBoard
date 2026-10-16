@@ -1,0 +1,14 @@
+title = "EqoBoard native candidate secret scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Four public ECB SDMX yield series identifiers, not authentication keys; retain scanning of every other value and path. See https://data.ecb.europa.eu/data/datasets/YC/YC.B.U2.EUR.4F.G_N_A.SV_C_YM.SR_3M"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)apps/eqoboard-web/lib/server/research/macro\.ts$''']
+regexes = ['''^B\.U2\.EUR\.4F\.G_N_A\.SV_C_YM\.SR_(?:3M|5Y|10Y|30Y)$''']

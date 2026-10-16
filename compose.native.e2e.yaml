@@ -1,0 +1,118 @@
+# CI-only synthetic fixtures. No real broker/provider credentials or networks.
+services:
+  native-web:
+    restart: "no"
+    environment:
+      EQO_NATIVE_E2E: "1"
+      EQO_OIDC_ISSUER: "http://native-mock-oidc:4450"
+      EQO_OIDC_CLIENT_ID: "eqoboard-native-ci"
+      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_OIDC_CLIENT_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      EQO_SESSION_TTL_SECONDS: "3600"
+      NEXTAUTH_URL: "http://127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440}"
+      EQO_PUBLIC_ORIGIN: "http://127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440}"
+      NEXTAUTH_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_TERMINAL_SESSION_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      EQO_RUST_URL: "http://native-mock-gateway:4451"
+      EQO_GATEWAY_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_GATEWAY_TERMINAL_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      EQO_MDP_URL: "http://market-data-platform:4452"
+      MDP_TERMINAL_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_MDP_TERMINAL_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      QUANT_TERMINAL_JWT_SECRET: ""
+      ENGINE_TERMINAL_JWT_SECRET: ""
+      EQO_QUANT_RESEARCH_URL: ""
+      EQO_ENGINE_URL: ""
+      EQO_RESEARCH_PUBLIC_ORIGIN: "http://localhost:3441"
+    depends_on:
+      native-mock-oidc: {condition: service_healthy}
+      native-mock-gateway: {condition: service_healthy}
+      market-data-platform: {condition: service_healthy}
+  native-research:
+    profiles: [native]
+    image: ${NATIVE_WEB_IMAGE:?production image required}
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    ports: ["127.0.0.1:3441:3000"]
+    environment:
+      EQO_NATIVE_E2E: "1"
+      EQO_OIDC_ISSUER: "http://native-mock-oidc:4450"
+      EQO_OIDC_CLIENT_ID: "eqoboard-native-ci"
+      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_OIDC_CLIENT_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      EQO_SESSION_TTL_SECONDS: "3600"
+      NODE_ENV: "production"
+      EQO_BFF_MODE: "research"
+      NEXTAUTH_URL: "http://localhost:3441"
+      EQO_PUBLIC_ORIGIN: "http://localhost:3441"
+      NEXTAUTH_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_RESEARCH_SESSION_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      EQO_MDP_URL: "http://market-data-platform:4452"
+      MDP_RESEARCH_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_MDP_RESEARCH_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    depends_on:
+      native-mock-oidc: {condition: service_healthy}
+      market-data-platform: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  native-mock-oidc:
+    profiles: [native]
+    image: node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    working_dir: /fixture
+    volumes: ["./apps/eqoboard-web/e2e:/fixture/e2e:ro"]
+    command: ["node", "e2e/fixture-server.mjs"]
+    ports: ["127.0.0.1:4450:4450"]
+    environment:
+      EQO_OIDC_ISSUER: "http://native-mock-oidc:4450"
+      EQO_OIDC_CLIENT_ID: "eqoboard-native-ci"
+      EQO_OIDC_CLIENT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_OIDC_CLIENT_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      EQO_PUBLIC_ORIGINS: "http://127.0.0.1:${NATIVE_WEB_HOST_PORT:-3440},http://localhost:3441"
+      FIXTURE_SERVICE: "oidc"
+      PORT: "4450"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4450/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  native-mock-gateway:
+    profiles: [native]
+    image: node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    working_dir: /fixture
+    volumes: ["./apps/eqoboard-web/e2e:/fixture/e2e:ro"]
+    command: ["node", "e2e/fixture-server.mjs"]
+    ports: ["127.0.0.1:0:4451"]
+    environment:
+      FIXTURE_SERVICE: "gateway"
+      PORT: "4451"
+      EQO_GATEWAY_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_GATEWAY_TERMINAL_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4451/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  market-data-platform:
+    profiles: [native]
+    image: node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    working_dir: /fixture
+    volumes: ["./apps/eqoboard-web/e2e:/fixture/e2e:ro"]
+    command: ["node", "e2e/mdp-fixture.mjs"]
+    ports: ["127.0.0.1:0:4452"]
+    environment:
+      PORT: "4452"
+      MDP_RESEARCH_JWT_SECRET: "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_MDP_RESEARCH_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4452/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

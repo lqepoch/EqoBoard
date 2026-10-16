@@ -33,6 +33,22 @@ class ContractTestSplitTests(unittest.TestCase):
         self.assertEqual(runner.module_owners("test_openbb_future.py"), {"openbb"})
         self.assertEqual(runner.module_owners("test_upstream_provenance.py"), {"core", "openbb"})
 
+    def test_native_modules_have_one_owner_and_are_not_imported_by_core(self):
+        self.assertEqual(runner.test_owner(self.CaseId("test_native_boundary.Tests.test_no_escape")),
+                         "native")
+        self.assertEqual(runner.module_owners("test_native_boundary.py"), {"native"})
+        with tempfile.TemporaryDirectory(prefix="eqoboard-native-test-split-") as temporary:
+            test_root = pathlib.Path(temporary)
+            (test_root / "test_native_broken.py").write_text(
+                "raise RuntimeError('native-only import failure')\n", encoding="utf-8")
+            self.assertEqual(runner.discover_test_cases("core", test_root), [])
+            self.assertEqual(runner.discover_test_cases("openbb", test_root), [])
+            cases = runner.discover_test_cases("native", test_root)
+            self.assertTrue(any(runner.is_loader_failure(case) for case in cases))
+            result = unittest.TestResult()
+            runner.build_suite("native", cases=cases).run(result)
+            self.assertFalse(result.wasSuccessful())
+
     def test_mixed_provenance_openbb_method_has_one_explicit_optional_owner(self):
         openbb_case = self.CaseId(runner.OPENBB_PROVENANCE_ID)
         unknown_openbb_method = self.CaseId("test_upstream_provenance.ProvenanceTests.test_openbb_new_contract")

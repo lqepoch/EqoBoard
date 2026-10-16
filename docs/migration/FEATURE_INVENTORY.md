@@ -2,9 +2,11 @@
 
 This inventory records behavior present in frozen legacy source snapshot
 fea1e952add7a11e799d6f9f198ddcee47fd12b6. It is a migration checklist, not a
-claim that the native application has delivered these features. Every item is
-NOT_STARTED until its native implementation has feature-specific parity,
-security, source, accessibility and release evidence on one candidate SHA.
+claim that the native application has delivered these features. Its NOT_STARTED
+column records the original inventory baseline, not current implementation progress.
+Current source, synthetic-test, Provider and release states are reported separately
+in [NATIVE_FEATURE_STATUS.md](NATIVE_FEATURE_STATUS.md). Source availability alone
+does not establish parity, security, accessibility or release acceptance.
 
 Native features are proposed for standalone apps/eqoboard-web. Exact registry
 and data-operation names remain subject to root-frozen interfaces. Native code
@@ -96,7 +98,8 @@ tools/migration/legacy-integrity.mjs and immutable manifest protect source bytes
 only. Hash integrity is not feature parity, security qualification, deployment
 approval or release acceptance.
 
-Every native feature remains NOT_STARTED until its owner records native
-route/UI/state behavior, source/permission result, meaningful tests and exact
-candidate evidence. Preserve missing/unverified provider data as unavailable;
+The baseline statuses above remain preserved for comparison. Current implementation
+and acceptance states must identify native route/UI/state behavior, source/permission
+results, meaningful tests and exact candidate evidence in NATIVE_FEATURE_STATUS.md.
+Preserve missing/unverified provider data as unavailable;
 do not substitute synthetic quotes, tape, bars, depth, accounts or orders.

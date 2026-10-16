@@ -1,0 +1,17 @@
+**/node_modules
+.next
+.git
+**/.git
+coverage
+test-results
+playwright-report
+*.tsbuildinfo
+**/.env*
+.npmrc
+**/.npmrc
+.state
+.state/**
+*.log
+npm-debug.log*
+.DS_Store
+Dockerfile*

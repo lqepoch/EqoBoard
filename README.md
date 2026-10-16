@@ -137,3 +137,9 @@ npm run build -w web
 ### Unified stock/ETF history (opt-in)
 
 `EQO_MDP_MARKET_BARS_ENABLED=true` routes both existing charts through the authenticated same-origin `/api/history/{symbol}` BFF and MDP Bars V1. The default is disabled. Range, resolution, session scope, adjustment and provider mode are query identities; fixed-window cursors preserve pagination. Per-row exact values and per-segment provenance remain distinct from UI float projections. Unknown entitlement/feed or provider-native adjustment stays unknown; partial coverage and daily downgrade are visible. Quotes/watchlists, legacy dataset diagnostics and execution authority retain their existing paths. See `apps/openterminal/docs/MARKET_BFF_ROUTING.md` and `docs/MARKET_CHART_ROUTING.md`. Public builds and browser E2E run in GitHub Actions on the PR head, using explicitly synthetic bounded mocks; actual provider acceptance is separate. Disable the flag and restart web for rollback.
+
+## 原生终端迁移
+
+独立实现位于 [apps/eqoboard-web](apps/eqoboard-web)，迁移跟踪 [Epic #60](https://github.com/lqepoch/EqoBoard/issues/60)。[源码保护基线](references/README.md)、[功能清单](docs/migration/FEATURE_INVENTORY.md) 与 [验收边界](apps/eqoboard-web/docs/migration/ACCEPTANCE.md) 分别记录完整性、功能差额和真实验证状态。新增功能使用原生 SDK/BFF；旧 OpenTerminal 与 OpenBB 源码、许可证、Patch 保留供研究和恢复。
+
+原生镜像/Compose为显式候选路径：`compose.native.yaml`；独立研究实例为 `compose.native.research.yaml`，需不同 hostname、会话密钥及研究服务 signer。`compose.yaml` 继续提供已存在的旧部署，直到全量对照与回滚验收通过。构建、测试与镜像验证仅在 GitHub Actions，真实 Provider 验收另行记录；Paper/Live execution 保持 disabled。

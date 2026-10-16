@@ -6,11 +6,13 @@ const test = require('node:test');
 const manifest = require('../tools/auto_merge/required-checks.json');
 const pr16CheckRuns = require('./fixtures/auto_merge/pr16-check-runs.json');
 const openbbOptionalCheckRuns = require('./fixtures/auto_merge/openbb-optional-check-runs.json');
+const nativeWebCheckRuns = require('./fixtures/auto_merge/native-web-check-runs.json');
 const {
   classifyChangedFiles,
   evaluatePolicySnapshot,
   mergeRequiredChecks,
   latestStatusesByContext,
+  validateAdditionalWorkflowRuns,
   validateRequiredChecks,
 } = require('../tools/auto_merge/policy.cjs');
 const { runAutoMerge } = require('../tools/auto_merge/orchestrator.cjs');
@@ -21,8 +23,18 @@ const BASE = 'b'.repeat(40);
 const MERGE = 'c'.repeat(40);
 const WORKFLOW_ID = 42;
 const CHECK_SUITE_ID = 777;
-const OPENBB_WORKFLOW_ID = 43;
-const OPENBB_CHECK_SUITE_ID = 778;
+const ADDITIONAL_WORKFLOW_IDS = Object.freeze(Object.fromEntries(manifest.additional_workflows.map((binding, index) => [
+  binding.key,
+  43 + index,
+])));
+const ADDITIONAL_CHECK_SUITE_IDS = Object.freeze(Object.fromEntries(manifest.additional_workflows.map((binding, index) => [
+  binding.key,
+  778 + index,
+])));
+const OPENBB_WORKFLOW_ID = ADDITIONAL_WORKFLOW_IDS.openbb;
+const OPENBB_CHECK_SUITE_ID = ADDITIONAL_CHECK_SUITE_IDS.openbb;
+const NATIVE_WORKFLOW_ID = ADDITIONAL_WORKFLOW_IDS.native;
+const NATIVE_CHECK_SUITE_ID = ADDITIONAL_CHECK_SUITE_IDS.native;
 const REVIEWER = { login: 'independent-reviewer', type: 'User' };
 
 function makePr(overrides = {}) {
@@ -64,23 +76,25 @@ function makeRun(pr = makePr(), overrides = {}) {
   };
 }
 
-function makeOpenBBRun(pr = makePr(), overrides = {}) {
-  const binding = manifest.additional_workflows[0];
+function makeAdditionalWorkflowRun(key, pr = makePr(), overrides = {}) {
+  const workflowIndex = manifest.additional_workflows.findIndex((item) => item.key === key);
+  const binding = manifest.additional_workflows[workflowIndex];
+  assert.ok(binding, `unknown workflow binding: ${key}`);
   return {
-    id: 199,
-    run_number: 21,
+    id: 199 + workflowIndex * 100,
+    run_number: 21 + workflowIndex * 10,
     run_attempt: 1,
     name: binding.workflow_name,
     path: binding.workflow_file,
-    workflow_id: OPENBB_WORKFLOW_ID,
-    check_suite_id: OPENBB_CHECK_SUITE_ID,
+    workflow_id: ADDITIONAL_WORKFLOW_IDS[key],
+    check_suite_id: ADDITIONAL_CHECK_SUITE_IDS[key],
     event: 'pull_request',
     status: 'completed',
     conclusion: 'success',
     head_repository: { full_name: REPOSITORY },
     head_branch: pr.head.ref,
     head_sha: pr.head.sha,
-    created_at: '2026-10-07T10:01:00Z',
+    created_at: `2026-10-07T10:${String(workflowIndex + 1).padStart(2, '0')}:00Z`,
     pull_requests: [{
       number: pr.number,
       head: { ref: pr.head.ref, sha: pr.head.sha, repo: { full_name: REPOSITORY } },
@@ -90,26 +104,39 @@ function makeOpenBBRun(pr = makePr(), overrides = {}) {
   };
 }
 
+function makeOpenBBRun(pr = makePr(), overrides = {}) {
+  return makeAdditionalWorkflowRun('openbb', pr, overrides);
+}
+
+function makeNativeRun(pr = makePr(), overrides = {}) {
+  return makeAdditionalWorkflowRun('native', pr, overrides);
+}
+
 function makeCheckRuns(headSha = HEAD, overrides = {}) {
-  return [...manifest.required_checks, ...manifest.guard_checks].map((check, index) => ({
-    id: index + 1,
-    name: check.context,
-    head_sha: headSha,
-    status: 'completed',
-    conclusion: 'success',
-    started_at: '2026-10-07T10:10:00Z',
-    app: { id: index + 100, slug: check.app_slug },
-    check_suite: {
-      id: check.workflow_key === 'openbb'
-        ? OPENBB_CHECK_SUITE_ID
-        : (check.bind_to_workflow_run ? CHECK_SUITE_ID : CHECK_SUITE_ID + 2),
-    },
-    ...((overrides && overrides[check.context]) || {}),
-  }));
+  return [...manifest.required_checks, ...manifest.guard_checks].map((check, index) => {
+    const workflowKey = check.workflow_key || 'ci';
+    const workflowSuiteId = workflowKey === 'ci' ? CHECK_SUITE_ID : ADDITIONAL_CHECK_SUITE_IDS[workflowKey];
+    return {
+      id: index + 1,
+      name: check.context,
+      head_sha: headSha,
+      status: 'completed',
+      conclusion: 'success',
+      started_at: '2026-10-07T10:10:00Z',
+      app: { id: index + 100, slug: check.app_slug },
+      check_suite: {
+        id: check.bind_to_workflow_run ? workflowSuiteId : CHECK_SUITE_ID + 2,
+      },
+      ...((overrides && overrides[check.context]) || {}),
+    };
+  });
 }
 
 function optionalWorkflowSuiteIds() {
-  return { openbb: OPENBB_CHECK_SUITE_ID };
+  return Object.fromEntries(manifest.additional_workflows.map((binding) => [
+    binding.key,
+    ADDITIONAL_CHECK_SUITE_IDS[binding.key],
+  ]));
 }
 
 function makeReview(state = 'APPROVED', overrides = {}) {
@@ -137,8 +164,18 @@ function makeStatus(id, context, state, secondsAfterBase = id) {
 function makePolicyInput(overrides = {}) {
   const pr = overrides.pr || makePr();
   const run = overrides.run || makeRun(pr);
-  const openbbRun = makeOpenBBRun(pr);
-  const openbbBinding = manifest.additional_workflows[0];
+  const workflowRuns = Object.fromEntries(manifest.additional_workflows.map((binding) => [
+    binding.key,
+    {
+      workflow: {
+        id: ADDITIONAL_WORKFLOW_IDS[binding.key],
+        name: binding.workflow_name,
+        path: binding.workflow_file,
+        state: 'active',
+      },
+      run: makeAdditionalWorkflowRun(binding.key, pr),
+    },
+  ]));
   return {
     trigger: { eventName: 'workflow_run', ref: 'refs/heads/main' },
     run,
@@ -146,12 +183,7 @@ function makePolicyInput(overrides = {}) {
     pr,
     workflow: { id: WORKFLOW_ID, name: manifest.ci_workflow_name, path: manifest.ci_workflow_file, state: 'active' },
     workflowBindings: manifest.additional_workflows,
-    workflowRuns: {
-      [openbbBinding.key]: {
-        workflow: { id: OPENBB_WORKFLOW_ID, name: openbbBinding.workflow_name, path: openbbBinding.workflow_file, state: 'active' },
-        run: openbbRun,
-      },
-    },
+    workflowRuns,
     expectedRepository: REPOSITORY,
     baseBranch: 'main',
     trustedAuthors: ['LQ-Epoch'],
@@ -174,7 +206,14 @@ function makePolicyInput(overrides = {}) {
 function createGithubMock(overrides = {}) {
   const pr = overrides.pr || makePr();
   const run = overrides.run || makeRun(pr);
-  const openbbRun = overrides.openbbRun || makeOpenBBRun(pr);
+  const additionalRuns = Object.fromEntries(manifest.additional_workflows.map((binding) => {
+    const key = binding.key;
+    const defaultRun = overrides[`${key}Run`] || makeAdditionalWorkflowRun(key, pr);
+    return [key, {
+      runs: overrides[`${key}Runs`] || [defaultRun],
+      runsForCall: overrides[`${key}RunsForCall`],
+    }];
+  }));
   const state = {
     prGets: 0,
     mergeCalls: [],
@@ -210,8 +249,6 @@ function createGithubMock(overrides = {}) {
   const combinedStatuses = latestStatusesByContext(statuses);
   const combinedStatusTotalCount = overrides.combinedStatusTotalCount ?? combinedStatuses.statuses.length;
   const runs = overrides.runs || [run];
-  const openbbRuns = overrides.openbbRuns || [openbbRun];
-  const openbbRunsForCall = overrides.openbbRunsForCall;
   const threadsPages = overrides.threadsPages || [{ nodes: [], pageInfo: { hasNextPage: false, endCursor: null } }];
   const rules = overrides.rules ?? [{ type: 'pull_request', parameters: { required_approving_review_count: 1 } }];
   const permissions = {
@@ -225,7 +262,7 @@ function createGithubMock(overrides = {}) {
       if (route.includes('/actions/workflows/')) {
         const binding = manifest.additional_workflows.find((item) => item.workflow_file === parameters.workflow_id);
         return { data: binding
-          ? { id: OPENBB_WORKFLOW_ID, name: binding.workflow_name, path: binding.workflow_file, state: 'active' }
+          ? { id: ADDITIONAL_WORKFLOW_IDS[binding.key], name: binding.workflow_name, path: binding.workflow_file, state: 'active' }
           : { id: WORKFLOW_ID, name: manifest.ci_workflow_name, path: manifest.ci_workflow_file, state: 'active' } };
       }
       if (route.includes('/collaborators/') && route.endsWith('/permission')) {
@@ -297,10 +334,11 @@ function createGithubMock(overrides = {}) {
         listWorkflowRuns: async ({ page: pageNo, workflow_id }) => {
           state.workflowRunListCalls += 1;
           state.workflowRunListCallsById[workflow_id] = (state.workflowRunListCallsById[workflow_id] || 0) + 1;
-          const selectedRuns = workflow_id === OPENBB_WORKFLOW_ID
-            ? (typeof openbbRunsForCall === 'function'
-              ? openbbRunsForCall(state.workflowRunListCallsById[workflow_id])
-              : openbbRuns)
+          const binding = manifest.additional_workflows.find((item) => ADDITIONAL_WORKFLOW_IDS[item.key] === workflow_id);
+          const selectedRuns = binding
+            ? (typeof additionalRuns[binding.key].runsForCall === 'function'
+              ? additionalRuns[binding.key].runsForCall(state.workflowRunListCallsById[workflow_id])
+              : additionalRuns[binding.key].runs)
             : runs;
           return page(selectedRuns, pageNo, 'workflow_runs');
         },
@@ -654,8 +692,8 @@ test('required check union is exact and missing, unknown, pending, stale or fail
 });
 
 test('historical GitHub check-run fixture binds the original three required jobs and known security guards', () => {
-  const historicalRequired = manifest.required_checks.filter((check) => check.workflow_key !== 'openbb');
-  const historicalGuards = manifest.guard_checks.filter((check) => check.workflow_key !== 'openbb');
+  const historicalRequired = manifest.required_checks.filter((check) => !check.workflow_key || check.workflow_key === 'ci');
+  const historicalGuards = manifest.guard_checks.filter((check) => !check.workflow_key || check.workflow_key === 'ci');
   const declarations = mergeRequiredChecks(historicalRequired, [], historicalGuards).checks;
   assert.deepEqual(validateRequiredChecks({
     checks: pr16CheckRuns.check_runs,
@@ -679,12 +717,20 @@ test('OpenBB workflow identity, required aggregate, and optional child-lane skip
     workflowCheckSuiteIds: optionalWorkflowSuiteIds(),
   };
   assert.deepEqual(validateRequiredChecks(expected), []);
-  assert.deepEqual(manifest.additional_workflows, [{
-    key: 'openbb',
-    workflow_file: '.github/workflows/openbb.yml',
-    workflow_name: 'OpenBB Optional CI',
-  }]);
+  assert.deepEqual(manifest.additional_workflows, [
+    {
+      key: 'openbb',
+      workflow_file: '.github/workflows/openbb.yml',
+      workflow_name: 'OpenBB Optional CI',
+    },
+    {
+      key: 'native',
+      workflow_file: '.github/workflows/native-web.yml',
+      workflow_name: 'Native Web CI',
+    },
+  ]);
   assert.equal(manifest.required_checks.some((check) => check.context === 'OpenBB optional validation gate' && check.workflow_key === 'openbb'), true);
+  assert.equal(manifest.required_checks.some((check) => check.context === 'Native web validation gate' && check.workflow_key === 'native'), true);
 
   await t.test('synthetic unrelated-change evidence accepts only the aggregate and bound skipped lanes', () => {
     const openbbDeclarations = declarations.filter((check) => check.workflowKey === 'openbb');
@@ -758,6 +804,108 @@ test('OpenBB workflow identity, required aggregate, and optional child-lane skip
   });
 });
 
+test('Native Web workflow identity, aggregate, lane guards, and base binding are explicit', async (t) => {
+  const declarations = mergeRequiredChecks(manifest.required_checks, [], manifest.guard_checks).checks;
+  const nativeDeclarations = declarations.filter((check) => check.workflowKey === 'native');
+  const expected = {
+    checks: nativeWebCheckRuns.check_runs,
+    statuses: [],
+    requiredChecks: nativeDeclarations,
+    headSha: nativeWebCheckRuns.head_sha,
+    workflowCheckSuiteIds: { native: nativeWebCheckRuns.check_suite_id },
+  };
+  assert.deepEqual(validateRequiredChecks(expected), []);
+  assert.equal(nativeDeclarations.length, 3);
+  assert.deepEqual(nativeDeclarations.map((check) => check.context).sort(), [
+    'Native web lock bootstrap',
+    'Native web package and runtime checks',
+    'Native web validation gate',
+  ].sort());
+  assert.equal(nativeDeclarations.find((check) => check.context === 'Native web validation gate').required, true);
+  assert.equal(nativeDeclarations.filter((check) => check.required === false && check.mustExist).length, 2);
+
+  await t.test('native gate cannot pass from a stale head, another suite, or another provider', () => {
+    const gate = 'Native web validation gate';
+    const withoutGate = nativeWebCheckRuns.check_runs.filter((run) => run.name !== gate);
+    assert.ok(validateRequiredChecks({ ...expected, checks: withoutGate }).includes(`check-missing:${gate}`));
+    const wrongHead = nativeWebCheckRuns.check_runs.map((run) => run.name === gate ? { ...run, head_sha: 'f'.repeat(40) } : run);
+    assert.ok(validateRequiredChecks({ ...expected, checks: wrongHead }).includes(`check-missing:${gate}`));
+    const wrongSuite = nativeWebCheckRuns.check_runs.map((run) => run.name === gate
+      ? { ...run, check_suite: { id: NATIVE_CHECK_SUITE_ID + 90 } }
+      : run);
+    assert.ok(validateRequiredChecks({ ...expected, checks: wrongSuite }).includes(`check-suite-mismatch:${gate}`));
+    const wrongProvider = nativeWebCheckRuns.check_runs.map((run) => run.name === gate
+      ? { ...run, app: { id: 2, slug: 'untrusted-provider' } }
+      : run);
+    assert.ok(validateRequiredChecks({ ...expected, checks: wrongProvider }).includes(`check-provider-mismatch:${gate}`));
+    for (const change of [
+      { status: 'queued', conclusion: null },
+      { status: 'completed', conclusion: 'failure' },
+      { status: 'completed', conclusion: 'skipped' },
+    ]) {
+      const altered = nativeWebCheckRuns.check_runs.map((run) => run.name === gate ? { ...run, ...change } : run);
+      assert.ok(validateRequiredChecks({ ...expected, checks: altered }).includes(`check-not-success:${gate}`));
+    }
+  });
+
+  await t.test('both native lane guards fail closed when missing, pending, failed, or skipped', () => {
+    for (const lane of ['Native web lock bootstrap', 'Native web package and runtime checks']) {
+      const omitted = nativeWebCheckRuns.check_runs.filter((run) => run.name !== lane);
+      assert.ok(validateRequiredChecks({ ...expected, checks: omitted }).includes(`check-missing:${lane}`));
+      for (const change of [
+        { status: 'queued', conclusion: null },
+        { status: 'completed', conclusion: 'failure' },
+        { status: 'completed', conclusion: 'skipped' },
+      ]) {
+        const altered = nativeWebCheckRuns.check_runs.map((run) => run.name === lane ? { ...run, ...change } : run);
+        assert.ok(validateRequiredChecks({ ...expected, checks: altered }).includes(`check-not-success:${lane}`));
+      }
+    }
+    const unknown = [...nativeWebCheckRuns.check_runs, {
+      name: 'Native web surprise job',
+      head_sha: nativeWebCheckRuns.head_sha,
+      status: 'completed',
+      conclusion: 'success',
+      started_at: '2026-10-14T00:10:00Z',
+      app: { id: 15368, slug: 'github-actions' },
+      check_suite: { id: nativeWebCheckRuns.check_suite_id },
+    }];
+    assert.ok(validateRequiredChecks({ ...expected, checks: unknown }).includes('check-context-unrecognized:Native web surprise job'));
+  });
+
+  await t.test('native workflow must bind the exact PR head and base', () => {
+    const input = makePolicyInput();
+    assert.deepEqual(
+      Object.keys(input.workflowRuns).sort(),
+      manifest.additional_workflows.map((binding) => binding.key).sort(),
+    );
+    const binding = manifest.additional_workflows.find((item) => item.key === 'native');
+    assert.deepEqual(validateAdditionalWorkflowRuns({
+      workflowBindings: [binding],
+      workflowRuns: { native: input.workflowRuns.native },
+      pr: input.pr,
+      expectedRepository: REPOSITORY,
+    }), []);
+    const wrongBaseRun = structuredClone(input.workflowRuns.native.run);
+    wrongBaseRun.pull_requests[0].base.sha = 'e'.repeat(40);
+    const wrongBase = validateAdditionalWorkflowRuns({
+      workflowBindings: [binding],
+      workflowRuns: { native: { ...input.workflowRuns.native, run: wrongBaseRun } },
+      pr: input.pr,
+      expectedRepository: REPOSITORY,
+    });
+    assert.ok(wrongBase.includes('workflow-run-pr-head-or-base-mismatch:native'));
+    const wrongHeadRun = { ...input.workflowRuns.native.run, head_sha: 'f'.repeat(40) };
+    const wrongHead = validateAdditionalWorkflowRuns({
+      workflowBindings: [binding],
+      workflowRuns: { native: { ...input.workflowRuns.native, run: wrongHeadRun } },
+      pr: input.pr,
+      expectedRepository: REPOSITORY,
+    });
+    assert.ok(wrongHead.includes('workflow-run-tested-revision-mismatch:native'));
+  });
+});
+
 test('run and PR must be trusted, linked, non-forked, non-draft, authored by allowlist, and on main', () => {
   const candidates = [
     { pr: makePr({ draft: true }), reason: 'pull-request-not-open-ready' },
@@ -788,6 +936,7 @@ test('orchestrator merges a fresh trusted candidate using expected head SHA and 
   assert.equal(mock.state.mergeCalls[0].merge_method, 'squash');
   assert.equal(mock.state.workflowRunListCallsById[WORKFLOW_ID], 2);
   assert.equal(mock.state.workflowRunListCallsById[OPENBB_WORKFLOW_ID], 2);
+  assert.equal(mock.state.workflowRunListCallsById[NATIVE_WORKFLOW_ID], 2);
 });
 
 test('workflow_dispatch reuses the latest successful linked CI run without triggering a new CI run', async () => {
@@ -798,6 +947,7 @@ test('workflow_dispatch reuses the latest successful linked CI run without trigg
   assert.equal(result.state, 'merged');
   assert.equal(mock.state.workflowRunListCallsById[WORKFLOW_ID], 2);
   assert.equal(mock.state.workflowRunListCallsById[OPENBB_WORKFLOW_ID], 2);
+  assert.equal(mock.state.workflowRunListCallsById[NATIVE_WORKFLOW_ID], 2);
 });
 
 test('independent OpenBB workflow must be a successful current-head run through final refresh', async (t) => {
@@ -840,6 +990,61 @@ test('independent OpenBB workflow must be a successful current-head run through 
     const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
     assert.equal(result.state, 'blocked');
     assert.equal(mock.state.mergeCalls.length, 0);
+  });
+});
+
+test('independent Native Web workflow must be successful on the linked current head and base through final refresh', async (t) => {
+  await t.test('failed Native Web workflow blocks before any merge', async () => {
+    const pr = makePr();
+    const run = makeRun(pr);
+    const nativeRun = makeNativeRun(pr, { conclusion: 'failure' });
+    const mock = createGithubMock({ pr, run, nativeRun });
+    const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+    assert.equal(result.state, 'blocked');
+    assert.equal(mock.state.mergeCalls.length, 0);
+  });
+
+  await t.test('a newer Native Web run arriving during final refresh blocks the stale decision', async () => {
+    const pr = makePr();
+    const run = makeRun(pr);
+    const first = makeNativeRun(pr);
+    const second = makeNativeRun(pr, {
+      id: 300,
+      run_number: 32,
+      check_suite_id: NATIVE_CHECK_SUITE_ID + 1,
+      created_at: '2026-10-07T10:03:00Z',
+    });
+    const mock = createGithubMock({
+      pr,
+      run,
+      nativeRunsForCall: (call) => call === 1 ? [first] : [second],
+    });
+    const result = await runAutoMerge({ github: mock.github, context: makeContext('workflow_run', run) });
+    assert.equal(result.state, 'blocked');
+    assert.ok(result.reasons.includes('latest-workflow-run-changed-during-evaluation:native'));
+    assert.equal(mock.state.mergeCalls.length, 0);
+  });
+
+  await t.test('Native Web run for another head or base cannot bind the current PR', async () => {
+    const pr = makePr();
+    const run = makeRun(pr);
+    const wrongHeadRun = makeNativeRun(pr, { head_sha: 'd'.repeat(40) });
+    const headMock = createGithubMock({ pr, run, nativeRun: wrongHeadRun });
+    const wrongHead = await runAutoMerge({ github: headMock.github, context: makeContext('workflow_run', run) });
+    assert.equal(wrongHead.state, 'blocked');
+    assert.equal(headMock.state.mergeCalls.length, 0);
+
+    const wrongBaseRun = makeNativeRun(pr, {
+      pull_requests: [{
+        number: pr.number,
+        head: { ref: pr.head.ref, sha: pr.head.sha, repo: { full_name: REPOSITORY } },
+        base: { ref: pr.base.ref, sha: 'e'.repeat(40), repo: { full_name: REPOSITORY } },
+      }],
+    });
+    const baseMock = createGithubMock({ pr, run, nativeRun: wrongBaseRun });
+    const wrongBase = await runAutoMerge({ github: baseMock.github, context: makeContext('workflow_run', run) });
+    assert.equal(wrongBase.state, 'blocked');
+    assert.equal(baseMock.state.mergeCalls.length, 0);
   });
 });
 

@@ -1,0 +1,17 @@
+TradingView Lightweight Charts™
+
+Copyright (c) 2025 TradingView, Inc. https://www.tradingview.com/
+
+The native chart indicator conventions, history viewport/page behavior, and
+chart control behavior are independently reimplemented from the EqoBoard
+OpenTerminal sources listed below. No legacy production module is imported.
+
+Copyright (c) 2026 OpenTerminal contributors
+MIT License
+Source commit: fea1e952add7a11e799d6f9f198ddcee47fd12b6
+Source files:
+- web/lib/indicators.ts
+- web/components/widgets/ChartWidget.tsx
+
+The complete MIT license terms and notice are preserved in
+../legal/OPENTERMINAL-LICENSE-MIT.

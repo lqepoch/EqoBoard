@@ -1,0 +1,14 @@
+node_modules/
+.next/
+*.tsbuildinfo
+test-results/
+playwright-report/
+coverage/
+.env*
+.state/
+
+# Source module named data is not a generated market-data directory.
+!features/data/
+!features/data/**
+!app/api/research/data/
+!app/api/research/data/**

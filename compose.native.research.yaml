@@ -1,0 +1,30 @@
+# Optional independent Native research image. Use a DIFFERENT hostname and session key.
+services:
+  native-research:
+    profiles: [native-research]
+    image: ${NATIVE_WEB_IMAGE:-eqoboard-native-web:candidate}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    ports: ["127.0.0.1:3441:3000"]
+    environment:
+      NODE_ENV: production
+      EQO_BFF_MODE: research
+      NEXTAUTH_URL: ${EQO_NATIVE_RESEARCH_PUBLIC_ORIGIN:-http://localhost:3441}
+      EQO_PUBLIC_ORIGIN: ${EQO_NATIVE_RESEARCH_PUBLIC_ORIGIN:-http://localhost:3441}
+      NEXTAUTH_SECRET: ${EQO_NATIVE_RESEARCH_SESSION_SECRET:-}
+      EQO_OIDC_ISSUER: ${EQO_OIDC_ISSUER:-}
+      EQO_OIDC_CLIENT_ID: ${EQO_NATIVE_RESEARCH_OIDC_CLIENT_ID:-}
+      EQO_OIDC_CLIENT_SECRET: ${EQO_NATIVE_RESEARCH_OIDC_CLIENT_SECRET:-}
+      EQO_MDP_URL: ${EQO_MDP_URL:-}
+      MDP_RESEARCH_JWT_SECRET: ${MDP_RESEARCH_JWT_SECRET:-}
+      EQO_QUANT_RESEARCH_URL: ${EQO_QUANT_RESEARCH_URL:-}
+      QUANT_RESEARCH_JWT_SECRET: ${QUANT_RESEARCH_JWT_SECRET:-}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12

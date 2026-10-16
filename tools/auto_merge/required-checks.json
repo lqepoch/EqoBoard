@@ -7,6 +7,11 @@
       "key": "openbb",
       "workflow_file": ".github/workflows/openbb.yml",
       "workflow_name": "OpenBB Optional CI"
+    },
+    {
+      "key": "native",
+      "workflow_file": ".github/workflows/native-web.yml",
+      "workflow_name": "Native Web CI"
     }
   ],
   "required_checks": [
@@ -30,6 +35,12 @@
       "app_slug": "github-actions",
       "bind_to_workflow_run": true,
       "workflow_key": "openbb"
+    },
+    {
+      "context": "Native web validation gate",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "native"
     }
   ],
   "guard_checks": [
@@ -74,6 +85,20 @@
       "bind_to_workflow_run": true,
       "workflow_key": "openbb",
       "allow_skipped": true,
+      "must_exist": true
+    },
+    {
+      "context": "Native web lock bootstrap",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "native",
+      "must_exist": true
+    },
+    {
+      "context": "Native web package and runtime checks",
+      "app_slug": "github-actions",
+      "bind_to_workflow_run": true,
+      "workflow_key": "native",
       "must_exist": true
     }
   ]

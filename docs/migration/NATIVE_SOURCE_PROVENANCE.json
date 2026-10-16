@@ -1,0 +1,1086 @@
+{
+  "schemaVersion": 1,
+  "sourceBaselineCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+  "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+  "classificationPolicy": "Every listed path has one declared owner. Independent implementation, behavioral reference, source adaptation, and first-party composition are distinct. Source licenses do not grant provider data rights. Any unresolved source or owner conflict must be recorded as UNVERIFIED and blocks the provenance audit. Source-code provenance is assessed from audited source and repository history; live provider availability is not copyright evidence.",
+  "records": [
+    {
+      "agent": "native02_app_shell",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "first-party independent implementation",
+        "adapted_sources": [],
+        "notes": "No OpenTerminal, legacy, or third-party source files were copied or adapted. Imports consume the frozen native Agent03/04/06/08 contracts."
+      },
+      "dependencies": {
+        "added": [],
+        "consumed": [
+          "next",
+          "react",
+          "@tanstack/react-query",
+          "vitest (adjacent pure tests only)"
+        ]
+      },
+      "files": [
+        "apps/eqoboard-web/app/layout-contract.test.ts",
+        "apps/eqoboard-web/app/layout.tsx",
+        "apps/eqoboard-web/app/page.tsx",
+        "apps/eqoboard-web/app/providers.tsx",
+        "apps/eqoboard-web/components/shell/AccessState.tsx",
+        "apps/eqoboard-web/components/shell/AccountControl.tsx",
+        "apps/eqoboard-web/components/shell/CommandPalette.tsx",
+        "apps/eqoboard-web/components/shell/PrimaryNav.tsx",
+        "apps/eqoboard-web/components/shell/ResourceState.test.ts",
+        "apps/eqoboard-web/components/shell/ResourceState.tsx",
+        "apps/eqoboard-web/components/shell/ShellIcon.tsx",
+        "apps/eqoboard-web/components/shell/TerminalShell.tsx",
+        "apps/eqoboard-web/components/shell/ThemeToggle.tsx",
+        "apps/eqoboard-web/components/shell/WorkspaceCommandContext.test.ts",
+        "apps/eqoboard-web/components/shell/WorkspaceCommandContext.tsx",
+        "apps/eqoboard-web/components/shell/keyboard.test.ts",
+        "apps/eqoboard-web/components/shell/keyboard.ts",
+        "apps/eqoboard-web/components/shell/resource-state.ts",
+        "apps/eqoboard-web/components/shell/symbol-search.test.ts",
+        "apps/eqoboard-web/components/shell/symbol-search.ts",
+        "apps/eqoboard-web/components/shell/theme.test.ts",
+        "apps/eqoboard-web/components/shell/theme.ts",
+        "apps/eqoboard-web/components/shell/useThemePreference.ts",
+        "apps/eqoboard-web/styles/globals.css",
+        "apps/eqoboard-web/styles/shell.css",
+        "apps/eqoboard-web/styles/tokens.css"
+      ],
+      "auditSources": [
+        "apps/eqoboard-web/AGENTS.md"
+      ]
+    },
+    {
+      "agent": "native03_widget_sdk",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "first-party independent native SDK and static registry implementation",
+        "adapted_sources": [],
+        "reference_sources": [
+          {
+            "repository": "lqepoch/EqoBoard",
+            "path": "apps/openterminal/web/store/terminal.ts",
+            "commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "license": "MIT",
+            "notice": "apps/openterminal/LICENSE",
+            "use": "Read-only audit reference for legacy workspace widget identity and active/fixed symbol-linking behavior. No legacy runtime module, widget implementation, or source code was copied or imported."
+          }
+        ],
+        "notes": "All files listed below are independently authored first-party code and tests. The SDK keeps feature-owned financial and provider contracts at unknown input/output boundaries and does not define duplicate financial wire DTOs. Provenance validation checks bounded audit metadata and the manifest provenanceId join; provenance is not authorization, a cryptographic signature, or proof of runtime trust. The V1 interface contract is documented in the checked-in widget SDK README; no private migration brief is published as source provenance."
+      },
+      "dependencies": {
+        "added": [],
+        "consumed": [
+          "react (ComponentType and WidgetErrorBoundary)",
+          "Vitest 4.1.11 (adjacent Node unit tests only)",
+          "apps/eqoboard-web/lib/contracts/auth.ts Permission type",
+          "feature-owned operation/action maps supplied by their owners"
+        ]
+      },
+      "files": [
+        "apps/eqoboard-web/widgets/registry/builtin.test.ts",
+        "apps/eqoboard-web/widgets/registry/builtin.ts",
+        "apps/eqoboard-web/widgets/registry/create.test.ts",
+        "apps/eqoboard-web/widgets/registry/create.ts",
+        "apps/eqoboard-web/widgets/registry/types.ts",
+        "apps/eqoboard-web/widgets/sdk/README.md",
+        "apps/eqoboard-web/widgets/sdk/WidgetErrorBoundary.tsx",
+        "apps/eqoboard-web/widgets/sdk/actions.test.ts",
+        "apps/eqoboard-web/widgets/sdk/actions.ts",
+        "apps/eqoboard-web/widgets/sdk/auth-errors.test.ts",
+        "apps/eqoboard-web/widgets/sdk/auth.ts",
+        "apps/eqoboard-web/widgets/sdk/budgetedData.test.ts",
+        "apps/eqoboard-web/widgets/sdk/budgetedData.ts",
+        "apps/eqoboard-web/widgets/sdk/contracts.ts",
+        "apps/eqoboard-web/widgets/sdk/data.ts",
+        "apps/eqoboard-web/widgets/sdk/errors.ts",
+        "apps/eqoboard-web/widgets/sdk/events.test.ts",
+        "apps/eqoboard-web/widgets/sdk/events.ts",
+        "apps/eqoboard-web/widgets/sdk/host.test.ts",
+        "apps/eqoboard-web/widgets/sdk/host.ts",
+        "apps/eqoboard-web/widgets/sdk/lifecycle.test.ts",
+        "apps/eqoboard-web/widgets/sdk/lifecycle.ts",
+        "apps/eqoboard-web/widgets/sdk/manifest.test.ts",
+        "apps/eqoboard-web/widgets/sdk/manifest.ts",
+        "apps/eqoboard-web/widgets/sdk/pollBudget.test.ts",
+        "apps/eqoboard-web/widgets/sdk/pollBudget.ts",
+        "apps/eqoboard-web/widgets/sdk/refresh.ts",
+        "apps/eqoboard-web/widgets/sdk/symbols.test.ts",
+        "apps/eqoboard-web/widgets/sdk/symbols.ts"
+      ],
+      "auditSources": [
+        "apps/eqoboard-web/widgets/sdk/README.md"
+      ]
+    },
+    {
+      "agent": "native04_workspace",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "first-party independent implementation",
+        "adapted_sources": [],
+        "reference_sources": [
+          {
+            "repository": "EqoBoard",
+            "path": "apps/openterminal/web/store/terminal.ts",
+            "commit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "notice": "apps/openterminal/LICENSE",
+            "use": "Read-only inventory of the persisted Zustand envelope, widget kinds, active symbol, watchlist, layout coordinates, and transient command/option-leg fields. The native import mapper is independently implemented and only maps validated user layout intent. No OpenTerminal runtime module or source implementation is imported or copied."
+          }
+        ],
+        "notes": "Workspace schema, parser, store, repository, recovery, migration, grid adapter, UI, and styles are new independent implementations. The explicit legacy mapper uses actual static native registrations for supported research views and retains unsupported legacy kinds as inert tiles. The parser rejects auth, owner, account, order, and market-event keys from widget configuration. The layout UI consumes the separately declared react-grid-layout package; no third-party grid source was copied. Per-widget host dispatch is joined to each static registration's read/action allowlists before render, with workspace-level tests for denied read, refresh, and action dispatch."
+      },
+      "dependencies": {
+        "added": [
+          {
+            "package": "react-grid-layout",
+            "version": "1.5.4",
+            "license": "MIT",
+            "use": "12-column controlled grid interaction and resize/drag surface"
+          }
+        ],
+        "consumed": [
+          "react",
+          "zustand",
+          "react-grid-layout",
+          "react-resizable",
+          "vitest (adjacent pure tests only)",
+          "Agent03 static widget SDK/registry",
+          "Agent06 MarketDataHost",
+          "Agent08 AuthUiSnapshot and /api/workspaces contract"
+        ]
+      },
+      "files": [
+        "apps/eqoboard-web/components/workspace/LegacyWorkspaceImportPanel.tsx",
+        "apps/eqoboard-web/components/workspace/WorkspaceGrid.test.tsx",
+        "apps/eqoboard-web/components/workspace/WorkspaceGrid.tsx",
+        "apps/eqoboard-web/components/workspace/WorkspaceTransferControls.tsx",
+        "apps/eqoboard-web/components/workspace/workspace.css",
+        "apps/eqoboard-web/stores/workspace/backups.ts",
+        "apps/eqoboard-web/stores/workspace/repository.ts",
+        "apps/eqoboard-web/stores/workspace/store.ts",
+        "apps/eqoboard-web/tests/migration/workspace-contract.test.ts",
+        "apps/eqoboard-web/tests/migration/workspace-copy.test.ts",
+        "apps/eqoboard-web/tests/migration/workspace-grid.test.ts",
+        "apps/eqoboard-web/tests/migration/workspace-legacy-import.test.ts",
+        "apps/eqoboard-web/tests/migration/workspace-repository.test.ts",
+        "apps/eqoboard-web/tests/migration/workspace-schema-security.test.ts",
+        "apps/eqoboard-web/tests/migration/workspace-store-acceptance.test.ts",
+        "apps/eqoboard-web/workspace/WorkspaceRoot.tsx",
+        "apps/eqoboard-web/workspace/command-selector.test.ts",
+        "apps/eqoboard-web/workspace/command-selector.ts",
+        "apps/eqoboard-web/workspace/grid.ts",
+        "apps/eqoboard-web/workspace/legacy-import.ts",
+        "apps/eqoboard-web/workspace/model.ts",
+        "apps/eqoboard-web/workspace/schema.ts",
+        "apps/eqoboard-web/workspace/transforms.ts",
+        "apps/eqoboard-web/workspace/widget-host.test.ts",
+        "apps/eqoboard-web/workspace/widget-host.ts"
+      ],
+      "auditSources": [
+        "apps/eqoboard-web/AGENTS.md"
+      ]
+    },
+    {
+      "agent": "native05_charts",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "native first-party chart/controller implementation with documented MIT behavioral reimplementations",
+        "adapted_sources": [
+          {
+            "repository": "lqepoch/EqoBoard",
+            "paths": [
+              "apps/openterminal/web/components/widgets/ChartWidget.tsx",
+              "apps/openterminal/web/lib/indicators.ts"
+            ],
+            "commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "license": "MIT",
+            "notice": "apps/eqoboard-web/legal/OPENTERMINAL-LICENSE-MIT; native attribution: apps/eqoboard-web/charts/NOTICE",
+            "use": "Reimplemented chart control/history lifecycle and SMA, EMA, cumulative loaded-window VWAP, Wilder RSI, MACD, and Bollinger conventions as isolated native modules. The zero-average-loss RSI fallback matches the pinned source (RS=100, yielding about 99.01, including a flat window). No legacy module is imported or copied byte-for-byte."
+          }
+        ],
+        "dependencies": [
+          {
+            "package": "lightweight-charts",
+            "version": "5.2.1",
+            "license": "Apache-2.0",
+            "notice": "apps/eqoboard-web/charts/NOTICE",
+            "source": "https://github.com/tradingview/lightweight-charts/tree/v5.2.1",
+            "use": "Native canvas chart rendering, series, time-scale interaction, and screenshot export; visible TradingView link and attributionLogo remain enabled."
+          },
+          {
+            "package": "@bufbuild/protobuf",
+            "version": "2.16.0",
+            "license": "Apache-2.0 AND BSD-3-Clause",
+            "use": "Decode the pinned Core Bars V1 ProtoJSON response with BarsResponseV1Schema."
+          },
+          {
+            "package": "@lqepoch/trading-core-contracts",
+            "version": "0.1.0",
+            "license": "MIT OR Apache-2.0",
+            "notice": "Pinned package includes LICENSE-MIT, LICENSE-APACHE, and NOTICE.md.",
+            "use": "Pinned Core Bars V1 request/response and row types.",
+            "pinnedCommit": "3359ead64da27113b383cc8c0126463cd772c5a6",
+            "source": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "packageSpec": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "resolved": "git+ssh://git@github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6"
+          }
+        ],
+        "notes": "The controller, finite-number projection, Core envelope adapter, bounded cursor state, export, evidence UI, config parser, static registration, and MDP diagnostic archive projection are native feature modules. SMA/EMA/MACD/Bollinger and RSI relative-strength fallback preserve pinned legacy formulas; zero-average-loss RSI uses RS=100 (about 99.01, including a flat window). VWAP is cumulative over explicitly loaded rows and labeled loaded-window. Core Bars V1, MDP diagnostic archive, and Yahoo daily observations are separate contracts and series. MDP charting consumes only the fixed `market.archive.diagnostic-bars` operation and validated MDP Bars V1 response; the response is bounded to one archive window with no cursor/pagination or live updates. No quote/trade-derived candles or fabricated chart rows are implemented; if a validated archive response identifies synthetic observations, the chart labels them synthetic. No night coverage, live bar updates, or correction claims are added."
+      },
+      "dependency_changes": {
+        "added_by_agent": [],
+        "versions_are_root_owned": true
+      },
+      "files": [
+        "apps/eqoboard-web/charts/ChartSurface.tsx",
+        "apps/eqoboard-web/charts/EvidencePanel.tsx",
+        "apps/eqoboard-web/charts/NOTICE",
+        "apps/eqoboard-web/charts/chart-surface.css",
+        "apps/eqoboard-web/charts/controller.test.ts",
+        "apps/eqoboard-web/charts/controller.ts",
+        "apps/eqoboard-web/charts/core-bars.test.ts",
+        "apps/eqoboard-web/charts/core-bars.ts",
+        "apps/eqoboard-web/charts/export.test.ts",
+        "apps/eqoboard-web/charts/export.ts",
+        "apps/eqoboard-web/charts/history.test.ts",
+        "apps/eqoboard-web/charts/history.ts",
+        "apps/eqoboard-web/charts/index.ts",
+        "apps/eqoboard-web/charts/indicators.test.ts",
+        "apps/eqoboard-web/charts/indicators.ts",
+        "apps/eqoboard-web/charts/mdp-diagnostic.test.ts",
+        "apps/eqoboard-web/charts/mdp-diagnostic.ts",
+        "apps/eqoboard-web/charts/native-operations.ts",
+        "apps/eqoboard-web/charts/projection.test.ts",
+        "apps/eqoboard-web/charts/projection.ts",
+        "apps/eqoboard-web/charts/request.test.ts",
+        "apps/eqoboard-web/charts/request.ts",
+        "apps/eqoboard-web/charts/time.test.ts",
+        "apps/eqoboard-web/charts/time.ts",
+        "apps/eqoboard-web/charts/types.ts",
+        "apps/eqoboard-web/widgets/implementations/charts/ChartWidget.test.tsx",
+        "apps/eqoboard-web/widgets/implementations/charts/ChartWidget.tsx",
+        "apps/eqoboard-web/widgets/implementations/charts/config.test.ts",
+        "apps/eqoboard-web/widgets/implementations/charts/config.ts",
+        "apps/eqoboard-web/widgets/implementations/charts/registration.ts",
+        "apps/eqoboard-web/widgets/implementations/charts/use-diagnostic-archive.ts"
+      ],
+      "auditSources": [
+        "apps/eqoboard-web/charts/NOTICE"
+      ]
+    },
+    {
+      "agent": "native06_market_host",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "first-party independent native market host, operations, store, and widgets with a separately identified upstream adaptation",
+        "independent_source": {
+          "repository": "https://github.com/lqepoch/EqoBoard",
+          "sourceCommit": null,
+          "license": "MIT",
+          "noticePath": "LICENSE"
+        },
+        "adapted_sources": [
+          {
+            "nativePath": "apps/eqoboard-web/features/market/mdp-archive.ts",
+            "relationship": "adapted-upstream",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourcePath": "apps/openterminal/web/lib/mdp-market-data.ts",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "sourceSha256": "80af4a52c785a939f3ae7604d7d9cf32f31ad83b6a88ea0f1a4b09c3dd1fcc96",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "changes": "Browser-safe fixed MDP V1 response decoder. Preserves existing snake_case DTO; no server-only import, second wire contract, or provider network client."
+          }
+        ],
+        "notes": "The native source keeps market data access behind the shared host and fixed operation maps. The MDP archive decoder is a bounded adaptation; it is not a new provider client. Market and option entitlements, ACK membership, freshness, and unsupported depth remain explicit runtime states."
+      },
+      "dependencies": {
+        "added": [
+          {
+            "package": "ag-grid-community",
+            "version": "36.2.0",
+            "license": "MIT",
+            "use": "AG Grid Community market/options surface; no Enterprise package or module."
+          },
+          {
+            "package": "ag-grid-react",
+            "version": "36.2.0",
+            "license": "MIT",
+            "use": "React adapter for the AG Grid Community market/options surfaces."
+          }
+        ],
+        "consumed": [
+          "React 19.3.0",
+          "Agent03 static widget registry and SDK",
+          "Agent04 workspace host",
+          "Agent08 safe AuthUiSnapshot"
+        ],
+        "pinOwner": "native_root_integration",
+        "lockEvidence": "apps/eqoboard-web/package.json and apps/eqoboard-web/package-lock.json"
+      },
+      "auditSources": [
+        "docs/migration/native06-provenance.json"
+      ],
+      "verification": "NOT_RUN; exact-head GitHub Actions validation required",
+      "files": [
+        "apps/eqoboard-web/features/data/MarketDataHost.tsx",
+        "apps/eqoboard-web/features/data/action-client.test.ts",
+        "apps/eqoboard-web/features/data/action-client.ts",
+        "apps/eqoboard-web/features/data/lease-coordinator.test.ts",
+        "apps/eqoboard-web/features/data/lease-coordinator.ts",
+        "apps/eqoboard-web/features/data/market-runtime.test.ts",
+        "apps/eqoboard-web/features/data/market-runtime.ts",
+        "apps/eqoboard-web/features/data/market-stream.test.ts",
+        "apps/eqoboard-web/features/data/market-stream.ts",
+        "apps/eqoboard-web/features/data/operations.test.ts",
+        "apps/eqoboard-web/features/data/operations.ts",
+        "apps/eqoboard-web/features/data/portfolio-decoder.ts",
+        "apps/eqoboard-web/features/data/read-client.test.ts",
+        "apps/eqoboard-web/features/data/read-client.ts",
+        "apps/eqoboard-web/features/data/refresh-scheduler.test.ts",
+        "apps/eqoboard-web/features/data/refresh-scheduler.ts",
+        "apps/eqoboard-web/features/data/runtime-policy.ts",
+        "apps/eqoboard-web/features/data/validation.ts",
+        "apps/eqoboard-web/features/market/core-bars-page.ts",
+        "apps/eqoboard-web/features/market/market-contracts.test.ts",
+        "apps/eqoboard-web/features/market/market-contracts.ts",
+        "apps/eqoboard-web/features/market/mdp-archive.test.ts",
+        "apps/eqoboard-web/features/market/mdp-archive.ts",
+        "apps/eqoboard-web/stores/market/market-store.test.ts",
+        "apps/eqoboard-web/stores/market/market-store.ts",
+        "apps/eqoboard-web/widgets/implementations/market/QuoteWidgets.tsx",
+        "apps/eqoboard-web/widgets/implementations/market/VerticalPreviewWidget.tsx",
+        "apps/eqoboard-web/widgets/implementations/market/config.ts",
+        "apps/eqoboard-web/widgets/implementations/market/hooks.ts",
+        "apps/eqoboard-web/widgets/implementations/market/market-widgets.module.css",
+        "apps/eqoboard-web/widgets/implementations/market/registry.test.tsx",
+        "apps/eqoboard-web/widgets/implementations/market/registry.tsx",
+        "apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx",
+        "docs/migration/native06-provenance.json"
+      ]
+    },
+    {
+      "agent": "native07_research",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "first-party native research implementation with selected, bounded provider-behavior adaptations",
+        "adapted_sources": [
+          {
+            "nativePath": "apps/eqoboard-web/features/research/yfinance-contract.ts",
+            "relationship": "targeted-adaptation-of-eqoboard-pr59-validator",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/web/lib/yfinance-research-contract.ts",
+                "sha256": "d45d0001670b133308aaab604d89be4b43912082e59f08bc2d4cde3b43874aca"
+              }
+            ],
+            "changes": "Adapts EqoBoard PR59's provider-native Yahoo daily response validator. This validator is not attributed to the separate OpenTerminal reference commit; preserves the MDP/Yahoo DTO without conversion to Core/SIP bars.",
+            "sourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourcePath": "apps/openterminal/web/lib/yfinance-research-contract.ts",
+            "sourceSha256": "d45d0001670b133308aaab604d89be4b43912082e59f08bc2d4cde3b43874aca",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          },
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/news.ts",
+            "relationship": "provider-behavior-adaptation",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/news.ts",
+                "sha256": "5fbcf5cdf924935dbd16acd8e874f51beb391741346f3af9ebb548ef7365c616"
+              },
+              {
+                "path": "apps/openterminal/server/src/routes/market.ts",
+                "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71"
+              }
+            ],
+            "changes": "Keeps fixed Yahoo Finance and Google News RSS sources and headline-only projection; adds bounded XML parsing, safe links, native partial/unavailable envelopes, deadlines and explicit terms warning.",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          },
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/macro.ts",
+            "relationship": "provider-behavior-adaptation",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/fred.ts",
+                "sha256": "38076119c097f224668f87bfae9a87d51cfa677c752dce172a044d2dc66460a2"
+              },
+              {
+                "path": "apps/openterminal/server/src/providers/ecb.ts",
+                "sha256": "ba39dfa64a7484aadaae77424760c9637677d321738b3079c3ce8677e01151cb"
+              },
+              {
+                "path": "apps/openterminal/server/src/routes/market.ts",
+                "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71"
+              }
+            ],
+            "changes": "Retains fixed FRED and ECB series/provider origins and per-series observation dates; uses separately labeled existing Gateway SIP snapshot reads for index proxies, with no fabricated as-of.",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          },
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/calendar.ts",
+            "relationship": "provider-behavior-adaptation",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/econcalendar.ts",
+                "sha256": "b455eaaba05b169a587f54e7e633306c605cec94e8a5d1061095a642ee38c76f"
+              },
+              {
+                "path": "apps/openterminal/server/src/providers/tradingview.ts",
+                "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3"
+              },
+              {
+                "path": "apps/openterminal/server/src/providers/nasdaq.ts",
+                "sha256": "849c235487aef9bb30184c60505bbdea913b3c3a542d460b90ba955c7a667e9a"
+              },
+              {
+                "path": "apps/openterminal/server/src/routes/market.ts",
+                "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71"
+              }
+            ],
+            "changes": "Retains fixed economic schedule, earnings estimate and history source paths; keeps event/report/source time fields distinct and returns bounded partial outcomes for source failures.",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          },
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/insider.ts",
+            "relationship": "provider-behavior-adaptation",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/secedgar.ts",
+                "sha256": "6e43420c231baecd64374113650b4b8b40cdb5c8244ca2d1a5557a1dac147d2e"
+              },
+              {
+                "path": "apps/openterminal/server/src/routes/market.ts",
+                "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71"
+              }
+            ],
+            "changes": "Retains SEC company ticker, submissions and Form 4 source path; applies a server-configured contact, serialized rate spacing, bounded requests/XML parsing and partial filing-failure evidence.",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          },
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/screener.ts",
+            "relationship": "provider-behavior-adaptation",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/tradingview.ts",
+                "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3"
+              },
+              {
+                "path": "apps/openterminal/server/src/routes/market.ts",
+                "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71"
+              }
+            ],
+            "changes": "Retains fixed TradingView security scans and existing Gateway SIP snapshot join semantics; separates metadata and market prices, preserves per-field source/time evidence, and reports coverage/truncation.",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          },
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/symbol-search.ts",
+            "relationship": "bounded-provider-behavior-adaptation",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/tradingview.ts",
+                "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3"
+              }
+            ],
+            "changes": "Uses a fixed TradingView symbol-search host and bounded metadata projection; normalizes listing symbols for workspace selection while preserving the provider symbol. No quote fields or SIP authority are added.",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          },
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/crypto.ts",
+            "relationship": "provider-behavior-adaptation",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/coingecko.ts",
+                "sha256": "a53721a2fc3c191bf4020b85ff55a4d5375b0d41be0106e4f595af9710b638e5"
+              },
+              {
+                "path": "apps/openterminal/server/src/providers/binance.ts",
+                "sha256": "cf61698bd7a7333c1797cd07b7b50d09e15fd873dd37db7d21edd55b71e3aa89"
+              },
+              {
+                "path": "apps/openterminal/server/src/routes/market.ts",
+                "sha256": "3e2fa32e99d93346c227bc8abc30b35d869524750d10efb5fb007b7905887b71"
+              }
+            ],
+            "changes": "Retains the existing CoinGecko market/global and Binance public-market source paths/fallback role; preserves actual source timestamps where supplied and does not claim streaming freshness.",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          }
+        ],
+        "compositions": [
+          {
+            "nativePath": "apps/eqoboard-web/lib/server/research/recap.ts",
+            "relationship": "first-party-composition-of-audited-provider-adapters",
+            "nativeTargetSourceCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+            "sourceRepository": "https://github.com/lqepoch/EqoBoard",
+            "sourceFiles": [
+              {
+                "path": "apps/openterminal/server/src/providers/fred.ts",
+                "sha256": "38076119c097f224668f87bfae9a87d51cfa677c752dce172a044d2dc66460a2"
+              },
+              {
+                "path": "apps/openterminal/server/src/providers/ecb.ts",
+                "sha256": "ba39dfa64a7484aadaae77424760c9637677d321738b3079c3ce8677e01151cb"
+              },
+              {
+                "path": "apps/openterminal/server/src/providers/tradingview.ts",
+                "sha256": "8d5d14e61de110ad341fde5959354cbfe409ccc182e8a9410c1a206052cd80f3"
+              },
+              {
+                "path": "apps/openterminal/server/src/providers/news.ts",
+                "sha256": "5fbcf5cdf924935dbd16acd8e874f51beb391741346f3af9ebb548ef7365c616"
+              }
+            ],
+            "changes": "New EqoBoard composition of already audited provider adapters and the existing Rust Gateway snapshot helper; no upstream recap implementation is copied. Each field retains its source and as-of, source coverage stays partial, and no narrative or missing-value fallback is synthesized.",
+            "referenceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "referenceLicense": "MIT",
+            "noticePath": "apps/openterminal/LICENSE"
+          }
+        ],
+        "reference_sources": [
+          {
+            "repository": "https://github.com/lqepoch/EqoBoard",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "paths": [
+              "apps/openterminal/server/src/routes/market.ts",
+              "apps/openterminal/web/components/widgets/RecapWidget.tsx"
+            ],
+            "use": "Behavior references for the legacy recap surface only; no legacy recap builder or widget implementation is copied."
+          }
+        ],
+        "notes": [
+          "Provider adapter paths carry path-level source hashes and the pinned OpenTerminal reference commit. The yfinance response validator is separately attributed to the EqoBoard PR59 baseline, not the OpenTerminal reference commit.",
+          "The browser shell symbol search is owned by Agent02 and is separate from the server TradingView provider adapter.",
+          "OpenBB Workspace is not a source for these native research files.",
+          "Provider terms and data redistribution rights are separate from source-code licenses and remain unverified.",
+          "Recap composes already audited providers; it does not copy the legacy generated narrative."
+        ]
+      },
+      "dependencies": {
+        "added": [
+          {
+            "package": "d3",
+            "version": "7.9.0",
+            "license": "ISC",
+            "use": "Treemap geometry only."
+          },
+          {
+            "package": "fast-xml-parser",
+            "version": "5.7.0",
+            "license": "MIT",
+            "use": "Bounded RSS and SEC Form 4 XML parsing."
+          }
+        ],
+        "consumed": [
+          {
+            "package": "next",
+            "version": "15.5.27",
+            "license": "MIT"
+          },
+          {
+            "package": "react",
+            "version": "19.3.0",
+            "license": "MIT"
+          },
+          {
+            "package": "@types/d3",
+            "version": "7.4.3",
+            "license": "MIT",
+            "scope": "development types only"
+          }
+        ],
+        "pinOwner": "native_root_integration",
+        "lockEvidence": "apps/eqoboard-web/package.json and apps/eqoboard-web/package-lock.json"
+      },
+      "auditSources": [
+        "docs/migration/native07-provenance.json"
+      ],
+      "verification": "NOT_RUN; exact-head GitHub Actions validation required",
+      "files": [
+        "apps/eqoboard-web/app/api/research/ai/route.test.ts",
+        "apps/eqoboard-web/app/api/research/ai/route.ts",
+        "apps/eqoboard-web/app/api/research/data/[operation]/route.test.ts",
+        "apps/eqoboard-web/app/api/research/data/[operation]/route.ts",
+        "apps/eqoboard-web/app/research/yfinance/[symbol]/page.tsx",
+        "apps/eqoboard-web/features/research/YahooResearchPage.tsx",
+        "apps/eqoboard-web/features/research/ai.test.ts",
+        "apps/eqoboard-web/features/research/ai.ts",
+        "apps/eqoboard-web/features/research/data.test.ts",
+        "apps/eqoboard-web/features/research/data.ts",
+        "apps/eqoboard-web/features/research/engine.test.ts",
+        "apps/eqoboard-web/features/research/engine.ts",
+        "apps/eqoboard-web/features/research/predictions.test.ts",
+        "apps/eqoboard-web/features/research/predictions.ts",
+        "apps/eqoboard-web/features/research/query-config.test.ts",
+        "apps/eqoboard-web/features/research/query-config.ts",
+        "apps/eqoboard-web/features/research/text.ts",
+        "apps/eqoboard-web/features/research/treemap.test.ts",
+        "apps/eqoboard-web/features/research/treemap.ts",
+        "apps/eqoboard-web/features/research/yfinance-contract.ts",
+        "apps/eqoboard-web/features/research/yfinance.test.ts",
+        "apps/eqoboard-web/features/research/yfinance.ts",
+        "apps/eqoboard-web/lib/server/research/cache.test.ts",
+        "apps/eqoboard-web/lib/server/research/cache.ts",
+        "apps/eqoboard-web/lib/server/research/calendar.ts",
+        "apps/eqoboard-web/lib/server/research/crypto.ts",
+        "apps/eqoboard-web/lib/server/research/gateway.test.ts",
+        "apps/eqoboard-web/lib/server/research/gateway.ts",
+        "apps/eqoboard-web/lib/server/research/input.test.ts",
+        "apps/eqoboard-web/lib/server/research/input.ts",
+        "apps/eqoboard-web/lib/server/research/insider.ts",
+        "apps/eqoboard-web/lib/server/research/macro.ts",
+        "apps/eqoboard-web/lib/server/research/news.ts",
+        "apps/eqoboard-web/lib/server/research/providers.test.ts",
+        "apps/eqoboard-web/lib/server/research/recap.test.ts",
+        "apps/eqoboard-web/lib/server/research/recap.ts",
+        "apps/eqoboard-web/lib/server/research/screener.ts",
+        "apps/eqoboard-web/lib/server/research/symbol-search.test.ts",
+        "apps/eqoboard-web/lib/server/research/symbol-search.ts",
+        "apps/eqoboard-web/lib/server/research/transport.ts",
+        "apps/eqoboard-web/lib/server/research/types.ts",
+        "apps/eqoboard-web/widgets/research/EngineOfflinePreviewWidget.tsx",
+        "apps/eqoboard-web/widgets/research/RecapWidget.tsx",
+        "apps/eqoboard-web/widgets/research/RegisteredPredictionsWidget.tsx",
+        "apps/eqoboard-web/widgets/research/ResearchAiWidget.tsx",
+        "apps/eqoboard-web/widgets/research/ResearchViews.test.ts",
+        "apps/eqoboard-web/widgets/research/ResearchViews.tsx",
+        "apps/eqoboard-web/widgets/research/SavedQueriesWidget.tsx",
+        "apps/eqoboard-web/widgets/research/YfinanceDailyWidget.tsx",
+        "apps/eqoboard-web/widgets/research/registrations.test.ts",
+        "apps/eqoboard-web/widgets/research/registrations.tsx",
+        "apps/eqoboard-web/widgets/research/research-widgets.module.css",
+        "docs/migration/native07-provenance.json"
+      ]
+    },
+    {
+      "agent": "native08_auth_bff",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "native isolated Next.js auth/BFF/SQLite implementation; selected OpenTerminal behavior and validators adapted with MIT attribution; no legacy runtime dependency",
+        "independent_native_modules": [
+          "apps/eqoboard-web/app/api/eqo/live/route.ts",
+          "apps/eqoboard-web/app/api/eqo/options/subscribe/route.ts",
+          "apps/eqoboard-web/app/api/eqo/orders/preview/route.ts",
+          "apps/eqoboard-web/app/api/eqo/stocks/subscribe/route.ts",
+          "apps/eqoboard-web/app/api/portfolios/[portfolioId]/positions/route.ts",
+          "apps/eqoboard-web/app/api/portfolios/[portfolioId]/route.ts",
+          "apps/eqoboard-web/app/api/portfolios/[portfolioId]/transactions/[transactionId]/route.ts",
+          "apps/eqoboard-web/app/api/portfolios/[portfolioId]/transactions/route.ts",
+          "apps/eqoboard-web/app/api/portfolios/route.ts",
+          "apps/eqoboard-web/app/api/workspaces/route.ts",
+          "apps/eqoboard-web/lib/server/gateway.ts",
+          "apps/eqoboard-web/lib/server/market-routes.ts",
+          "apps/eqoboard-web/lib/server/rate-limit.ts",
+          "apps/eqoboard-web/lib/server/runtime-mode.ts",
+          "apps/eqoboard-web/lib/server/service-http.ts",
+          "apps/eqoboard-web/lib/server/stream-budget.ts",
+          "apps/eqoboard-web/lib/server/workspace-storage.ts"
+        ],
+        "adapted_sources": [
+          {
+            "sourceRepository": "lqepoch/EqoBoard",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "sourcePaths": [
+              "apps/openterminal/web/auth.ts",
+              "apps/openterminal/web/lib/eqo-auth.ts",
+              "apps/openterminal/web/lib/permissions.ts"
+            ],
+            "nativePaths": [
+              "apps/eqoboard-web/auth.ts",
+              "apps/eqoboard-web/lib/server/auth.ts",
+              "apps/eqoboard-web/lib/server/permissions.ts",
+              "apps/eqoboard-web/lib/server/bff-security.ts"
+            ],
+            "relationship": "selected-behavior-adaptation",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "changes": "Independent NextAuth/OIDC and server-principal implementation preserving the existing verified issuer/subject/role projection, closed permission strings, write-origin and bounded-body checks, and existing JWT iss/kid/aud/scope/key contracts. Local identity bypass is not carried over."
+          },
+          {
+            "sourceRepository": "lqepoch/EqoBoard",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "sourcePaths": [
+              "apps/openterminal/web/lib/mdp-market-data.ts",
+              "apps/openterminal/web/lib/mdp-market-data-contract.ts"
+            ],
+            "nativePaths": [
+              "apps/eqoboard-web/lib/server/mdp-archive.ts"
+            ],
+            "relationship": "selected-behavior-adaptation",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "changes": "Adapted the fixed diagnostic archive request validation and response validation. Native retains the exact MDP V1 {summary,rows} wire body, strict source/schema/coverage checks, bounded response and manual redirects; curated data remains denied."
+          },
+          {
+            "sourceRepository": "lqepoch/EqoBoard",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "sourcePaths": [
+              "apps/openterminal/web/lib/quant-predictions.ts"
+            ],
+            "nativePaths": [
+              "apps/eqoboard-web/lib/server/quant-predictions.ts"
+            ],
+            "relationship": "selected-behavior-adaptation",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "changes": "Adapted the fixed private prediction read, registered ProtoJSON validation, bounded private projection verification and stripping of private artifact/feature details. The native route remains read-only and requires research:private-read."
+          },
+          {
+            "sourceRepository": "lqepoch/EqoBoard",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "sourcePaths": [
+              "apps/openterminal/web/lib/engine-preview.ts"
+            ],
+            "nativePaths": [
+              "apps/eqoboard-web/lib/server/engine-read.ts"
+            ],
+            "relationship": "selected-behavior-adaptation",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "changes": "Adapted the terminal-only fixed loopback status/preview read and bounded Core ProtoJSON validation. The native proxy remains diagnostic/synthetic and does not imply trading authority."
+          },
+          {
+            "sourceRepository": "lqepoch/EqoBoard",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "sourcePaths": [
+              "apps/openterminal/web/lib/yfinance-research-bff.ts",
+              "apps/openterminal/web/lib/yfinance-research-contract.ts"
+            ],
+            "nativePaths": [
+              "apps/eqoboard-web/lib/server/yfinance-daily.ts",
+              "apps/eqoboard-web/app/api/research/yfinance/daily/route.ts"
+            ],
+            "relationship": "selected-behavior-adaptation",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "changes": "Adapted the fixed MDP Yahoo daily observation route. The native endpoint is Research-runtime-only, preserves the provider-native response contract and never maps observations to SIP/Core bars."
+          },
+          {
+            "sourceRepository": "lqepoch/EqoBoard",
+            "sourceCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "upstreamOpenTerminalCommit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+            "sourcePaths": [
+              "apps/openterminal/web/lib/market-bars-bff.ts",
+              "apps/openterminal/server/src/routes/portfolio.ts",
+              "apps/openterminal/server/src/db.ts",
+              "apps/openterminal/web/components/widgets/PortfolioWidget.tsx"
+            ],
+            "nativePaths": [
+              "apps/eqoboard-web/lib/server/core-bars.ts",
+              "apps/eqoboard-web/lib/server/portfolio-storage.ts",
+              "apps/eqoboard-web/lib/server/portfolio-input.ts",
+              "apps/eqoboard-web/lib/server/native-db.ts",
+              "apps/eqoboard-web/features/portfolio/PortfolioWidget.tsx"
+            ],
+            "relationship": "behavior-and-field-compatibility-reference-only",
+            "license": "MIT",
+            "noticePath": "apps/openterminal/LICENSE",
+            "changes": "Behavior and field compatibility references only. Native is a separately implemented manual ledger and SQLite schema in a new isolated DB; no old database is read, copied or reassigned, and no legacy local owner becomes an OIDC owner. Portfolio values remain user-entered manual records, not broker positions."
+          }
+        ],
+        "notes": [
+          "Auth, permission, BFF, and SQLite boundaries are native first-party implementations; the client receives only the safe auth projection.",
+          "Yahoo daily route and helper are owned here; their provider BFF/validator source is tied to the EqoBoard PR59 baseline, not the OpenTerminal reference commit.",
+          "Portfolio behavior references do not migrate or reassign legacy databases or local owners."
+        ]
+      },
+      "dependencies": {
+        "changed_by_agent": [],
+        "root_owned_pins": true,
+        "consumed": [
+          {
+            "package": "next",
+            "version": "15.5.27",
+            "license": "MIT"
+          },
+          {
+            "package": "next-auth",
+            "version": "4.24.15",
+            "license": "ISC"
+          },
+          {
+            "package": "jose",
+            "version": "6.2.12",
+            "license": "MIT"
+          },
+          {
+            "package": "react",
+            "version": "19.3.0",
+            "license": "MIT"
+          },
+          {
+            "package": "@tanstack/react-query",
+            "version": "5.102.8",
+            "license": "MIT"
+          },
+          {
+            "package": "better-sqlite3",
+            "version": "13.0.3",
+            "license": "MIT"
+          },
+          {
+            "package": "@types/better-sqlite3",
+            "version": "7.6.13",
+            "license": "MIT",
+            "scope": "development types only"
+          },
+          {
+            "package": "@bufbuild/protobuf",
+            "version": "2.16.0",
+            "license": "Apache-2.0 AND BSD-3-Clause"
+          },
+          {
+            "package": "@lqepoch/trading-core-contracts",
+            "version": "0.1.0",
+            "license": "MIT OR Apache-2.0",
+            "notice": "Pinned package LICENSE-MIT, LICENSE-APACHE and NOTICE.md",
+            "pinnedCommit": "3359ead64da27113b383cc8c0126463cd772c5a6",
+            "source": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "packageSpec": "https://github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6",
+            "resolved": "git+ssh://git@github.com/lqepoch/trading-core.git#3359ead64da27113b383cc8c0126463cd772c5a6"
+          }
+        ],
+        "pinOwner": "native_root_integration",
+        "lockEvidence": "apps/eqoboard-web/package.json and apps/eqoboard-web/package-lock.json"
+      },
+      "auditSources": [],
+      "verification": "NOT_RUN; exact-head GitHub Actions validation required",
+      "files": [
+        "apps/eqoboard-web/app/api/auth/[...nextauth]/route.ts",
+        "apps/eqoboard-web/app/api/eqo/engine/preview/route.ts",
+        "apps/eqoboard-web/app/api/eqo/engine/status/route.ts",
+        "apps/eqoboard-web/app/api/eqo/live/route.ts",
+        "apps/eqoboard-web/app/api/eqo/market-data/datasets/[datasetId]/bars/route.ts",
+        "apps/eqoboard-web/app/api/eqo/options/subscribe/route.ts",
+        "apps/eqoboard-web/app/api/eqo/orders/preview/route.ts",
+        "apps/eqoboard-web/app/api/eqo/research/predictions/[runId]/route.ts",
+        "apps/eqoboard-web/app/api/eqo/stocks/subscribe/route.ts",
+        "apps/eqoboard-web/app/api/healthz/route.ts",
+        "apps/eqoboard-web/app/api/history/[symbol]/route.ts",
+        "apps/eqoboard-web/app/api/options/[symbol]/route.ts",
+        "apps/eqoboard-web/app/api/portfolios/[portfolioId]/positions/route.ts",
+        "apps/eqoboard-web/app/api/portfolios/[portfolioId]/route.ts",
+        "apps/eqoboard-web/app/api/portfolios/[portfolioId]/transactions/[transactionId]/route.ts",
+        "apps/eqoboard-web/app/api/portfolios/[portfolioId]/transactions/route.ts",
+        "apps/eqoboard-web/app/api/portfolios/route.ts",
+        "apps/eqoboard-web/app/api/quotes/route.ts",
+        "apps/eqoboard-web/app/api/readyz/route.ts",
+        "apps/eqoboard-web/app/api/research/yfinance/daily/route.ts",
+        "apps/eqoboard-web/app/api/status/route.ts",
+        "apps/eqoboard-web/app/api/workspaces/route.ts",
+        "apps/eqoboard-web/auth.ts",
+        "apps/eqoboard-web/components/auth/AuthProvider.test.tsx",
+        "apps/eqoboard-web/components/auth/AuthProvider.tsx",
+        "apps/eqoboard-web/features/portfolio/PortfolioWidget.tsx",
+        "apps/eqoboard-web/features/portfolio/contracts.ts",
+        "apps/eqoboard-web/features/portfolio/portfolio.module.css",
+        "apps/eqoboard-web/features/portfolio/registration.test.ts",
+        "apps/eqoboard-web/features/portfolio/registration.ts",
+        "apps/eqoboard-web/lib/contracts/auth.ts",
+        "apps/eqoboard-web/lib/server/auth-snapshot.test.ts",
+        "apps/eqoboard-web/lib/server/auth.test.ts",
+        "apps/eqoboard-web/lib/server/auth.ts",
+        "apps/eqoboard-web/lib/server/bff-security.signers.test.ts",
+        "apps/eqoboard-web/lib/server/bff-security.ts",
+        "apps/eqoboard-web/lib/server/core-bars.test.ts",
+        "apps/eqoboard-web/lib/server/core-bars.ts",
+        "apps/eqoboard-web/lib/server/engine-read.ts",
+        "apps/eqoboard-web/lib/server/gateway.ts",
+        "apps/eqoboard-web/lib/server/http-body.ts",
+        "apps/eqoboard-web/lib/server/market-routes.ts",
+        "apps/eqoboard-web/lib/server/mdp-archive.route.test.ts",
+        "apps/eqoboard-web/lib/server/mdp-archive.test.ts",
+        "apps/eqoboard-web/lib/server/mdp-archive.ts",
+        "apps/eqoboard-web/lib/server/native-db.test.ts",
+        "apps/eqoboard-web/lib/server/native-db.ts",
+        "apps/eqoboard-web/lib/server/order-intent.test.ts",
+        "apps/eqoboard-web/lib/server/order-intent.ts",
+        "apps/eqoboard-web/lib/server/permissions.test.ts",
+        "apps/eqoboard-web/lib/server/permissions.ts",
+        "apps/eqoboard-web/lib/server/portfolio-http.ts",
+        "apps/eqoboard-web/lib/server/portfolio-input.ts",
+        "apps/eqoboard-web/lib/server/portfolio-storage.test.ts",
+        "apps/eqoboard-web/lib/server/portfolio-storage.ts",
+        "apps/eqoboard-web/lib/server/quant-predictions.ts",
+        "apps/eqoboard-web/lib/server/rate-limit.ts",
+        "apps/eqoboard-web/lib/server/runtime-mode.test.ts",
+        "apps/eqoboard-web/lib/server/runtime-mode.ts",
+        "apps/eqoboard-web/lib/server/service-http.ts",
+        "apps/eqoboard-web/lib/server/stream-budget.test.ts",
+        "apps/eqoboard-web/lib/server/stream-budget.ts",
+        "apps/eqoboard-web/lib/server/text-validation.ts",
+        "apps/eqoboard-web/lib/server/workspace-storage.test.ts",
+        "apps/eqoboard-web/lib/server/workspace-storage.ts",
+        "apps/eqoboard-web/lib/server/yfinance-daily.test.ts",
+        "apps/eqoboard-web/lib/server/yfinance-daily.ts",
+        "apps/eqoboard-web/middleware.test.ts",
+        "apps/eqoboard-web/middleware.ts"
+      ]
+    },
+    {
+      "agent": "native10_parity_acceptance",
+      "base_commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "source_provenance": {
+        "classification": "first-party browser parity tests, fixtures, and acceptance support",
+        "adapted_sources": [],
+        "notes": "Browser tests use synthetic same-origin fixtures; they are not product or market data."
+      },
+      "dependencies": {
+        "consumed": [
+          {
+            "package": "@playwright/test",
+            "version": "1.63.0",
+            "license": "MIT"
+          }
+        ],
+        "pinOwner": "native_root_integration",
+        "lockEvidence": "apps/eqoboard-web/package.json and apps/eqoboard-web/package-lock.json"
+      },
+      "verification": "NOT_RUN; exact-head GitHub Actions browser acceptance required",
+      "files": [
+        "apps/eqoboard-web/e2e/anonymous-api-security.spec.ts",
+        "apps/eqoboard-web/e2e/execution-boundary.spec.ts",
+        "apps/eqoboard-web/e2e/fixture-server.mjs",
+        "apps/eqoboard-web/e2e/helpers/research-test-support.ts",
+        "apps/eqoboard-web/e2e/live-stream-boundary.spec.ts",
+        "apps/eqoboard-web/e2e/market-source-boundary.spec.ts",
+        "apps/eqoboard-web/e2e/mdp-fixture.mjs",
+        "apps/eqoboard-web/e2e/oidc-workspace-isolation.spec.ts",
+        "apps/eqoboard-web/e2e/production-image-boundary.spec.ts",
+        "apps/eqoboard-web/e2e/research-mode-boundary.spec.ts",
+        "apps/eqoboard-web/e2e/security-headers.spec.ts",
+        "apps/eqoboard-web/e2e/shell-accessibility.spec.ts",
+        "apps/eqoboard-web/e2e/workspace-layout-export.spec.ts",
+        "apps/eqoboard-web/e2e/workspace-migration.spec.ts",
+        "apps/eqoboard-web/e2e/workspace-recovery.spec.ts",
+        "apps/eqoboard-web/tests/parity/legacy-contract-v1.ts",
+        "apps/eqoboard-web/tests/parity/legacy-inventory.test.ts",
+        "apps/eqoboard-web/tests/parity/native-registry.test.ts"
+      ]
+    },
+    {
+      "agent": "pr64_review_regressions",
+      "source_provenance": {
+        "classification": "first-party independent implementation",
+        "adapted_sources": [],
+        "notes": "New regression tests exercise existing native rendering and fixed synthetic SSE scenarios; no provider data or upstream source is copied."
+      },
+      "files": [
+        "apps/eqoboard-web/e2e/market-tape-rendering.spec.ts",
+        "apps/eqoboard-web/widgets/implementations/options/tape.test.ts",
+        "apps/eqoboard-web/widgets/implementations/market/hooks.test.ts"
+      ]
+    }
+  ],
+  "rootIntegration": {
+    "classification": "Independent configuration, CI, attribution and integration implementation",
+    "files": [
+      ".github/workflows/native-web.yml",
+      "apps/eqoboard-web/.dockerignore",
+      "apps/eqoboard-web/.gitignore",
+      "apps/eqoboard-web/AGENTS.md",
+      "apps/eqoboard-web/Dockerfile",
+      "apps/eqoboard-web/biome.json",
+      "apps/eqoboard-web/docs/migration/ACCEPTANCE.md",
+      "apps/eqoboard-web/legal/EQOBOARD-LICENSE-MIT",
+      "apps/eqoboard-web/legal/OPENTERMINAL-LICENSE-MIT",
+      "apps/eqoboard-web/next-auth.d.ts",
+      "apps/eqoboard-web/next-env.d.ts",
+      "apps/eqoboard-web/next.config.mjs",
+      "apps/eqoboard-web/package-lock.json",
+      "apps/eqoboard-web/package.json",
+      "apps/eqoboard-web/playwright.config.ts",
+      "apps/eqoboard-web/postcss.config.mjs",
+      "apps/eqoboard-web/tests/security/auth-contract.test.ts",
+      "apps/eqoboard-web/tests/security/downstream-denial.test.ts",
+      "apps/eqoboard-web/tests/security/operation-boundary.test.ts",
+      "apps/eqoboard-web/tests/server-only.ts",
+      "apps/eqoboard-web/tools/ci/native-runtime-package-audit.mjs",
+      "apps/eqoboard-web/tsconfig.json",
+      "apps/eqoboard-web/vitest.config.ts",
+      "compose.native.e2e.yaml",
+      "compose.native.research.yaml",
+      "compose.native.yaml",
+      "docs/migration/NATIVE_SOURCE_PROVENANCE.json",
+      "tools/ci/native-gitleaks.toml",
+      "tools/ci/native-provenance-audit.mjs",
+      "tools/ci/native-provenance-audit.test.mjs",
+      "tools/ci/native-runtime-package-audit.test.mjs"
+    ],
+    "notices": [
+      "apps/eqoboard-web/legal/EQOBOARD-LICENSE-MIT",
+      "apps/eqoboard-web/legal/OPENTERMINAL-LICENSE-MIT"
+    ],
+    "verification": "NOT_RUN; exact-head GitHub Actions validation required",
+    "agent": "native_root_integration",
+    "source_provenance": {
+      "classification": "first-party app configuration, CI/container integration, legal archive, and shared provenance audit implementation",
+      "adapted_sources": [],
+      "notes": "Root owns dependency pins and lockfile, runtime/build configuration, CI wiring, deployment recipes, and aggregate audit. No OpenTerminal app runtime is imported. next-env.d.ts is the generated declaration template from pinned Next.js 15.5.27, not original EqoBoard application logic.",
+      "generated_declarations": [
+        {
+          "nativePath": "apps/eqoboard-web/next-env.d.ts",
+          "repository": "https://github.com/vercel/next.js",
+          "commit": "def7eff9063f79cf58610c15fe58dd78b967c885",
+          "upstreamPath": "packages/next/src/lib/typescript/writeAppTypeDeclarations.ts",
+          "license": "MIT",
+          "noticePath": "apps/eqoboard-web/legal/third-party/LICENSE-NEXT-15.5.27-MIT.md",
+          "use": "Matches the generated App Router declaration output; Actions runs next typegen before tsc, and the SBOM dirty-source guard remains enforced."
+        }
+      ]
+    }
+  },
+  "sourceReferences": {
+    "eqoboardBaseline": {
+      "commit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+      "sourceTagObject": "9d606d11fa95ffa696aa009b52695d2c349f6a97",
+      "pr59MergeCommit": "e5f0f6b7531eb73356eb4059d5cef9e37584b259",
+      "tree": "986dd808560016965e73edc1869603b621b4286e"
+    },
+    "openTerminalReference": {
+      "commit": "aed097c680cd8ec1c391ae06966babe7d6d91fc6",
+      "license": "MIT",
+      "noticePath": "apps/openterminal/LICENSE"
+    }
+  }
+}

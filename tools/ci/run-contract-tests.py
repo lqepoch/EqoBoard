@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run core or optional OpenBB Python contract tests with explicit ownership."""
+"""Run core, OpenBB or Native Python contract tests with explicit ownership."""
 
 from __future__ import annotations
 
@@ -26,11 +26,13 @@ def iter_test_cases(suite: unittest.TestSuite) -> Iterable[unittest.TestCase]:
 def test_owner(test: unittest.TestCase) -> str:
     """OpenBB tests opt in by module prefix or within the mixed provenance module."""
     attributed_owner = getattr(test, "_contract_test_owner", None)
-    if attributed_owner in {"core", "openbb"}:
+    if attributed_owner in {"core", "openbb", "native"}:
         return attributed_owner
     test_id = test.id()
     module = test_id.split(".", 1)[0]
     method = test_id.rsplit(".", 1)[-1]
+    if module.startswith("test_native_"):
+        return "native"
     if module.startswith("test_openbb_"):
         return "openbb"
     if module == "test_upstream_provenance" and method.startswith("test_openbb_"):
@@ -43,6 +45,8 @@ def is_loader_failure(test: unittest.TestCase) -> bool:
 
 
 def module_owners(filename: str) -> set[str]:
+    if filename.startswith("test_native_"):
+        return {"native"}
     if filename.startswith("test_openbb_"):
         return {"openbb"}
     if filename == "test_upstream_provenance.py":
@@ -51,7 +55,7 @@ def module_owners(filename: str) -> set[str]:
 
 
 def discover_test_cases(owner: str, tests_dir: Path | None = None) -> list[unittest.TestCase]:
-    if owner not in {"core", "openbb"}:
+    if owner not in {"core", "openbb", "native"}:
         raise ValueError(f"unknown contract-test owner: {owner}")
     sys.path.insert(0, str(ROOT))
     test_root = tests_dir or ROOT / "tests"
@@ -80,7 +84,7 @@ def build_suite(
     cases: Iterable[unittest.TestCase] | None = None,
     tests_dir: Path | None = None,
 ) -> unittest.TestSuite:
-    if owner not in {"core", "openbb"}:
+    if owner not in {"core", "openbb", "native"}:
         raise ValueError(f"unknown contract-test owner: {owner}")
     candidate_cases = list(discover_test_cases(owner, tests_dir) if cases is None else cases)
     for case in candidate_cases:
@@ -107,8 +111,8 @@ def build_suite(
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 1 or args[0] not in {"core", "openbb"}:
-        print("usage: run-contract-tests.py core|openbb", file=sys.stderr)
+    if len(args) != 1 or args[0] not in {"core", "openbb", "native"}:
+        print("usage: run-contract-tests.py core|openbb|native", file=sys.stderr)
         return 2
 
     owner = args[0]

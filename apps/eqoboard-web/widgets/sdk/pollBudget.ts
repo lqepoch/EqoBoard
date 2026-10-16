@@ -1,0 +1,401 @@
+import type { WidgetLifecycle, WidgetRefreshPolicyV1 } from "./contracts";
+import { WidgetDataReadError } from "./data";
+
+const WINDOW_MS = 60_000;
+const MAX_CONCURRENT_GLOBAL = 128;
+const MAX_CONCURRENT_PER_OPERATION = 32;
+const MAX_CONCURRENT_PER_WIDGET = 3;
+const MAX_REQUESTS_PER_MINUTE = 120;
+const MAX_INTERVAL_MS = 3_600_000;
+const INSTANCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const OPERATION_ID = /^[A-Za-z][A-Za-z0-9.-]{0,95}$/u;
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
+export type WidgetPollBudgetConfig = Readonly<{
+  /** Host-owned ceilings. Manifest policy can only lower these limits. */
+  maxConcurrentGlobal: number;
+  maxConcurrentPerOperation: number;
+  maxConcurrentPerWidget: number;
+  maxRequestsPerMinuteGlobal: number;
+  maxRequestsPerMinutePerUser: number;
+  maxRequestsPerMinutePerOperation: number;
+  maxRequestsPerMinutePerWidget: number;
+  minimumIntervalMs: number;
+}>;
+
+export type WidgetPollRequest = Readonly<{
+  /** Opaque auth/cache partition supplied by the host; never a credential or ownership proof. */
+  scopeKey: string;
+  instanceId: string;
+  operationId: string;
+  input: unknown;
+  policy: DirectBudgetPolicy;
+  lifecycle: WidgetLifecycle;
+  hidden: boolean;
+  /** Optional caller cancellation. Requests with caller signals are never deduplicated. */
+  signal?: AbortSignal;
+}>;
+
+/** Runtime read budget; direct `none` widgets may use a small host-approved fanout. */
+type DirectBudgetPolicy = Readonly<
+  Omit<Extract<WidgetRefreshPolicyV1, { mode: "poll" }>, "maxConcurrentRequests"> & {
+    maxConcurrentRequests: 1 | 3;
+  }
+>;
+
+export interface WidgetPollBudget {
+  run<T>(request: WidgetPollRequest, operation: (signal: AbortSignal) => Promise<T>): Promise<T>;
+}
+
+function validConfig(config: WidgetPollBudgetConfig): boolean {
+  return (
+    Number.isSafeInteger(config.maxConcurrentGlobal) &&
+    config.maxConcurrentGlobal >= 1 &&
+    config.maxConcurrentGlobal <= MAX_CONCURRENT_GLOBAL &&
+    Number.isSafeInteger(config.maxConcurrentPerOperation) &&
+    config.maxConcurrentPerOperation >= 1 &&
+    config.maxConcurrentPerOperation <= MAX_CONCURRENT_PER_OPERATION &&
+    Number.isSafeInteger(config.maxConcurrentPerWidget) &&
+    config.maxConcurrentPerWidget >= 1 &&
+    config.maxConcurrentPerWidget <= MAX_CONCURRENT_PER_WIDGET &&
+    [
+      config.maxRequestsPerMinuteGlobal,
+      config.maxRequestsPerMinutePerUser,
+      config.maxRequestsPerMinutePerOperation,
+      config.maxRequestsPerMinutePerWidget,
+    ].every(
+      (value) => Number.isSafeInteger(value) && value >= 1 && value <= MAX_REQUESTS_PER_MINUTE,
+    ) &&
+    Number.isSafeInteger(config.minimumIntervalMs) &&
+    config.minimumIntervalMs >= 0 &&
+    config.minimumIntervalMs <= MAX_INTERVAL_MS
+  );
+}
+
+function validPollPolicy(policy: DirectBudgetPolicy): boolean {
+  return (
+    policy.mode === "poll" &&
+    Number.isSafeInteger(policy.minIntervalMs) &&
+    policy.minIntervalMs >= 250 &&
+    policy.minIntervalMs <= MAX_INTERVAL_MS &&
+    Number.isSafeInteger(policy.maxRequestsPerMinute) &&
+    policy.maxRequestsPerMinute >= 1 &&
+    policy.maxRequestsPerMinute <= MAX_REQUESTS_PER_MINUTE &&
+    (policy.maxConcurrentRequests === 1 || policy.maxConcurrentRequests === 3) &&
+    (policy.whenHidden === "pause" || policy.whenHidden === "continue")
+  );
+}
+
+type StableKeyBudget = { nodes: number; chars: number };
+
+function stableKey(
+  value: unknown,
+  depth = 0,
+  budget: StableKeyBudget = { nodes: 0, chars: 0 },
+): string | null {
+  budget.nodes += 1;
+  if (budget.nodes > 4096 || depth > 16 || budget.chars > 32_768) return null;
+  if (value === null || typeof value === "boolean" || typeof value === "string") {
+    if (typeof value === "string" && value.length > 8_192) return null;
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) return null;
+    budget.chars += encoded.length;
+    return budget.chars <= 32_768 ? encoded : null;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    const encoded = JSON.stringify(value);
+    budget.chars += encoded.length;
+    return budget.chars <= 32_768 ? encoded : null;
+  }
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype) return null;
+      const keys = Reflect.ownKeys(value);
+      if (keys.length > 4_097) return null;
+      const descriptors: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(value as object);
+      const lengthDescriptor = descriptors.length;
+      if (
+        !lengthDescriptor ||
+        typeof lengthDescriptor.value !== "number" ||
+        !Number.isSafeInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value > 4_096
+      )
+        return null;
+      const length = lengthDescriptor.value;
+      if (keys.length !== length + 1) return null;
+      for (const key of keys) {
+        if (key === "length") continue;
+        if (typeof key !== "string" || !/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= length)
+          return null;
+        const descriptor = descriptors[key];
+        if (!descriptor?.enumerable || !("value" in descriptor)) return null;
+      }
+      const parts: string[] = [];
+      for (let index = 0; index < length; index += 1) {
+        const descriptor = descriptors[String(index)];
+        if (!descriptor || !("value" in descriptor)) return null;
+        const part = stableKey(descriptor.value, depth + 1, budget);
+        if (part === null) return null;
+        parts.push(part);
+      }
+      budget.chars += 2 + Math.max(0, parts.length - 1);
+      return budget.chars <= 32_768 ? `[${parts.join(",")}]` : null;
+    }
+    if (typeof value !== "object") return null;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > 256 || keys.some((key) => typeof key !== "string")) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const parts: string[] = [];
+    for (const key of (keys as string[]).sort()) {
+      if (key.length > 256 || ["__proto__", "constructor", "prototype"].includes(key)) return null;
+      const descriptor = descriptors[key];
+      if (!descriptor?.enumerable || !("value" in descriptor)) return null;
+      const part = stableKey(descriptor.value, depth + 1, budget);
+      if (part === null) return null;
+      const encodedKey = JSON.stringify(key);
+      budget.chars += encodedKey.length + 1;
+      if (budget.chars > 32_768) return null;
+      parts.push(`${encodedKey}:${part}`);
+    }
+    budget.chars += 2 + Math.max(0, parts.length - 1);
+    return budget.chars <= 32_768 ? `{${parts.join(",")}}` : null;
+  } catch {
+    return null;
+  }
+}
+
+function prune(timestamps: number[], now: number): number[] {
+  return timestamps.filter((timestamp) => now - timestamp < WINDOW_MS);
+}
+
+function sweepExpiredWindowKeys(map: Map<string, number[]>, now: number): void {
+  for (const [key, timestamps] of map) {
+    const remaining = prune(timestamps, now);
+    if (remaining.length === 0) map.delete(key);
+    else if (remaining.length !== timestamps.length) map.set(key, remaining);
+  }
+}
+
+function sweepExpiredRateState(
+  now: number,
+  operationTimes: Map<string, number[]>,
+  widgetTimes: Map<string, number[]>,
+  scopedUserTimes: Map<string, number[]>,
+  lastReadAt: Map<string, number>,
+): void {
+  sweepExpiredWindowKeys(operationTimes, now);
+  sweepExpiredWindowKeys(widgetTimes, now);
+  sweepExpiredWindowKeys(scopedUserTimes, now);
+
+  // A manifest may set a one-hour minimum interval. Keep every key long enough
+  // to enforce the largest accepted policy, then discard inactive identities.
+  for (const [key, timestamp] of lastReadAt) {
+    if (now - timestamp >= MAX_INTERVAL_MS) lastReadAt.delete(key);
+  }
+}
+
+function nextWindowDelay(timestamps: readonly number[], now: number): number {
+  return Math.max(1, Math.min(...timestamps) + WINDOW_MS - now);
+}
+
+function bump(map: Map<string, number>, key: string, delta: number): void {
+  const next = (map.get(key) ?? 0) + delta;
+  if (next === 0) map.delete(key);
+  else map.set(key, next);
+}
+
+/**
+ * Host-side poll gate. It owns no timers and does not perform transport; the host
+ * schedules refresh attempts and supplies the already-closed operation callback.
+ */
+export function createWidgetPollBudget(
+  config: WidgetPollBudgetConfig,
+  now: () => number = Date.now,
+): WidgetPollBudget {
+  if (!validConfig(config)) throw new TypeError("Invalid widget poll budget configuration.");
+  const globalTimes: number[] = [];
+  const operationTimes = new Map<string, number[]>();
+  const widgetTimes = new Map<string, number[]>();
+  const lastReadAt = new Map<string, number>();
+  const inFlight = new Map<string, Promise<unknown>>();
+  const operationCounts = new Map<string, number>();
+  const widgetCounts = new Map<string, number>();
+  const scopedUserTimes = new Map<string, number[]>();
+  const lifecycleIds = new WeakMap<WidgetLifecycle, number>();
+  let nextLifecycleId = 1;
+  let globalCount = 0;
+
+  return Object.freeze({
+    async run<T>(
+      request: WidgetPollRequest,
+      operation: (signal: AbortSignal) => Promise<T>,
+    ): Promise<T> {
+      if (
+        !request ||
+        typeof request.instanceId !== "string" ||
+        !INSTANCE_ID.test(request.instanceId) ||
+        typeof request.operationId !== "string" ||
+        !OPERATION_ID.test(request.operationId) ||
+        !validPollPolicy(request.policy)
+      ) {
+        throw new WidgetDataReadError("request-failed");
+      }
+      const snapshot = request.lifecycle.getSnapshot();
+      if (snapshot.phase === "disposed") throw new WidgetDataReadError("disposed");
+      if (snapshot.phase !== "active" || snapshot.signal.aborted)
+        throw new WidgetDataReadError("suspended");
+      if (request.signal?.aborted) throw new WidgetDataReadError("cancelled");
+      if (request.hidden && request.policy.whenHidden === "pause")
+        throw new WidgetDataReadError("hidden");
+      if (
+        typeof request.scopeKey !== "string" ||
+        request.scopeKey.length === 0 ||
+        request.scopeKey.length > 256 ||
+        request.scopeKey !== request.scopeKey.trim() ||
+        hasControlCharacters(request.scopeKey)
+      ) {
+        throw new WidgetDataReadError("request-failed");
+      }
+
+      const inputKey = stableKey({
+        scopeKey: request.scopeKey,
+        instanceId: request.instanceId,
+        operationId: request.operationId,
+        input: request.input,
+      });
+      if (inputKey === null) throw new WidgetDataReadError("request-failed");
+      let lifecycleId = lifecycleIds.get(request.lifecycle);
+      if (lifecycleId === undefined) {
+        lifecycleId = nextLifecycleId;
+        nextLifecycleId += 1;
+        lifecycleIds.set(request.lifecycle, lifecycleId);
+      }
+      const dedupeKey = request.signal ? null : `${lifecycleId}:${snapshot.generation}:${inputKey}`;
+      const existing = dedupeKey === null ? undefined : inFlight.get(dedupeKey);
+      if (existing) return existing as Promise<T>;
+
+      const time = now();
+      sweepExpiredRateState(time, operationTimes, widgetTimes, scopedUserTimes, lastReadAt);
+      const operationKey = request.operationId;
+      const widgetKey = stableKey({ scopeKey: request.scopeKey, instanceId: request.instanceId });
+      if (widgetKey === null) throw new WidgetDataReadError("request-failed");
+      const global = prune(globalTimes, time);
+      const user = scopedUserTimes.get(request.scopeKey) ?? [];
+      const perOperation = operationTimes.get(operationKey) ?? [];
+      const perWidget = widgetTimes.get(widgetKey) ?? [];
+      globalTimes.splice(0, globalTimes.length, ...global);
+
+      const rateCeilings = [
+        [global, config.maxRequestsPerMinuteGlobal],
+        [user, config.maxRequestsPerMinutePerUser],
+        [perOperation, config.maxRequestsPerMinutePerOperation],
+        [
+          perWidget,
+          Math.min(config.maxRequestsPerMinutePerWidget, request.policy.maxRequestsPerMinute),
+        ],
+      ] as const;
+      for (const [timestamps, limit] of rateCeilings) {
+        if (timestamps.length >= limit)
+          throw new WidgetDataReadError("rate-limited", nextWindowDelay(timestamps, time));
+      }
+
+      const interval = Math.max(config.minimumIntervalMs, request.policy.minIntervalMs);
+      const prior = lastReadAt.get(`${widgetKey}:${operationKey}`);
+      if (prior !== undefined && time - prior < interval) {
+        throw new WidgetDataReadError("rate-limited", interval - (time - prior));
+      }
+
+      if (
+        globalCount >= config.maxConcurrentGlobal ||
+        (operationCounts.get(operationKey) ?? 0) >= config.maxConcurrentPerOperation ||
+        (widgetCounts.get(widgetKey) ?? 0) >=
+          Math.min(config.maxConcurrentPerWidget, request.policy.maxConcurrentRequests)
+      ) {
+        throw new WidgetDataReadError("concurrency-limited");
+      }
+
+      globalTimes.push(time);
+      user.push(time);
+      perOperation.push(time);
+      perWidget.push(time);
+      scopedUserTimes.set(request.scopeKey, user);
+      operationTimes.set(operationKey, perOperation);
+      widgetTimes.set(widgetKey, perWidget);
+      lastReadAt.set(`${widgetKey}:${operationKey}`, time);
+      globalCount += 1;
+      bump(operationCounts, operationKey, 1);
+      bump(widgetCounts, widgetKey, 1);
+
+      const execute = async (): Promise<T> => {
+        const controller = new AbortController();
+        let rejectAbort: ((error: WidgetDataReadError) => void) | undefined;
+        const onAbort = () => {
+          controller.abort();
+          rejectAbort?.(new WidgetDataReadError("cancelled"));
+        };
+        const cancellationSignals = new Set<AbortSignal>([snapshot.signal]);
+        if (request.signal) cancellationSignals.add(request.signal);
+        const aborted = new Promise<never>((_resolve, reject) => {
+          rejectAbort = reject;
+          for (const signal of cancellationSignals) {
+            if (signal.aborted) {
+              onAbort();
+              return;
+            }
+            signal.addEventListener("abort", onAbort, { once: true });
+          }
+        });
+        const work = Promise.resolve().then(() => {
+          const current = request.lifecycle.getSnapshot();
+          if (
+            controller.signal.aborted ||
+            current.phase !== "active" ||
+            current.generation !== snapshot.generation
+          ) {
+            throw new WidgetDataReadError("cancelled");
+          }
+          return operation(controller.signal);
+        });
+        // If the signal wins, a late work rejection is still observed.
+        void work.catch(() => undefined);
+        try {
+          const result = await Promise.race([work, aborted]);
+          const after = request.lifecycle.getSnapshot();
+          if (
+            after.phase !== "active" ||
+            after.generation !== snapshot.generation ||
+            snapshot.signal.aborted ||
+            request.signal?.aborted
+          ) {
+            throw new WidgetDataReadError("cancelled");
+          }
+          return result;
+        } catch (error) {
+          if (controller.signal.aborted || snapshot.signal.aborted || request.signal?.aborted)
+            throw new WidgetDataReadError("cancelled");
+          throw error;
+        } finally {
+          for (const signal of cancellationSignals) signal.removeEventListener("abort", onAbort);
+          globalCount -= 1;
+          bump(operationCounts, operationKey, -1);
+          bump(widgetCounts, widgetKey, -1);
+          if (dedupeKey !== null) inFlight.delete(dedupeKey);
+        }
+      };
+
+      const promise = execute();
+      if (dedupeKey !== null) inFlight.set(dedupeKey, promise);
+      return promise;
+    },
+  });
+}

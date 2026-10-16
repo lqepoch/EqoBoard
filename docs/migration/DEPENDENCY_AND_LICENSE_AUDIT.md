@@ -1,0 +1,40 @@
+# Native Research Dependency and License Audit
+
+Audit date: 2026-10-15. Scope: OpenBB source/product boundary and dependencies relevant to the native EqoBoard app. This is not legal advice and does not establish provider-data redistribution rights.
+
+## OpenBB: commercial product, Workspace source, and public SDKs are separate
+
+| Item | Fixed evidence | Result for this migration |
+|---|---|---|
+| OpenBB Workspace repository | [`OpenBB-finance/workspace` at `be00e95019a55d57af146919ee46b7e1a4859226`](https://github.com/OpenBB-finance/workspace/tree/be00e95019a55d57af146919ee46b7e1a4859226); root [`LICENSE`](https://github.com/OpenBB-finance/workspace/blob/be00e95019a55d57af146919ee46b7e1a4859226/LICENSE) is Apache-2.0. The repository was archived on 2026-10-01. | Apache-2.0 applies to covered files in this pinned source tree, subject to the license text, notices, and third-party file/dependency terms. It is not a blanket license for hosted Workspace, branding, Marketplace assets, support, data, or every package. |
+| Workspace NOTICE and declared components | Pinned [`NOTICE`](https://github.com/OpenBB-finance/workspace/blob/be00e95019a55d57af146919ee46b7e1a4859226/NOTICE) excludes TradingView Advanced Charts from Apache-2.0. Pinned [`terminalpro/package.json`](https://github.com/OpenBB-finance/workspace/blob/be00e95019a55d57af146919ee46b7e1a4859226/terminalpro/package.json) declares `ag-grid-enterprise`, `ag-charts-enterprise`, and Highcharts packages. | Do not copy Workspace/TerminalPro wholesale or use excluded commercial components. The existing Community patch and hash-bound source recipe remain the only authorized optional Lite adaptation in this repository. |
+| Community Lite patch | `tools/openbb/community/README.md`, `tools/openbb/community/patches/community.patch`, `third_party/upstreams.lock.json`, and `docs/OPENBB_SUPPLY_CHAIN.md`. | Preserve its source pin, notices, patch hash, diff and SBOM. This migration adds no Lite dependency and does not alter the patch or runtime. |
+| Open Data Platform (ODP) V4 | [Official V4 license FAQ](https://docs.openbb.co/odp/v4/python/faqs/license) identifies AGPL-3.0 with a commercial-license option and explains release licensing. | Do not generalize V4's AGPL terms to later versions. No V4 package is introduced by this change. |
+| Public OpenBB / ODP V5 SDK | Official [`openbb-v5.0.0` release](https://github.com/openbq-org/OpenBB/releases/tag/openbb-v5.0.0), full release commit `5a7517ae8bc74ecdcd1a549ed26df8ad131b02d0`, root [`LICENSE`](https://github.com/openbq-org/OpenBB/blob/5a7517ae8bc74ecdcd1a549ed26df8ad131b02d0/LICENSE), and [V5 license FAQ](https://docs.openbb.co/odp/python/faqs/license). | The fixed V5 source tree states Apache-2.0 and is distinct from V4. No V5 package is added here. Any future adoption requires a full commit/package graph pin, notices, and provider review. |
+| ODP V4 public SDK | [Official V4 license FAQ](https://docs.openbb.co/odp/v4/python/faqs/license) identifies AGPL-3.0-only with a commercial-license option. | Do not generalize V4's AGPL terms to V5 or Workspace source; do not introduce V4 into a network-served proprietary app without a separate license decision. |
+| Commercial Workspace/product/service | [OpenBB pricing and product FAQ](https://openbb.co/pricing/) and official Workspace docs describe the commercial product and tiers. The official project also announced OpenBQ/FINOS stewardship and a permissive-source transition in October 2026. | Product/service rights may differ from the fixed source grant and public notices may be in transition. Do not infer current hosted service, Marketplace, support, trademark, or future-release rights from a repository LICENSE or pricing page. This native app uses no commercial Workspace feature. |
+
+The local audit captured the Workspace archive SHA-256 as `4171aa8984c7c63e171239f8cda72c4bc950f1e068de33577035dc8e5d63e6a4`. The fixed Git commit identifies source contents; the archive hash binds the retrieved archive used in the earlier audit. These identifiers are not interchangeable.
+
+## EqoBoard native code and data sources
+
+- Native React registrations, query configuration, BFF authorization, closed routes, and feature UI are newly authored against the frozen native contracts. They do not copy OpenBB Workspace product code, import the legacy OpenTerminal application at runtime, or add an OpenBB SDK dependency.
+- Provider and XML parser adaptations are recorded against the frozen EqoBoard source baseline `fea1e952add7a11e799d6f9f198ddcee47fd12b6`, with source-file SHA-256 values from its legacy manifest. The separate OpenTerminal reference commit is `aed097c680cd8ec1c391ae06966babe7d6d91fc6`; it is not the source commit for every file. In particular, the Yahoo response validator was introduced by EqoBoard PR59 and is attributed to the EqoBoard baseline, not to that OpenTerminal reference commit. The file-level relationship, hashes, and upstream reference are recorded in [`native07-provenance.json`](native07-provenance.json). The built-in renderer remains EqoBoard first-party UI.
+- The provider XML parser is `fast-xml-parser@5.7.0` (MIT), pinned by the root-owned native app dependency manifest. Its use is limited to RSS/Form 4 parsing. Root owns the lockfile and dependency installation/CI evidence.
+- Software licenses do not grant rights to returned data. Yahoo RSS/Finance, Forex Factory, TradingView, Nasdaq, CoinGecko, Binance and streamed media each require separate source, terms, freshness, and redistribution review. The native adapters retain their actual provider labels and return unavailable/partial errors instead of fabricating fallback data; the current implementation does not establish any provider's redistribution entitlement. SEC EDGAR and FRED/ECB observations still require correct attribution, rate limits, and timestamp semantics.
+- LiveTV's legacy direct HLS URLs have no verified rights or official embed record. The native capability stays blocked, unregistered, and makes no network request.
+- Values with unknown source time remain unknown. Comparison views retain each response's provider/as-of/completeness; UI retrieval time and cache state are not market observation time or a freshness guarantee.
+
+## Dependency decision
+
+The native app uses the repository's existing React/TypeScript stack, fixed native contracts, MIT `fast-xml-parser@5.7.0` dependency, and already-pinned D3 `7.9.0` for market-cap treemap geometry. No package is added for the recap, symbol search, or treemap implementation. No OpenBB Workspace, ODP V4/V5 SDK, proprietary chart/grid package, or provider SDK is introduced by the research migration. Root owns shared dependency manifests, lockfiles, CI and container configuration.
+
+## Evidence references
+
+The source and license observations above were made against the fixed source IDs and official pages linked in the table. The related read-only implementation audit and structured inventory are in the task handoff directory as `native07-openbb-audit.md` and `native07-openbb-audit.json`; they are audit inputs, not native-app acceptance receipts.
+
+## Native dependency pruning and notice scope
+
+The native source does not import Recharts. Its unused direct dependency and 11 exclusive transitive packages were removed using an Actions-generated lock proposal, preserving all remaining package versions, integrity values and resolved identities. The reviewed proposal binds the Core browser-safe package to commit `3359ead64da27113b383cc8c0126463cd772c5a6`; it is not acceptance until the committed lock passes the exact candidate checks.
+
+Pinned notice texts and unresolved runtime notice conditions are recorded in `apps/eqoboard-web/legal/third-party/NOTICE-RECORDS.json`. A passing metadata/text-integrity audit does not turn its separate `runtimeNoticeGate=BLOCKED` into runtime legal clearance. Shared Next server traces and per-route traces must both exclude unused optimizer families; only actual standalone/image scans and image SBOM establish their absence.
