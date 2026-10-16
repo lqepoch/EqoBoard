@@ -70,6 +70,7 @@ function setLocalWorkstationEnvironment(): void {
     "ANTHROPIC_API_KEY",
     "EQO_OIDC_CLIENT_SECRET",
     "EQO_OPENBB_OIDC_CLIENT_SECRET",
+    "EQO_LOCAL_CORE_BARS",
   ])
     vi.stubEnv(name, "");
   vi.stubEnv("EQO_LOCAL_ACCESS", "true");
@@ -330,6 +331,15 @@ describe("server auth UI snapshot", () => {
     expect(local.permissions).not.toContain("research:ai");
     expect(local.permissions).not.toContain("engine:offline-read");
     expect(authMocks.getToken).not.toHaveBeenCalled();
+
+    vi.stubEnv("EQO_LOCAL_CORE_BARS", "true");
+    const localWithoutMdpSigner = await getAuthUiSnapshot();
+    expect(localWithoutMdpSigner.authenticated).toBe(true);
+    const localPrincipal = await getServerPrincipal(localApiRequest("/api/history/SPY?range=1D"));
+    if (!localPrincipal) throw new Error("Expected a validated local workstation principal.");
+    const unavailableMdp = await signMdpMarketReadDelegation(localPrincipal);
+    expect(unavailableMdp.ok).toBe(false);
+    if (!unavailableMdp.ok) expect(unavailableMdp.response.status).toBe(503);
 
     const forgedHost = await authorizeRequest(
       new Request("http://127.0.0.1:3000/api/quotes", {

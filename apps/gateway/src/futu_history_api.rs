@@ -56,6 +56,11 @@ pub(crate) async fn read(futu: &FutuLocal, request: &HistoryBarsRequest) -> Resp
                 "futu_disconnected",
                 "Futu history worker unavailable",
             ),
+            "futu_invalid_response" => fail(
+                StatusCode::BAD_GATEWAY,
+                "futu_invalid_response",
+                "Futu history response validation failed",
+            ),
             _ => fail(
                 StatusCode::BAD_GATEWAY,
                 "futu_read_failed",

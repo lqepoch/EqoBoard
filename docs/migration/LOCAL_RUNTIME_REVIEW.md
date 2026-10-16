@@ -1,4 +1,4 @@
-# PR64/65 审查与本机运行交付边界
+# PR64/65/66 审查与本机运行交付边界
 
 日期：2026-10-16。迁移 Epic #60；完整旧功能映射见
 [FEATURE_INVENTORY.md](FEATURE_INVENTORY.md)，逐项实现/验收差距见
@@ -26,9 +26,13 @@ flowchart TD
   D --> E[唯一 Futu SDK 子进程]
   E --> F[本机 OpenD WebSocket 12345]
   B --> G[独立身份作用域的 Workspace 存储]
+  B --> J[显式启用的 MDP Core Bars 127.0.0.1:8088]
+  J --> D
+  J --> K[显式启用的 Alpaca 只读历史]
   H[ignored 根 .env] --> I[启动器环境白名单]
   I --> B
   I --> D
+  I --> J
 ```
 
 `apps/eqoboard-web` 提供独立应用；`tools/futu-runtime` 提供固定 SDK-only
@@ -43,7 +47,7 @@ OpenTerminal 应用包、旧 Node Server 或 OpenBB Lite。不同 Research 实�
 | 原生 Workspace/Widget | 独立 SDK、布局持久化和导入/导出；Windows 包执行保存/恢复验收 | 不等于所有旧功能交互及历史用户数据迁移通过 |
 | 行情/期权/图表 | 共用 Gateway/BFF，保持来源、unknown/partial 与代次语义 | 合成 Runner 不验证 SIP/OPRA/Futu 权限、额度或实时性；本机期权保持不可用 |
 | OpenBB 研究借鉴 | 采用自主研究界面、表格与查询机制，详见能力矩阵 | 不引入完整 Workspace/ODP 强制依赖，不使用未授权 Enterprise 功能 |
-| 本机身份 | 显式启用、精确 loopback Host/Origin/端口及代理头校验，独立 issuer/subject | 不能替代生产 OIDC；不签发 Engine/MDP/Quant/Research signer 委托 |
+| 本机身份 | 显式启用、精确 loopback Host/Origin/端口及代理头校验，独立 issuer/subject | 不能替代生产 OIDC；独立开关仅允许 MDP terminal market:read，Engine/Quant/MDP Research signer 仍拒绝 |
 | 凭据 | ignored 根 .env 私有 ACL，清除继承环境后分服务白名单注入 | Futu-only 不向 Web 或 Gateway 传入不需要的 Alpaca 凭据 |
 | 交易 | effective execution 固定 disabled，保留只读与离线预览 | 配置 Paper endpoint/Key 不代表 Paper 委托、账户或对账验收通过 |
 | 旧源码 | 受保护源码与原许可证/patch 保留 | 不提前归档移动，不切换默认生产部署 |
@@ -77,14 +81,23 @@ SBOM 与文件哈希证明库存和字节身份，不证明全部静态组件 no
 
 ## 尚未满足的生产切换门槛
 
+后续 Core Bars 本机接线以固定 MDP 源码 pin 和三服务 Windows 包交付，源码/运行检查需
+绑定该 PR 最终 head。MDP 独立 [PR24](https://github.com/lqepoch/market-data-platform/pull/24)
+已合并，测试与主分支树一致；不把它的 CI 当作 EqoBoard 新 head 或真实历史数据验收。
+MDP [PR26](https://github.com/lqepoch/market-data-platform/pull/26) 随后修复失败的近期
+Futu 计划段吞掉后续 Alpaca OLD 段游标的问题：失败页保留 gap/unknown，并允许继续
+读取原有计划的下一段，不改变来源优先级或增加自动回退。该源码已合并并固定到本机包。
+当前图表是否成功仍需验证日历、委托和实际 Provider 响应，Quote 成功不替代历史链路证据。
+
 - 完整旧/新功能对照、非空真实 Provider 数据与故障恢复验收。
 - Futu HTTP ACK 与 SDK 实际订阅完成的精确 ready/error 契约。
 - 完整运行时许可证/notices、数据及媒体使用权证据。
 - 同环境成对性能与实测预算、真实用户数据身份迁移及生产回滚演练。
 - 所有选定 OpenBB 高价值研究能力的真实来源与稳定性验收。
 
-没有修改其它仓库的源码或合并无关 Draft；锁定的 Core/connector 提交已在各自
-main 历史中。九仓 Draft 治理方案仍不取代当前契约。
+关联市场后端的改动仅限 MDP PR24 的 Windows 交付和 PR26 的既定历史计划续页修复；
+未合并无关 Draft。锁定的 Core/connector 提交已在各自 main 历史中。
+九仓 Draft 治理方案仍不取代当前契约。
 
 ## 单项旧测试授权与原件保护
 

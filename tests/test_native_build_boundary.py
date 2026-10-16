@@ -835,6 +835,9 @@ class NativeLocalLauncherTests(unittest.TestCase):
             "$webEnvironment = New-ServiceEnvironment", 1
         )[0]
         web = source.split("$webEnvironment = New-ServiceEnvironment", 1)[1].split(
+            "$mdpArchiveRoot =", 1
+        )[0]
+        mdp = source.split("$mdpEnvironment = New-ServiceEnvironment", 1)[1].split(
             "$gatewayExe = Join-Path", 1
         )[0]
         self.assertIn("EQO_RESEARCH_JWT_SECRET", gateway)
@@ -848,6 +851,16 @@ class NativeLocalLauncherTests(unittest.TestCase):
         self.assertNotIn("FUTU_OPEND_", web)
         self.assertNotRegex(web, r"\bALPACA_[A-Z0-9_]+\b")
         self.assertNotRegex(gateway, r"\bALPACA_[A-Z0-9_]+\b")
+        self.assertIn("$webEnvironment['MDP_TERMINAL_JWT_SECRET'] = $mdpTerminalSecret", web)
+        self.assertNotIn("MDP_RESEARCH_JWT_SECRET", web)
+        self.assertIn("MDP_TERMINAL_JWT_SECRET = $mdpTerminalSecret", mdp)
+        self.assertIn("MDP_RESEARCH_JWT_SECRET = $mdpResearchSecret", mdp)
+        self.assertNotIn("EQO_GATEWAY_JWT_SECRET", mdp)
+        self.assertNotIn("EQO_RESEARCH_JWT_SECRET", mdp)
+        self.assertNotIn("FUTU_OPEND_", mdp)
+        self.assertIn("if ($alpacaHistorySetting -ceq 'true')", mdp)
+        self.assertIn("$mdpEnvironment['ALPACA_KEY'] = Get-EnvValue $values 'ALPACA_KEY'", mdp)
+        self.assertIn("$mdpEnvironment['ALPACA_SECRET'] = Get-EnvValue $values 'ALPACA_SECRET'", mdp)
         # The launcher may compare private credentials to reject signer reuse;
         # neither service allowlist may receive these unused Futu-mode secrets.
         self.assertIn("Provider credentials must not be reused as service signing secrets", source)

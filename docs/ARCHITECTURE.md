@@ -127,4 +127,13 @@ flowchart TD
 
 浏览器使用单一共享行情host；Widget仅获得声明的读取/动作能力，静态builtin尚不构成第三方插件沙箱。Core图表、非canonical诊断归档、Yahoo研究观测分别保留来源、精度与可用时间含义。终端和研究进程不混用签名密钥；未配置数据服务准确返回unavailable，不生成行情。
 
+原生 Chart 默认 Core Bars，`/api/history/{symbol}` 必须经 MDP，没有旧历史 fallback。
+旧 OpenTerminal 的 `EQO_MDP_MARKET_BARS_ENABLED` 不控制此原生路径。Windows 受控本机包
+按 `third_party/mdp-runtime.json` 纳入独立市场后端，显式 Core Bars profile 启动
+Gateway:8080→MDP:8088→Web:3000，三者均实际 loopback。Web 仅持 MDP terminal signer；
+MDP 只持自己的 terminal/research verifier，另以请求内独立短时 Gateway delegation 读取
+唯一 Futu worker 的历史，不持 Gateway signer/Futu key。可单独启用 MDP 的 Alpaca 只读历史
+客户端供已批准 OLD 路由使用。MDP 数据权限与日历证据分别校验，Windows 不做 Parquet 解码。
+Linux Web 镜像仍 app-only，需显式外置 MDP；OpenBB/Yahoo 可选研究构建隔离不变。
+
 Workspace与手动Portfolio使用独立 `EQOBOARD_DATA_DIR`，服务端由已验证issuer+subject定归属，Workspace以revision/ETag原子CAS写入。旧SQLite不自动迁移，匿名布局仅显式预览/复制导入。交易仍由现有可信系统掌权且effective execution disabled。全量功能、权限、成对性能、持久化与回滚验收通过前，旧源码与默认部署保持。

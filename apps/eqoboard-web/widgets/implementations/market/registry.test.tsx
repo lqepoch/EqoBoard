@@ -264,7 +264,8 @@ describe("native market widget registrations", () => {
       liveAskSize: null,
       liveSource: "unknown",
       liveEntitlement: "unknown",
-      liveAt: null,
+      liveAt: "unknown",
+      liveReceivedAt: "unknown",
       snapshotEvidence: "chain snapshot source",
     });
     type OptionGridRowFixture =
@@ -290,7 +291,8 @@ describe("native market widget registrations", () => {
       liveAskSize: null,
       liveSource: "unknown",
       liveEntitlement: "unknown",
-      liveAt: null,
+      liveAt: "unknown",
+      liveReceivedAt: "unknown",
       bid: snapshotBid,
       quoteAt: "chain snapshot quote time",
       modelAsOf: "model time",

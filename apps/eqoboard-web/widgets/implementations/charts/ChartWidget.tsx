@@ -40,6 +40,7 @@ import type { NativeChartOperationMap } from "../../../charts/native-operations"
 import type { BarsResponseV1, BarRowV1 } from "@lqepoch/trading-core-contracts/bars";
 import type { WidgetProps } from "../../../widgets/sdk/contracts";
 import type { WidgetNoActionMap } from "../../../widgets/sdk/actions";
+import { WidgetDataReadError } from "../../../widgets/sdk/data";
 import type { MarketHostSnapshot } from "../../../stores/market/market-store";
 import {
   CHART_ADJUSTMENTS,
@@ -578,7 +579,7 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
             ? "The response is truncated but supplied no usable continuation cursor."
             : null,
       });
-    } catch {
+    } catch (error) {
       if (
         !abortController.signal.aborted &&
         isCurrentHistoryGeneration(historyGenerationRef.current, generation)
@@ -586,7 +587,9 @@ export function ChartWidget({ config, inputs, host, onConfigChange }: NativeChar
         cursorHistoryRef.current.delete(cursorKey);
         const latest = historyRef.current;
         const message =
-          "Older history could not be loaded. Existing validated rows remain visible.";
+          error instanceof WidgetDataReadError && error.code === "rate-limited"
+            ? `Older history is rate limited. Try again in ${Math.max(1, Math.ceil((error.retryAfterMs ?? 1_000) / 1_000))} seconds. Existing validated rows remain visible.`
+            : "Older history could not be loaded. Existing validated rows remain visible.";
         commitHistory({ ...latest, olderLoading: false, error: message, notice: message });
       }
     } finally {

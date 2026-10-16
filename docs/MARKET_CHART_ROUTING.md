@@ -1,5 +1,11 @@
 # OpenTerminal chart history routing
 
+This document's opt-in flag and legacy fallback describe the retained OpenTerminal application.
+Native `apps/eqoboard-web` uses Core Bars by default and requires MDP; missing MDP returns
+unavailable, without a legacy fallback. Its controlled Windows profile is documented in
+`NATIVE_LOCAL_START.md`; Linux app-only requires an external MDP origin. Native local MDP access
+requires the explicit `EQO_LOCAL_CORE_BARS` opt-in and isolated terminal key on exact loopback 8088.
+
 The main trading chart and the Workspace Chart widget use the same browser history client and the same origin route, `/api/history/{symbol}`. The browser sends the selected range, requested resolution, caller-selected provider mode, caller-declared asset class, `session_scope=all`, `adjustment=unadjusted`, and `allow_daily_downgrade=true`. Provider mode is one of `auto`, `alpaca_only`, or `futu_only`; it is a read preference and does not assert which provider returned the bars. `asset_class` is a caller declaration (`stock` or `etf`), not a security-master classification.
 
 The interval control defaults to `Auto`, which follows these range-to-resolution defaults. Choosing a supported interval overrides the range default without changing the selected date range. Supported explicit intervals are `1m`, `5m`, `15m`, `1h`, and `1D` (sent as `1d`). Legacy controls that have no market-bars resolution remain visible but disabled with an explanation; they never fall back to another interval. `Auto` avoids pinning `1D` to `1m` when the user later selects `MAX`.

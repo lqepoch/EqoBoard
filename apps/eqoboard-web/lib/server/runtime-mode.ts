@@ -108,6 +108,16 @@ export function nativeRuntimeReadiness(): NativeRuntimeReadiness {
   return Object.freeze({ mode, ready: mode !== null && isolated, profileIsolated: isolated });
 }
 
+/** Core Bars local access is a separate opt-in layered on the workstation profile. */
+export function localCoreBarsModeEnabled(): boolean {
+  return (
+    process.env.EQO_LOCAL_CORE_BARS === "true" &&
+    getNativeRuntimeMode() === "terminal" &&
+    localWorkstationModeRequested() &&
+    localWorkstationModeEnabled()
+  );
+}
+
 /**
  * Research mode serves only its frozen, read-only NativeResearch allowlist.
  * The terminal has its separate complete route surface; Yahoo is excluded

@@ -1038,6 +1038,32 @@
         "apps/eqoboard-web/AGENTS.md",
         "docs/NATIVE_LOCAL_START.md"
       ]
+    },
+    {
+      "agent": "native_local_core_bars_regressions",
+      "base_commit": "6b1157942b32217aa53b94eba8800382747732f4",
+      "source_provenance": {
+        "classification": "first-party independent regression tests",
+        "adapted_sources": [],
+        "notes": "Independent tests for exact local MDP URL/delegation routing, shared option-tape subscriptions, and synthetic Core Bars empty-head continuation/rendering; existing source owners remain unchanged. No third-party or legacy application source copied."
+      },
+      "dependencies": {
+        "added": [],
+        "consumed": [
+          "Vitest (existing)",
+          "Playwright (existing)"
+        ]
+      },
+      "files": [
+        "apps/eqoboard-web/app/api/history/[symbol]/route.test.ts",
+        "apps/eqoboard-web/e2e/core-bars-continuation.spec.ts",
+        "apps/eqoboard-web/e2e/option-tape-shared-subscription.spec.ts",
+        "apps/eqoboard-web/lib/server/service-http.test.ts"
+      ],
+      "auditSources": [
+        "apps/eqoboard-web/AGENTS.md",
+        "third_party/mdp-runtime.json"
+      ]
     }
   ],
   "rootIntegration": {

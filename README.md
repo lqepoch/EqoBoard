@@ -139,6 +139,11 @@ npm run build -w web
 
 ### Unified stock/ETF history (opt-in)
 
+The flag and legacy rollback below apply to OpenTerminal. Native Chart always requires
+MDP Core Bars; missing MDP returns unavailable. Its controlled Windows package includes the
+fixed backend and uses the separate `EQO_LOCAL_CORE_BARS` profile in
+[local startup](docs/NATIVE_LOCAL_START.md). Linux native app-only needs an external MDP.
+
 `EQO_MDP_MARKET_BARS_ENABLED=true` routes both existing charts through the authenticated same-origin `/api/history/{symbol}` BFF and MDP Bars V1. The default is disabled. Range, resolution, session scope, adjustment and provider mode are query identities; fixed-window cursors preserve pagination. Per-row exact values and per-segment provenance remain distinct from UI float projections. Unknown entitlement/feed or provider-native adjustment stays unknown; partial coverage and daily downgrade are visible. Quotes/watchlists, legacy dataset diagnostics and execution authority retain their existing paths. See `apps/openterminal/docs/MARKET_BFF_ROUTING.md` and `docs/MARKET_CHART_ROUTING.md`. Public builds and browser E2E run in GitHub Actions on the PR head, using explicitly synthetic bounded mocks; actual provider acceptance is separate. Disable the flag and restart web for rollback.
 
 ## 原生终端迁移

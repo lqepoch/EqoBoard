@@ -10,6 +10,17 @@ an Actions-built Windows local evaluation package and controlled local identity.
 See [LOCAL_RUNTIME_REVIEW.md](LOCAL_RUNTIME_REVIEW.md) for scope, architecture,
 security boundaries, evidence locations, unresolved gates and rollback.
 
+Current source correction: `charts/history.ts` rebuilds each head refresh from the
+bounded cursor chain and latest head. The accumulated-head capacity gap described
+in the frozen observation below is historical, not a current source finding.
+This does not establish a browser memory/performance budget or paired legacy/native results.
+
+The option chain now keeps missing stream event time `unknown` and displays Gateway
+receive time in a separate column. Option Tape explicitly observes contracts already
+leased by other active widgets; it does not subscribe independently or imply complete
+market coverage. New unit and standalone-Tape browser regressions require exact-head
+Actions validation; they do not prove OPRA permission or actual trade coverage.
+
 ## PR #64 review, 2026-10-16
 
 The previously reviewed head is `c0e22628249b8b2e946c13d7d28ed0c949ad9702`.

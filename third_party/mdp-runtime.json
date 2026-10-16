@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "repository": "lqepoch/market-data-platform",
+  "revision": "28990511737a2b4d7eb9406c879a8bb956cfc972",
+  "sourceManifestSha256": "d9a26887e4689afcc5380e2a40fafad175dac9089a3acfa5afee07a7904dd2cb",
+  "rustVersion": "1.99.0",
+  "target": "x86_64-pc-windows-msvc",
+  "license": "MIT",
+  "acceptance": "LOCAL_EVALUATION_ONLY",
+  "sourceValidation": {
+    "head": "264f8905e977158f0541c4d223fc2f867a065f91",
+    "tree": "8657eaf28a119c6af0108bfc3f6648b09a7a44de",
+    "ciRun": 38870867615,
+    "codeqlRun": 38870867597
+  }
+}

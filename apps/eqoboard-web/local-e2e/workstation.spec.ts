@@ -32,6 +32,12 @@ test("packaged workstation opens without OIDC and persists an owned workspace", 
     execution_mode: "disabled",
     execution_enabled: false,
   });
+  // CI starts MDP without a trusted calendar, so Core Bars must fail closed instead of
+  // fabricating a chart response; the launcher separately verifies MDP readiness.
+  const historyResponse = await request.get("/api/history/QQQ?range=1D");
+  expect(historyResponse.status()).toBe(503);
+  expect(await historyResponse.json()).toEqual({ error: "market_data_service_unavailable" });
+  expect(historyResponse.headers()["cache-control"]).toContain("no-store");
   expect(await page.content()).not.toContain("NATIVE_LOCAL_PROVIDER_SECRET_SENTINEL");
   expect(await page.content()).not.toContain("NATIVE_LOCAL_PARENT_SECRET_SENTINEL");
   expect([...new Set(origins)]).toEqual(["http://127.0.0.1:3000"]);

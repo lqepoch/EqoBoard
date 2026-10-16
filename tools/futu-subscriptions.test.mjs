@@ -163,6 +163,37 @@ test('daily bars use ET transaction dates and regular session without minute tim
   assert.deepEqual(result.bars.map(row => row.event_time_et.slice(0, 10)), ['2026-01-05', '2026-01-06']);
 });
 
+test('history accepts a terminal page decoded by the pinned SDK with no optional nextReqKey', async () => {
+  const protoRoot = require('futu-api/proto');
+  const Response = protoRoot.lookupType('Qot_RequestHistoryKL.Response');
+  const missingVolume = bar('2026-01-05 09:31:00');
+  delete missingVolume.volume;
+  const decoded = Response.decode(Response.encode(Response.create({
+    retType: 0,
+    s2c: { security: { market: 11, code: 'AAPL' },
+      klList: [bar('2026-01-05 09:30:00'), missingVolume] },
+  })).finish());
+  assert.equal(Object.hasOwn(decoded.s2c, 'nextReqKey'), false);
+  assert.equal(Object.hasOwn(decoded.s2c.klList[1], 'volume'), false);
+  const f = historyFixture({ pages: [() => decoded] });
+  const result = await f.history.bars(baseRange);
+  assert.equal(result.bars.length, 2);
+  assert.equal(result.bars[0].volume, '1000');
+  assert.equal(result.bars[1].volume, null);
+  assert.equal(result.has_more, false);
+  assert.equal(result.cursor, null);
+  assert.equal(result.truncated, false);
+});
+
+test('history rejects malformed explicit nextReqKey values instead of treating them as absent', async () => {
+  for (const nextReqKey of [[], [1], 'invalid-key', { length: 0 }]) {
+    const f = historyFixture({ pages: [() => ({ retType: 0, s2c: {
+      klList: [bar('2026-01-05 09:30:00')], nextReqKey,
+    } })] });
+    await assert.rejects(f.history.bars(baseRange), /futu_invalid_response/);
+  }
+});
+
 test('history cursor is opaque, query-bound, and forwards the exact SDK nextReqKey bytes', async () => {
   const sdkKey = Buffer.from([0, 255, 16, 128]);
   const f = historyFixture({ pages: [
