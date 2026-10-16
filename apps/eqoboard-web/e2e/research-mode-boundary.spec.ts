@@ -70,7 +70,8 @@ async function installResearchAbortDiagnostics(page: Page) {
     const target = window as Window & {
       __eqoResearchAbortEvents?: ResearchAbortDiagnostic[];
     };
-    const events = (target.__eqoResearchAbortEvents ??= []);
+    const events: ResearchAbortDiagnostic[] = [];
+    target.__eqoResearchAbortEvents = events;
     const originalAbort = AbortController.prototype.abort;
     const wrappedAbort: typeof originalAbort = function (
       this: AbortController,
