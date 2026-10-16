@@ -67,7 +67,7 @@ test("@component workspace recovery restores a tab after deletion and persists t
   if (!deletedWorkspacePoint) {
     throw new Error("Tab deletion did not leave the expected partition-scoped recovery copy.");
   }
-  await recoverySelector.selectOption(deletedWorkspacePoint.value);
+  await recoverySelector.selectOption(deletedWorkspacePoint);
 
   const restoreDialog = page.waitForEvent("dialog");
   const restoreClick = page.getByRole("button", { name: "Restore", exact: true }).click();
