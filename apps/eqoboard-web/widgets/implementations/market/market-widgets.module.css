@@ -1,16 +1,17 @@
 .marketWidget {
-  --market-line: var(--eq-border, #293642);
-  --market-muted: var(--eq-text-muted, #a4b1bc);
+  --market-line: var(--eq-border, #1b2532);
+  --market-muted: var(--eq-text-muted, #95a4b5);
   display: flex;
   min-width: 0;
   height: 100%;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.6rem;
   overflow: auto;
-  padding: 0.85rem;
-  color: var(--eq-text, #e8eef3);
-  background: var(--eq-surface, #111821);
-  font-size: 0.78rem;
+  padding: 0.8rem 0.85rem;
+  color: var(--eq-text, #e6edf5);
+  background: var(--eq-surface, #0c121a);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .marketWidget h2,
@@ -20,10 +21,13 @@
 }
 
 .marketWidget h2 {
-  font-size: 1rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 .marketWidget h3 {
   font-size: 0.8rem;
+  font-weight: 650;
 }
 
 .marketGrid {
@@ -32,7 +36,7 @@
   min-height: 260px;
   overflow: hidden;
   border: 1px solid var(--market-line);
-  border-radius: 0.4rem;
+  border-radius: 0.5rem;
 }
 
 .feedGrid {
@@ -45,10 +49,10 @@
   display: grid;
   min-width: 0;
   gap: 0.45rem;
-  padding: 0.65rem;
+  padding: 0.7rem;
   border: 1px solid var(--market-line);
-  border-radius: 0.4rem;
-  background: var(--eq-surface-raised, #18222d);
+  border-radius: 0.5rem;
+  background: var(--eq-surface-raised, #121b26);
 }
 
 .notice,
@@ -56,25 +60,27 @@
 .emptyState {
   color: var(--market-muted);
   font-size: 0.7rem;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .notice {
-  color: var(--eq-warning, #efc36f);
+  color: var(--eq-warning, #f3bd5c);
 }
 .marketFootnote {
   border-top: 1px solid var(--market-line);
-  padding-top: 0.45rem;
+  padding-top: 0.5rem;
 }
 .emptyState {
-  padding: 0.8rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--market-line);
+  border-radius: 0.5rem;
   text-align: center;
 }
 
 .controlLabel {
   display: grid;
   min-width: 8rem;
-  gap: 0.25rem;
+  gap: 0.3rem;
   color: var(--market-muted);
   font-size: 0.7rem;
 }
@@ -83,19 +89,19 @@
 .controlLabel select,
 .previewButton {
   min-width: 0;
-  min-height: 2rem;
-  padding: 0.4rem 0.55rem;
+  min-height: 2.1rem;
+  padding: 0.4rem 0.6rem;
   border: 1px solid var(--market-line);
-  border-radius: 0.35rem;
+  border-radius: 0.4rem;
   color: inherit;
-  background: var(--eq-surface-raised, #18222d);
+  background: var(--eq-surface-sunken, #080d13);
   font: inherit;
 }
 
 .controlLabel input:focus-visible,
 .controlLabel select:focus-visible,
 .previewButton:focus-visible {
-  outline: 2px solid var(--eq-focus, #89c8ff);
+  outline: 2px solid var(--eq-focus, #7cb8ff);
   outline-offset: 2px;
 }
 
@@ -106,8 +112,8 @@
   gap: 0.65rem;
   padding: 0.75rem;
   border: 1px solid var(--market-line);
-  border-radius: 0.45rem;
-  background: var(--eq-surface-raised, #18222d);
+  border-radius: 0.5rem;
+  background: var(--eq-surface-raised, #121b26);
 }
 
 .previewButton {
@@ -126,7 +132,7 @@
   margin: 0;
   padding: 0.7rem;
   border: 1px solid var(--market-line);
-  border-radius: 0.4rem;
+  border-radius: 0.5rem;
 }
 
 .previewReceipt > div {
@@ -155,7 +161,7 @@
   gap: 0.45rem;
   padding: 0.55rem;
   border: 1px solid var(--market-line);
-  border-radius: 0.35rem;
+  border-radius: 0.4rem;
 }
 .tapeList time,
 .tapeList strong {

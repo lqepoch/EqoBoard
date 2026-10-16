@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { AccountControl } from "./AccountControl";
 import { CommandPalette, type ShellCommand } from "./CommandPalette";
+import { MarketStatusPill } from "./MarketStatusPill";
 import { PrimaryNav } from "./PrimaryNav";
 import { ShellIcon } from "./ShellIcon";
 import { ThemeToggle } from "./ThemeToggle";
@@ -125,6 +126,7 @@ export function TerminalShell({ children }: TerminalShellProps) {
           </span>
         </button>
         <div className="eq-header-actions">
+          <MarketStatusPill />
           <ThemeToggle onCycle={cyclePreference} preference={preference} />
           <AccountControl />
         </div>

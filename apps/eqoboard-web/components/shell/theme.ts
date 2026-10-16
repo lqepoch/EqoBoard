@@ -4,10 +4,13 @@ export type ThemePreference = "system" | "light" | "dark";
 
 const THEME_PREFERENCES: readonly ThemePreference[] = ["system", "light", "dark"];
 
+/** The terminal is designed dark-first; "system" remains an explicit opt-in. */
+export const DEFAULT_THEME_PREFERENCE: ThemePreference = "dark";
+
 export function parseThemePreference(value: unknown): ThemePreference {
   return THEME_PREFERENCES.includes(value as ThemePreference)
     ? (value as ThemePreference)
-    : "system";
+    : DEFAULT_THEME_PREFERENCE;
 }
 
 export function nextThemePreference(current: ThemePreference): ThemePreference {
@@ -17,9 +20,11 @@ export function nextThemePreference(current: ThemePreference): ThemePreference {
 
 export function readThemePreference(storage: Pick<Storage, "getItem"> | null): ThemePreference {
   try {
-    return storage ? parseThemePreference(storage.getItem(THEME_STORAGE_KEY)) : "system";
+    return storage
+      ? parseThemePreference(storage.getItem(THEME_STORAGE_KEY))
+      : DEFAULT_THEME_PREFERENCE;
   } catch {
-    return "system";
+    return DEFAULT_THEME_PREFERENCE;
   }
 }
 

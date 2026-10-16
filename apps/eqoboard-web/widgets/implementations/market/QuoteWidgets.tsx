@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, themeQuartz } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import type { ColDef, GridApi, GridReadyEvent } from "ag-grid-community";
 
 import { ResourceState } from "@/components/shell/ResourceState";
@@ -17,6 +17,7 @@ import type { StockSnapshotRow } from "@/features/market/market-contracts";
 import { useMarketSnapshot, useQuoteSnapshots } from "./hooks";
 import type { QuoteWidgetHost } from "./hooks";
 import type { EmptyMarketConfigV1 } from "./config";
+import { MARKET_GRID_THEME } from "./grid-theme";
 import styles from "./market-widgets.module.css";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -456,7 +457,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
           getRowId={({ data }) => data.symbol}
           onGridReady={onGridReady}
           rowData={rows}
-          theme={themeQuartz}
+          theme={MARKET_GRID_THEME}
         />
       </section>
       <p className={styles.marketFootnote}>

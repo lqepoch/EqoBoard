@@ -13,8 +13,8 @@ describe("theme preference", () => {
     expect(parseThemePreference("dark")).toBe("dark");
     expect(parseThemePreference("light")).toBe("light");
     expect(parseThemePreference("system")).toBe("system");
-    expect(parseThemePreference("auto")).toBe("system");
-    expect(parseThemePreference(null)).toBe("system");
+    expect(parseThemePreference("auto")).toBe("dark");
+    expect(parseThemePreference(null)).toBe("dark");
   });
 
   it("cycles predictably through system, light, and dark", () => {
@@ -47,7 +47,7 @@ describe("theme preference", () => {
         throw new Error("blocked");
       },
     };
-    expect(readThemePreference(storage)).toBe("system");
+    expect(readThemePreference(storage)).toBe("dark");
     expect(() => writeThemePreference(storage, "light")).not.toThrow();
   });
 });

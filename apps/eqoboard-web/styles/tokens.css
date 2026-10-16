@@ -1,31 +1,43 @@
+/*
+ * Design tokens. Dark is the default terminal surface; light and system
+ * variants are kept as explicit overrides so the existing theme toggle works.
+ */
 :root {
   color-scheme: dark;
-  --eq-bg: #0b0f14;
-  --eq-surface: #111821;
-  --eq-surface-raised: #18222d;
-  --eq-surface-hover: #202d39;
-  --eq-border: #293642;
-  --eq-border-strong: #435361;
-  --eq-text: #e8eef3;
-  --eq-text-muted: #a4b1bc;
-  --eq-text-subtle: #788895;
-  --eq-accent: #f0b14a;
-  --eq-accent-contrast: #241708;
-  --eq-positive: #58c89b;
-  --eq-negative: #f17f7f;
-  --eq-warning: #efc36f;
-  --eq-focus: #89c8ff;
-  --eq-backdrop: rgb(2 7 12 / 72%);
-  --eq-shadow: 0 18px 56px rgb(0 0 0 / 38%);
-  --eq-radius-sm: 4px;
-  --eq-radius-md: 8px;
+  --eq-bg: #070a0f;
+  --eq-surface: #0c121a;
+  --eq-surface-sunken: #080d13;
+  --eq-surface-raised: #121b26;
+  --eq-surface-hover: #182331;
+  --eq-border: #1b2532;
+  --eq-border-strong: #2a3848;
+  --eq-text: #e6edf5;
+  --eq-text-muted: #95a4b5;
+  --eq-text-subtle: #61718a;
+  --eq-accent: #5aa2ff;
+  --eq-accent-contrast: #05101f;
+  --eq-accent-soft: rgb(90 162 255 / 14%);
+  --eq-positive: #2fd49b;
+  --eq-positive-soft: rgb(47 212 155 / 12%);
+  --eq-negative: #ff6b7a;
+  --eq-negative-soft: rgb(255 107 122 / 12%);
+  --eq-warning: #f3bd5c;
+  --eq-warning-soft: rgb(243 189 92 / 12%);
+  --eq-focus: #7cb8ff;
+  --eq-backdrop: rgb(2 6 12 / 72%);
+  --eq-shadow: 0 18px 48px rgb(0 0 0 / 48%);
+  --eq-radius-sm: 6px;
+  --eq-radius-md: 10px;
+  --eq-radius-lg: 14px;
   --eq-space-1: 4px;
   --eq-space-2: 8px;
   --eq-space-3: 12px;
   --eq-space-4: 16px;
   --eq-font-sans:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --eq-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    "Inter", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --eq-font-mono:
+    "Cascadia Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 :root[data-theme="dark"] {
@@ -34,23 +46,28 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --eq-bg: #f1f4f6;
+  --eq-bg: #eef2f6;
   --eq-surface: #ffffff;
-  --eq-surface-raised: #f7f9fa;
-  --eq-surface-hover: #e8edf1;
-  --eq-border: #d5dde3;
-  --eq-border-strong: #aab7c1;
-  --eq-text: #18232d;
-  --eq-text-muted: #536371;
-  --eq-text-subtle: #73818d;
-  --eq-accent: #9a5b00;
+  --eq-surface-sunken: #f5f7fa;
+  --eq-surface-raised: #f9fbfd;
+  --eq-surface-hover: #e9eef4;
+  --eq-border: #d6dee7;
+  --eq-border-strong: #a9b7c6;
+  --eq-text: #16202b;
+  --eq-text-muted: #4f6072;
+  --eq-text-subtle: #6f7f91;
+  --eq-accent: #1f63d6;
   --eq-accent-contrast: #ffffff;
-  --eq-positive: #087a55;
-  --eq-negative: #b5262a;
-  --eq-warning: #815400;
+  --eq-accent-soft: rgb(31 99 214 / 10%);
+  --eq-positive: #07774f;
+  --eq-positive-soft: rgb(7 119 79 / 9%);
+  --eq-negative: #b3262c;
+  --eq-negative-soft: rgb(179 38 44 / 8%);
+  --eq-warning: #7d5300;
+  --eq-warning-soft: rgb(125 83 0 / 8%);
   --eq-focus: #075fa8;
   --eq-backdrop: rgb(19 31 42 / 42%);
-  --eq-shadow: 0 18px 56px rgb(28 43 54 / 18%);
+  --eq-shadow: 0 18px 48px rgb(28 43 54 / 16%);
 }
 
 :root[data-theme="system"] {
@@ -61,22 +78,27 @@
   :root:not([data-theme]),
   :root[data-theme="system"] {
     color-scheme: light;
-    --eq-bg: #f1f4f6;
+    --eq-bg: #eef2f6;
     --eq-surface: #ffffff;
-    --eq-surface-raised: #f7f9fa;
-    --eq-surface-hover: #e8edf1;
-    --eq-border: #d5dde3;
-    --eq-border-strong: #aab7c1;
-    --eq-text: #18232d;
-    --eq-text-muted: #536371;
-    --eq-text-subtle: #73818d;
-    --eq-accent: #9a5b00;
+    --eq-surface-sunken: #f5f7fa;
+    --eq-surface-raised: #f9fbfd;
+    --eq-surface-hover: #e9eef4;
+    --eq-border: #d6dee7;
+    --eq-border-strong: #a9b7c6;
+    --eq-text: #16202b;
+    --eq-text-muted: #4f6072;
+    --eq-text-subtle: #6f7f91;
+    --eq-accent: #1f63d6;
     --eq-accent-contrast: #ffffff;
-    --eq-positive: #087a55;
-    --eq-negative: #b5262a;
-    --eq-warning: #815400;
+    --eq-accent-soft: rgb(31 99 214 / 10%);
+    --eq-positive: #07774f;
+    --eq-positive-soft: rgb(7 119 79 / 9%);
+    --eq-negative: #b3262c;
+    --eq-negative-soft: rgb(179 38 44 / 8%);
+    --eq-warning: #7d5300;
+    --eq-warning-soft: rgb(125 83 0 / 8%);
     --eq-focus: #075fa8;
     --eq-backdrop: rgb(19 31 42 / 42%);
-    --eq-shadow: 0 18px 56px rgb(28 43 54 / 18%);
+    --eq-shadow: 0 18px 48px rgb(28 43 54 / 16%);
   }
 }

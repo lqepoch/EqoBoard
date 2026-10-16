@@ -1,0 +1,94 @@
+.tapeHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.symbol {
+  color: var(--eq-text-muted);
+  font-family: var(--eq-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.tapeHead,
+.tapeRow {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 1fr) minmax(4.5rem, 0.9fr) minmax(4rem, 0.8fr) 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.22rem 0.5rem;
+  font-family: var(--eq-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tapeHead {
+  padding-top: 0;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--eq-border);
+  color: var(--eq-text-subtle);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tapeList {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 12rem;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.tapeRow {
+  border-bottom: 1px solid var(--eq-border);
+  font-size: 0.8rem;
+}
+
+.tapeRow:first-child {
+  background: var(--eq-accent-soft);
+}
+
+.clock {
+  color: var(--eq-text-muted);
+}
+
+.price {
+  color: var(--eq-text);
+  font-weight: 650;
+  text-align: right;
+}
+
+.size {
+  color: var(--eq-text-muted);
+  text-align: right;
+}
+
+.tick {
+  color: var(--eq-text-subtle);
+  font-size: 0.6rem;
+  text-align: center;
+}
+
+.alignEnd {
+  text-align: right;
+}
+
+.alignCenter {
+  text-align: center;
+}
+
+.tapeRow[data-direction="up"] .price,
+.tapeRow[data-direction="up"] .tick {
+  color: var(--eq-positive);
+}
+
+.tapeRow[data-direction="down"] .price,
+.tapeRow[data-direction="down"] .tick {
+  color: var(--eq-negative);
+}

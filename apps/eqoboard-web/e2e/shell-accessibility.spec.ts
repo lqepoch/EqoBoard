@@ -106,7 +106,7 @@ test("@component command palette supports shortcut, search, keyboard selection, 
   await expect(appearanceCommand).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(dialog).toBeHidden();
-  await expect(page.getByTestId("theme-toggle")).toHaveAccessibleName(/Appearance: Light/);
+  await expect(page.getByTestId("theme-toggle")).toHaveAccessibleName(/Appearance: System/);
 
   await page.getByTestId("command-palette-trigger").click();
   await expect(dialog).toBeVisible();
@@ -147,6 +147,8 @@ test("@component appearance cycles through the persisted native theme preference
   await openNativeApp(page);
 
   const toggle = page.getByTestId("theme-toggle");
+  await expect(toggle).toHaveAccessibleName(/Appearance: Dark/);
+  await toggle.click();
   await expect(toggle).toHaveAccessibleName(/Appearance: System/);
   await toggle.click();
   await expect(toggle).toHaveAccessibleName(/Appearance: Light/);

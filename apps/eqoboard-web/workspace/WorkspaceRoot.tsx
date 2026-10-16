@@ -484,8 +484,8 @@ export function WorkspaceRoot({ auth, registry }: WorkspaceRootProps) {
     <div className="workspace-root" data-testid="workspace-root">
       <header className="workspace-topbar">
         <div className="workspace-title-block">
-          <p className="workspace-eyebrow">EqoBoard · Native workspace</p>
-          <h1>Market workspace</h1>
+          <p className="workspace-eyebrow">EqoBoard</p>
+          <h1>Market desk</h1>
         </div>
         <label className="workspace-select-label">
           <span>Workspace</span>

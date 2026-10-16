@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
-import { AllCommunityModule, ModuleRegistry, themeQuartz } from "ag-grid-community";
+import { AllCommunityModule, ModuleRegistry } from "ag-grid-community";
 import type { ColDef, GridApi, GridReadyEvent } from "ag-grid-community";
 
 import { ResourceState } from "@/components/shell/ResourceState";
@@ -16,6 +16,7 @@ import type { WidgetNoActionMap } from "@/widgets/sdk/actions";
 import type { WidgetOperationMap } from "@/widgets/sdk/data";
 import { useOptionsResource } from "../market/hooks";
 import type { EmptyMarketConfigV1, OptionExpiryConfigV1 } from "../market/config";
+import { MARKET_GRID_THEME } from "../market/grid-theme";
 import styles from "../market/market-widgets.module.css";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -440,7 +441,7 @@ export function OptionsChainWidget({
           getRowId={({ data }) => data.symbol}
           onGridReady={onGridReady}
           rowData={rows}
-          theme={themeQuartz}
+          theme={MARKET_GRID_THEME}
         />
       </section>
       <p className={styles.marketFootnote}>
@@ -520,7 +521,7 @@ export function IvSkewWidget({
           defaultColDef={IV_DEFAULT_COL_DEF}
           getRowId={({ data }) => data.symbol}
           rowData={withIv}
-          theme={themeQuartz}
+          theme={MARKET_GRID_THEME}
         />
       </section>
     </section>
@@ -793,7 +794,7 @@ export function OptionTapeWidget({ host, inputs }: OptionTapeWidgetProps) {
           rowData={[...rowsRef.current.values()].sort(
             (left, right) => right.sequence - left.sequence,
           )}
-          theme={themeQuartz}
+          theme={MARKET_GRID_THEME}
         />
       </section>
       <p className={styles.marketFootnote}>
