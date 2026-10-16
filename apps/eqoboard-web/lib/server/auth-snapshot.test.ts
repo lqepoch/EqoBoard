@@ -11,6 +11,9 @@ vi.mock("next-auth/jwt", () => authMocks);
 
 const { getAuthUiSnapshot, ownerKeyForPrincipal } = await import("./auth");
 const { authorizeRequest } = await import("./bff-security");
+const { isLocalWorkstationRequestAllowed } = await vi.importActual<
+  typeof import("../../auth")
+>("../../auth");
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -272,6 +275,12 @@ describe("server auth UI snapshot", () => {
 
   it("projects local workstation identity without OIDC claims and limits its permissions", async () => {
     setLocalWorkstationEnvironment();
+
+    const serverComponentRequest = new NextRequest("http://127.0.0.1:3000/", {
+      headers: requestMocks.headers,
+    });
+    expect(new URL(serverComponentRequest.url).origin).toBe("http://localhost:3000");
+    expect(isLocalWorkstationRequestAllowed(serverComponentRequest)).toBe(true);
 
     const local = await getAuthUiSnapshot();
     expect(local).toMatchObject({

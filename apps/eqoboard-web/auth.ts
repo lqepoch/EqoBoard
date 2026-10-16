@@ -70,7 +70,17 @@ export function isLocalWorkstationRequestAllowed(request: Request): boolean {
   } catch {
     return false;
   }
-  if (requestUrl.origin !== configuredOrigin) return false;
+  // Next.js 15.5.27 normalizes IPv4 loopback URLs to `localhost` in NextURL.
+  // The original Host and forwarded authority are still checked below, so this
+  // accepts only that framework-internal URL representation of the same request.
+  const nextNormalizedOrigin = new URL(configuredOrigin);
+  nextNormalizedOrigin.hostname = "localhost";
+  if (
+    requestUrl.origin !== configuredOrigin &&
+    requestUrl.origin !== nextNormalizedOrigin.origin
+  ) {
+    return false;
+  }
   if (request.headers.get("host") !== expected.host) return false;
 
   let invalidForwardingHeader = false;
@@ -101,8 +111,7 @@ export function isLocalWorkstationRequestAllowed(request: Request): boolean {
   if (site !== null && site !== "same-origin" && !(site === "none" && !isWrite)) return false;
   if (
     isWrite &&
-    (origin !== configuredOrigin ||
-      (mode !== null && mode !== "same-origin" && mode !== "cors"))
+    (origin !== configuredOrigin || (mode !== null && mode !== "same-origin" && mode !== "cors"))
   ) {
     return false;
   }

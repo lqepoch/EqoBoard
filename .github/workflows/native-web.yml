@@ -217,7 +217,7 @@ jobs:
             tools/futu-runtime/package-lock.json
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: 3.12.15
+          python-version: 3.14.6
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # toolchain 1.99.0
         with:
           toolchain: 1.99.0

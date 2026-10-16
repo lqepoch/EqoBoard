@@ -516,9 +516,9 @@ try {
     $pidDir = Ensure-PrivateDirectory (Join-Path $dataRoot 'pid')
     $homeRoot = Ensure-PrivateDirectory (Join-Path $stateDir 'home')
     foreach ($name in @('web', 'gateway')) {
-        $home = Ensure-PrivateDirectory (Join-Path $homeRoot $name)
-        [void](Ensure-PrivateDirectory (Join-Path $home 'AppData/Roaming'))
-        [void](Ensure-PrivateDirectory (Join-Path $home 'AppData/Local'))
+        $serviceHome = Ensure-PrivateDirectory (Join-Path $homeRoot $name)
+        [void](Ensure-PrivateDirectory (Join-Path $serviceHome 'AppData/Roaming'))
+        [void](Ensure-PrivateDirectory (Join-Path $serviceHome 'AppData/Local'))
     }
     [void]$auditDir
     [void]$logsDir

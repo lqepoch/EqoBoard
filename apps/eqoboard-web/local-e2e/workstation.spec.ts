@@ -30,14 +30,15 @@ test("packaged workstation opens without OIDC and persists an owned workspace", 
 test("packaged local identity rejects foreign and proxy origins before storage writes", async ({
   request,
 }) => {
-  for (const headers of [
+  const rejectedHeaders: Record<string, string>[] = [
     { Origin: "https://foreign.invalid" },
     { Host: "foreign.invalid" },
     { "X-Forwarded-Host": "foreign.invalid" },
     { "X-Forwarded-Proto": "https" },
     { "X-Forwarded-Port": "443" },
     { Forwarded: "host=foreign.invalid;proto=https" },
-  ]) {
+  ];
+  for (const headers of rejectedHeaders) {
     expect((await request.get("/api/workspaces", { headers })).status()).toBe(403);
   }
   expect(

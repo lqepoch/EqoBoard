@@ -10,8 +10,7 @@ const {
   isOidcConfigured,
   localWorkstationModeEnabled,
   localWorkstationModeRequested,
-} =
-  await vi.importActual<typeof import("../../auth")>("../../auth");
+} = await vi.importActual<typeof import("../../auth")>("../../auth");
 
 afterEach(() => vi.unstubAllEnvs());
 

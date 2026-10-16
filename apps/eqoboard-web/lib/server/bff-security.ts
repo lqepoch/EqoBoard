@@ -94,12 +94,7 @@ export function validateRequestBoundary(
   if (origin !== null && (!expectedOrigin || origin !== expectedOrigin))
     return jsonError(403, "origin_rejected");
   if (site !== null && site !== "same-origin") return jsonError(403, "origin_rejected");
-  if (
-    mode !== null &&
-    isWrite &&
-    mode !== "same-origin" &&
-    !(localMode && mode === "cors")
-  ) {
+  if (mode !== null && isWrite && mode !== "same-origin" && !(localMode && mode === "cors")) {
     return jsonError(403, "origin_rejected");
   }
   if (isWrite && (!expectedOrigin || origin !== expectedOrigin))

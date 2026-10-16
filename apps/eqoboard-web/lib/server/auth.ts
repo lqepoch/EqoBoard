@@ -201,9 +201,7 @@ function anonymousSnapshot(
     storagePartition: null,
     ...(mode === null ? {} : { runtimeMode: mode }),
     researchOrigin:
-      localWorkstationModeRequested() || mode !== "terminal"
-        ? null
-        : nativeResearchPublicOrigin(),
+      localWorkstationModeRequested() || mode !== "terminal" ? null : nativeResearchPublicOrigin(),
   };
 }
 

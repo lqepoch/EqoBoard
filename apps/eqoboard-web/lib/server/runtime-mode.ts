@@ -84,10 +84,7 @@ function configuredSigningSecretsAreValid(): boolean {
 
 function profileIsolated(mode: NativeRuntimeMode | null): boolean {
   if (!mode) return false;
-  if (
-    localWorkstationModeRequested() &&
-    (mode !== "terminal" || !localWorkstationModeEnabled())
-  ) {
+  if (localWorkstationModeRequested() && (mode !== "terminal" || !localWorkstationModeEnabled())) {
     return false;
   }
   const oppositeProfile = mode === "terminal" ? RESEARCH_ONLY_ENV : TERMINAL_ONLY_ENV;

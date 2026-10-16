@@ -868,7 +868,7 @@ class NativeLocalLauncherTests(unittest.TestCase):
         self.assertIn("repoRoot = $script:RepositoryRoot", start)
         self.assertIn("$script:RepositoryRoot = $repo", start)
         self.assertIn("Write-RunState -Root $dataRoot", start)
-        self.assertIn("$process.Kill($true)", start)
+        self.assertRegex(start, r"\$\w+\.Kill\(\$true\)")
         self.assertIn("$actualStart -cne $Record.startTimeUtcTicks", stop)
         self.assertIn("$process.MainModule.FileName", stop)
         self.assertIn("$process.Kill($true)", stop)

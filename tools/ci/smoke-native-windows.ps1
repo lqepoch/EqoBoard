@@ -53,6 +53,7 @@ $envPath = Join-Path $fixtureRoot '.env'
 Set-SmokePrivateAcl $envPath
 try {
     & (Join-Path $repo 'tools/start-native-local.ps1') -PackagePath $PackagePath -RepoRoot $fixtureRoot -EnvPath $envPath -NodePath (Get-Command node).Source -ExpectedCandidateSha $CandidateSha
+    if ($LASTEXITCODE) { throw 'Packaged runtime startup failed' }
     $env:E2E_LOCAL_ORIGIN = 'http://127.0.0.1:3000'
     Push-Location (Join-Path $repo 'apps/eqoboard-web')
     try {
