@@ -548,6 +548,7 @@ type OptionTapeRow = Readonly<{
   price: number | null;
   size: number | null;
   eventAt: string;
+  receivedAt: string;
   source: string;
   entitlement: string;
 }>;
@@ -558,6 +559,7 @@ const TAPE_COLUMNS: readonly ColDef<OptionTapeRow>[] = Object.freeze([
   { field: "price", headerName: "Price", valueFormatter: ({ value }) => formatNumber(value) },
   { field: "size", headerName: "Size", valueFormatter: ({ value }) => formatNumber(value, 0) },
   { field: "eventAt", headerName: "Event time", minWidth: 190 },
+  { field: "receivedAt", headerName: "Gateway received time", minWidth: 190 },
   { field: "source", headerName: "Source", minWidth: 150 },
   { field: "entitlement", headerName: "Entitlement", minWidth: 140 },
 ]);
@@ -567,7 +569,7 @@ const TAPE_DEFAULT_COL_DEF: ColDef<OptionTapeRow> = Object.freeze({
   minWidth: 100,
 });
 
-function tapeRow(event: Readonly<Record<string, unknown>>): OptionTapeRow | null {
+export function tapeRow(event: Readonly<Record<string, unknown>>): OptionTapeRow | null {
   if (
     typeof event.gateway_instance_id !== "string" ||
     typeof event.local_sequence !== "number" ||
@@ -582,10 +584,8 @@ function tapeRow(event: Readonly<Record<string, unknown>>): OptionTapeRow | null
     symbol: event.symbol,
     price: typeof event.price === "number" && Number.isFinite(event.price) ? event.price : null,
     size: typeof event.size === "number" && Number.isFinite(event.size) ? event.size : null,
-    eventAt:
-      textValue(event, "event_time") === "unknown"
-        ? textValue(event, "received_at")
-        : textValue(event, "event_time"),
+    eventAt: textValue(event, "event_time"),
+    receivedAt: textValue(event, "received_at"),
     source: textValue(event, "source_label", 128),
     entitlement: textValue(event, "source_entitlement", 64),
   });

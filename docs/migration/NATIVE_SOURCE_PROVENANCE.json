@@ -997,6 +997,18 @@
         "apps/eqoboard-web/tests/parity/legacy-inventory.test.ts",
         "apps/eqoboard-web/tests/parity/native-registry.test.ts"
       ]
+    },
+    {
+      "agent": "pr64_review_regressions",
+      "source_provenance": {
+        "classification": "first-party independent implementation",
+        "adapted_sources": [],
+        "notes": "New regression tests exercise existing native rendering and fixed synthetic SSE scenarios; no provider data or upstream source is copied."
+      },
+      "files": [
+        "apps/eqoboard-web/e2e/market-tape-rendering.spec.ts",
+        "apps/eqoboard-web/widgets/implementations/options/tape.test.ts"
+      ]
     }
   ],
   "rootIntegration": {

@@ -4,7 +4,8 @@
  * Isolated CI-only OIDC and Gateway fixtures. This server intentionally has no
  * provider, broker, order, or account connector. The OIDC signing key is
  * generated in memory for each process and the Gateway returns empty,
- * explicitly synthetic/unavailable responses only.
+ * explicitly synthetic/unavailable responses only. A fixed test-control
+ * scenario can publish labeled non-provider SSE events to exercise rendering.
  *
  * Compose runs two copies:
  *   FIXTURE_SERVICE=oidc    PORT=4450 node e2e/fixture-server.mjs
@@ -591,6 +592,7 @@ function readGatewayBody(request) {
 
 function createGatewayServer() {
   const calls = new Map();
+  const streams = new Set();
   async function handle(request, response) {
     const url = new URL(request.url ?? "/", "http://native-mock-gateway:4451");
     if (url.pathname === "/healthz" && request.method === "GET")
@@ -605,6 +607,30 @@ function createGatewayServer() {
     if (url.pathname === "/__test/counters/reset" && request.method === "POST") {
       calls.clear();
       return sendJson(response, 200, { reset: true });
+    }
+    if (url.pathname === "/__test/market" && request.method === "POST") {
+      const body = await readGatewayBody(request);
+      const steps = {
+        initial: { local_sequence: 10, connection_epoch: 1, price: 4.25 },
+        stale: { local_sequence: 9, connection_epoch: 1, price: 999 },
+        epoch: { local_sequence: 11, connection_epoch: 2, price: 5.5 },
+      };
+      const step = body && Object.hasOwn(steps, body.step) ? steps[body.step] : null;
+      if (!step) return sendJson(response, 400, { error: "invalid_fixture_step" });
+      const event = {
+        kind: "option_trade",
+        gateway_instance_id: "native-e2e-fixture",
+        symbol: "SPY261218C00600000",
+        source_mode: "unknown",
+        source_label: FIXTURE_LABEL,
+        source_entitlement: "unknown",
+        event_time: null,
+        received_at: "2026-10-16T14:30:01Z",
+        size: 2,
+        ...step,
+      };
+      for (const stream of streams) stream.write(`data: ${JSON.stringify([event])}\n\n`);
+      return sendJson(response, 200, { published: streams.size, fixture: FIXTURE_LABEL });
     }
 
     // Count every application API dispatch, including an unknown path. This
@@ -634,6 +660,8 @@ function createGatewayServer() {
         "x-content-type-options": "nosniff",
       });
       response.write(": native-e2e empty stream; no market events\n\n");
+      streams.add(response);
+      response.once("close", () => streams.delete(response));
       return;
     }
 
