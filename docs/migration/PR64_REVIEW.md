@@ -70,6 +70,19 @@
 
 上述回归需在新候选 Actions 验证，未执行的测试不记为通过。
 
+修复候选 `1e9bd31703ae7aee1271850dc838d29acbfe34ac` 的
+[Native run 38835087755](https://github.com/lqepoch/EqoBoard/actions/runs/38835087755)
+已有真实产物：90 个文件、326 单元/路由测试通过，类型、lint、格式、密钥
+扫描、生产构建、生产镜像和 SBOM 成功；浏览器为 24 passed、3 failed，
+0 skipped / flaky，故整体失败。非空 Tape 的 trace 实际已有成交行，失败
+来自测试引用 AG Grid 新版本已不存在的 CSS 容器类名；恢复测试在异步
+IndexedDB 列表返回前读取 options。后续只改用行/单元格角色定位、等待指定
+delete 恢复项，不降低数据、时间、代次或恢复断言。Yahoo MAX 分页的最后
+一页返回 200 但 trace 标记 `net::ERR_ABORTED`；尚无产品触发取消的确证。
+测试现在在 response 到达时立即等待完整 transfer 并读取正文，与点击并行
+等待，保留全部相邻窗口、cursor、来源及次数断言；未加入重试或吞掉取消。
+若仍失败，必须继续定位，不能将该改动直接计为已修复。最终候选仍须重跑。
+
 运行时许可补充审查确认：原候选 image SBOM 未列 SWC native 候选包或
 server-only，却列出 client-only manifest、Node 和 better-sqlite3 native
 文件。部分 native 文件的 SPDX SHA1 为全零，不能当成真实文件身份。新增
@@ -77,6 +90,14 @@ Actions-only 原生文件清单工具，在同一 image config digest 的无网�
 无宿主挂载容器里读取实际字节并生成 SHA-256/大小，绑定 receipt 和校验清单。
 它不执行扫描到的模块，也不把文件哈希冒充许可证、来源或静态嵌入组件证明。
 许可 BLOCKED 保留；新清单本身仍需新 head 的 Actions 验证。
+
+`1e9bd31` 的实际清单已生成并与 receipt / SHA256SUMS 一致：703 项、
+702 个唯一 SHA-256、209,380,936 字节（699 ELF、2 Mach-O、2 PE），其中
+8 项是 better-sqlite3 的跨平台预编译模块。102 个 symlink 被明确跳过，
+不是完整文件系统扫描证明。此精确镜像的 SWC 两个 native 包与 server-only
+未在 SBOM/扫描路径中发现；client-only 仍存在，完整权威许可文本尚未闭合。
+这些观测不自动修改未来候选的许可门槛；原生组件的来源、构建与静态嵌入
+组件 notices 仍需补证，不能把新哈希清单当作许可放行。
 
 首轮修复候选 `ac310a18685c8cfa458644a1cb41ced58e2cb617` 的
 [Native run 38832905619](https://github.com/lqepoch/EqoBoard/actions/runs/38832905619)

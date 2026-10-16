@@ -387,17 +387,20 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     for (let pageNumber = 2; pageNumber <= expectedPageCount; pageNumber += 1) {
       const cursor = previousPage.next_cursor;
       expect(cursor).toBe(`older:${pageNumber - 1}`);
-      const olderRead = researchPage.waitForResponse((response) => {
-        const url = new URL(response.url());
-        return (
-          url.pathname === "/api/research/yfinance/daily" &&
-          url.searchParams.get("cursor") === cursor
-        );
-      });
-      await olderPageButton.click();
-      const olderResponse = await olderRead;
-      expect(olderResponse.status(), `Research page ${pageNumber}`).toBe(200);
-      const olderPage = (await olderResponse.json()) as PagedYfinanceObservation;
+      const olderRead = researchPage
+        .waitForResponse((response) => {
+          const url = new URL(response.url());
+          return (
+            url.pathname === "/api/research/yfinance/daily" &&
+            url.searchParams.get("cursor") === cursor
+          );
+        })
+        .then(async (response) => {
+          expect(response.status(), `Research page ${pageNumber}`).toBe(200);
+          expect(await response.finished(), `Research page ${pageNumber} transfer`).toBeNull();
+          return (await response.json()) as PagedYfinanceObservation;
+        });
+      const [olderPage] = await Promise.all([olderRead, olderPageButton.click()]);
       const expectedPageEnd = Date.parse(previousPage.page_range.start_utc);
       const expectedPageStart = Math.max(maxStartMs, expectedPageEnd - pageDurationMs);
       expect(olderPage.requested_range).toEqual(maxRange.requested_range);

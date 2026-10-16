@@ -55,17 +55,15 @@ test("@component workspace recovery restores a tab after deletion and persists t
   await recovery.click();
   await page.getByRole("button", { name: "Load local recovery copies" }).click();
   const recoverySelector = page.getByLabel("Saved recovery point");
-  const options = await recoverySelector.locator("option").evaluateAll((elements) =>
-    elements.map((element) => ({
-      label: (element as HTMLOptionElement).textContent ?? "",
-      value: (element as HTMLOptionElement).value,
-    })),
-  );
-  const deletedWorkspacePoint = options.find(({ label }) => label.endsWith("· delete"));
+  const deletedWorkspaceOption = recoverySelector.locator("option").filter({
+    hasText: /· delete$/,
+  });
+  await expect(deletedWorkspaceOption).toHaveCount(1);
+  const deletedWorkspacePoint = await deletedWorkspaceOption.getAttribute("value");
   expect(
     deletedWorkspacePoint,
     "tab deletion must first leave a partition-scoped recovery copy",
-  ).toBeDefined();
+  ).toBeTruthy();
   if (!deletedWorkspacePoint) {
     throw new Error("Tab deletion did not leave the expected partition-scoped recovery copy.");
   }

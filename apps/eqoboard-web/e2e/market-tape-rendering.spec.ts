@@ -39,7 +39,9 @@ test("@component synthetic tape renders through the shared BFF stream and clears
   }
 
   await publish("initial");
-  const rows = tape.locator(".ag-center-cols-container [role=row]");
+  const rows = tape.getByRole("row").filter({
+    has: page.getByRole("gridcell").and(page.locator('[col-id="price"]')),
+  });
   await expect(rows).toHaveCount(1);
   await expect(rows.locator('[col-id="price"]')).toHaveText("4.25");
   // Event time is deliberately missing even though Gateway receive time exists.
