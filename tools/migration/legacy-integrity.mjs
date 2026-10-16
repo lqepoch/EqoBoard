@@ -1045,8 +1045,9 @@ function main() {
     return;
   }
   process.stdout.write(
-    "PASS legacy integrity: " + result.checkedFiles + " protected files match frozen source "
-    + manifest.baseline.commit + ". This does not prove feature parity or release acceptance.\n",
+    "PASS legacy integrity: " + result.checkedFiles + " protected paths verified against frozen source "
+    + manifest.baseline.commit + " with exact single-file authorization " + LEGACY_AUTHORIZATION_ID
+    + "; archived original bytes verified. This does not prove feature parity or release acceptance.\n",
   );
 }
 
