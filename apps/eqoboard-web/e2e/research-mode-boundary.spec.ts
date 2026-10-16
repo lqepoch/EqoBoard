@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Page,
+  type Request as PlaywrightRequest,
+  type TestInfo,
+} from "@playwright/test";
 import {
   YFINANCE_RESEARCH_MAX_PAGE_DAYS,
   YFINANCE_RESEARCH_MAX_PAGES,
@@ -17,6 +23,40 @@ import {
 
 const MDP_RESEARCH_ROUTE = "/v1/research/yfinance/daily";
 const SECRET_SENTINEL_PREFIX = "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_";
+const YAHOO_DAILY_API_PATH = "/api/research/yfinance/daily";
+
+function installResearchNetworkDiagnostics(page: Page) {
+  const startedAt = Date.now();
+  const ids = new WeakMap<PlaywrightRequest, number>();
+  const statuses = new WeakMap<PlaywrightRequest, number>();
+  const events: Record<string, string | number | boolean>[] = [];
+  let nextId = 1;
+  const record = (event: string, request: PlaywrightRequest) => {
+    const url = new URL(request.url());
+    if (url.pathname !== YAHOO_DAILY_API_PATH || events.length >= 200) return;
+    let id = ids.get(request);
+    if (!id) {
+      id = nextId++;
+      ids.set(request, id);
+    }
+    events.push({
+      elapsedMs: Date.now() - startedAt,
+      event,
+      id,
+      pathname: url.pathname,
+      status: statuses.get(request) ?? 0,
+      failure: event === "requestfailed",
+    });
+  };
+  page.on("request", (request) => record("request", request));
+  page.on("response", (response) => {
+    statuses.set(response.request(), response.status());
+    record("response", response.request());
+  });
+  page.on("requestfinished", (request) => record("requestfinished", request));
+  page.on("requestfailed", (request) => record("requestfailed", request));
+  return events;
+}
 
 function candidateSha(): string {
   const sha = process.env.E2E_CANDIDATE_SHA;
@@ -271,6 +311,7 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
   const context = await browser.newContext();
   const researchPage = await context.newPage();
   const browserRequests: string[] = [];
+  const networkEvents = installResearchNetworkDiagnostics(researchPage);
   try {
     await signInAt(researchPage, researchOrigin, "reader", "/");
     await resetMdpFixtureCounters(request);
@@ -467,6 +508,14 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
       /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u,
     );
   } finally {
+    try {
+      await testInfo.attach("yahoo-research-network", {
+        body: JSON.stringify(networkEvents, null, 2),
+        contentType: "application/json",
+      });
+    } catch {
+      // Diagnostic attachment must not mask the test result.
+    }
     await context.close();
   }
 });

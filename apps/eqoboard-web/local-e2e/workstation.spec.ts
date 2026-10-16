@@ -10,6 +10,8 @@ test("packaged workstation opens without OIDC and persists an owned workspace", 
   await expect(page.getByTestId("workspace-root")).toBeVisible();
   await expect(page.getByTestId("sign-in-button")).toHaveCount(0);
   const selector = page.getByTestId("workspace-selector");
+  await expect(selector.locator("option").first()).toBeAttached();
+  await expect(page.getByText("All changes saved", { exact: true })).toBeVisible();
   const originalCount = await selector.locator("option").count();
   await page.getByRole("button", { name: "New workspace", exact: true }).click();
   await expect(selector.locator("option")).toHaveCount(originalCount + 1);
