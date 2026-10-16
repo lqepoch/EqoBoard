@@ -223,6 +223,10 @@ jobs:
         with:
           toolchain: 1.99.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        env:
+          # A later Web smoke failure does not invalidate Cargo's fingerprinted
+          # build cache. Gate acceptance still requires the entire lane to pass.
+          CACHE_ON_FAILURE: "true"
         with:
           shared-key: native-windows-release
       - name: Install exact Windows dependency graphs

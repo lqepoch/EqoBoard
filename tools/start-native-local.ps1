@@ -311,6 +311,9 @@ function New-ServiceEnvironment([string]$NodeDirectory, [string]$PrivateHome, [h
     foreach ($name in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Machine).Keys) {
         $environment[[string]$name] = $null
     }
+    foreach ($name in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::Process).Keys) {
+        $environment[[string]$name] = $null
+    }
     $systemRoot = [Environment]::GetEnvironmentVariable('SystemRoot', [EnvironmentVariableTarget]::Machine)
     if (-not $systemRoot) { $systemRoot = [Environment]::GetEnvironmentVariable('SystemRoot') }
     if (-not $systemRoot) { Fail 'Windows SystemRoot is unavailable.' }
@@ -398,7 +401,7 @@ function Start-TrackedService(
     $process = Start-Process -FilePath $Executable @argumentParameters `
         -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-        -Environment $Environment -UseNewEnvironment
+        -Environment $Environment
     $script:ManagedProcesses.Add($process)
     try {
         $identity = Get-ProcessIdentity -ProcessId $process.Id

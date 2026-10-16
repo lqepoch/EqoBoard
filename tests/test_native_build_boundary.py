@@ -826,9 +826,11 @@ class NativeLocalLauncherTests(unittest.TestCase):
     def test_services_receive_separate_scrubbed_environment_allowlists(self) -> None:
         source = self.START.read_text(encoding="utf-8")
         self.assertIn("GetEnvironmentVariables([EnvironmentVariableTarget]::Machine).Keys", source)
+        self.assertIn("GetEnvironmentVariables([EnvironmentVariableTarget]::Process).Keys", source)
         self.assertIn("$environment[[string]$name] = $null", source)
         self.assertIn("-WindowStyle Hidden", source)
-        self.assertIn("-Environment $Environment -UseNewEnvironment", source)
+        self.assertIn("-Environment $Environment", source)
+        self.assertNotIn("-UseNewEnvironment", source)
         gateway = source.split("$gatewayEnvironment = New-ServiceEnvironment", 1)[1].split(
             "$webEnvironment = New-ServiceEnvironment", 1
         )[0]

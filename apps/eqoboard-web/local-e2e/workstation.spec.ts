@@ -31,6 +31,7 @@ test("packaged workstation opens without OIDC and persists an owned workspace", 
     execution_enabled: false,
   });
   expect(await page.content()).not.toContain("NATIVE_LOCAL_PROVIDER_SECRET_SENTINEL");
+  expect(await page.content()).not.toContain("NATIVE_LOCAL_PARENT_SECRET_SENTINEL");
   expect([...new Set(origins)]).toEqual(["http://127.0.0.1:3000"]);
 });
 

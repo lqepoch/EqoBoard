@@ -64,6 +64,9 @@ pwsh -File tools/start-native-local.ps1 -RepoRoot . -PackagePath data/native-loc
 启动器再次核对 `runtime.json` 和完整 `SHA256SUMS`，只运行该包中的二进制。
 Web 仅收到自身签名/会话与必要配置，Alpaca 与 Futu 凭据只传给 Gateway/SDK。
 两个服务实际绑定 `127.0.0.1`；已有端口或未知进程占用时拒绝覆盖，不杀其它任务。
+启动器先移除当前进程全部继承变量，再传入服务白名单；避免 Windows 的
+`Start-Process -UseNewEnvironment` 忽略显式环境块。Actions 通过父进程合成敏感
+变量验证 Web 的运行模式隔离，真实凭据不参与该验收。
 状态、日志和独立数据库保存在根目录 `data/native-local/`，目录由独占 Windows ACL
 保护。旧 SQLite 不迁入、不认领。
 

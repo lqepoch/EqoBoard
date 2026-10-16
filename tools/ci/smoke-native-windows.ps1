@@ -51,7 +51,14 @@ $envPath = Join-Path $fixtureRoot '.env'
     "NEXTAUTH_SECRET=$(New-TestSecret)"
 ) | Set-Content -LiteralPath $envPath -Encoding utf8NoBOM
 Set-SmokePrivateAcl $envPath
+$priorAlpacaKey = $env:ALPACA_KEY
+$priorAlpacaSecret = $env:ALPACA_SECRET
+$priorResearchSecret = $env:EQO_RESEARCH_JWT_SECRET
 try {
+    # Inherited provider/research secrets must not reach the terminal Web.
+    $env:ALPACA_KEY = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_KEY'
+    $env:ALPACA_SECRET = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_SECRET'
+    $env:EQO_RESEARCH_JWT_SECRET = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_RESEARCH'
     & (Join-Path $repo 'tools/start-native-local.ps1') -PackagePath $PackagePath -RepoRoot $fixtureRoot -EnvPath $envPath -NodePath (Get-Command node).Source -ExpectedCandidateSha $CandidateSha
     if ($LASTEXITCODE) { throw 'Packaged runtime startup failed' }
     $env:E2E_LOCAL_ORIGIN = 'http://127.0.0.1:3000'
@@ -61,5 +68,11 @@ try {
         if ($LASTEXITCODE) { throw 'Packaged workstation browser acceptance failed' }
     } finally { Pop-Location }
 } finally {
-    & (Join-Path $repo 'tools/stop-native-local.ps1') -RepoRoot $fixtureRoot
+    try {
+        & (Join-Path $repo 'tools/stop-native-local.ps1') -RepoRoot $fixtureRoot
+    } finally {
+        $env:ALPACA_KEY = $priorAlpacaKey
+        $env:ALPACA_SECRET = $priorAlpacaSecret
+        $env:EQO_RESEARCH_JWT_SECRET = $priorResearchSecret
+    }
 }
