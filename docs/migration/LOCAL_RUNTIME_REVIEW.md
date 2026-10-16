@@ -60,9 +60,15 @@ Windows lane 固定 Windows 2022、Node 22.23.3、Rust 1.99.0、Python 3.14.6
 保存/重载后才上传。Linux lane 继续执行原生构建、合成容器浏览器与 SBOM。
 Core、OpenBB 和 CodeQL 门禁保留，任何失败或未知状态均阻止合并。
 
-Research 分页传输及 OpenBB 刷新恢复曾出现 Actions 失败，必须结合完整响应
-与服务端日志定位；保留全部来源/数据/分页断言，不能用提高重试或忽略失败
-代替修复。最终记录需明确残余不稳定性，不能将单次绿灯称作长期可靠性证明。
+Research 分页传输及 OpenBB 刷新恢复曾出现 Actions 失败。Chromium
+[568852319](https://issues.chromium.org/issues/568852319/dupes) 与
+[8508456 修复](https://chromium-review.googlesource.com/c/chromium/src/+/8508456)
+说明：完整读取 no-store 响应后，DevTools 仍可能误报取消并丢失响应体。
+当前固定浏览器源码未包含该修复；这与记录中已显示数据、没有对应应用 abort
+但 CDP 报 ERR_ABORTED 的现象一致。Research 测试改为旁路 clone 到 EOF 的有界
+浏览器内响应证据，保持原 fetch/Response、全部来源/数据/分页及大小断言；
+真实读取失败仍阻断，CDP 时间线继续留存作对照，不增加重试或忽略传输失败。
+最终记录需明确验收范围，不能将单次绿灯称作长期可靠性证明。
 
 源码来源记录在 `NATIVE_SOURCE_PROVENANCE.json`、`native06-provenance.json`、
 `native07-provenance.json`；许可证审计见 `DEPENDENCY_AND_LICENSE_AUDIT.md`。
