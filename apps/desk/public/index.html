@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EqoBoard 股票期权</title>
+<link rel="stylesheet" href="/app.css" />
+<script src="/vendor/lightweight-charts.js"></script>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="tb-left">
+      <span class="logo" aria-hidden="true">EQ</span>
+      <form class="search" id="searchForm" autocomplete="off">
+        <span class="muted" aria-hidden="true">⌕</span>
+        <input id="searchInput" maxlength="12" placeholder="搜索代码，例如 TSLA" aria-label="搜索股票代码" />
+      </form>
+    </div>
+    <div class="tb-right">
+      <span class="pill" id="futuPill">富途 · 连接中</span>
+      <span class="pill muted">股票 K 线 · Alpaca IEX</span>
+      <span class="pill muted">期权 · Alpaca 指示性</span>
+      <span class="clock" id="clock">--:--:-- ET</span>
+    </div>
+  </header>
+
+  <aside class="watch" aria-label="自选">
+    <div class="sec-head"><span>自选</span><span class="muted" id="watchCount"></span></div>
+    <div class="watch-cols"><span>名称 / 代码</span><span>最新价</span><span>涨跌幅</span></div>
+    <div class="watch-list" id="watchList"></div>
+    <form class="add-row" id="addForm" autocomplete="off">
+      <input class="field" id="addInput" maxlength="12" placeholder="添加代码" aria-label="添加代码" />
+      <button class="btn" type="submit">添加</button>
+    </form>
+  </aside>
+
+  <main class="center" aria-label="行情">
+    <div class="head">
+      <div class="head-id">
+        <span class="name" id="symName">—</span>
+        <span class="code" id="symCode"></span>
+      </div>
+      <div class="head-px">
+        <span class="price" id="symPx">—</span>
+        <span class="chg" id="symChg"></span>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab on" data-view="chart" role="tab" aria-selected="true">图表</button>
+      <button type="button" class="tab" data-view="options" role="tab" aria-selected="false">期权</button>
+    </nav>
+
+    <section id="chartView" class="view">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="分钟与小时">
+          <button class="tf on" data-tf="1m">1分</button>
+          <button class="tf" data-tf="5m">5分</button>
+          <button class="tf" data-tf="10m">10分</button>
+          <button class="tf" data-tf="15m">15分</button>
+          <button class="tf" data-tf="30m">30分</button>
+          <button class="tf" data-tf="1h">1时</button>
+          <button class="tf" data-tf="2h">2时</button>
+          <button class="tf" data-tf="4h">4时</button>
+        </div>
+        <div class="seg" role="group" aria-label="日周月">
+          <button class="tf" data-tf="D">日K</button>
+          <button class="tf" data-tf="W">周K</button>
+          <button class="tf" data-tf="M">月K</button>
+        </div>
+        <div class="seg sec" role="group" aria-label="秒级（由 1 秒线聚合）">
+          <button class="tf" data-tf="1s">1秒</button>
+          <button class="tf" data-tf="5s">5秒</button>
+          <button class="tf" data-tf="10s">10秒</button>
+        </div>
+        <div class="seg" id="windowSeg" role="group" aria-label="秒级窗口" hidden>
+          <button class="win on" data-win="600">10分</button>
+          <button class="win" data-win="1800">30分</button>
+          <button class="win" data-win="3600">1小时</button>
+          <button class="win" data-win="7200">2小时</button>
+        </div>
+      </div>
+      <div class="chart-box">
+        <div class="legend" id="legend"></div>
+        <div class="chart" id="chart"></div>
+        <div class="notice" id="chartNotice" hidden></div>
+      </div>
+      <div class="foot" id="chartFoot"></div>
+    </section>
+
+    <section id="optionsView" class="view" hidden>
+      <div class="opt-summary" id="optSummary"></div>
+      <div class="expiries" id="expiries" role="group" aria-label="到期日"></div>
+      <div class="opt-bar">
+        <div class="seg" id="optSide" role="group" aria-label="期权方向">
+          <button class="fbtn on" type="button" data-side="all">全部</button>
+          <button class="fbtn" type="button" data-side="call">看涨</button>
+          <button class="fbtn" type="button" data-side="put">看跌</button>
+        </div>
+        <span class="opt-note" id="optNote"></span>
+      </div>
+      <div class="opt-wrap">
+        <table class="opt-table" id="optTable">
+          <thead id="optHead"></thead>
+          <tbody id="optBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <aside class="side" aria-label="摘要、逐笔与摆盘">
+    <div class="side-head">
+      <div class="side-name" id="sideName">—</div>
+      <div class="side-px" id="sidePx">—</div>
+      <div class="side-status" id="sideStatus">—</div>
+    </div>
+    <div class="stats-head">摘要 · yfinance</div>
+    <div class="stats">
+      <div><span>最高</span><b id="stHigh">—</b></div>
+      <div><span>最低</span><b id="stLow">—</b></div>
+      <div><span>今开</span><b id="stOpen">—</b></div>
+      <div><span>昨收</span><b id="stPrev">—</b></div>
+      <div><span>成交量</span><b id="stVol">—</b></div>
+      <div><span>市值</span><b id="stCap">—</b></div>
+      <div><span>市盈率</span><b id="stPe">—</b></div>
+      <div><span>52周高</span><b id="stHi52">—</b></div>
+      <div><span>52周低</span><b id="stLo52">—</b></div>
+    </div>
+    <div class="sec-head small"><span>逐笔成交 · 富途</span><span class="muted" id="tapeCount"></span></div>
+    <div class="tape" id="tape" aria-label="逐笔成交">
+      <div class="tape-head"><span>时间 (ET)</span><span class="r">价格</span><span class="r">数量</span><span class="c">零股</span></div>
+      <div id="tapeRows"></div>
+    </div>
+    <div class="sec-head small"><span>买卖盘 · 富途</span><span class="muted">前 10 档</span></div>
+    <div class="bid-sum"><span class="buy-h">买盘 <b id="bbBuyPct">—</b></span><span class="sell-h"><b id="bbSellPct">—</b> 卖盘</span></div>
+    <div class="bidbar"><div class="bb-buy" id="bbBuy"></div><div class="bb-sell" id="bbSell"></div></div>
+    <div class="bbo"><span class="bbo-b">买一 <b id="bboBidPx">—</b> <i id="bboBidSz">—</i></span><span class="bbo-a"><i id="bboAskSz">—</i> <b id="bboAskPx">—</b> 卖一</span></div>
+    <div class="sec-head small"><span>摆盘 · 富途 ORDER_BOOK</span><span class="muted">无交易所名称</span></div>
+    <div class="depth-head"><span>买盘 · 价 / 量</span><span class="r">卖盘 · 量 / 价</span></div>
+    <div class="depth">
+      <div class="dcol" id="depthBid"></div>
+      <div class="dcol" id="depthAsk"></div>
+    </div>
+  </aside>
+
+  <footer class="status">
+    <span id="stFutu">富途 OpenD：—</span>
+    <span id="stRate">逐笔：— 笔/秒</span>
+    <span id="stSess">—</span>
+    <span>行情：富途 OpenD · 摘要：yfinance · 历史 K 线：Alpaca · 期权：Alpaca 指示性</span>
+  </footer>
+</div>
+</body>
+</html>

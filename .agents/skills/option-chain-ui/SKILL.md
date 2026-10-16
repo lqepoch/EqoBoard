@@ -7,7 +7,7 @@ description: 实现高频、可信、可操作的期权链 AG Grid 双边报价�
 原生开发路径：`apps/eqoboard-web/widgets/implementations/options/OptionsWidgets.tsx`、
 `widgets/implementations/market/registry.tsx` 与共享市场宿主。旧 OpenTerminal 对应 Widget
 只作为受保护参考，不作为新增 UI 修改目标；原生边界同时遵循 `native-terminal` Skill。
-优先 AG Grid Community 的 row ID=strike、applyTransactionAsync 批量更新；不要对每个 Quote 都 React setState 整表。
+优先 AG Grid Community 的 row ID=strike、applyTransactionAsync 批量更新（`apps/desk` 期权页按用户要求用普通只读表格）；不要对每个 Quote 都 React setState 整表。
 必须显示 call/put 双侧、strike、Bid/Ask、IV/Delta、数据源、授权/ACK/覆盖/新鲜度错误和分页截断。
 OPRA 只标注 quote/trade feed。IV/Greeks 属 Alpaca REST option snapshot vendor/model 字段，不是 OPRA 原生字段；缺少独立模型时间时显示 `model as-of unknown`，不能借用 quote/trade event time 或 Gateway response time。
 行情 event time 与 Gateway received-at 分开显示；缺少 event time 保持 unknown，不能以接收时间回填。
@@ -19,3 +19,7 @@ Gateway feed ACK、source/instance/time DTO 尚未在当前 Rust 基线完成时
 交易仍为关闭状态：本版本只允许服务器风险预览；Paper submit 必须显示 blocked，Live 始终拒绝。预览以服务端返回并锁定的 intent、preview ID 与 expiry 为准；表单或腿变化递增 generation 并更新 fingerprint，使旧请求/旧预览失效，确认时再次核对锁定 intent 和 expiry。不得用本地 simulation 冒充券商 Paper。
 
 若提交响应或连接结果为 UNKNOWN，保留原 client_order_id 与操作关联，显示需要恢复/对账，并禁止换新 ID 重下。只有服务端明确返回 rejected 或 blocked 才显示对应终态；超时、冲突或无回包不能推断为拒单。
+
+## apps/desk 例外（用户需求优先）
+
+`apps/desk` 的期权页是独立的只读链，不使用 AG Grid 与原生 Widget SDK：看涨在左、行权价居中、看跌在右，到期日标签为 `MM/DD (N天)`。数据来自 Alpaca 指示性期权快照，标的价来自富途。IV 与希腊字母未提供时显示 `—`，报价滞后按实测秒数标注。规则以 `apps/desk/AGENTS.md` 为准。
