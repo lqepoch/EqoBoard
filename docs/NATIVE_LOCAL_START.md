@@ -51,6 +51,8 @@ EQO_EXECUTION_MODE=disabled
 选择目标 commit 上 **全部 Native Web CI 门禁成功** 的 run。Windows lane 会先
 构建 Rust Gateway 和 Next standalone，再对实际运行包执行本机身份、工作区保存、
 跨源拒绝的浏览器验收；不包含任何真实行情或私有凭据。
+Windows TLS 构建使用固定 NASM 2.16.03 官方 zip，并校验提交的 SHA-256；
+NASM 仅在 Actions 构建机使用，本机运行包不需要安装它。
 
 ```powershell
 gh run download <run-id> --repo lqepoch/EqoBoard --name native-windows-<candidate-sha>-<run-id> --dir data/native-local/download
