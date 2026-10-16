@@ -119,90 +119,123 @@ test("@component synthetic Core Bars continuation renders older rows without era
   await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
     "All changes saved",
   );
-  const oldWorkspaceCount = await workspaceSelector.locator("option").count();
-  await page.getByRole("button", { name: "New workspace", exact: true }).click();
-  await expect(workspaceSelector.locator("option")).toHaveCount(oldWorkspaceCount + 1);
-  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
-    "All changes saved",
+  const previousWorkspaceId = await workspaceSelector.inputValue();
+  const previousWorkspaceIds = await workspaceSelector.locator("option").evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
   );
+  let createdWorkspaceId: string | null = null;
 
-  // This same-origin route returns a synthetic BFF envelope in the browser; the real BFF,
-  // MDP authentication, and market providers are outside the scope of this client regression.
-  await page.route(
-    (url) => url.origin === origin && /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname),
-    async (route) => {
-      const request = pageRequest(new URL(route.request().url()));
-      servedRequests.push(request);
-      const older = request.cursor !== null;
-      await route.fulfill({
-        status: older ? 200 : 206,
-        json: {
-          kind: "eqoboard.core-bars-page.v1",
-          request,
-          response: pageResponse(request, older),
-        },
-      });
-    },
-  );
-
-  await page.getByRole("button", { name: "Add widget", exact: true }).click();
-  const initialRead = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      url.origin === origin &&
-      /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
-      url.searchParams.get("cursor") === null
+  try {
+    const oldWorkspaceCount = await workspaceSelector.locator("option").count();
+    await page.getByRole("button", { name: "New workspace", exact: true }).click();
+    await expect(workspaceSelector.locator("option")).toHaveCount(oldWorkspaceCount + 1);
+    createdWorkspaceId = await workspaceSelector.inputValue();
+    expect(createdWorkspaceId).not.toBe(previousWorkspaceId);
+    await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+      "All changes saved",
     );
-  });
-  await page.getByRole("menuitem", { name: /^Chart\b/u }).click();
-  expect((await initialRead).status()).toBe(206);
 
-  const chart = page.getByTestId("native-chart");
-  await expect(chart).toBeVisible();
-  await page.getByRole("button", { name: "Maximize Chart", exact: true }).click();
-  const evidence = chart.getByTestId("native-chart-provenance");
-  await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
-  await expect(evidence).toContainText(
-    "1 gaps across 1 validated page snapshots; 0 distinct rows loaded",
-  );
-  const loadOlder = chart.getByTestId("native-chart-load-older");
-  await expect(loadOlder).toBeEnabled();
-
-  const olderRead = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      url.origin === origin &&
-      /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
-      url.searchParams.get("cursor") === CURSOR
+    // This same-origin route returns a synthetic BFF envelope in the browser; the real BFF,
+    // MDP authentication, and market providers are outside the scope of this client regression.
+    await page.route(
+      (url) => url.origin === origin && /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname),
+      async (route) => {
+        const request = pageRequest(new URL(route.request().url()));
+        servedRequests.push(request);
+        const older = request.cursor !== null;
+        await route.fulfill({
+          status: older ? 200 : 206,
+          json: {
+            kind: "eqoboard.core-bars-page.v1",
+            request,
+            response: pageResponse(request, older),
+          },
+        });
+      },
     );
-  });
-  await loadOlder.click();
-  expect((await olderRead).status()).toBe(200);
-  await expect(chart.getByTestId("native-chart-crosshair")).toContainText(
-    "2 validated historical rows loaded",
-  );
-  await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
-  await expect(evidence).toContainText(
-    "mixed; 1 segments and 1 gaps across 2 validated page snapshots; 2 distinct rows loaded",
-  );
-  await expect(evidence).toContainText("synthetic-core-bars-continuation-e2e");
 
-  const canvasSizes = await chart.locator("canvas").evaluateAll((canvases) =>
-    canvases.map((canvas) => ({
-      width: (canvas as HTMLCanvasElement).width,
-      height: (canvas as HTMLCanvasElement).height,
-    })),
-  );
-  expect(canvasSizes.some(({ width, height }) => width > 0 && height > 0)).toBe(true);
-  await expect(chart.getByTestId("native-chart-load-older")).toHaveCount(0);
+    await page.getByRole("button", { name: "Add widget", exact: true }).click();
+    const initialRead = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.origin === origin &&
+        /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
+        url.searchParams.get("cursor") === null
+      );
+    });
+    await page.getByRole("menuitem", { name: /^Chart\b/u }).click();
+    expect((await initialRead).status()).toBe(206);
 
-  expect(externalBrowserRequests).toEqual([]);
-  expect(servedRequests).toHaveLength(2);
-  const head = servedRequests[0];
-  const continuation = servedRequests[1];
-  expect(head).toBeDefined();
-  expect(continuation).toBeDefined();
-  if (!head || !continuation) throw new Error("Expected a head and a continuation request.");
-  expect(head.cursor).toBeNull();
-  expect(continuation).toEqual({ ...head, cursor: CURSOR });
+    const chart = page.getByTestId("native-chart");
+    await expect(chart).toBeVisible();
+    const evidence = chart.getByTestId("native-chart-provenance");
+    // waitForResponse resolves at headers; wait for the widget to decode and commit the
+    // empty first page before interacting with it. Maximize re-parents the widget and
+    // remounts it, which would cancel an in-flight first read and issue another head read.
+    await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
+    await expect(evidence).toContainText(
+      "1 gaps across 1 validated page snapshots; 0 distinct rows loaded",
+    );
+    await expect(chart.getByTestId("native-chart-crosshair")).toContainText(
+      "0 validated historical rows loaded.",
+    );
+    const loadOlder = chart.getByTestId("native-chart-load-older");
+    await expect(loadOlder).toBeEnabled();
+
+    const olderRead = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.origin === origin &&
+        /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
+        url.searchParams.get("cursor") === CURSOR
+      );
+    });
+    await loadOlder.click();
+    expect((await olderRead).status()).toBe(200);
+    await expect(chart.getByTestId("native-chart-crosshair")).toContainText(
+      "2 validated historical rows loaded",
+    );
+    await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
+    await expect(evidence).toContainText(
+      "mixed; 1 segments and 1 gaps across 2 validated page snapshots; 2 distinct rows loaded",
+    );
+    await expect(evidence).toContainText("synthetic-core-bars-continuation-e2e");
+
+    const canvasSizes = await chart.locator("canvas").evaluateAll((canvases) =>
+      canvases.map((canvas) => ({
+        width: (canvas as HTMLCanvasElement).width,
+        height: (canvas as HTMLCanvasElement).height,
+      })),
+    );
+    expect(canvasSizes.some(({ width, height }) => width > 0 && height > 0)).toBe(true);
+    await expect(chart.getByTestId("native-chart-load-older")).toHaveCount(0);
+
+    expect(externalBrowserRequests).toEqual([]);
+    expect(servedRequests).toHaveLength(2);
+    const head = servedRequests[0];
+    const continuation = servedRequests[1];
+    expect(head).toBeDefined();
+    expect(continuation).toBeDefined();
+    if (!head || !continuation) throw new Error("Expected a head and a continuation request.");
+    expect(head.cursor).toBeNull();
+    expect(continuation).toEqual({ ...head, cursor: CURSOR });
+  } finally {
+    const currentWorkspaceId = await workspaceSelector.inputValue().catch(() => null);
+    const ownedWorkspaceId =
+      createdWorkspaceId ??
+      (currentWorkspaceId && !previousWorkspaceIds.includes(currentWorkspaceId)
+        ? currentWorkspaceId
+        : null);
+    if (ownedWorkspaceId) {
+      await workspaceSelector.selectOption(ownedWorkspaceId);
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Delete workspace", exact: true }).click();
+      await expect(workspaceSelector.locator("option")).toHaveCount(previousWorkspaceIds.length);
+      await workspaceSelector.selectOption(previousWorkspaceId);
+      await expect(workspaceSelector).toHaveValue(previousWorkspaceId);
+      await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+        "All changes saved",
+      );
+    }
+  }
 });
