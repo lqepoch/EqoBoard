@@ -62,12 +62,14 @@ describe("chart history pagination and viewport", () => {
   it("advances a head snapshot without replacing the exact-window cursor chain", () => {
     type Page = Readonly<{
       response: Readonly<{ effectiveResolution: string }>;
+      projection: Readonly<{ bars: readonly ChartPlotBar<string>[] }>;
       envelope: Readonly<{
         request: Readonly<{ request_start: string; request_end: string; cursor: string | null }>;
       }>;
     }>;
     const originalHead: Page = {
       response: { effectiveResolution: "1m" },
+      projection: { bars: bars([20, 30]) },
       envelope: {
         request: {
           request_start: "2026-10-15T13:00:00Z",
@@ -78,6 +80,7 @@ describe("chart history pagination and viewport", () => {
     };
     const olderPage: Page = {
       response: { effectiveResolution: "1m" },
+      projection: { bars: bars([10, 20]) },
       envelope: {
         request: {
           request_start: "2026-10-15T13:00:00Z",
@@ -88,6 +91,7 @@ describe("chart history pagination and viewport", () => {
     };
     const refreshedHead: Page = {
       response: { effectiveResolution: "1m" },
+      projection: { bars: bars([30, 40]) },
       envelope: {
         request: {
           request_start: "2026-10-15T13:01:00Z",
@@ -117,9 +121,48 @@ describe("chart history pagination and viewport", () => {
     expect(result.snapshot.bars[2]?.close).toBe(99);
   });
 
+  it("drops expired head rows on consecutive refreshes while preserving cursor pages", () => {
+    type Page = Readonly<{
+      response: Readonly<{ effectiveResolution: string }>;
+      projection: Readonly<{ bars: readonly ChartPlotBar<string>[] }>;
+    }>;
+    const originalHead: Page = {
+      response: { effectiveResolution: "1m" },
+      projection: { bars: bars([10, 20]) },
+    };
+    const olderPage: Page = {
+      response: { effectiveResolution: "1m" },
+      projection: { bars: bars([0, 10]) },
+    };
+    const firstRefresh: Page = {
+      response: { effectiveResolution: "1m" },
+      projection: { bars: bars([20, 30]) },
+    };
+    const secondRefresh: Page = {
+      response: { effectiveResolution: "1m" },
+      projection: { bars: bars([40, 50]) },
+    };
+    const cursorPages = [originalHead, olderPage];
+    const first = mergePagedHistoryHead(
+      { cursorPages, latestHead: originalHead, bars: bars([0, 10, 20]) },
+      firstRefresh,
+      firstRefresh.projection.bars,
+    );
+
+    expect(first.accepted).toBe(true);
+    if (!first.accepted) return;
+    expect(first.snapshot.bars.map((bar) => Number(bar.time))).toEqual([0, 10, 20, 30]);
+
+    const second = mergePagedHistoryHead(first.snapshot, secondRefresh, secondRefresh.projection.bars);
+    expect(second.accepted).toBe(true);
+    if (!second.accepted) return;
+    expect(second.snapshot.cursorPages).toBe(cursorPages);
+    expect(second.snapshot.bars.map((bar) => Number(bar.time))).toEqual([0, 10, 20, 40, 50]);
+  });
+
   it("rejects mixed effective resolutions for head and older pages", () => {
-    const head = { response: { effectiveResolution: "1m" } };
-    const older = { response: { effectiveResolution: "1d" } };
+    const head = { response: { effectiveResolution: "1m" }, projection: { bars: bars([10, 20]) } };
+    const older = { response: { effectiveResolution: "1d" }, projection: { bars: bars([1]) } };
     const result = mergePagedHistoryHead(
       { cursorPages: [head], latestHead: head, bars: bars([10, 20]) },
       older,

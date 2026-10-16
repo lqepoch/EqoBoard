@@ -142,7 +142,9 @@ function evidence(
       ? row.source_entitlement
       : null;
   const feed = typeof row.feed === "string" && string(row.feed, 64) ? row.feed : null;
-  const rawAsOf = row.as_of ?? row.market_as_of ?? row.received_at ?? null;
+  // Receipt time describes the Gateway hop, not when the market observation
+  // occurred. Keep it in the raw wire envelope instead of promoting it to asOf.
+  const rawAsOf = row.as_of ?? row.market_as_of ?? null;
   const asOf = nullableString(rawAsOf, 128) ? rawAsOf : null;
   return Object.freeze({ source, sourceMode, sourceLabel, sourceEntitlement, feed, asOf });
 }
@@ -190,33 +192,58 @@ function parseSnapshot(value: unknown): StockSnapshotRow | null {
   });
 }
 
-/** Accepts the known Alpaca snapshot variant; other provider-native payloads stay unsupported. */
+function isKnownFutuSnapshotEnvelope(row: Record<string, unknown>): boolean {
+  return (
+    !Object.hasOwn(row, "source") &&
+    row.source_mode === "futu" &&
+    row.source_label === "Futu OpenD" &&
+    row.source_entitlement === "unknown" &&
+    row.feed === "futu"
+  );
+}
+
+function hasFutuSnapshotEvidence(row: StockSnapshotRow): boolean {
+  return (
+    row.wire.source_mode === "futu" &&
+    row.wire.source_label === "Futu OpenD" &&
+    row.wire.feed === "futu"
+  );
+}
+
+/** Accepts the current Alpaca and explicitly identified Futu Gateway snapshot variants. */
 export function decodeQuoteResponse(value: unknown): QuoteResponse | null {
   const row = record(value);
   if (!row) return null;
-  const sourceEvidence = evidence(row);
-  if (row.source !== "alpaca") {
+  const isAlpaca = row.source === "alpaca";
+  const isFutu = isKnownFutuSnapshotEnvelope(row);
+  if (!isAlpaca && !isFutu) {
     return Object.freeze({
       status: "unsupported-source",
-      evidence: sourceEvidence,
+      evidence: evidence(row),
       wire: Object.freeze({ ...row }),
     });
   }
   if (
     !string(row.feed, 64) ||
-    !nullableString(row.as_of, 128) ||
+    (isFutu
+      ? Object.hasOwn(row, "as_of") && !nullableString(row.as_of, 128)
+      : !nullableString(row.as_of, 128)) ||
     !Array.isArray(row.snapshots) ||
-    row.snapshots.length > 50
+    row.snapshots.length > (isFutu ? 32 : 50)
   )
     return null;
   const snapshots: StockSnapshotRow[] = [];
   const seen = new Set<string>();
   for (const item of row.snapshots) {
     const parsed = parseSnapshot(item);
-    if (!parsed || seen.has(parsed.symbol)) return null;
+    if (!parsed || (isFutu && !hasFutuSnapshotEvidence(parsed)) || seen.has(parsed.symbol))
+      return null;
     seen.add(parsed.symbol);
     snapshots.push(parsed);
   }
+  const sourceEvidence = isFutu
+    ? Object.freeze({ ...evidence(row, "futu"), source: "futu" })
+    : evidence(row);
   return Object.freeze({
     status: "available",
     evidence: sourceEvidence,

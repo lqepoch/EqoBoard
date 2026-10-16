@@ -104,6 +104,94 @@ describe("native market response adapters", () => {
     expect(decoded.wire).toEqual(quoteResponse);
   });
 
+  it("does not infer an Alpaca source from source_mode alone", () => {
+    const decoded = decodeQuoteResponse({
+      source_mode: "alpaca",
+      feed: "sip",
+      as_of: quoteResponse.as_of,
+      snapshots: quoteResponse.snapshots,
+    });
+    expect(decoded?.status).toBe("unsupported-source");
+    expect(decoded?.evidence.source).toBeNull();
+  });
+
+  it("accepts the current Futu Gateway snapshots without promoting receipt time to market time", () => {
+    const futuResponse = {
+      feed: "futu",
+      source_mode: "futu",
+      source_label: "Futu OpenD",
+      source_entitlement: "unknown",
+      received_at: "2026-10-15T02:00:01Z",
+      gateway_instance_id: "gateway-a",
+      snapshots: [
+        {
+          symbol: "SPY",
+          last: 600,
+          previous_close: 590,
+          change_percent: 1.69,
+          open: 595,
+          high: 601,
+          low: 594,
+          bid: null,
+          ask: null,
+          volume: 1_000,
+          feed: "futu",
+          last_as_of: "2026-10-15T02:00:00Z",
+          last_basis: "unknown",
+          quote_at: null,
+          trade_at: null,
+          received_at: "2026-10-15T02:00:01Z",
+          source_mode: "futu",
+          source_label: "Futu OpenD",
+        },
+      ],
+    };
+    const decoded = decodeQuoteResponse(futuResponse);
+
+    expect(decoded?.status).toBe("available");
+    if (decoded?.status !== "available") return;
+    expect(decoded.evidence).toMatchObject({
+      source: "futu",
+      sourceMode: "futu",
+      sourceLabel: "Futu OpenD",
+      sourceEntitlement: "unknown",
+      feed: "futu",
+      asOf: null,
+    });
+    expect(decoded.snapshots[0]).toMatchObject({
+      symbol: "SPY",
+      last: 600,
+      marketAsOf: "2026-10-15T02:00:00Z",
+    });
+    expect(decoded.wire).toEqual(futuResponse);
+  });
+
+  it("keeps Futu acceptance tied to its explicit Gateway identity and stock snapshot cap", () => {
+    const snapshot = {
+      symbol: "SPY",
+      last: 600,
+      feed: "futu",
+      source_mode: "futu",
+      source_label: "Futu OpenD",
+    };
+    const response = {
+      feed: "futu",
+      source_mode: "futu",
+      source_label: "Futu OpenD",
+      source_entitlement: "unknown",
+      snapshots: [snapshot],
+    };
+    expect(
+      decodeQuoteResponse({ ...response, snapshots: [{ ...snapshot, source_label: "Alpaca SIP" }] }),
+    ).toBeNull();
+    expect(
+      decodeQuoteResponse({
+        ...response,
+        snapshots: Array.from({ length: 33 }, (_, i) => ({ ...snapshot, symbol: `S${i}` })),
+      }),
+    ).toBeNull();
+  });
+
   it("does not translate a configured Futu payload into the Alpaca table shape", () => {
     const decoded = decodeQuoteResponse({
       source: "futu",
