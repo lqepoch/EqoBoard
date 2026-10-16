@@ -54,8 +54,37 @@
    上限无法限制不断产生的新时间点。现在从固定 cursor 页链重建，再叠加
    最新 head；保留精确请求窗口和重叠行优先级，清除已离开当前 head 且
    不属于固定页链的旧行。新测试覆盖连续窗口移动；这不是负载性能资格证明。
+8. **浏览器租约顺序与股票容量**：共享宿主读取并校验 Gateway 容量、固定
+   股票集合，容量未知时不请求股票租约；保留固定项所占容量，50 项 Watchlist
+   仅读取已被租约选中的子集，并显示 Partial/未覆盖数量。报价与期权标的
+   的首次读取等待 HTTP ACK。Gateway 实例变化时重读容量、重新租约；状态
+   读取有 5 秒 deadline 和至多一次重试，不响应 abort 的请求也不会永久 pending。
+   单元回归覆盖未知容量、50/32 部分覆盖、排在末尾的固定项、实例重启及超时。
+
+**Futu 仍有实质未完成项**：Gateway `stock_subscribe` 在写入 watch channel
+后立即返回 HTTP ACK；Futu SDK watcher 的实际订阅更新是异步的。上述修复
+不能保证 worker 已完成更新，新标的首个快照仍可能 `subscription_required`。
+目前客户端错误分类不足以安全区分该窗口与鉴权/限流/真实故障，因此没有用
+通用自动重试掩盖问题。需要 Gateway/worker 同步或精确 ready/error 契约和
+受控 Provider 回归；HTTP ACK 仍不宣称 provider 确认、entitlement 或 freshness。
 
 上述回归需在新候选 Actions 验证，未执行的测试不记为通过。
+
+运行时许可补充审查确认：原候选 image SBOM 未列 SWC native 候选包或
+server-only，却列出 client-only manifest、Node 和 better-sqlite3 native
+文件。部分 native 文件的 SPDX SHA1 为全零，不能当成真实文件身份。新增
+Actions-only 原生文件清单工具，在同一 image config digest 的无网络、只读、
+无宿主挂载容器里读取实际字节并生成 SHA-256/大小，绑定 receipt 和校验清单。
+它不执行扫描到的模块，也不把文件哈希冒充许可证、来源或静态嵌入组件证明。
+许可 BLOCKED 保留；新清单本身仍需新 head 的 Actions 验证。
+
+首轮修复候选 `ac310a18685c8cfa458644a1cb41ced58e2cb617` 的
+[Native run 38832905619](https://github.com/lqepoch/EqoBoard/actions/runs/38832905619)
+失败记录保留：history 测试旧夹具缺少新增 projection 字段，三处格式不符，
+两条既有订单测试的固定合约在测试当天到期。后续提交修正夹具类型、按 Actions
+格式提案修正源码格式，并冻结订单测试时钟，额外断言同一合约在到期当天及
+之后仍被拒绝；未更改生产的过期拒绝逻辑。生产 build/浏览器在该失败轮次
+未执行，不能记为通过。最终新 head 的证据以 PR 的绑定 SHA 自审评论为准。
 
 ## 对原始强制目标的差距
 
