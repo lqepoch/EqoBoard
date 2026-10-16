@@ -35,6 +35,21 @@
     },
     {
       "id": 3003,
+      "name": "Native Windows runtime and local launch",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-14T00:12:30Z",
+      "app": {
+        "id": 15368,
+        "slug": "github-actions"
+      },
+      "check_suite": {
+        "id": 779
+      }
+    },
+    {
+      "id": 3004,
       "name": "Native web validation gate",
       "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "status": "completed",

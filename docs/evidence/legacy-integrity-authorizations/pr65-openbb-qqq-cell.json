@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "authorizationId": "PR65-OPENBB-QQQ-CELL-20261016",
+  "kind": "explicit-single-file-legacy-test-maintenance",
+  "authorization": {
+    "actor": "repository-owner",
+    "source": "direct-user-message",
+    "authorizedOn": "2026-10-16",
+    "statement": "授权，仅修复这项旧测试并记录审计",
+    "scope": "Replace the restored stock Widget QQQ CSS selector with an exact visible gridcell assertion; no runtime or other legacy changes."
+  },
+  "baselineCommit": "fea1e952add7a11e799d6f9f198ddcee47fd12b6",
+  "baseline": {
+    "path": "apps/openterminal/web/e2e/openbb-lite.spec.ts",
+    "mode": "100644",
+    "type": "blob",
+    "gitBlobOid": "e58e7fc364c07a1ddbd49f514e96d7e3aeb3a2be",
+    "bytes": 41820,
+    "sha256": "593edeb81e7c8b3fce43d5d211595c982e84d47f7bc681254400a87eeef4220b"
+  },
+  "current": {
+    "path": "apps/openterminal/web/e2e/openbb-lite.spec.ts",
+    "mode": "100644",
+    "type": "blob",
+    "gitBlobOid": "61249affb972b617584c273afa16c9cdbbd8544f",
+    "bytes": 41749,
+    "sha256": "ac518acbed56d563828d94eb56f21a1d37f92a8d1ffbfed744075154270ffcd5"
+  },
+  "preserved": {
+    "path": "references/legacy/authorized-originals/pr65/openbb-lite.spec.ts",
+    "mode": "100644",
+    "type": "blob",
+    "gitBlobOid": "e58e7fc364c07a1ddbd49f514e96d7e3aeb3a2be",
+    "bytes": 41820,
+    "sha256": "593edeb81e7c8b3fce43d5d211595c982e84d47f7bc681254400a87eeef4220b"
+  }
+}

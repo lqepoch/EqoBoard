@@ -84,6 +84,7 @@ jobs:
       - name: Test local Futu subscription and workstation boundaries
         working-directory: .
         run: |
+          npm ci --prefix tools/futu-runtime --ignore-scripts --no-audit --no-fund
           node --test tools/futu-subscriptions.test.mjs
           node --import ./apps/openterminal/node_modules/tsx/dist/loader.mjs --test tools/local-access.test.ts
       - name: Test client cancellation during BFF authorization

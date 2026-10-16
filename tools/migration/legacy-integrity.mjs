@@ -65,6 +65,61 @@ export const EXCLUDED_PATHS = Object.freeze([
   "tools/ci/openbb-ci-route.mjs", "tools/ci/openbb-ci-route.test.mjs",
   "tools/migration/legacy-integrity.mjs", "tools/native-web-compose-e2e.sh", "tools/native-web-sbom.sh",
 ]);
+export const LEGACY_AUTHORIZATION_RECORD_PATH = "docs/evidence/legacy-integrity-authorizations/pr65-openbb-qqq-cell.json";
+export const LEGACY_AUTHORIZATION_ID = "PR65-OPENBB-QQQ-CELL-20261016";
+export const AUTHORIZED_LEGACY_TEST_PATH = "apps/openterminal/web/e2e/openbb-lite.spec.ts";
+export const AUTHORIZED_LEGACY_ARCHIVE_PATH = "references/legacy/authorized-originals/pr65/openbb-lite.spec.ts";
+
+const LEGACY_AUTHORIZATION_RECORD_DIRECTORY = "docs/evidence/legacy-integrity-authorizations";
+const AUTHORIZED_LEGACY_ARCHIVE_DIRECTORY = "references/legacy/authorized-originals/pr65";
+const AUTHORIZATION_RECORD_IDENTITY = Object.freeze({
+  path: LEGACY_AUTHORIZATION_RECORD_PATH,
+  mode: "100644",
+  type: "blob",
+  gitBlobOid: "3d844c4861ed22a7a345254dbceb66fbdffb8e26",
+  bytes: 1423,
+  sha256: "e8c7f742cbc2a76d94e5842f54049002d0d63146293774e88ca11cbe8c1cd84d",
+});
+const AUTHORIZED_LEGACY_BASELINE = Object.freeze({
+  path: AUTHORIZED_LEGACY_TEST_PATH,
+  mode: "100644",
+  type: "blob",
+  gitBlobOid: "e58e7fc364c07a1ddbd49f514e96d7e3aeb3a2be",
+  bytes: 41820,
+  sha256: "593edeb81e7c8b3fce43d5d211595c982e84d47f7bc681254400a87eeef4220b",
+});
+const AUTHORIZED_LEGACY_CURRENT = Object.freeze({
+  path: AUTHORIZED_LEGACY_TEST_PATH,
+  mode: "100644",
+  type: "blob",
+  gitBlobOid: "61249affb972b617584c273afa16c9cdbbd8544f",
+  bytes: 41749,
+  sha256: "ac518acbed56d563828d94eb56f21a1d37f92a8d1ffbfed744075154270ffcd5",
+});
+const AUTHORIZED_LEGACY_PRESERVED = Object.freeze({
+  path: AUTHORIZED_LEGACY_ARCHIVE_PATH,
+  mode: "100644",
+  type: "blob",
+  gitBlobOid: AUTHORIZED_LEGACY_BASELINE.gitBlobOid,
+  bytes: AUTHORIZED_LEGACY_BASELINE.bytes,
+  sha256: AUTHORIZED_LEGACY_BASELINE.sha256,
+});
+const PINNED_LEGACY_AUTHORIZATION_RECORD = Object.freeze({
+  schemaVersion: 1,
+  authorizationId: LEGACY_AUTHORIZATION_ID,
+  kind: "explicit-single-file-legacy-test-maintenance",
+  authorization: Object.freeze({
+    actor: "repository-owner",
+    source: "direct-user-message",
+    authorizedOn: "2026-10-16",
+    statement: "授权，仅修复这项旧测试并记录审计",
+    scope: "Replace the restored stock Widget QQQ CSS selector with an exact visible gridcell assertion; no runtime or other legacy changes.",
+  }),
+  baselineCommit: BASELINE_COMMIT,
+  baseline: AUTHORIZED_LEGACY_BASELINE,
+  current: AUTHORIZED_LEGACY_CURRENT,
+  preserved: AUTHORIZED_LEGACY_PRESERVED,
+});
 
 const EXPECTED = Object.freeze({
   commit: BASELINE_COMMIT,
@@ -636,14 +691,82 @@ function makeManifest(repoRoot, expected = EXPECTED) {
   };
 }
 
-function compareIndex(manifestFiles, indexEntries) {
-  const expectedEntries = manifestFiles.map(({ path: filePath, mode, gitBlobOid }) => ({
-    path: filePath,
-    mode,
-    gitBlobOid,
-    stage: 0,
-  }));
+function requireExactRecord(actual, expected, label) {
+  if (!isRecord(actual)) fail(label + " must be an object");
+  const expectedKeys = Object.keys(expected).sort(comparePath);
+  const actualKeys = Object.keys(actual).sort(comparePath);
+  if (actualKeys.length !== expectedKeys.length
+      || actualKeys.some((key, index) => key !== expectedKeys[index])) {
+    fail(label + " fields differ from the pinned authorization");
+  }
+  for (const key of expectedKeys) {
+    if (isRecord(expected[key])) requireExactRecord(actual[key], expected[key], label + "." + key);
+    else if (actual[key] !== expected[key]) fail(label + "." + key + " differs from the pinned authorization");
+  }
+}
+
+function requireArtifactIdentity(actual, expected, label) {
+  for (const key of ["path", "mode", "type", "gitBlobOid", "bytes", "sha256"]) {
+    if (actual?.[key] !== expected[key]) fail(label + " " + key + " differs from the pinned identity");
+  }
+}
+
+export function validateLegacyAuthorizationRecord(record, manifestFiles) {
+  requireExactRecord(record, PINNED_LEGACY_AUTHORIZATION_RECORD, "Legacy authorization record");
+  if (!Array.isArray(manifestFiles)) fail("Legacy authorization requires manifest entries");
+  const baselineEntries = manifestFiles.filter((entry) => entry.path === AUTHORIZED_LEGACY_TEST_PATH);
+  if (baselineEntries.length !== 1) fail("Manifest must contain exactly one authorized legacy baseline path");
+  requireArtifactIdentity(baselineEntries[0], AUTHORIZED_LEGACY_BASELINE, "Manifest authorized legacy baseline");
+  return Object.freeze({
+    authorizationId: LEGACY_AUTHORIZATION_ID,
+    current: Object.freeze({ ...AUTHORIZED_LEGACY_CURRENT }),
+  });
+}
+
+export function validateLegacyAuthorizationBytes(bytes, manifestFiles) {
+  if (!Buffer.isBuffer(bytes)) fail("Legacy authorization record must be a Buffer");
+  if (bytes.length !== AUTHORIZATION_RECORD_IDENTITY.bytes
+      || sha256(bytes) !== AUTHORIZATION_RECORD_IDENTITY.sha256) {
+    fail("Legacy authorization record bytes differ from the pinned audit record");
+  }
+  let record;
+  try {
+    record = JSON.parse(decodeUtf8(bytes, "Legacy authorization record"));
+  } catch {
+    fail("Legacy authorization record is invalid JSON");
+  }
+  return validateLegacyAuthorizationRecord(record, manifestFiles);
+}
+
+function isPinnedLegacyAuthorization(authorization) {
+  try {
+    requireExactRecord(authorization, {
+      authorizationId: LEGACY_AUTHORIZATION_ID,
+      current: AUTHORIZED_LEGACY_CURRENT,
+    }, "Legacy authorization override");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function compareIndex(manifestFiles, indexEntries, authorization = null) {
   const errors = [];
+  const useAuthorizedCurrent = authorization !== null && isPinnedLegacyAuthorization(authorization);
+  if (authorization !== null && !useAuthorizedCurrent) {
+    errors.push("Legacy authorization override is not the pinned single-file identity");
+  }
+  const expectedEntries = manifestFiles.map(({ path: filePath, mode, gitBlobOid }) => {
+    const authorized = useAuthorizedCurrent && filePath === AUTHORIZED_LEGACY_TEST_PATH
+      ? AUTHORIZED_LEGACY_CURRENT
+      : null;
+    return {
+      path: filePath,
+      mode: authorized?.mode ?? mode,
+      gitBlobOid: authorized?.gitBlobOid ?? gitBlobOid,
+      stage: 0,
+    };
+  });
   const expected = new Map(expectedEntries.map((entry) => [entry.path, entry]));
   const actual = new Map(indexEntries.map((entry) => [entry.path, entry]));
   if (actual.size !== indexEntries.length) errors.push("Git index contains duplicate protected paths");
@@ -660,7 +783,7 @@ function compareIndex(manifestFiles, indexEntries) {
   return errors;
 }
 
-export function inspectWorktreeFile(repoRoot, filePath) {
+function inspectWorktreeFileWithContent(repoRoot, filePath, label = "Worktree file") {
   if (!isSafeRelativePath(filePath)) fail("Unsafe worktree path");
   const root = realpathSync(repoRoot);
   const parts = filePath.split("/");
@@ -677,7 +800,7 @@ export function inspectWorktreeFile(repoRoot, filePath) {
   }
   const resolved = realpathSync(current);
   if (!resolved.startsWith(root + path.sep)) fail("Protected file resolves outside repository");
-  const opened = readNoFollowBounded(current, MAX_SINGLE_FILE_BYTES, "Worktree file");
+  const opened = readNoFollowBounded(current, MAX_SINGLE_FILE_BYTES, label);
   if (opened.stat.dev !== finalStat.dev || opened.stat.ino !== finalStat.ino) {
     fail("Protected path changed while opening: " + filePath);
   }
@@ -690,7 +813,81 @@ export function inspectWorktreeFile(repoRoot, filePath) {
     gitBlobOid: gitBlobSha1(content),
     bytes: content.length,
     sha256: sha256(content),
+    content,
   };
+}
+
+export function inspectWorktreeFile(repoRoot, filePath) {
+  const { content, ...identity } = inspectWorktreeFileWithContent(repoRoot, filePath);
+  return identity;
+}
+
+function verifyPinnedArtifactDirectory(repoRoot, directoryPath, expected, label) {
+  const errors = [];
+  let entries = [];
+  try {
+    entries = parseLsFilesStage(runGit(repoRoot, ["ls-files", "--stage", "-z", "--", directoryPath]));
+  } catch (error) {
+    errors.push(error.message);
+  }
+  if (entries.length !== 1 || entries[0]?.path !== expected.path) {
+    errors.push(label + " directory must track exactly its one pinned file");
+  }
+  if (entries.length === 1) {
+    const indexed = entries[0];
+    if (indexed.mode !== expected.mode || indexed.gitBlobOid !== expected.gitBlobOid || indexed.stage !== 0) {
+      errors.push(label + " index identity differs from the pinned file");
+    }
+  }
+
+  try {
+    const untracked = nulRecords(
+      runGit(repoRoot, ["ls-files", "--others", "--exclude-standard", "-z", "--", directoryPath]),
+      "git ls-files artifact directory",
+    );
+    const ignored = nulRecords(
+      runGit(repoRoot, ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--", directoryPath]),
+      "git ls-files ignored artifact directory",
+    );
+    if (untracked.length || ignored.length) errors.push(label + " directory contains untracked or ignored files");
+  } catch (error) {
+    errors.push(error.message);
+  }
+
+  let actual = null;
+  try {
+    actual = inspectWorktreeFileWithContent(repoRoot, expected.path, label);
+    requireArtifactIdentity(actual, expected, label);
+  } catch (error) {
+    errors.push(error.message);
+  }
+  return { errors, actual };
+}
+
+export function verifyLegacyAuthorizationArtifacts(repoRoot, manifestFiles) {
+  const record = verifyPinnedArtifactDirectory(
+    repoRoot,
+    LEGACY_AUTHORIZATION_RECORD_DIRECTORY,
+    AUTHORIZATION_RECORD_IDENTITY,
+    "Legacy authorization record",
+  );
+  const preserved = verifyPinnedArtifactDirectory(
+    repoRoot,
+    AUTHORIZED_LEGACY_ARCHIVE_DIRECTORY,
+    AUTHORIZED_LEGACY_PRESERVED,
+    "Preserved legacy original",
+  );
+  const errors = [...record.errors, ...preserved.errors];
+  let authorization = null;
+  if (record.actual) {
+    try {
+      authorization = validateLegacyAuthorizationBytes(record.actual.content, manifestFiles);
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+  if (errors.length) authorization = null;
+  return { errors, authorization };
 }
 
 export function verifyManifestAtRepo(repoRoot, manifest, expected = EXPECTED) {
@@ -713,8 +910,10 @@ export function verifyManifestAtRepo(repoRoot, manifest, expected = EXPECTED) {
     errors.push(error.message);
   }
 
+  const authorizationResult = verifyLegacyAuthorizationArtifacts(repoRoot, manifest.files);
+  errors.push(...authorizationResult.errors);
   const indexEntries = parseLsFilesStage(runGit(repoRoot, ["ls-files", "--stage", "-z", ...scopeArgs()]));
-  errors.push(...compareIndex(manifest.files, indexEntries));
+  errors.push(...compareIndex(manifest.files, indexEntries, authorizationResult.authorization));
   const untracked = nulRecords(
     runGit(repoRoot, ["ls-files", "--others", "--exclude-standard", "-z", ...scopeArgs()]),
     "git ls-files --others",
@@ -726,8 +925,12 @@ export function verifyManifestAtRepo(repoRoot, manifest, expected = EXPECTED) {
     try {
       const actual = inspectWorktreeFile(repoRoot, expectedFile.path);
       checkedFiles += 1;
+      const authorizedCurrent = authorizationResult.authorization?.current;
+      const worktreeExpected = authorizedCurrent?.path === expectedFile.path
+        ? authorizedCurrent
+        : expectedFile;
       for (const key of ["mode", "type", "gitBlobOid", "bytes", "sha256"]) {
-        if (actual[key] !== expectedFile[key]) {
+        if (actual[key] !== worktreeExpected[key]) {
           errors.push("Worktree " + key + " mismatch: " + expectedFile.path);
         }
       }
@@ -842,8 +1045,9 @@ function main() {
     return;
   }
   process.stdout.write(
-    "PASS legacy integrity: " + result.checkedFiles + " protected files match frozen source "
-    + manifest.baseline.commit + ". This does not prove feature parity or release acceptance.\n",
+    "PASS legacy integrity: " + result.checkedFiles + " protected paths verified against frozen source "
+    + manifest.baseline.commit + " with exact single-file authorization " + LEGACY_AUTHORIZATION_ID
+    + "; archived original bytes verified. This does not prove feature parity or release acceptance.\n",
   );
 }
 

@@ -29,5 +29,9 @@ performance, container and rollback acceptance pass on the same candidate.
   implementation and wire them into real Actions before claiming verification.
 - Public builds, typecheck, unit/component/API/browser/security/container tests
   run in GitHub Actions. Do not run local builds, dev servers or Docker.
+- Explicitly authorized local startup may run the verified Actions Windows
+  standalone package with Node 22.23.3 and strict loopback local-workstation
+  identity. Follow `docs/NATIVE_LOCAL_START.md`; never load Provider credentials
+  into the Web process or treat local identity as an OIDC session.
 - Shared config, dependencies, Compose, CI, provenance integration and PRs are
   owned by the coordinator; concurrent agents edit only assigned paths.

@@ -93,6 +93,15 @@ cleanup() {
   if (( result != 0 )); then
     printf '%s\n' 'Native Compose fixture status at failure:' >&2
     dc ps --all >&2 || true
+    # This helper can only launch the scrubbed, synthetic Actions fixture.
+    # Preserve server errors before teardown without dumping its environment.
+    mkdir -p "$app_dir/test-results/compose"
+    dc logs --no-color --tail 200 > "$app_dir/test-results/compose/services.log" 2>&1 || true
+    if [[ -n "${mdp_fixture_control_origin:-}" ]]; then
+      curl --noproxy '*' --connect-timeout 2 --max-time 5 --fail --silent --show-error \
+        "$mdp_fixture_control_origin/__test/counters" \
+        > "$app_dir/test-results/compose/mdp-counters.json" 2>/dev/null || true
+    fi
   fi
   dc down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
   rm -rf "$e2e_home"

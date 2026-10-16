@@ -2,6 +2,11 @@
 
 本文记录专用 GitHub App 自动合并的停用状态和用户授权的 owner operator 自合并门槛。策略代码位于 `tools/auto_merge/`，离线 API 反例测试位于 `tests/auto_merge_policy.test.cjs`。
 
+原生 Windows 运行包新增 `Native Windows runtime and local launch` guard，
+与 lock、Linux runtime 和 aggregate gate 同属精确候选的 `Native Web CI`
+suite。guard 必须存在且成功，不允许 skipped；该登记不启用停用的 App。
+所有公开仓库的治理反例测试也由精确 head 的 Actions 执行。
+
 > **当前不启用 App 自动合并。** `pr-auto-merge.yml` 已从 `.github/workflows` 移除，历史 Actions workflow 已手动禁用。保留的策略代码和测试只用于本地离线治理审查，不会创建 App token 或合并 PR。重新启用需要单独授权和重新审查；不得仅通过配置变量或 Secret 启动。
 
 ## 当前状态

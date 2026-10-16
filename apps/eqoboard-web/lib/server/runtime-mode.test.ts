@@ -32,6 +32,12 @@ function clearProfileEnvironment(): void {
     "NEXTAUTH_SECRET",
     "EQO_OIDC_CLIENT_SECRET",
     "EQO_OPENBB_OIDC_CLIENT_SECRET",
+    "EQO_LOCAL_ACCESS",
+    "EQO_LOCAL_BIND",
+    "HOSTNAME",
+    "PORT",
+    "EQO_PUBLIC_ORIGIN",
+    "NEXTAUTH_URL",
   ])
     vi.stubEnv(name, "");
 }
@@ -52,6 +58,19 @@ function researchProfile(): void {
 function emptyOptionalServiceProfile(mode: "terminal" | "research"): void {
   clearProfileEnvironment();
   vi.stubEnv("EQO_BFF_MODE", mode);
+}
+
+function localWorkstationProfile(mode: "terminal" | "research"): void {
+  clearProfileEnvironment();
+  vi.stubEnv("EQO_BFF_MODE", mode);
+  vi.stubEnv("EQO_LOCAL_ACCESS", "true");
+  vi.stubEnv("EQO_LOCAL_BIND", "127.0.0.1");
+  vi.stubEnv("HOSTNAME", "127.0.0.1");
+  vi.stubEnv("PORT", "3000");
+  vi.stubEnv("EQO_PUBLIC_ORIGIN", "http://127.0.0.1:3000");
+  vi.stubEnv("NEXTAUTH_URL", "http://127.0.0.1:3000");
+  vi.stubEnv("NEXTAUTH_SECRET", "n".repeat(64));
+  if (mode === "research") vi.stubEnv("MDP_RESEARCH_JWT_SECRET", "r".repeat(64));
 }
 
 describe("Native runtime profiles", () => {
@@ -99,6 +118,26 @@ describe("Native runtime profiles", () => {
       ready: true,
       profileIsolated: true,
     });
+  });
+
+  it("enables only the fixed loopback terminal profile and rejects local auth in Research", () => {
+    localWorkstationProfile("terminal");
+    expect(nativeRuntimeReadiness()).toEqual({
+      mode: "terminal",
+      ready: true,
+      profileIsolated: true,
+    });
+
+    vi.stubEnv("EQO_PUBLIC_ORIGIN", "http://192.168.1.20:3000");
+    expect(nativeRuntimeReadiness().ready).toBe(false);
+
+    localWorkstationProfile("research");
+    expect(nativeRuntimeReadiness()).toEqual({
+      mode: "research",
+      ready: false,
+      profileIsolated: false,
+    });
+    expect(requireRuntimeMode("research")?.status).toBe(503);
   });
 
   it("keeps the research runtime allowlist limited to Yahoo, private predictions, and diagnostic archive reads", () => {

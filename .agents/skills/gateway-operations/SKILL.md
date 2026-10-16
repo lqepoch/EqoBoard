@@ -6,6 +6,10 @@ description: 维护 Rust Axum 网关鉴权、SIP/OPRA 订阅租约、WebSocket �
 路径：apps/gateway/**。
 要求：loopback 默认；non-loopback 仅在 `EQO_GATEWAY_JWT_SECRET` 与 `EQO_RESEARCH_JWT_SECRET` 都可验证、彼此独立时启动。受保护请求必须携带由受信 BFF (`kid=bff`, 固定 issuer/audience) 或 research (`kid=research`, 仅 `market:read`) 签发的短时委托 JWT；身份由验签后的 `idp_iss` + `sub` 标识，action 由 allowlist scope 决定。禁止信任客户端身份头；静态 `EQO_ACCESS_TOKEN` 已退役，不能作为 Gateway 认证或启动条件。WS ticket 15秒有效且单次消费；禁止浏览器直接连接 Alpaca 带密钥端点；对 WS 慢客户端发送 `resync_required`。
 行情出错保留 HTTP 上游分类；不得降级伪造来源。
+Futu SDK 子进程保持 `env_clear` 与独立白名单；Windows 仅额外保留操作系统
+`SystemRoot`，固定 Node 的 crypto 初始化依赖它。不能为修复启动而继承全部
+环境或传入 Gateway/Research signer、Alpaca 凭据。Actions Windows 运行验收
+检查唯一 SDK 子进程持续存活，不把存活或 TCP 监听当作 Provider 权限/行情就绪。
 
 历史归档读取属于独立 `market-data-platform` 服务，不属于 Gateway 行情采集/实时状态。浏览器只能通过 OpenTerminal 同源 BFF 的 `/api/eqo/market-data/datasets/{dataset_id}/bars` 读取；BFF 使用 audience=`lqepoch-market-data`、issuer/kid 按终端和 research hostname 固定映射的独立 MDP key，只签精确 `market:read` 且最长 60 秒。MDP key 不得与 NextAuth/Gateway key 共用，也不得跨 hostname 注入。现有 V1 bars 没有 CompletionV2 证据，BFF 只允许 `diagnostic`，拒绝 `curated`；`unknown` / `synthetic` provenance 不能显示为 SIP/OPRA 已连接或实时订阅确认。
 

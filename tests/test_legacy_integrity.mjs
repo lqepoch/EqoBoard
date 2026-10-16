@@ -1,29 +1,70 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, chmodSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, chmodSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   BASELINE_COMMIT,
   BASELINE_TREE,
+  AUTHORIZED_LEGACY_ARCHIVE_PATH,
+  AUTHORIZED_LEGACY_TEST_PATH,
   EXCLUDED_PATHS,
+  LEGACY_AUTHORIZATION_ID,
+  LEGACY_AUTHORIZATION_RECORD_PATH,
   MERGED_MAIN,
   MUTABLE_SHARED_PATHS,
   PREMERGE_MAIN_PREFLIGHT,
   PROTECTED_FILES,
   SOURCE_TAG,
   compareEntrySets,
+  compareIndex,
   gitBlobSha1,
   inspectWorktreeFile,
   isSafeRelativePath,
   parseLsFilesStage,
   parseLsTree,
   readBoundedManifestFile,
+  validateLegacyAuthorizationBytes,
+  validateLegacyAuthorizationRecord,
   validateManifestShape,
+  verifyLegacyAuthorizationArtifacts,
 } from "../tools/migration/legacy-integrity.mjs";
 
 const HASH = "f".repeat(64);
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const AUTHORIZATION_BYTES = readFileSync(path.join(REPO_ROOT, LEGACY_AUTHORIZATION_RECORD_PATH));
+const PRESERVED_ORIGINAL_BYTES = readFileSync(path.join(REPO_ROOT, AUTHORIZED_LEGACY_ARCHIVE_PATH));
+const AUTHORIZED_BASELINE_ENTRY = {
+  path: AUTHORIZED_LEGACY_TEST_PATH,
+  mode: "100644",
+  type: "blob",
+  gitBlobOid: "e58e7fc364c07a1ddbd49f514e96d7e3aeb3a2be",
+  bytes: 41820,
+  sha256: "593edeb81e7c8b3fce43d5d211595c982e84d47f7bc681254400a87eeef4220b",
+};
+
+function makeAuthorizationRepoFixture(t, { extraTracked = false, extraUntracked = false } = {}) {
+  const root = mkdtempSync(path.join(os.tmpdir(), "eqoboard-legacy-authorization-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const recordPath = path.join(root, LEGACY_AUTHORIZATION_RECORD_PATH);
+  const archivePath = path.join(root, AUTHORIZED_LEGACY_ARCHIVE_PATH);
+  mkdirSync(path.dirname(recordPath), { recursive: true });
+  mkdirSync(path.dirname(archivePath), { recursive: true });
+  writeFileSync(recordPath, AUTHORIZATION_BYTES, { mode: 0o644 });
+  writeFileSync(archivePath, PRESERVED_ORIGINAL_BYTES, { mode: 0o644 });
+  const stagedPaths = [LEGACY_AUTHORIZATION_RECORD_PATH, AUTHORIZED_LEGACY_ARCHIVE_PATH];
+  if (extraTracked || extraUntracked) {
+    const extraPath = path.join(path.dirname(recordPath), "second-record.json");
+    writeFileSync(extraPath, "{}\n", { mode: 0o644 });
+    if (extraTracked) stagedPaths.push(path.relative(root, extraPath).replaceAll(path.sep, "/"));
+  }
+  execFileSync("git", ["init", "--quiet"], { cwd: root, stdio: "ignore" });
+  execFileSync("git", ["add", "--", ...stagedPaths], { cwd: root, stdio: "ignore" });
+  return root;
+}
 
 test("source tag, merged main and protected OpenBB implementation facts are pinned", () => {
   assert.equal(BASELINE_COMMIT, "fea1e952add7a11e799d6f9f198ddcee47fd12b6");
@@ -193,6 +234,112 @@ test("baseline comparator rejects altered feature and provenance attribution", (
   }]);
   assert.ok(attributionErrors.some((message) => /feature attribution mismatch/.test(message)));
   assert.ok(attributionErrors.some((message) => /provenance reference mismatch/.test(message)));
+});
+
+test("single-file legacy authorization is pinned to the exact audit record and manifest baseline", () => {
+  const manifestFiles = [AUTHORIZED_BASELINE_ENTRY];
+  const authorization = validateLegacyAuthorizationBytes(AUTHORIZATION_BYTES, manifestFiles);
+  assert.equal(authorization.authorizationId, LEGACY_AUTHORIZATION_ID);
+  assert.equal(authorization.current.path, AUTHORIZED_LEGACY_TEST_PATH);
+  assert.equal(authorization.current.gitBlobOid, "61249affb972b617584c273afa16c9cdbbd8544f");
+
+  const record = JSON.parse(AUTHORIZATION_BYTES.toString("utf8"));
+  assert.throws(
+    () => validateLegacyAuthorizationRecord({ ...record, authorizationId: "PR65-OTHER" }, manifestFiles),
+    /differs from the pinned authorization/i,
+  );
+  assert.throws(
+    () => validateLegacyAuthorizationRecord({ ...record, secondPath: AUTHORIZED_LEGACY_TEST_PATH }, manifestFiles),
+    /fields differ/i,
+  );
+  assert.throws(
+    () => validateLegacyAuthorizationRecord({
+      ...record,
+      preserved: { ...record.preserved, path: "references/legacy/*" },
+    }, manifestFiles),
+    /differs from the pinned authorization/i,
+  );
+  assert.throws(
+    () => validateLegacyAuthorizationRecord(record, [{ ...AUTHORIZED_BASELINE_ENTRY, gitBlobOid: "0".repeat(40) }]),
+    /manifest authorized legacy baseline/i,
+  );
+  const changedBytes = Buffer.from(AUTHORIZATION_BYTES);
+  changedBytes[changedBytes.length - 2] ^= 1;
+  assert.throws(() => validateLegacyAuthorizationBytes(changedBytes, manifestFiles), /bytes differ/i);
+});
+
+test("index override accepts only the pinned current blob and leaves every other legacy path frozen", () => {
+  const authorization = validateLegacyAuthorizationBytes(AUTHORIZATION_BYTES, [AUTHORIZED_BASELINE_ENTRY]);
+  const other = {
+    path: "apps/openterminal/web/src/untouched.ts",
+    mode: "100644",
+    type: "blob",
+    gitBlobOid: "a".repeat(40),
+    bytes: 4,
+    sha256: HASH,
+  };
+  const manifestFiles = [AUTHORIZED_BASELINE_ENTRY, other];
+  const exactIndex = [
+    { path: AUTHORIZED_LEGACY_TEST_PATH, mode: "100644", gitBlobOid: authorization.current.gitBlobOid, stage: 0 },
+    { path: other.path, mode: other.mode, gitBlobOid: other.gitBlobOid, stage: 0 },
+  ];
+  assert.deepEqual(compareIndex(manifestFiles, exactIndex, authorization), []);
+  assert.ok(compareIndex(manifestFiles, [
+    { ...exactIndex[0], gitBlobOid: "0".repeat(40) }, exactIndex[1],
+  ], authorization).some((message) => /modified protected path/.test(message)));
+  assert.ok(compareIndex(manifestFiles, [exactIndex[0]], authorization)
+    .some((message) => /deleted protected path/.test(message)));
+  assert.ok(compareIndex(manifestFiles, [exactIndex[0], { ...exactIndex[1], gitBlobOid: "b".repeat(40) }], authorization)
+    .some((message) => /modified protected path/.test(message)));
+  assert.ok(compareIndex(manifestFiles, [...exactIndex, {
+    path: "apps/openterminal/web/extra.ts", mode: "100644", gitBlobOid: "c".repeat(40), stage: 0,
+  }], authorization).some((message) => /added protected path/.test(message)));
+  const forgedAuthorization = { ...authorization, current: { ...authorization.current, gitBlobOid: "d".repeat(40) } };
+  assert.ok(compareIndex(manifestFiles, exactIndex, forgedAuthorization)
+    .some((message) => /override is not the pinned/i.test(message)));
+});
+
+test("authorization record and preserved original must be tracked as the only exact artifact files", (t) => {
+  const root = makeAuthorizationRepoFixture(t);
+  const valid = verifyLegacyAuthorizationArtifacts(root, [AUTHORIZED_BASELINE_ENTRY]);
+  assert.deepEqual(valid.errors, []);
+  assert.equal(valid.authorization.authorizationId, LEGACY_AUTHORIZATION_ID);
+
+  const extraTrackedRoot = makeAuthorizationRepoFixture(t, { extraTracked: true });
+  const extraTracked = verifyLegacyAuthorizationArtifacts(extraTrackedRoot, [AUTHORIZED_BASELINE_ENTRY]);
+  assert.equal(extraTracked.authorization, null);
+  assert.ok(extraTracked.errors.some((message) => /track exactly its one pinned file/i.test(message)));
+
+  const extraUntrackedRoot = makeAuthorizationRepoFixture(t, { extraUntracked: true });
+  const extraUntracked = verifyLegacyAuthorizationArtifacts(extraUntrackedRoot, [AUTHORIZED_BASELINE_ENTRY]);
+  assert.equal(extraUntracked.authorization, null);
+  assert.ok(extraUntracked.errors.some((message) => /untracked or ignored files/i.test(message)));
+
+  const tamperedArchiveRoot = makeAuthorizationRepoFixture(t);
+  writeFileSync(path.join(tamperedArchiveRoot, AUTHORIZED_LEGACY_ARCHIVE_PATH), Buffer.concat([
+    PRESERVED_ORIGINAL_BYTES,
+    Buffer.from("tampered"),
+  ]));
+  const tamperedArchive = verifyLegacyAuthorizationArtifacts(tamperedArchiveRoot, [AUTHORIZED_BASELINE_ENTRY]);
+  assert.equal(tamperedArchive.authorization, null);
+  assert.ok(tamperedArchive.errors.some((message) => /preserved legacy original .* differs from the pinned identity/i.test(message)));
+});
+
+test("authorization and archive worktree reads reject symlink replacement even when their index is unchanged", (t) => {
+  const outside = mkdtempSync(path.join(os.tmpdir(), "eqoboard-legacy-authorization-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  const outsideFile = path.join(outside, "target.bin");
+  writeFileSync(outsideFile, PRESERVED_ORIGINAL_BYTES);
+
+  for (const artifactPath of [LEGACY_AUTHORIZATION_RECORD_PATH, AUTHORIZED_LEGACY_ARCHIVE_PATH]) {
+    const root = makeAuthorizationRepoFixture(t);
+    const replacement = path.join(root, artifactPath);
+    rmSync(replacement);
+    symlinkSync(outsideFile, replacement);
+    const result = verifyLegacyAuthorizationArtifacts(root, [AUTHORIZED_BASELINE_ENTRY]);
+    assert.equal(result.authorization, null);
+    assert.ok(result.errors.some((message) => /symlink is forbidden/i.test(message)));
+  }
 });
 
 test("manifest validation binds the fixed snapshot, complete scope and sorted unique paths", () => {

@@ -60,8 +60,10 @@ listener 一致；旧 XML 不含 SSL/key，OpenD 启动参数引用的运行时 
 ## 本机免登录
 
 设置 `EQO_LOCAL_ACCESS=true`、`EQO_LOCAL_BIND=127.0.0.1`，相同的
-`EQO_PUBLIC_ORIGIN` / `NEXTAUTH_URL=http://localhost:3000`，并以
-`npm run dev -w web -- --hostname 127.0.0.1` 启动。Web、Node、Gateway 必须
+`EQO_PUBLIC_ORIGIN` / `NEXTAUTH_URL`。旧终端免登录记录曾使用 localhost:3000；
+当前原生 Windows 本机启动按 [NATIVE_LOCAL_START.md](NATIVE_LOCAL_START.md)
+使用 Actions 预编译运行包及 `http://127.0.0.1:3000`，不在本机运行 build/dev。
+Web、Node、Gateway 必须
 实际仅监听 loopback；Gateway 在该模式或 Futu 模式拒绝 non-loopback bind。
 该模式必须显式启用，独立 research runtime 不接受。缺省仍为 OIDC。
 
@@ -88,7 +90,8 @@ Live 不启用，不删除门禁来开通 Paper。
 Gateway 的 `EQO_FUTU_SCRIPT` 指向本仓 `tools/futu-stdio.mjs`；
 `FUTU_OPEND_HOST=127.0.0.1`、`FUTU_OPEND_WEBSOCKET_PORT`、
 `FUTU_OPEND_WEBSOCKET_SSL`、`FUTU_OPEND_WEBSOCKET_KEY` 仅传给 Gateway
-和其 SDK 子进程。当前 WebSocket 为 127.0.0.1:33333，TCP 为 11111，不能混用。
+和其 SDK 子进程。2026-10-16 用户指定的本机 WebSocket 为 127.0.0.1:12345，
+TCP 为 11111，不能混用；此前 33333 是旧环境记录，不是当前启动默认值。
 Gateway 启动一个常驻 SDK 子进程，不按请求新建连接；stdin/stdout 使用有界
 NDJSON 队列，Gateway 单行读取预算为 1 MiB，超限会关闭 worker 并结束待处理请求。
 OpenD 登录拒绝以脱敏错误码 `futu_login_rejected` 返回，不转发 SDK 原始错误。

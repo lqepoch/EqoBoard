@@ -27,6 +27,8 @@ export type AuthUiSnapshot = Readonly<{
   status: AuthUiStatus;
   authenticated: boolean;
   displayName: string | null;
+  /** Non-authoritative identity label; server authorization never trusts this field. */
+  identityType?: "oidc" | "local-workstation";
   permissions: readonly Permission[];
   /** Server-derived opaque non-secret namespace, null without a verified session. */
   storagePartition: string | null;

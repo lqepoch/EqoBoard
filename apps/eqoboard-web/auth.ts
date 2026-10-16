@@ -15,6 +15,107 @@ type OidcProfile = Record<string, unknown> & {
 
 const NATIVE_E2E_ISSUER = "http://native-mock-oidc:4450";
 
+/** Return the exact loopback origin selected by the launcher, or fail closed. */
+export function localWorkstationOrigin(): string | null {
+  if (
+    process.env.EQO_LOCAL_ACCESS !== "true" ||
+    process.env.EQO_BFF_MODE !== "terminal" ||
+    process.env.EQO_LOCAL_BIND !== "127.0.0.1" ||
+    process.env.HOSTNAME !== "127.0.0.1"
+  ) {
+    return null;
+  }
+
+  const rawPort = process.env.PORT;
+  const configuredPort = rawPort === undefined || rawPort === "" ? "3000" : rawPort;
+  if (!/^[1-9][0-9]{0,4}$/u.test(configuredPort)) return null;
+  const port = Number(configuredPort);
+  if (!Number.isSafeInteger(port) || port > 65_535) return null;
+
+  const expectedOrigin = new URL(`http://127.0.0.1:${port}`).origin;
+  if (
+    process.env.EQO_PUBLIC_ORIGIN !== expectedOrigin ||
+    process.env.NEXTAUTH_URL !== expectedOrigin ||
+    typeof process.env.NEXTAUTH_SECRET !== "string" ||
+    process.env.NEXTAUTH_SECRET.length < 32
+  ) {
+    return null;
+  }
+  return expectedOrigin;
+}
+
+/** A non-empty local-access setting opts into local mode and must be exact. */
+export function localWorkstationModeRequested(): boolean {
+  const value = process.env.EQO_LOCAL_ACCESS;
+  return typeof value === "string" && value.length > 0 && value !== "false";
+}
+
+/** Local access is deliberately tied to the launcher’s one loopback endpoint. */
+export function localWorkstationModeEnabled(): boolean {
+  return localWorkstationOrigin() !== null;
+}
+
+/**
+ * Validate the direct local request boundary without trusting proxy headers.
+ * Next.js 15.5.27 adds its x-forwarded-* defaults before route handlers, so the
+ * authority-bearing values must agree with Host and the fixed local origin.
+ */
+export function isLocalWorkstationRequestAllowed(request: Request): boolean {
+  const configuredOrigin = localWorkstationOrigin();
+  if (!configuredOrigin) return false;
+  const expected = new URL(configuredOrigin);
+  let requestUrl: URL;
+  try {
+    requestUrl = new URL(request.url);
+  } catch {
+    return false;
+  }
+  // Next.js 15.5.27 normalizes IPv4 loopback URLs to `localhost` in NextURL.
+  // The original Host and forwarded authority are still checked below, so this
+  // accepts only that framework-internal URL representation of the same request.
+  const nextNormalizedOrigin = new URL(configuredOrigin);
+  nextNormalizedOrigin.hostname = "localhost";
+  if (requestUrl.origin !== configuredOrigin && requestUrl.origin !== nextNormalizedOrigin.origin) {
+    return false;
+  }
+  if (request.headers.get("host") !== expected.host) return false;
+
+  let invalidForwardingHeader = false;
+  request.headers.forEach((value, name) => {
+    if (name === "forwarded" || name.startsWith("x-original-")) {
+      invalidForwardingHeader = true;
+      return;
+    }
+    if (!name.startsWith("x-forwarded-") || name === "x-forwarded-for") return;
+    const expectedValue =
+      name === "x-forwarded-host"
+        ? expected.host
+        : name === "x-forwarded-proto"
+          ? "http"
+          : name === "x-forwarded-port"
+            ? process.env.PORT || "3000"
+            : null;
+    if (expectedValue === null || value !== expectedValue) invalidForwardingHeader = true;
+  });
+  if (invalidForwardingHeader) return false;
+
+  const origin = request.headers.get("origin");
+  const site = request.headers.get("sec-fetch-site");
+  const mode = request.headers.get("sec-fetch-mode");
+  const method = request.method.toUpperCase();
+  const isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+  if (origin !== null && origin !== configuredOrigin) return false;
+  if (site !== null && site !== "same-origin" && !(site === "none" && !isWrite)) return false;
+  if (
+    isWrite &&
+    (origin !== configuredOrigin || (mode !== null && mode !== "same-origin" && mode !== "cors"))
+  ) {
+    return false;
+  }
+  if (isWrite && mode === "cors" && site !== "same-origin") return false;
+  return true;
+}
+
 function validIssuer(raw: string | undefined): string | null {
   if (!raw) return null;
   try {
@@ -81,6 +182,7 @@ export function configuredSessionLifetime(): number | null {
 }
 
 export function isOidcConfigured(): boolean {
+  if (localWorkstationModeRequested()) return false;
   const issuer = currentOidcIssuer();
   const publicOrigin = publicAppOrigin();
   const nextAuthUrl = process.env.NEXTAUTH_URL;

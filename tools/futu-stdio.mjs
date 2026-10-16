@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import readline from 'node:readline';
 import { FutuHistory } from './futu-history.mjs';
 import { StockSubscriptions } from './futu-subscriptions.mjs';
-const require = createRequire(new URL('../apps/openterminal/server/package.json', import.meta.url));
+const require = createRequire(new URL('./futu-runtime/package.json', import.meta.url));
 const SDK = require('futu-api').default;
 const { ftCmdID } = require('futu-api');
 const protoRoot = require('futu-api/proto');

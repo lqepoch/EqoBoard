@@ -1010,6 +1010,34 @@
         "apps/eqoboard-web/widgets/implementations/options/tape.test.ts",
         "apps/eqoboard-web/widgets/implementations/market/hooks.test.ts"
       ]
+    },
+    {
+      "agent": "native_local_windows_launch",
+      "base_commit": "32bfc58124809bd3e37ac0069fd917e6be576e64",
+      "source_provenance": {
+        "classification": "first-party independent local-workstation acceptance and UI regression implementation",
+        "adapted_sources": [],
+        "notes": "New tests and local browser configuration are EqoBoard-authored. Existing local workstation policy was reviewed as behavior only; there is no legacy runtime import or third-party source copy. Windows acceptance is synthetic and does not qualify real providers or production licensing."
+      },
+      "dependencies": {
+        "added": [],
+        "consumed": [
+          "next",
+          "react",
+          "vitest",
+          "@playwright/test"
+        ]
+      },
+      "files": [
+        "apps/eqoboard-web/app/api/readyz/route.test.ts",
+        "apps/eqoboard-web/components/shell/AccountControl.test.tsx",
+        "apps/eqoboard-web/local-e2e/workstation.spec.ts",
+        "apps/eqoboard-web/playwright.local.config.ts"
+      ],
+      "auditSources": [
+        "apps/eqoboard-web/AGENTS.md",
+        "docs/NATIVE_LOCAL_START.md"
+      ]
     }
   ],
   "rootIntegration": {

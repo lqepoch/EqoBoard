@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Page,
+  type Request as PlaywrightRequest,
+  type Response as PlaywrightResponse,
+  type TestInfo,
+} from "@playwright/test";
 import {
   YFINANCE_RESEARCH_MAX_PAGE_DAYS,
   YFINANCE_RESEARCH_MAX_PAGES,
@@ -17,6 +24,340 @@ import {
 
 const MDP_RESEARCH_ROUTE = "/v1/research/yfinance/daily";
 const SECRET_SENTINEL_PREFIX = "NATIVE_SERVER_ONLY_SECRET_SENTINEL_20261015_";
+const YAHOO_DAILY_API_PATH = "/api/research/yfinance/daily";
+const MAX_OBSERVED_RESEARCH_REQUESTS = YFINANCE_RESEARCH_MAX_PAGES + 1;
+const MAX_OBSERVED_RESEARCH_BODY_BYTES = 1024 * 1024;
+
+type ResearchFetchObservationRecord = {
+  readonly id: number;
+  readonly requestUrl: string;
+  readonly method: string;
+  state: "pending" | "complete" | "failed";
+  status: number | null;
+  byteLength: number | null;
+  bodyBase64: string | null;
+  eof: boolean;
+  errorClass: string | null;
+};
+
+type ResearchFetchObservationState = {
+  readonly records: ResearchFetchObservationRecord[];
+  fatalErrorClass: string | null;
+};
+
+type ResearchObservationWindow = Window & {
+  __eqoResearchFetchObservations?: ResearchFetchObservationState;
+};
+
+function installResearchNetworkDiagnostics(page: Page) {
+  const startedAt = Date.now();
+  const ids = new WeakMap<PlaywrightRequest, number>();
+  const statuses = new WeakMap<PlaywrightRequest, number>();
+  const events: Record<string, string | number | boolean>[] = [];
+  let nextId = 1;
+  const record = (event: string, request: PlaywrightRequest) => {
+    const url = new URL(request.url());
+    if (url.pathname !== YAHOO_DAILY_API_PATH || events.length >= 200) return;
+    let id = ids.get(request);
+    if (!id) {
+      id = nextId++;
+      ids.set(request, id);
+    }
+    const errorCode = event === "requestfailed" ? safeResearchFailureCode(request) : null;
+    events.push({
+      elapsedMs: Date.now() - startedAt,
+      event,
+      id,
+      pathname: url.pathname,
+      status: statuses.get(request) ?? 0,
+      failure: event === "requestfailed",
+      ...(errorCode ? { errorCode } : {}),
+    });
+  };
+  page.on("request", (request) => record("request", request));
+  page.on("response", (response) => {
+    statuses.set(response.request(), response.status());
+    record("response", response.request());
+  });
+  page.on("requestfinished", (request) => record("requestfinished", request));
+  page.on("requestfailed", (request) => record("requestfailed", request));
+  return events;
+}
+
+type ResearchAbortDiagnostic = Readonly<{
+  elapsedMs: number;
+  pathname: string;
+  frames: readonly string[];
+}>;
+
+async function installResearchAbortDiagnostics(page: Page) {
+  await page.addInitScript(() => {
+    const target = window as Window & {
+      __eqoResearchAbortEvents?: ResearchAbortDiagnostic[];
+    };
+    const events: ResearchAbortDiagnostic[] = [];
+    target.__eqoResearchAbortEvents = events;
+    const originalAbort = AbortController.prototype.abort;
+    const wrappedAbort: typeof originalAbort = function (
+      this: AbortController,
+      ...args: Parameters<typeof originalAbort>
+    ) {
+      if (location.pathname.startsWith("/research/yfinance/") && events.length < 64) {
+        const frames = (new Error().stack ?? "")
+          .split("\n")
+          .slice(1, 9)
+          .flatMap((frame) => {
+            const match = frame.match(/(\/_next\/static\/[^?:\s)]+):(\d+):(\d+)/u);
+            return match ? [`${match[1]}:${match[2]}:${match[3]}`] : [];
+          });
+        events.push({
+          elapsedMs: Math.round(performance.now()),
+          pathname: location.pathname,
+          frames,
+        });
+      }
+      return originalAbort.apply(this, args);
+    };
+    AbortController.prototype.abort = wrappedAbort;
+  });
+}
+
+async function installResearchFetchObserver(page: Page) {
+  // Chromium crbug 568852319 reports a DevTools ERR_ABORTED for a no-store
+  // Fetch body after the renderer has consumed it with getReader(). Gerrit
+  // change 8508456 (62473ad0f747e245e514c93e741bb8e168a2a207) fixes the
+  // ordering in OnStateChange; the pinned CI Chromium predates that change.
+  // Observe a bounded clone to EOF while returning the original Response
+  // immediately and unchanged. https://crbug.com/568852319
+  // https://chromium-review.googlesource.com/c/chromium/src/+/8508456
+  await page.addInitScript(
+    ({
+      apiPath,
+      maxRequests,
+      maxBytes,
+      maxUrlChars,
+    }: {
+      apiPath: string;
+      maxRequests: number;
+      maxBytes: number;
+      maxUrlChars: number;
+    }) => {
+      const target = window as ResearchObservationWindow;
+      const state: ResearchFetchObservationState = { records: [], fatalErrorClass: null };
+      target.__eqoResearchFetchObservations = state;
+      const originalFetch = window.fetch;
+      const allowedQueryKeys = new Set([
+        "symbols",
+        "asset_class",
+        "start_utc",
+        "end_utc",
+        "adjustment",
+        "cursor",
+      ]);
+
+      const encodeBase64 = (bytes: Uint8Array): string => {
+        let binary = "";
+        for (let offset = 0; offset < bytes.byteLength; offset += 32_768) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+        }
+        return btoa(binary);
+      };
+
+      const fail = (record: ResearchFetchObservationRecord, errorClass: string) => {
+        record.state = "failed";
+        record.errorClass = errorClass;
+      };
+
+      const observeClone = async (
+        record: ResearchFetchObservationRecord,
+        clone: Response,
+      ): Promise<void> => {
+        const reader = clone.body?.getReader();
+        if (!reader) {
+          fail(record, "body-unavailable");
+          return;
+        }
+        const chunks: Uint8Array[] = [];
+        let totalBytes = 0;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            totalBytes += value.byteLength;
+            if (totalBytes > maxBytes) {
+              fail(record, "body-too-large");
+              await reader.cancel().catch(() => undefined);
+              return;
+            }
+            chunks.push(value);
+          }
+          const bytes = new Uint8Array(totalBytes);
+          let offset = 0;
+          for (const chunk of chunks) {
+            bytes.set(chunk, offset);
+            offset += chunk.byteLength;
+          }
+          record.byteLength = bytes.byteLength;
+          record.bodyBase64 = encodeBase64(bytes);
+          record.eof = true;
+          record.state = "complete";
+        } catch {
+          fail(record, "body-read-failed");
+          await reader.cancel().catch(() => undefined);
+        } finally {
+          reader.releaseLock();
+        }
+      };
+
+      const wrappedFetch: typeof window.fetch = function (input, init) {
+        let url: URL;
+        try {
+          const inputUrl = input instanceof Request ? input.url : input.toString();
+          url = new URL(inputUrl, window.location.href);
+        } catch {
+          return originalFetch.call(window, input, init);
+        }
+        if (url.origin !== window.location.origin || url.pathname !== apiPath) {
+          return originalFetch.call(window, input, init);
+        }
+
+        if (state.records.length >= maxRequests) {
+          state.fatalErrorClass = "request-count-limit";
+          return originalFetch.call(window, input, init);
+        }
+        const queryKeys = Array.from(url.searchParams.keys());
+        if (
+          url.href.length > maxUrlChars ||
+          queryKeys.length > allowedQueryKeys.size ||
+          queryKeys.some((key) => !allowedQueryKeys.has(key)) ||
+          new Set(queryKeys).size !== queryKeys.length
+        ) {
+          state.fatalErrorClass = "request-metadata-limit";
+          return originalFetch.call(window, input, init);
+        }
+
+        const method = (
+          init?.method ?? (input instanceof Request ? input.method : "GET")
+        ).toUpperCase();
+        const record: ResearchFetchObservationRecord = {
+          id: state.records.length + 1,
+          requestUrl: url.href,
+          method,
+          state: "pending",
+          status: null,
+          byteLength: null,
+          bodyBase64: null,
+          eof: false,
+          errorClass: null,
+        };
+        state.records.push(record);
+        if (method !== "GET") fail(record, "unexpected-method");
+
+        return originalFetch.call(window, input, init).then(
+          (response) => {
+            record.status = response.status;
+            if (record.state === "failed") return response;
+            if (response.status !== 200) {
+              fail(record, "http-status");
+              return response;
+            }
+            let clone: Response;
+            try {
+              clone = response.clone();
+            } catch {
+              fail(record, "clone-failed");
+              return response;
+            }
+            void observeClone(record, clone).catch(() => fail(record, "body-read-failed"));
+            return response;
+          },
+          (error: unknown) => {
+            fail(record, "fetch-failed");
+            return Promise.reject(error);
+          },
+        );
+      };
+      window.fetch = wrappedFetch;
+    },
+    {
+      apiPath: YAHOO_DAILY_API_PATH,
+      maxRequests: MAX_OBSERVED_RESEARCH_REQUESTS,
+      maxBytes: MAX_OBSERVED_RESEARCH_BODY_BYTES,
+      maxUrlChars: 4_096,
+    },
+  );
+}
+
+function safeResearchFailureCode(request: PlaywrightRequest): string | null {
+  const failure = request.failure() as unknown;
+  let errorText = "";
+  if (typeof failure === "string") errorText = failure;
+  else if (
+    failure !== null &&
+    typeof failure === "object" &&
+    "errorText" in failure &&
+    typeof failure.errorText === "string"
+  ) {
+    errorText = failure.errorText;
+  }
+  return /^net::ERR_[A-Z0-9_]+$/u.test(errorText) ? errorText : null;
+}
+
+async function readObservedResearchResponse<T>(
+  page: Page,
+  response: PlaywrightResponse,
+  label: string,
+): Promise<Readonly<{ body: T; bytes: Buffer }>> {
+  const target = { url: response.url(), status: response.status() };
+  const observationHandle = await page.waitForFunction(
+    (expected: { url: string; status: number }) => {
+      const target = window as ResearchObservationWindow;
+      const state = target.__eqoResearchFetchObservations;
+      if (!state) return { state: "failed", errorClass: "observer-unavailable" };
+      if (state.fatalErrorClass) return { state: "failed", errorClass: state.fatalErrorClass };
+      // A fetch rejected before receiving headers has no Playwright Response
+      // to pair with, so it must not make a later response for the same URL
+      // look duplicated.
+      const matches = state.records.filter(
+        (record) => record.requestUrl === expected.url && record.status === expected.status,
+      );
+      if (matches.length > 1) return { state: "failed", errorClass: "duplicate-request" };
+      const record = matches[0];
+      if (!record || record.state === "pending") return false;
+      return record;
+    },
+    target,
+    { polling: 50, timeout: 10_000 },
+  );
+  const observation = (await observationHandle.jsonValue()) as
+    | ResearchFetchObservationRecord
+    | Readonly<{ state: "failed"; errorClass: string }>;
+  await observationHandle.dispose();
+
+  if (observation.state !== "complete") {
+    throw new Error(`${label} browser body observation failed (${observation.errorClass}).`);
+  }
+  expect(observation.requestUrl, `${label} exact request`).toBe(target.url);
+  expect(observation.method, `${label} method`).toBe("GET");
+  expect(observation.status, `${label} browser status`).toBe(200);
+  expect(observation.status, `${label} response status`).toBe(target.status);
+  expect(observation.eof, `${label} body EOF`).toBe(true);
+  expect(observation.byteLength, `${label} body byte limit`).toBeLessThanOrEqual(
+    MAX_OBSERVED_RESEARCH_BODY_BYTES,
+  );
+  expect(observation.bodyBase64, `${label} raw body`).toEqual(expect.any(String));
+
+  const bytes = Buffer.from(observation.bodyBase64 as string, "base64");
+  expect(bytes.byteLength, `${label} exact byte length`).toBe(observation.byteLength);
+  expect(bytes.toString("base64"), `${label} canonical raw bytes`).toBe(observation.bodyBase64);
+  let body: T;
+  try {
+    body = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as T;
+  } catch {
+    throw new Error(`${label} body was not complete UTF-8 JSON.`);
+  }
+  return { body, bytes };
+}
 
 function candidateSha(): string {
   const sha = process.env.E2E_CANDIDATE_SHA;
@@ -271,7 +612,10 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
   const context = await browser.newContext();
   const researchPage = await context.newPage();
   const browserRequests: string[] = [];
+  const networkEvents = installResearchNetworkDiagnostics(researchPage);
   try {
+    await installResearchAbortDiagnostics(researchPage);
+    await installResearchFetchObserver(researchPage);
     await signInAt(researchPage, researchOrigin, "reader", "/");
     await resetMdpFixtureCounters(request);
     researchPage.on("request", (browserRequest) => browserRequests.push(browserRequest.url()));
@@ -285,7 +629,12 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     });
     const initialResponse = await initialRead;
     expect(initialResponse.status()).toBe(200);
-    const firstApiBody = await initialResponse.body();
+    const initialObservation = await readObservedResearchResponse<unknown>(
+      researchPage,
+      initialResponse,
+      "Initial 1M range",
+    );
+    const firstApiBody = initialObservation.bytes;
     const firstApiBodyBytes = firstApiBody.byteLength;
     const fixtureResponseSha256 = createHash("sha256").update(firstApiBody).digest("hex");
 
@@ -345,9 +694,11 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     await researchPage.getByLabel("Daily window").selectOption("MAX");
     const maxRangeRead = await maxRangeReadPromise;
     expect(maxRangeRead.status()).toBe(200);
-    expect(await maxRangeRead.finished()).toBeNull();
-    const maxRangeBody = await maxRangeRead.body();
-    const maxRange = JSON.parse(maxRangeBody.toString("utf8")) as PagedYfinanceObservation;
+    const { body: maxRange } = await readObservedResearchResponse<PagedYfinanceObservation>(
+      researchPage,
+      maxRangeRead,
+      "MAX range",
+    );
     expect(maxRange.requested_range).toEqual({
       start_utc: supportedStartUtc,
       end_utc: expectedMaxEndUtc,
@@ -392,15 +743,23 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
           const url = new URL(response.url());
           return (
             url.pathname === "/api/research/yfinance/daily" &&
+            url.searchParams.get("symbols") === "SPY" &&
+            url.searchParams.get("asset_class") === "stock" &&
+            url.searchParams.get("adjustment") === "unadjusted" &&
+            url.searchParams.get("start_utc") === supportedStartUtc &&
+            url.searchParams.get("end_utc") === expectedMaxEndUtc &&
             url.searchParams.get("cursor") === cursor
           );
         })
-        .then(async (response) => {
+        .then((response) => {
           expect(response.status(), `Research page ${pageNumber}`).toBe(200);
-          expect(await response.finished(), `Research page ${pageNumber} transfer`).toBeNull();
-          return (await response.json()) as PagedYfinanceObservation;
+          return readObservedResearchResponse<PagedYfinanceObservation>(
+            researchPage,
+            response,
+            `Research page ${pageNumber}`,
+          );
         });
-      const [olderPage] = await Promise.all([olderRead, olderPageButton.click()]);
+      const [{ body: olderPage }] = await Promise.all([olderRead, olderPageButton.click()]);
       const expectedPageEnd = Date.parse(previousPage.page_range.start_utc);
       const expectedPageStart = Math.max(maxStartMs, expectedPageEnd - pageDurationMs);
       expect(olderPage.requested_range).toEqual(maxRange.requested_range);
@@ -467,6 +826,27 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
       /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u,
     );
   } finally {
+    try {
+      const abortEvents = await researchPage.evaluate(
+        () =>
+          (window as Window & { __eqoResearchAbortEvents?: ResearchAbortDiagnostic[] })
+            .__eqoResearchAbortEvents ?? [],
+      );
+      await testInfo.attach("yahoo-research-abort-calls", {
+        body: JSON.stringify(abortEvents, null, 2),
+        contentType: "application/json",
+      });
+    } catch {
+      // Diagnostic attachment must not mask the test result.
+    }
+    try {
+      await testInfo.attach("yahoo-research-network", {
+        body: JSON.stringify(networkEvents, null, 2),
+        contentType: "application/json",
+      });
+    } catch {
+      // Diagnostic attachment must not mask the test result.
+    }
     await context.close();
   }
 });

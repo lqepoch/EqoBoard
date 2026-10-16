@@ -1,0 +1,3 @@
+# Exact bytes for the separately authorized preservation copy and audit record.
+/references/legacy/authorized-originals/pr65/openbb-lite.spec.ts -text
+/docs/evidence/legacy-integrity-authorizations/pr65-openbb-qqq-cell.json text eol=lf

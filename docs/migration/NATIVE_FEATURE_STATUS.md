@@ -1,5 +1,15 @@
 # Native implementation and acceptance status
 
+## Source integration and local runtime follow-up, 2026-10-16
+
+PR64 merged as `32bfc58124809bd3e37ac0069fd917e6be576e64` after exact-head
+checks and self-review. Its final 326 unit/route and 27 browser tests passed;
+earlier failed runs below remain historical evidence. This integrates source,
+not a default production cutover or complete migration acceptance. PR65 adds
+an Actions-built Windows local evaluation package and controlled local identity.
+See [LOCAL_RUNTIME_REVIEW.md](LOCAL_RUNTIME_REVIEW.md) for scope, architecture,
+security boundaries, evidence locations, unresolved gates and rollback.
+
 ## PR #64 review, 2026-10-16
 
 The previously reviewed head is `c0e22628249b8b2e946c13d7d28ed0c949ad9702`.

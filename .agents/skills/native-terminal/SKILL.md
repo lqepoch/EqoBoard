@@ -13,3 +13,5 @@ Widget通过静态 registry、配置schema和声明的读/动作allowlist接入�
 OIDC 必须显式设置 `NEXTAUTH_URL`，且与精确 `EQO_PUBLIC_ORIGIN` 字符串相同，不带路径、凭据、query 或 fragment；缺失/错配应不可用，不能依赖请求 Host/forwarded host 推导回调基准。
 
 修改哪个模块就补对应单元、契约和真实浏览器/容器测试。公共项目构建测试只在精确head GitHub Actions执行，不本地build、dev、Docker或真实Provider探测。不得用synthetic测试冒称Provider/生产验收。更新功能矩阵与真实状态，完整对照、身份迁移、同环境成对性能和回滚未通过时保留旧默认部署。
+
+明确授权的本机启动使用 Actions Windows运行包与固定 Node 22.23.3，不本地编译。按 docs/NATIVE_LOCAL_START.md 校验候选/文件哈希并使用 start/stop-native-local.ps1；本机身份仅限 terminal、实际127.0.0.1绑定、匹配Host/Origin/代理头，无Paper提交/AI/Engine权限。独立SDK-only tools/futu-runtime供唯一Gateway子进程，不依赖旧Node Server。ignored根.env按Web/Gateway白名单分流，Alpaca/Futu凭据不进入Web或Actions。

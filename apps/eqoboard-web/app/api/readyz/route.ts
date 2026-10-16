@@ -1,11 +1,19 @@
-import { isOidcConfigured } from "@/auth";
+import {
+  isLocalWorkstationRequestAllowed,
+  isOidcConfigured,
+  localWorkstationModeEnabled,
+  localWorkstationModeRequested,
+} from "@/auth";
 import { noStoreJson } from "@/lib/server/bff-security";
 import { nativeRuntimeReadiness } from "@/lib/server/runtime-mode";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  const identityConfigured = isOidcConfigured();
+export function GET(request: Request) {
+  const localMode = localWorkstationModeRequested();
+  const identityConfigured = localMode
+    ? localWorkstationModeEnabled() && isLocalWorkstationRequestAllowed(request)
+    : isOidcConfigured();
   const runtime = nativeRuntimeReadiness();
   const ready = identityConfigured && runtime.ready;
   return noStoreJson(

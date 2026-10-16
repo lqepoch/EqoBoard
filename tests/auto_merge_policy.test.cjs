@@ -815,14 +815,26 @@ test('Native Web workflow identity, aggregate, lane guards, and base binding are
     workflowCheckSuiteIds: { native: nativeWebCheckRuns.check_suite_id },
   };
   assert.deepEqual(validateRequiredChecks(expected), []);
-  assert.equal(nativeDeclarations.length, 3);
+  assert.equal(nativeDeclarations.length, 4);
   assert.deepEqual(nativeDeclarations.map((check) => check.context).sort(), [
     'Native web lock bootstrap',
     'Native web package and runtime checks',
+    'Native Windows runtime and local launch',
     'Native web validation gate',
   ].sort());
   assert.equal(nativeDeclarations.find((check) => check.context === 'Native web validation gate').required, true);
-  assert.equal(nativeDeclarations.filter((check) => check.required === false && check.mustExist).length, 2);
+  assert.equal(nativeDeclarations.filter((check) => check.required === false && check.mustExist).length, 3);
+  assert.deepEqual(nativeDeclarations.find((check) => check.context === 'Native Windows runtime and local launch'), {
+    context: 'Native Windows runtime and local launch',
+    appSlug: 'github-actions',
+    integrationId: null,
+    bindToWorkflowRun: true,
+    workflowKey: 'native',
+    allowSkipped: false,
+    mustExist: true,
+    source: 'guard',
+    required: false,
+  });
 
   await t.test('native gate cannot pass from a stale head, another suite, or another provider', () => {
     const gate = 'Native web validation gate';
@@ -848,8 +860,12 @@ test('Native Web workflow identity, aggregate, lane guards, and base binding are
     }
   });
 
-  await t.test('both native lane guards fail closed when missing, pending, failed, or skipped', () => {
-    for (const lane of ['Native web lock bootstrap', 'Native web package and runtime checks']) {
+  await t.test('all native lane guards fail closed when missing, stale, misbound, or unsuccessful', () => {
+    for (const lane of [
+      'Native web lock bootstrap',
+      'Native web package and runtime checks',
+      'Native Windows runtime and local launch',
+    ]) {
       const omitted = nativeWebCheckRuns.check_runs.filter((run) => run.name !== lane);
       assert.ok(validateRequiredChecks({ ...expected, checks: omitted }).includes(`check-missing:${lane}`));
       for (const change of [
@@ -860,6 +876,16 @@ test('Native Web workflow identity, aggregate, lane guards, and base binding are
         const altered = nativeWebCheckRuns.check_runs.map((run) => run.name === lane ? { ...run, ...change } : run);
         assert.ok(validateRequiredChecks({ ...expected, checks: altered }).includes(`check-not-success:${lane}`));
       }
+      const wrongHead = nativeWebCheckRuns.check_runs.map((run) => run.name === lane ? { ...run, head_sha: 'f'.repeat(40) } : run);
+      assert.ok(validateRequiredChecks({ ...expected, checks: wrongHead }).includes(`check-missing:${lane}`));
+      const wrongSuite = nativeWebCheckRuns.check_runs.map((run) => run.name === lane
+        ? { ...run, check_suite: { id: NATIVE_CHECK_SUITE_ID + 90 } }
+        : run);
+      assert.ok(validateRequiredChecks({ ...expected, checks: wrongSuite }).includes(`check-suite-mismatch:${lane}`));
+      const wrongProvider = nativeWebCheckRuns.check_runs.map((run) => run.name === lane
+        ? { ...run, app: { id: 2, slug: 'untrusted-provider' } }
+        : run);
+      assert.ok(validateRequiredChecks({ ...expected, checks: wrongProvider }).includes(`check-provider-mismatch:${lane}`));
     }
     const unknown = [...nativeWebCheckRuns.check_runs, {
       name: 'Native web surprise job',
