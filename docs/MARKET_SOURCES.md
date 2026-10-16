@@ -75,4 +75,9 @@ The Playwright `market-stream.spec.ts` signs in through the local OIDC flow and 
 
 ### Unified stock/ETF history (opt-in)
 
+The opt-in and fallback below apply to the retained OpenTerminal application. Native Chart
+always uses Core Bars through MDP; missing configuration is unavailable. Its Windows local
+profile has the separate `EQO_LOCAL_CORE_BARS` switch and verified MDP runtime described in
+`NATIVE_LOCAL_START.md`. Quote success does not establish historical bars availability.
+
 `EQO_MDP_MARKET_BARS_ENABLED=true` routes both existing charts through the authenticated same-origin `/api/history/{symbol}` BFF and MDP Bars V1. The default is disabled. Range, resolution, session scope, adjustment and provider mode are query identities; fixed-window cursors preserve pagination. Per-row exact values and per-segment provenance remain distinct from UI float projections. Unknown entitlement/feed or provider-native adjustment stays unknown; partial coverage and daily downgrade are visible. Quotes/watchlists, legacy dataset diagnostics and execution authority retain their existing paths. See `apps/openterminal/docs/MARKET_BFF_ROUTING.md` and `docs/MARKET_CHART_ROUTING.md`. Public builds and browser E2E run in GitHub Actions on the PR head, using explicitly synthetic bounded mocks; actual provider acceptance is separate. Disable the flag and restart web for rollback.

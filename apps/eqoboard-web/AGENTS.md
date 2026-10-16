@@ -33,5 +33,10 @@ performance, container and rollback acceptance pass on the same candidate.
   standalone package with Node 22.23.3 and strict loopback local-workstation
   identity. Follow `docs/NATIVE_LOCAL_START.md`; never load Provider credentials
   into the Web process or treat local identity as an OIDC session.
+  Local Core Bars is a separate explicit opt-in: only the fixed MDP terminal
+  `market:read` delegation and exact loopback 8088 are admitted. Research MDP,
+  Quant and Engine remain unavailable to that identity. MDP is the existing Core
+  Bars market backend, not the optional OpenBB/Yahoo runtime; its fixed Windows
+  source/runtime integration must not change Linux app-only or research isolation.
 - Shared config, dependencies, Compose, CI, provenance integration and PRs are
   owned by the coordinator; concurrent agents edit only assigned paths.

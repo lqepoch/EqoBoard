@@ -21,6 +21,8 @@
 ```dotenv
 EQO_LOCAL_ACCESS=true
 EQO_LOCAL_BIND=127.0.0.1
+EQO_LOCAL_CORE_BARS=false
+EQO_LOCAL_ALPACA_HISTORY=false
 EQO_BFF_MODE=terminal
 EQO_PUBLIC_ORIGIN=http://127.0.0.1:3000
 NEXTAUTH_URL=http://127.0.0.1:3000
@@ -41,6 +43,27 @@ EQO_EXECUTION_MODE=disabled
 凭据。Futu SSL/key 必须匹配 OpenD 实际设置；端口可连接不等于 SDK 登录成功。
 默认缺少 OpenD 或权限时，真实状态保持 disconnected/unavailable，不回退伪造数据。
 
+原生 Chart 的 Core Bars 通过独立 MDP 服务，不能仅凭 Quotes 可读认定历史图表可用。
+启用本机历史需将 `EQO_LOCAL_CORE_BARS=true`、`EQO_MDP_URL=http://127.0.0.1:8088`
+以及两个独立的 `MDP_TERMINAL_JWT_SECRET` / `MDP_RESEARCH_JWT_SECRET` 配入根 `.env`。
+本机启动器要求每把 key 至少 64 个无空格 ASCII 字符，建议独立 CSPRNG 生成的 64 hex；
+不可与 Gateway、NextAuth、其它 signer 或 Provider 凭据共用。Web 只拿 terminal key，
+MDP verifier 只拿这两把 MDP key，不拿 Gateway signer 或 Futu key。
+
+真实查询还需成对设置 `MDP_MARKET_CALENDAR_FILE`（私有 `data/native-local` 下的绝对路径）
+和 `MDP_MARKET_CALENDAR_SHA256`。使用固定 MDP 的 `tools/xnys_snapshot_adapter.py`，
+从操作者持有且单独固定原始哈希的 XNYS artifact 离线转换；保留原始来源、canonical checksum、
+官方验证范围和输出 SHA。Windows 转换需要独立校验的 IANA timezone 数据。禁止把测试日历
+当作真实日历。缺少日历时服务可提供存活/鉴权诊断，但 history 明确 unavailable。
+当前 CLI 只加载现金市场日历，没有 OVER/BOATS overnight authority。
+
+默认本机 MDP 只通过已有 Gateway/Futu 读取历史，受现行 NEW/BUFFER 策略约束；
+OLD 或未知时段仍留缺口。若显式设置 `EQO_LOCAL_ALPACA_HISTORY=true`，启动器仅把
+已配置的 `ALPACA_KEY` / `ALPACA_SECRET` 传给 MDP 现有只读历史客户端，按现行服务端
+路由尝试 SIP 历史；不会修改来源优先级，不证明 Plus/数据权限，不进入 Web 或 Futu worker。
+Paper endpoint 不用于历史行情认证，不启用订单。Windows 不设置 MDP 市场 Parquet cache；
+独立空 LocalTest 根和 query-cache 仅用于服务初始化，不表示 Windows 归档读取已支持。
+
 本机身份只在显式启用、IPv4 loopback 绑定、Host/Origin/端口及配置一致时有效。
 用户归属为独立 local-workstation issuer/subject，不冒称 OIDC。Research runtime
 拒绝该模式，公共部署仍使用 OIDC。保留写请求的同源与 Fetch Metadata 校验、
@@ -49,7 +72,7 @@ EQO_EXECUTION_MODE=disabled
 ## 下载与启动
 
 选择目标 commit 上 **全部 Native Web CI 门禁成功** 的 run。Windows lane 会先
-构建 Rust Gateway 和 Next standalone，再对实际运行包执行本机身份、工作区保存、
+构建 Rust Gateway、固定版本 MDP 和 Next standalone，再对实际运行包执行本机身份、工作区保存、
 跨源拒绝的浏览器验收；不包含任何真实行情或私有凭据。
 Windows TLS 构建使用固定 NASM 2.16.03 官方 zip，并校验提交的 SHA-256；
 NASM 仅在 Actions 构建机使用，本机运行包不需要安装它。
@@ -64,8 +87,10 @@ pwsh -File tools/start-native-local.ps1 -RepoRoot . -PackagePath data/native-loc
 启动器再次核对 `runtime.json` 和完整 `SHA256SUMS`，只运行该包中的二进制。
 `ExpectedCandidateSha` 必填，必须来自已通过门禁的目标 Actions run，不能仅从
 下载包自报的 metadata 推导可信候选身份。
-Web 仅收到自身签名/会话与必要配置，Alpaca 与 Futu 凭据只传给 Gateway/SDK。
-两个服务实际绑定 `127.0.0.1`；已有端口或未知进程占用时拒绝覆盖，不杀其它任务。
+固定 MDP 来源见 `third_party/mdp-runtime.json`；内层源码/文件清单与外层完整清单交叉验证。
+Web 仅收到自身签名/会话与必要配置；Futu key 只给 Gateway/SDK，显式启用的 Alpaca
+只读历史 key 只给 MDP。启用 Core Bars 时按 Gateway→MDP→Web 启动，端口分别为
+8080、8088、3000，均实际绑定 `127.0.0.1`；已有端口或未知进程占用时拒绝覆盖。
 启动器先移除当前进程全部继承变量，再传入服务白名单；避免 Windows 的
 `Start-Process -UseNewEnvironment` 忽略显式环境块。Actions 通过父进程合成敏感
 变量验证 Web 的运行模式隔离，真实凭据不参与该验收。
@@ -96,3 +121,9 @@ pwsh -File tools/stop-native-local.ps1 -RepoRoot .
 日志与 `.env`，不删除私有状态。替换运行包时先停止，再选择另一个已验证 commit
 的包；数据格式不兼容时保留原目录并使用独立数据目录，不覆盖旧终端数据。
 `runtime.json` 的 `LOCAL_EVALUATION_ONLY` 和 `NOT_CLAIMED` 不代表生产或许可放行。
+新状态 schema v2 绑定外层 `SHA256SUMS` 文件的 SHA-256，并逐一核对 PID record；
+按 Web→MDP→Gateway 停止。仍兼容 PR65 的 v1 两服务状态，不删除其数据。
+回滚到不含 MDP 的旧运行包前，先停服务并将 `EQO_LOCAL_CORE_BARS` 和
+`EQO_LOCAL_ALPACA_HISTORY` 明确设为 false；启用 Core Bars 却选择缺少 MDP 的旧包会拒绝启动。
+Windows smoke 只证明无真实 Provider/日历时的三服务身份和失败关闭，不是实时行情、
+历史数据覆盖、Windows Ctrl-C graceful shutdown 或生产回滚验收。

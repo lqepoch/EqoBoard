@@ -19,7 +19,7 @@
 
 本机授权例外及当前验收边界见 `docs/FUTU_LOCAL_MARKET_DATA.md`：显式 loopback 直开可授予市场、workspace、私有研究、订单预览和 Paper scope；行情可选 Futu、期权暂停，交易目标 Alpaca Paper。该例外不表示实际执行已启用；effective execution 仍 disabled，Live 拒绝，部署缺省仍为 OIDC。
 
-12. 股票/ETF统一历史图表通过同源 BFF 与 Core Bars V1；`EQO_MDP_MARKET_BARS_ENABLED` 默认关闭，可回滚到旧历史路径。逐段保留 provider/feed/缺口和复权语义，source unknown 不可由路由意图替代。Futu 历史复用唯一 loopback OpenD 连接，无新订单或期权权限。
+12. 股票/ETF统一历史图表通过同源 BFF 与 Core Bars V1。旧 OpenTerminal 的 `EQO_MDP_MARKET_BARS_ENABLED` 默认关闭并可回退旧历史；原生 Chart 始终需要 MDP，无该服务准确返回 unavailable，不读这个旧开关。逐段保留 provider/feed/缺口和复权语义，source unknown 不可由路由意图替代。Futu 历史复用唯一 loopback OpenD 连接，无新订单或期权权限。
 13. 公共仓库编译、build 和最终测试由精确 PR HEAD 的 GitHub Actions 执行；本地不运行 build/Next dev，避免启动 Docker。受控只读 Provider 验收与 Actions 合成验收分别记录。
 
 ## 原生迁移与验收
@@ -30,5 +30,7 @@
 - Yahoo 日线仅经独立原生 research-mode 实例及研究 signer读取；终端实例不得配置研究 signer，研究实例不得配置终端/Engine/Provider 密钥。导航不同端口不能替代不同 hostname 的 cookie 隔离。所有服务密钥仍仅服务端。
 - 原生 `EQOBOARD_DATA_DIR` 独立于旧 SQLite。未配置时相关持久接口准确 unavailable；禁止自动迁入/认领旧数据。Workspace CAS、备份、显式旧布局预览/导入必须保持身份边界。
 - 原生验收仅由 `Native Web CI` 执行。缺失已提交的 package-lock 或其根依赖与 package 声明不匹配时，bootstrap artifact仅是待审查提案，gate必须失败。未通过新旧对照、成对性能和回滚证据不得切换默认部署。公共 Runner 无真实市场密钥或 Provider 验收；本地不启动 build、Next dev、Docker 或浏览器测试。
+- MDP 是原生 Core Bars 的必需市场后端，不是可选 OpenBB/Yahoo 研究运行时。Windows 本机包从 `third_party/mdp-runtime.json` 固定版本在 Actions 构建并集成 MDP；其自身源码 CI 独立通过，Native lane 只验证本包集成。Linux Web 镜像保持 app-only，须外置配置 MDP。OpenBB 的可选构建隔离不变。
+- 本机 Core Bars 需显式 `EQO_LOCAL_CORE_BARS=true`、精确 `http://127.0.0.1:8088` 与独立 MDP terminal signer；Web 不持 MDP research verifier 或 Provider key。MDP 只读服务持自身 verifier pair；`EQO_LOCAL_ALPACA_HISTORY=true` 才把已配置的 Alpaca key/secret交给 MDP 只读历史客户端，不启用 Paper/Live。可信日历必须成对固定文件和 SHA，不能部署 CI 合成日历；Windows 不启用 Linux-only Parquet cache。
 - `.agents/skills/native-terminal/SKILL.md` 适用于新终端；旧 OpenTerminal/OpenBB Skill仅用于历史参考或明确的可选旧模块维护，不能覆盖本迁移目标与旧源码保护。
 - 用户明确要求本机启动时，可按 `docs/NATIVE_LOCAL_START.md` 运行 Actions 构建并校验的 Windows standalone/Gateway 产物；只做运行与健康检查，不在本机 build、Next dev、Docker 或跑验收测试。凭据仅存 ignored `.env`，按服务白名单分流；本机免登录必须严格 loopback，生产默认仍 OIDC。
