@@ -44,6 +44,8 @@ EqoBoard 外层清单。这是本机核心行情 profile 集成，不把可选 O
 MDP 自身源码 CI 独立通过；Native Linux 镜像仍 app-only。Windows 合成验收三项 PID/映像/
 loopback 监听、v2 manifest 绑定和无日历时 BFF history 503，不冒称真实数据或 graceful shutdown。
 第二公开 checkout 不配置 PAT/私有 token，两个 Cargo target 使用锁/工具链指纹缓存并始终重新验收。
+根 Cargo workspace 显式排除 `data/ci-mdp-source`，使固定 MDP 使用自身 manifest/lock，
+不能为修复嵌套工作区识别而修改其已固定源码。
 
 Native Windows runtime and local launch lane 在 windows-2022 固定 Node 22.23.3 / Rust 1.99.0 / Python 3.14.6（3.12.15 没有 Windows 安装包）；保留 VS 2022 以兼容 Node 22 内置 node-gyp，避免 VS 2026 检测失败。构建独立 standalone 和 Gateway，安装精确 Futu SDK-only 锁，打包文件SHA-256与候选元数据并实际执行loopback本机身份/保存/跨源浏览器验收；无真实Provider凭据。Native gate 同时要求 Linux、lock 和 Windows lane 成功。可下载包仅 LOCAL_EVALUATION_ONLY，许可与生产门槛保留；不运行本机build或上传私有.env。
 

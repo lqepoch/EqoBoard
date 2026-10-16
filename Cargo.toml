@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/domain", "crates/alpaca-data", "crates/execution", "apps/gateway"]
+# The pinned Actions checkout is an independent backend with its own lockfile.
+exclude = ["data/ci-mdp-source"]
 
 [workspace.package]
 edition = "2021"
