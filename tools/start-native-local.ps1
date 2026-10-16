@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory)][string]$RepoRoot,
     [string]$EnvPath,
     [Parameter(Mandatory)][string]$NodePath,
-    [ValidatePattern('^[0-9a-f]{40}$')][string]$ExpectedCandidateSha
+    [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{40}$')][string]$ExpectedCandidateSha
 )
 
 $ErrorActionPreference = 'Stop'

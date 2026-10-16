@@ -62,6 +62,8 @@ pwsh -File tools/start-native-local.ps1 -RepoRoot . -PackagePath data/native-loc
 ```
 
 启动器再次核对 `runtime.json` 和完整 `SHA256SUMS`，只运行该包中的二进制。
+`ExpectedCandidateSha` 必填，必须来自已通过门禁的目标 Actions run，不能仅从
+下载包自报的 metadata 推导可信候选身份。
 Web 仅收到自身签名/会话与必要配置，Alpaca 与 Futu 凭据只传给 Gateway/SDK。
 两个服务实际绑定 `127.0.0.1`；已有端口或未知进程占用时拒绝覆盖，不杀其它任务。
 启动器先移除当前进程全部继承变量，再传入服务白名单；避免 Windows 的
