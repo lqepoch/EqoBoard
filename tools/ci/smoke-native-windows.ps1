@@ -228,10 +228,25 @@ function Assert-StartRejectsSecretReuse(
         $attempt = Invoke-StartNativeLocal -FixtureRoot $FixtureRoot `
             -PackagePath $PackagePath -EnvPath $EnvPath -NodePath $NodePath `
             -CandidateSha $CandidateSha -TimeoutMilliseconds 60000
+        # PowerShell may wrap redirected error text and add ANSI/line gutters.
+        # Match the unchanged static reason after removing presentation only.
+        $plainOutput = $attempt.Output -replace '\x1b\[[0-?]*[ -/]*[@-~]', ''
+        $plainOutput = $plainOutput -replace '(?:\r?\n)\s*\|\s*', ' '
+        $plainOutput = $plainOutput -replace '\s+', ' '
+        $reasonMatched = $plainOutput.IndexOf($ExpectedReason, [StringComparison]::Ordinal) -ge 0
+        $secretLeaked = $attempt.Output.Contains($ReusedSecret)
         if ($attempt.ExitCode -eq 0 -or
-            $attempt.Output.IndexOf($ExpectedReason, [StringComparison]::Ordinal) -lt 0 -or
-            $attempt.Output.Contains($ReusedSecret)) {
-            throw 'The intended startup secret-reuse guard did not fail safely.'
+            -not $reasonMatched -or $secretLeaked) {
+            # Never print captured stderr or an env line, even on failure.
+            $diagnostic = [regex]::Match(
+                $plainOutput,
+                "during '([a-z-]+)' \(type=([A-Za-z.]+), line=([0-9]+)\)"
+            )
+            if ($diagnostic.Success) {
+                Write-Host ('START_REJECTION_LOCATION=phase:{0};type:{1};line:{2}' -f
+                    $diagnostic.Groups[1].Value, $diagnostic.Groups[2].Value, $diagnostic.Groups[3].Value)
+            }
+            throw "Startup rejection failed: case=$CaseLabel; exit=$($attempt.ExitCode); expectedReason=$reasonMatched; secretLeaked=$secretLeaked."
         }
         if (Test-Path -LiteralPath $statePath) {
             throw 'The rejected startup wrote aggregate native-local state.'
