@@ -4,6 +4,7 @@ import {
   test,
   type Page,
   type Request as PlaywrightRequest,
+  type Response as PlaywrightResponse,
   type TestInfo,
 } from "@playwright/test";
 import {
@@ -56,6 +57,92 @@ function installResearchNetworkDiagnostics(page: Page) {
   page.on("requestfinished", (request) => record("requestfinished", request));
   page.on("requestfailed", (request) => record("requestfailed", request));
   return events;
+}
+
+type ResearchAbortDiagnostic = Readonly<{
+  elapsedMs: number;
+  pathname: string;
+  frames: readonly string[];
+}>;
+
+async function installResearchAbortDiagnostics(page: Page) {
+  await page.addInitScript(() => {
+    const target = window as Window & {
+      __eqoResearchAbortEvents?: ResearchAbortDiagnostic[];
+    };
+    const events = (target.__eqoResearchAbortEvents ??= []);
+    const originalAbort = AbortController.prototype.abort;
+    const wrappedAbort: typeof originalAbort = function (
+      this: AbortController,
+      ...args: Parameters<typeof originalAbort>
+    ) {
+      if (location.pathname.startsWith("/research/yfinance/") && events.length < 64) {
+        const frames = (new Error().stack ?? "")
+          .split("\n")
+          .slice(1, 9)
+          .flatMap((frame) => {
+            const match = frame.match(/(\/_next\/static\/[^?:\s)]+):(\d+):(\d+)/u);
+            return match ? [`${match[1]}:${match[2]}:${match[3]}`] : [];
+          });
+        events.push({
+          elapsedMs: Math.round(performance.now()),
+          pathname: location.pathname,
+          frames,
+        });
+      }
+      return originalAbort.apply(this, args);
+    };
+    AbortController.prototype.abort = wrappedAbort;
+  });
+}
+
+function safeResearchFailureCode(request: PlaywrightRequest): string | null {
+  const failure = request.failure() as unknown;
+  let errorText = "";
+  if (typeof failure === "string") errorText = failure;
+  else if (
+    failure !== null &&
+    typeof failure === "object" &&
+    "errorText" in failure &&
+    typeof failure.errorText === "string"
+  ) {
+    errorText = failure.errorText;
+  }
+  return /^net::ERR_[A-Z0-9_]+$/u.test(errorText) ? errorText : null;
+}
+
+function researchTransferFailure(label: string, request: PlaywrightRequest): Error {
+  const code = safeResearchFailureCode(request);
+  return new Error(code ? `${label} transfer failed (${code}).` : `${label} transfer failed.`);
+}
+
+function readFinishedResearchResponse<T>(
+  page: Page,
+  response: PlaywrightResponse,
+  label: string,
+  readBody: (response: PlaywrightResponse) => Promise<T>,
+): Promise<T> {
+  const request = response.request();
+  let onRequestFailed: ((request: PlaywrightRequest) => void) | undefined;
+  const requestFailed = new Promise<never>((_resolve, reject) => {
+    onRequestFailed = (failedRequest) => {
+      if (failedRequest === request) reject(researchTransferFailure(label, request));
+    };
+    page.on("requestfailed", onRequestFailed);
+    const existingFailure = request.failure() as unknown;
+    if (existingFailure !== null && existingFailure !== undefined) {
+      reject(researchTransferFailure(label, request));
+    }
+  });
+  const transfer = (async () => {
+    const finished = await response.finished();
+    if (finished !== null) throw researchTransferFailure(label, request);
+    expect(finished, `${label} transfer`).toBeNull();
+    return readBody(response);
+  })();
+  return Promise.race([transfer, requestFailed]).finally(() => {
+    if (onRequestFailed) page.off("requestfailed", onRequestFailed);
+  });
 }
 
 function candidateSha(): string {
@@ -313,6 +400,7 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
   const browserRequests: string[] = [];
   const networkEvents = installResearchNetworkDiagnostics(researchPage);
   try {
+    await installResearchAbortDiagnostics(researchPage);
     await signInAt(researchPage, researchOrigin, "reader", "/");
     await resetMdpFixtureCounters(request);
     researchPage.on("request", (browserRequest) => browserRequests.push(browserRequest.url()));
@@ -386,9 +474,13 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
     await researchPage.getByLabel("Daily window").selectOption("MAX");
     const maxRangeRead = await maxRangeReadPromise;
     expect(maxRangeRead.status()).toBe(200);
-    expect(await maxRangeRead.finished()).toBeNull();
-    const maxRangeBody = await maxRangeRead.body();
-    const maxRange = JSON.parse(maxRangeBody.toString("utf8")) as PagedYfinanceObservation;
+    const maxRange = await readFinishedResearchResponse<PagedYfinanceObservation>(
+      researchPage,
+      maxRangeRead,
+      "MAX range",
+      async (response) =>
+        JSON.parse((await response.body()).toString("utf8")) as PagedYfinanceObservation,
+    );
     expect(maxRange.requested_range).toEqual({
       start_utc: supportedStartUtc,
       end_utc: expectedMaxEndUtc,
@@ -436,10 +528,14 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
             url.searchParams.get("cursor") === cursor
           );
         })
-        .then(async (response) => {
+        .then((response) => {
           expect(response.status(), `Research page ${pageNumber}`).toBe(200);
-          expect(await response.finished(), `Research page ${pageNumber} transfer`).toBeNull();
-          return (await response.json()) as PagedYfinanceObservation;
+          return readFinishedResearchResponse<PagedYfinanceObservation>(
+            researchPage,
+            response,
+            `Research page ${pageNumber}`,
+            (finishedResponse) => finishedResponse.json() as Promise<PagedYfinanceObservation>,
+          );
         });
       const [olderPage] = await Promise.all([olderRead, olderPageButton.click()]);
       const expectedPageEnd = Date.parse(previousPage.page_range.start_utc);
@@ -508,6 +604,19 @@ test("@component Yahoo Research chart stays display-only, source-labelled, and e
       /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/u,
     );
   } finally {
+    try {
+      const abortEvents = await researchPage.evaluate(
+        () =>
+          (window as Window & { __eqoResearchAbortEvents?: ResearchAbortDiagnostic[] })
+            .__eqoResearchAbortEvents ?? [],
+      );
+      await testInfo.attach("yahoo-research-abort-calls", {
+        body: JSON.stringify(abortEvents, null, 2),
+        contentType: "application/json",
+      });
+    } catch {
+      // Diagnostic attachment must not mask the test result.
+    }
     try {
       await testInfo.attach("yahoo-research-network", {
         body: JSON.stringify(networkEvents, null, 2),
