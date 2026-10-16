@@ -362,9 +362,24 @@ function New-ServiceEnvironment([string]$NodeDirectory, [string]$PrivateHome, [h
 }
 
 function Get-ProcessIdentity([int]$ProcessId) {
-    $process = Get-Process -Id $ProcessId -ErrorAction Stop
-    $path = $process.MainModule.FileName
-    if (-not $path) { Fail 'The started service executable path could not be verified.' }
+    $identityDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    $process = $null
+    $path = $null
+    while ([DateTime]::UtcNow -lt $identityDeadline) {
+        $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if (-not $process -or $process.HasExited) {
+            Fail 'The started service exited before its executable identity could be verified.'
+        }
+        $module = $process.MainModule
+        if ($module) {
+            $path = [string]$module.FileName
+            if (-not [string]::IsNullOrWhiteSpace($path)) { break }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $path) {
+        Fail 'The service executable identity remained unavailable after the startup deadline.'
+    }
     return [pscustomobject]@{
         Process = $process
         ProcessId = $ProcessId

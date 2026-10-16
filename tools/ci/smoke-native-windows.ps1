@@ -50,12 +50,30 @@ function Assert-RecordedGatewayProcess(
     [string]$ExpectedStartTicks,
     [string]$ExpectedExecutablePath
 ) {
-    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if (-not $process -or $process.HasExited) { throw 'The recorded Gateway process exited.' }
+    $identityDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    $process = $null
+    $executablePath = $null
+    while ([DateTime]::UtcNow -lt $identityDeadline) {
+        $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if (-not $process -or $process.HasExited) {
+            throw 'The recorded Gateway process exited before its identity could be verified.'
+        }
+        $module = $process.MainModule
+        if ($module) {
+            $path = [string]$module.FileName
+            if (-not [string]::IsNullOrWhiteSpace($path)) {
+                $executablePath = [IO.Path]::GetFullPath($path)
+                break
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $executablePath) {
+        throw 'Gateway executable identity remained unavailable after the startup deadline.'
+    }
     $startTicks = $process.StartTime.ToUniversalTime().Ticks.ToString(
         [Globalization.CultureInfo]::InvariantCulture
     )
-    $executablePath = [IO.Path]::GetFullPath($process.MainModule.FileName)
     if ($startTicks -cne $ExpectedStartTicks -or
         -not [String]::Equals(
             $executablePath,
