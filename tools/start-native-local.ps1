@@ -86,7 +86,9 @@ function Set-PrivateAcl([string]$Path, [switch]$Directory) {
         $acl = [IO.FileSystemAclExtensions]::GetAccessControl($item, $sections)
     }
     $acl.SetAccessRuleProtection($true, $false)
-    foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($rule) }
+    foreach ($rule in @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))) {
+        [void]$acl.RemoveAccessRuleSpecific($rule)
+    }
     $inheritance = if ($Directory) {
         [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
             [Security.AccessControl.InheritanceFlags]::ObjectInherit

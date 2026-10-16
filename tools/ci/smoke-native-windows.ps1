@@ -19,7 +19,9 @@ function Set-SmokePrivateAcl([string]$Path) {
         $acl = [IO.FileSystemAclExtensions]::GetAccessControl($item, $sections)
     }
     $acl.SetAccessRuleProtection($true, $false)
-    foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($rule) }
+    foreach ($rule in @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))) {
+        [void]$acl.RemoveAccessRuleSpecific($rule)
+    }
     $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $system = [Security.Principal.SecurityIdentifier]::new(
         [Security.Principal.WellKnownSidType]::LocalSystemSid, $null
