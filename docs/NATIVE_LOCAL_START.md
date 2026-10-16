@@ -115,6 +115,9 @@ Actions 还需检查唯一 SDK 子进程持续存活；无 OpenD 时 disconnecte
 打开 `http://127.0.0.1:3000`。确认 Gateway `/healthz` 和 Web `/api/healthz` 正常后，
 单独查看行情连接状态；HTTP liveness 不代表 Provider 权限、订阅就绪或数据新鲜。
 没有本机市场权限的期权继续 unavailable。
+Futu 历史的 `futu_invalid_response` 表示已接收数据未通过验证，保留 HTTP 502；
+`futu_read_failed` 仍表示未分类的读取失败。两者均不暴露 SDK 原始消息或行情，
+不能仅凭这些错误推断账户权限；行情快照可读也不证明历史路径成功。
 
 ## 停止与回滚
 

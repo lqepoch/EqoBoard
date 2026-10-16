@@ -99,108 +99,106 @@ function pageResponse(request: CoreBarsPageRequest, older: boolean): Record<stri
   };
 }
 
-test(
-  "@component synthetic Core Bars continuation renders older rows without erasing unknown coverage",
-  async ({ page }) => {
-    const origin = terminalWebOrigin();
-    const servedRequests: CoreBarsPageRequest[] = [];
-    const externalBrowserRequests: string[] = [];
-    const allowedOrigins = new Set([origin, "http://native-mock-oidc:4450"]);
+test("@component synthetic Core Bars continuation renders older rows without erasing unknown coverage", async ({
+  page,
+}) => {
+  const origin = terminalWebOrigin();
+  const servedRequests: CoreBarsPageRequest[] = [];
+  const externalBrowserRequests: string[] = [];
+  const allowedOrigins = new Set([origin, "http://native-mock-oidc:4450"]);
 
-    page.on("request", (request) => {
-      const url = new URL(request.url());
-      if (!allowedOrigins.has(url.origin)) externalBrowserRequests.push(url.origin);
-    });
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (!allowedOrigins.has(url.origin)) externalBrowserRequests.push(url.origin);
+  });
 
-    await signInAt(page, origin, "writer", "/");
-    await expect(page.getByTestId("workspace-root")).toBeVisible();
-    const workspaceSelector = page.getByTestId("workspace-selector");
-    const oldWorkspaceCount = await workspaceSelector.locator("option").count();
-    await page.getByRole("button", { name: "New workspace", exact: true }).click();
-    await expect(workspaceSelector.locator("option")).toHaveCount(oldWorkspaceCount + 1);
-    await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
-      "All changes saved",
+  await signInAt(page, origin, "writer", "/");
+  await expect(page.getByTestId("workspace-root")).toBeVisible();
+  const workspaceSelector = page.getByTestId("workspace-selector");
+  const oldWorkspaceCount = await workspaceSelector.locator("option").count();
+  await page.getByRole("button", { name: "New workspace", exact: true }).click();
+  await expect(workspaceSelector.locator("option")).toHaveCount(oldWorkspaceCount + 1);
+  await expect(page.locator("[aria-label='Workspace sync status']")).toContainText(
+    "All changes saved",
+  );
+
+  // This same-origin route returns a synthetic BFF envelope in the browser; the real BFF,
+  // MDP authentication, and market providers are outside the scope of this client regression.
+  await page.route(
+    (url) => url.origin === origin && /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname),
+    async (route) => {
+      const request = pageRequest(new URL(route.request().url()));
+      servedRequests.push(request);
+      const older = request.cursor !== null;
+      await route.fulfill({
+        status: older ? 200 : 206,
+        json: {
+          kind: "eqoboard.core-bars-page.v1",
+          request,
+          response: pageResponse(request, older),
+        },
+      });
+    },
+  );
+
+  await page.getByRole("button", { name: "Add widget", exact: true }).click();
+  const initialRead = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.origin === origin &&
+      /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
+      url.searchParams.get("cursor") === null
     );
+  });
+  await page.getByRole("menuitem", { name: /^Chart\b/u }).click();
+  expect((await initialRead).status()).toBe(206);
 
-    // This same-origin route returns a synthetic BFF envelope in the browser; the real BFF,
-    // MDP authentication, and market providers are outside the scope of this client regression.
-    await page.route(
-      (url) =>
-        url.origin === origin && /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname),
-      async (route) => {
-        const request = pageRequest(new URL(route.request().url()));
-        servedRequests.push(request);
-        const older = request.cursor !== null;
-        await route.fulfill({
-          status: older ? 200 : 206,
-          json: {
-            kind: "eqoboard.core-bars-page.v1",
-            request,
-            response: pageResponse(request, older),
-          },
-        });
-      },
+  const chart = page.getByTestId("native-chart");
+  await expect(chart).toBeVisible();
+  await page.getByRole("button", { name: "Maximize Chart", exact: true }).click();
+  const evidence = chart.getByTestId("native-chart-provenance");
+  await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
+  await expect(evidence).toContainText(
+    "1 gaps across 1 validated page snapshots; 0 distinct rows loaded",
+  );
+  const loadOlder = chart.getByTestId("native-chart-load-older");
+  await expect(loadOlder).toBeEnabled();
+
+  const olderRead = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.origin === origin &&
+      /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
+      url.searchParams.get("cursor") === CURSOR
     );
+  });
+  await loadOlder.click();
+  expect((await olderRead).status()).toBe(200);
+  await expect(chart.getByTestId("native-chart-crosshair")).toContainText(
+    "2 validated historical rows loaded",
+  );
+  await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
+  await expect(evidence).toContainText(
+    "mixed; 1 segments and 1 gaps across 2 validated page snapshots; 2 distinct rows loaded",
+  );
+  await expect(evidence).toContainText("synthetic-core-bars-continuation-e2e");
 
-    await page.getByRole("button", { name: "Add widget", exact: true }).click();
-    const initialRead = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        url.origin === origin &&
-        /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
-        url.searchParams.get("cursor") === null
-      );
-    });
-    await page.getByRole("menuitem", { name: /^Chart\b/u }).click();
-    expect((await initialRead).status()).toBe(206);
+  const canvasSizes = await chart.locator("canvas").evaluateAll((canvases) =>
+    canvases.map((canvas) => ({
+      width: (canvas as HTMLCanvasElement).width,
+      height: (canvas as HTMLCanvasElement).height,
+    })),
+  );
+  expect(canvasSizes.some(({ width, height }) => width > 0 && height > 0)).toBe(true);
+  await expect(chart.getByTestId("native-chart-load-older")).toHaveCount(0);
 
-    const chart = page.getByTestId("native-chart");
-    await expect(chart).toBeVisible();
-    await page.getByRole("button", { name: "Maximize Chart", exact: true }).click();
-    const evidence = chart.getByTestId("native-chart-provenance");
-    await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
-    await expect(evidence).toContainText(
-      "1 gaps across 1 validated page snapshots; 0 distinct rows loaded",
-    );
-    const loadOlder = chart.getByTestId("native-chart-load-older");
-    await expect(loadOlder).toBeEnabled();
-
-    const olderRead = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        url.origin === origin &&
-        /^\/api\/history\/[A-Z][A-Z0-9.-]{0,11}$/u.test(url.pathname) &&
-        url.searchParams.get("cursor") === CURSOR
-      );
-    });
-    await loadOlder.click();
-    expect((await olderRead).status()).toBe(200);
-    await expect(chart.getByTestId("native-chart-crosshair")).toContainText(
-      "2 validated historical rows loaded",
-    );
-    await expect(evidence).toHaveAttribute("data-chart-completeness", "unknown");
-    await expect(evidence).toContainText(
-      "mixed; 1 segments and 1 gaps across 2 validated page snapshots; 2 distinct rows loaded",
-    );
-    await expect(evidence).toContainText("synthetic-core-bars-continuation-e2e");
-
-    const canvasSizes = await chart.locator("canvas").evaluateAll((canvases) =>
-      canvases.map((canvas) => ({
-        width: (canvas as HTMLCanvasElement).width,
-        height: (canvas as HTMLCanvasElement).height,
-      })),
-    );
-    expect(canvasSizes.some(({ width, height }) => width > 0 && height > 0)).toBe(true);
-    await expect(chart.getByTestId("native-chart-load-older")).toHaveCount(0);
-
-    expect(externalBrowserRequests).toEqual([]);
-    expect(servedRequests).toHaveLength(2);
-    const head = servedRequests[0];
-    const continuation = servedRequests[1];
-    expect(head).toBeDefined();
-    expect(continuation).toBeDefined();
-    if (!head || !continuation) throw new Error("Expected a head and a continuation request.");
-    expect(head.cursor).toBeNull();
-    expect(continuation).toEqual({ ...head, cursor: CURSOR });
-  },
-);
+  expect(externalBrowserRequests).toEqual([]);
+  expect(servedRequests).toHaveLength(2);
+  const head = servedRequests[0];
+  const continuation = servedRequests[1];
+  expect(head).toBeDefined();
+  expect(continuation).toBeDefined();
+  if (!head || !continuation) throw new Error("Expected a head and a continuation request.");
+  expect(head.cursor).toBeNull();
+  expect(continuation).toEqual({ ...head, cursor: CURSOR });
+});
