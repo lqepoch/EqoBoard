@@ -527,14 +527,10 @@ describe("server auth UI snapshot", () => {
     );
     expect(oidc.ok).toBe(true);
     if (oidc.ok) {
-      const { payload } = await jwtVerify(
-        oidc.token,
-        new TextEncoder().encode("g".repeat(64)),
-        {
-          issuer: "eqoboard-openterminal",
-          audience: "eqoboard-gateway",
-        },
-      );
+      const { payload } = await jwtVerify(oidc.token, new TextEncoder().encode("g".repeat(64)), {
+        issuer: "eqoboard-openterminal",
+        audience: "eqoboard-gateway",
+      });
       expect(payload.idp_iss).toBe("https://id.example.test/native");
       expect(payload.sub).toBe("oidc-market-reader");
       expect(payload.scope).toEqual(["market:read"]);

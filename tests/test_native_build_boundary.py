@@ -845,7 +845,10 @@ class NativeLocalLauncherTests(unittest.TestCase):
         self.assertNotIn("EQO_RESEARCH_JWT_SECRET", web)
         self.assertNotIn("FUTU_OPEND_", web)
         self.assertNotRegex(web, r"\bALPACA_[A-Z0-9_]+\b")
-        self.assertNotRegex(source, r"\bALPACA_[A-Z0-9_]+\b")
+        self.assertNotRegex(gateway, r"\bALPACA_[A-Z0-9_]+\b")
+        # The launcher may compare private credentials to reject signer reuse;
+        # neither service allowlist may receive these unused Futu-mode secrets.
+        self.assertIn("Provider credentials must not be reused as service signing secrets", source)
         self.assertIn("EQO_EXECUTION_MODE = 'disabled'", gateway)
         self.assertIn("EQO_EXECUTION_MODE = 'disabled'", web)
 
