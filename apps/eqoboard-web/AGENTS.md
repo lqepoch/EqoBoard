@@ -15,6 +15,8 @@ performance, container and rollback acceptance pass on the same candidate.
 - UI permissions are visibility hints. Every BFF route verifies the current
   trusted session and required permission. Keep existing service issuer,
   audience, kid, scope and key isolation. Browser bundles contain no secrets.
+  `NEXTAUTH_URL` must explicitly equal the exact `EQO_PUBLIC_ORIGIN` (no path,
+  credentials, query or fragment); missing/mismatched configuration is unavailable.
 - Native widgets must not inherit the legacy Pro route's simulated order,
   account, depth or tape fallbacks as real provider capabilities. Missing market
   data remains missing. Paper and Live execution remain disabled.

@@ -1,5 +1,27 @@
 # Native implementation and acceptance status
 
+## PR #64 review, 2026-10-16
+
+The previously reviewed head is `c0e22628249b8b2e946c13d7d28ed0c949ad9702`.
+Its [Native Actions 38729250483](https://github.com/lqepoch/EqoBoard/actions/runs/38729250483)
+completed successfully, including production app/image builds, 310 unit/route
+tests, and **26 browser tests passed, zero failed/skipped/flaky**. The downloaded
+Playwright JSON confirms those browser counts. All reported legacy, OpenBB and
+CodeQL checks also completed successfully on that head; earlier pending/failed
+statements below are historical observations, not its current check state.
+
+This does **not** establish full migration acceptance: the Gateway fixture serves
+empty market responses and an empty SSE stream, so that browser run does not
+prove nonempty quote/chain/tape rendering or a real Provider connection. The
+downloaded `native-license-audit.json` still reports three runtime notice blockers.
+The image receipt remains `NOT_RELEASE`; old/default production is retained.
+
+Review fixes and their exact-head validation are tracked in
+[PR64_REVIEW.md](PR64_REVIEW.md). Auth/Workspace/market/tape regression tests added
+after the observed head require a new Actions run; the 26-test result cannot be
+transferred to those changes. The new controlled tape scenario remains explicitly
+synthetic, with source entitlement unknown and no broker/provider connection.
+
 ## Later evidence, 2026-10-15
 
 The table below remains a frozen `2fcd4b0` observation. Later source adds the

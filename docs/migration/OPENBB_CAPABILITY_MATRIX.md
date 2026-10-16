@@ -30,7 +30,24 @@ EqoBoard's Rust Gateway keeps a separate OpenBB Workspace compatibility surface 
 | Live TV | No native registration or route. | Legacy third-party HLS sources have no verified embed/redistribution entitlement. | Explicitly blocked; no stream URL is loaded, no sample stream is substituted, and no fake/live status is shown. |
 | OpenBB compatibility catalog | `apps/gateway/openbb/widgets.json`, `apps.json`, `/openbb/*`. | External Workspace data/display schema. | Keep isolated from native IDs, manifests, permissions and workspace config. A Workspace manifest is not proof of a native provider or role. |
 
-## Native acceptance rules
+## Requested capabilities still outside the implementation
+
+The original migration brief includes more than the existing legacy widgets.
+The following items are evaluated as gaps, not delivered merely because the
+native registry or OpenBB compatibility catalog exists:
+
+| Requested capability | Current disposition | Remaining implementation / evidence |
+|---|---|---|
+| Company statements, cash flow, valuation and industry comparisons | Needs native implementation and an approved data source | No normalized financial-statement/query/rendering contract is registered. Earnings history is a separate, narrower feature. |
+| General Provider/Extension registry, field mapping, quota and health management | Needs native implementation | Closed server research operations exist; they are not a user-extensible provider system or a distributed quota monitor. |
+| Treasury yield curve and point-in-time historical fundamentals | Not delivered | Existing macro observations do not establish curve coverage or PIT financial data. |
+| Pivot/aggregation and Excel export | Not delivered | No unlicensed AG Grid Enterprise features may be enabled to fill the gap. Choose a compliant implementation and prove exported values/provenance. |
+| AI natural-language queries/tool registry, reviewable drafts and quant backtest views | Partial / future extension | The current assistant and registered prediction reader do not implement a general tool router, factor explorer or backtest workspace. AI execution permission stays absent. |
+| Team sharing, general RBAC management and audit/query history | Future extension | Current issuer+subject ownership and role allowlists are necessary boundaries, not a collaborative workspace product. |
+
+These gaps block a claim that the entire original brief has been implemented.
+
+## Native acceptance rules (existing provider adapters)
 
 - All research provider requests originate in the same-origin BFF. Browser widgets call the scoped `WidgetDataClient` or the single closed `research.ai` action; they never fetch a provider URL or generic proxy.
 - The data BFF has a closed GET operation allowlist, exact input fields, `research:read`, request deadlines, bounded response bodies, process-local cache/rate budgets and explicit unavailable/partial results. These in-process budgets do not provide distributed ingress enforcement. `research.ai`, private predictions and Engine reads use their own POST/permission or fixed-route contracts and do not inherit `research:read`.
