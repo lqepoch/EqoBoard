@@ -145,6 +145,107 @@ function Invoke-StopNativeLocal([string]$FixtureRoot, [int]$TimeoutMilliseconds)
     }
 }
 
+function Invoke-StartNativeLocal(
+    [string]$FixtureRoot,
+    [string]$PackagePath,
+    [string]$EnvPath,
+    [string]$NodePath,
+    [string]$CandidateSha,
+    [int]$TimeoutMilliseconds
+) {
+    $pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
+    $startPath = Join-Path $repo 'tools/start-native-local.ps1'
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $pwshPath
+    $startInfo.WorkingDirectory = $repo
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in @(
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-File', $startPath,
+        '-PackagePath', $PackagePath, '-RepoRoot', $FixtureRoot,
+        '-EnvPath', $EnvPath, '-NodePath', $NodePath,
+        '-ExpectedCandidateSha', $CandidateSha
+    )) {
+        [void]$startInfo.ArgumentList.Add($argument)
+    }
+    $child = [Diagnostics.Process]::Start($startInfo)
+    if (-not $child) { throw 'The isolated start check could not start.' }
+    $stdoutTask = $child.StandardOutput.ReadToEndAsync()
+    $stderrTask = $child.StandardError.ReadToEndAsync()
+    try {
+        if (-not $child.WaitForExit($TimeoutMilliseconds)) {
+            $child.Kill($true)
+            [void]$child.WaitForExit(5000)
+            throw 'The isolated start check exceeded its bounded deadline.'
+        }
+        [void]$child.WaitForExit()
+        $stdoutText = $stdoutTask.GetAwaiter().GetResult()
+        $stderrText = $stderrTask.GetAwaiter().GetResult()
+        return [pscustomobject]@{
+            ExitCode = $child.ExitCode
+            Output = "$stdoutText`n$stderrText"
+        }
+    } finally {
+        if (-not $child.HasExited) {
+            $child.Kill($true)
+            [void]$child.WaitForExit(5000)
+        }
+        $child.Dispose()
+    }
+}
+
+function Assert-StartRejectsSecretReuse(
+    [string]$CaseLabel,
+    [string]$EnvironmentLine,
+    [string]$ExpectedReason,
+    [string]$ReusedSecret,
+    [string]$FixtureRoot,
+    [string]$PackagePath,
+    [string]$EnvPath,
+    [string]$NodePath,
+    [string]$CandidateSha
+) {
+    if ($CaseLabel -cnotin @(
+        'terminal_key_oidc_secret_reuse_rejected',
+        'research_key_engine_research_reuse_rejected'
+    )) {
+        throw 'The start negative case label is not allowlisted.'
+    }
+    $envBackup = [IO.File]::ReadAllBytes($EnvPath)
+    $envAclFingerprint = Get-AclFingerprint $EnvPath
+    $statePath = Join-Path $FixtureRoot 'data/native-local/state.json'
+    try {
+        [IO.File]::AppendAllText(
+            $EnvPath,
+            [Environment]::NewLine + $EnvironmentLine + [Environment]::NewLine,
+            [Text.UTF8Encoding]::new($false)
+        )
+        if ((Get-AclFingerprint $EnvPath) -cne $envAclFingerprint) {
+            throw 'The start negative case changed its private env ACL.'
+        }
+        $attempt = Invoke-StartNativeLocal -FixtureRoot $FixtureRoot `
+            -PackagePath $PackagePath -EnvPath $EnvPath -NodePath $NodePath `
+            -CandidateSha $CandidateSha -TimeoutMilliseconds 60000
+        if ($attempt.ExitCode -eq 0 -or
+            $attempt.Output.IndexOf($ExpectedReason, [StringComparison]::Ordinal) -lt 0 -or
+            $attempt.Output.Contains($ReusedSecret)) {
+            throw 'The intended startup secret-reuse guard did not fail safely.'
+        }
+        if (Test-Path -LiteralPath $statePath) {
+            throw 'The rejected startup wrote aggregate native-local state.'
+        }
+        Write-Host "START_NEGATIVE_CASE=$CaseLabel"
+    } finally {
+        [IO.File]::WriteAllBytes($EnvPath, $envBackup)
+        Assert-FileBytesEqual -Path $EnvPath -ExpectedBytes $envBackup
+        if ((Get-AclFingerprint $EnvPath) -cne $envAclFingerprint) {
+            throw 'Restoring the smoke env changed its private ACL.'
+        }
+    }
+}
+
 function Assert-OriginalServicesRemainRunning($Identities) {
     foreach ($identity in $Identities) {
         [void](Assert-RecordedProcess -ProcessId $identity.ProcessId `
@@ -373,6 +474,8 @@ if ([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdenti
     Write-Host 'SMOKE_TOKEN_CONTEXT=standard-user'
 }
 function New-TestSecret { [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant() }
+$mdpTerminalSecret = New-TestSecret
+$mdpResearchSecret = New-TestSecret
 $envPath = Join-Path $fixtureRoot '.env'
 @(
     'ALPACA_KEY=NATIVE_LOCAL_PROVIDER_SECRET_SENTINEL_KEY'
@@ -396,8 +499,8 @@ $envPath = Join-Path $fixtureRoot '.env'
     'EQO_RUST_URL=http://127.0.0.1:8080'
     'EQO_MDP_URL=http://127.0.0.1:8088'
     'EQO_LOCAL_CORE_BARS=true'
-    "MDP_TERMINAL_JWT_SECRET=$(New-TestSecret)"
-    "MDP_RESEARCH_JWT_SECRET=$(New-TestSecret)"
+    "MDP_TERMINAL_JWT_SECRET=$mdpTerminalSecret"
+    "MDP_RESEARCH_JWT_SECRET=$mdpResearchSecret"
     "EQO_GATEWAY_JWT_SECRET=$(New-TestSecret)"
     "EQO_RESEARCH_JWT_SECRET=$(New-TestSecret)"
     "NEXTAUTH_SECRET=$(New-TestSecret)"
@@ -418,6 +521,16 @@ try {
     $env:ALPACA_SECRET = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_SECRET'
     $env:EQO_RESEARCH_JWT_SECRET = 'NATIVE_LOCAL_PARENT_SECRET_SENTINEL_RESEARCH'
     $nodePath = (Get-Command node -ErrorAction Stop).Source
+    Assert-StartRejectsSecretReuse -CaseLabel 'terminal_key_oidc_secret_reuse_rejected' `
+        -EnvironmentLine "EQO_OIDC_CLIENT_SECRET=$mdpTerminalSecret" `
+        -ExpectedReason 'The MDP terminal signer must not reuse another service or Provider credential.' `
+        -ReusedSecret $mdpTerminalSecret -FixtureRoot $fixtureRoot -PackagePath $PackagePath `
+        -EnvPath $envPath -NodePath $nodePath -CandidateSha $CandidateSha
+    Assert-StartRejectsSecretReuse -CaseLabel 'research_key_engine_research_reuse_rejected' `
+        -EnvironmentLine "ENGINE_RESEARCH_JWT_SECRET=$mdpResearchSecret" `
+        -ExpectedReason 'The MDP research verifier must not reuse another service or Provider credential.' `
+        -ReusedSecret $mdpResearchSecret -FixtureRoot $fixtureRoot -PackagePath $PackagePath `
+        -EnvPath $envPath -NodePath $nodePath -CandidateSha $CandidateSha
     & (Join-Path $repo 'tools/start-native-local.ps1') -PackagePath $PackagePath -RepoRoot $fixtureRoot -EnvPath $envPath -NodePath $nodePath -ExpectedCandidateSha $CandidateSha
     if ($LASTEXITCODE) { throw 'Packaged runtime startup failed' }
     $serviceIdentities = @(Assert-NativeServicesSurviveStartup -FixtureRoot $fixtureRoot `
