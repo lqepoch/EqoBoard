@@ -113,10 +113,7 @@ describe("Core Bars history route local upstream boundary", () => {
     const response = await GET(request(), context);
     expect(response.status).toBe(503);
     expect(securityMocks.signMdpMarketReadDelegation).toHaveBeenCalledWith(localPrincipal);
-    expect(securityMocks.signGatewayDelegation).toHaveBeenCalledWith(
-      localPrincipal,
-      "market:read",
-    );
+    expect(securityMocks.signGatewayDelegation).toHaveBeenCalledWith(localPrincipal, "market:read");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

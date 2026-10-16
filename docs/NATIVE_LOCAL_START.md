@@ -88,6 +88,8 @@ pwsh -File tools/start-native-local.ps1 -RepoRoot . -PackagePath data/native-loc
 `ExpectedCandidateSha` 必填，必须来自已通过门禁的目标 Actions run，不能仅从
 下载包自报的 metadata 推导可信候选身份。
 固定 MDP 来源见 `third_party/mdp-runtime.json`；内层源码/文件清单与外层完整清单交叉验证。
+MDP 源项目采用 MIT；包内保留其 `LICENSE` 和依赖 `NOTICE.txt`，不将第三方实现
+声明为 EqoBoard 原创。该来源记录不能替代整个静态链接闭包或数据商业使用权验收。
 Web 仅收到自身签名/会话与必要配置；Futu key 只给 Gateway/SDK，显式启用的 Alpaca
 只读历史 key 只给 MDP。启用 Core Bars 时按 Gateway→MDP→Web 启动，端口分别为
 8080、8088、3000，均实际绑定 `127.0.0.1`；已有端口或未知进程占用时拒绝覆盖。

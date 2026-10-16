@@ -36,9 +36,8 @@ function applyQuoteEvent(overrides: Record<string, unknown> = {}) {
   const store = new MarketStore(() => 10_000);
   store.acceptBatch([quote], 10_000);
 
-  type OptionRow = Parameters<typeof applyOptionEvents>[1] extends Map<string, infer Row>
-    ? Row
-    : never;
+  type OptionRow =
+    Parameters<typeof applyOptionEvents>[1] extends Map<string, infer Row> ? Row : never;
   const row = {
     symbol: OPTION_SYMBOL,
     underlying: "SPY",

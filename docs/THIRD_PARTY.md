@@ -74,15 +74,6 @@ Previous CHG-2026-001 dependency refresh (2026-10-12): the Broker consumer pin m
 - 2026-10-12 CHG-2026-001 shared dependency refresh: Rust `market-contracts` and TypeScript `@lqepoch/trading-core-contracts` now pin the merged `trading-core` revision `105e42896eaa62afe7377a24478f0dd5632b1155`; Rust `broker-ports` and `alpaca-stream` pin merged `broker-connectors` revision `dc6f578ec15be9e52aca43e0fddf5a25abdd3ba9`, which itself pins that same Core revision. This is dependency closure only; it does not qualify real data sources, entitlement, external archive storage, or trading execution.
 - 2026-10-13 CHG-2026-001 current-main refresh: EqoBoard Rust and TypeScript consumers pin Core `b2679e757576f8da7850cd4b5ea2958bc9a2354c` and Broker `873337e3fafe64344dfb9ac7719fad54f157a9c0`, with Broker's Core dependency on the same exact Core revision. This refresh closes source identities only; real SIP/OPRA source, entitlement, provider ACK, remote archive readback, and P6 remain blocked.
 
-## Windows Core Bars market-data-platform
-
-Windows 原生 Core Bars 本机包另含公开 MIT 项目 `lqepoch/market-data-platform` 的
-固定源码构建，版本/源码清单哈希及其已通过的独立 CI 记录见
-`third_party/mdp-runtime.json`。Actions 保留内层 `LICENSE`、依赖 `NOTICE.txt`、二进制与
-文件哈希，再由 EqoBoard 外层 manifest 绑定；不将 MDP 或它的依赖声明为 EqoBoard UI 原创。
-这不等于静态链接组件 notices、数据商业使用权或完整运行包许可已经闭合，仍为
-`LOCAL_EVALUATION_ONLY` / `licenseClosure=NOT_CLAIMED`。不把参考应用包作为主终端依赖。
-
 ## Futu OpenD JavaScript SDK
 
 Official npm package `futu-api@10.11.7108` (ISC), stock-only server transport in
