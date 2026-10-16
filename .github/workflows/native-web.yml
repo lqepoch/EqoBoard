@@ -194,7 +194,8 @@ jobs:
   windows-runtime:
     name: Native Windows runtime and local launch
     needs: lock
-    runs-on: windows-2025
+    # Node 22's bundled node-gyp supports VS 2022, not the VS 2026 image.
+    runs-on: windows-2022
     timeout-minutes: 45
     env:
       NEXT_TELEMETRY_DISABLED: "1"
