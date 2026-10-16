@@ -797,5 +797,83 @@ for name in research_forbidden_secrets:
         self.assertNotIn("lint --write", format_helper)
 
 
+class NativeLocalLauncherTests(unittest.TestCase):
+    """Static security contracts for the Actions-driven Windows launcher."""
+
+    START = REPO_ROOT / "tools" / "start-native-local.ps1"
+    STOP = REPO_ROOT / "tools" / "stop-native-local.ps1"
+
+    def test_startup_validates_the_immutable_package_and_candidate(self) -> None:
+        source = self.START.read_text(encoding="utf-8")
+        for required in (
+            "runtime.json",
+            "SHA256SUMS",
+            "Get-FileHash",
+            "candidateSha",
+            "ExpectedSha",
+            "LOCAL_EVALUATION_ONLY",
+            "22.23.3",
+            "win32",
+            "x64",
+            "execution -cne 'disabled'",
+            "FileAttributes]::ReparsePoint",
+        ):
+            self.assertIn(required, source)
+        self.assertIn("$listed.Count -ne $actualFiles.Count", source)
+        self.assertIn("$EnvPath = Join-Path $repo '.env'", source)
+        self.assertNotIn("Invoke-Expression", source)
+
+    def test_services_receive_separate_scrubbed_environment_allowlists(self) -> None:
+        source = self.START.read_text(encoding="utf-8")
+        self.assertIn("GetEnvironmentVariables([EnvironmentVariableTarget]::Machine).Keys", source)
+        self.assertIn("$environment[[string]$name] = $null", source)
+        self.assertIn("-WindowStyle Hidden", source)
+        self.assertIn("-Environment $Environment -UseNewEnvironment", source)
+        gateway = source.split("$gatewayEnvironment = New-ServiceEnvironment", 1)[1].split(
+            "$webEnvironment = New-ServiceEnvironment", 1
+        )[0]
+        web = source.split("$webEnvironment = New-ServiceEnvironment", 1)[1].split(
+            "$gatewayExe = Join-Path", 1
+        )[0]
+        self.assertIn("EQO_RESEARCH_JWT_SECRET", gateway)
+        self.assertIn("FUTU_OPEND_WEBSOCKET_KEY", gateway)
+        self.assertIn("EQO_GATEWAY_JWT_SECRET", gateway)
+        self.assertIn("EQO_AUDIT_PATH = (Join-Path $auditDir 'order-events.jsonl')", gateway)
+        self.assertIn("EQO_WEB_DIST = (Join-Path $gatewayDirectory 'empty')", gateway)
+        self.assertIn("EQO_GATEWAY_JWT_SECRET", web)
+        self.assertIn("NEXTAUTH_SECRET", web)
+        self.assertNotIn("EQO_RESEARCH_JWT_SECRET", web)
+        self.assertNotIn("FUTU_OPEND_", web)
+        self.assertNotRegex(web, r"\bALPACA_[A-Z0-9_]+\b")
+        self.assertNotRegex(source, r"\bALPACA_[A-Z0-9_]+\b")
+        self.assertIn("EQO_EXECUTION_MODE = 'disabled'", gateway)
+        self.assertIn("EQO_EXECUTION_MODE = 'disabled'", web)
+
+    def test_local_bind_and_private_windows_state_are_enforced(self) -> None:
+        start = self.START.read_text(encoding="utf-8")
+        stop = self.STOP.read_text(encoding="utf-8")
+        for fixed in (
+            "http://127.0.0.1:3000",
+            "127.0.0.1:8080",
+            "EQO_LOCAL_BIND",
+            "Assert-PortAvailable",
+            "Assert-OwnedListener",
+        ):
+            self.assertIn(fixed, start)
+        self.assertIn("SetAccessRuleProtection($true, $false)", start)
+        self.assertIn("LocalSystemSid", start)
+        self.assertIn("AreAccessRulesProtected", start)
+        self.assertIn("Assert-PrivateAcl -Path $envFile", start)
+        self.assertIn("startTimeUtcTicks", start)
+        self.assertIn("repoRoot = $script:RepositoryRoot", start)
+        self.assertIn("$script:RepositoryRoot = $repo", start)
+        self.assertIn("Write-RunState -Root $dataRoot", start)
+        self.assertIn("$process.Kill($true)", start)
+        self.assertIn("$actualStart -cne $Record.startTimeUtcTicks", stop)
+        self.assertIn("$process.MainModule.FileName", stop)
+        self.assertIn("$process.Kill($true)", stop)
+        self.assertIn("State files are retained for recovery", stop)
+
+
 if __name__ == "__main__":
     unittest.main()

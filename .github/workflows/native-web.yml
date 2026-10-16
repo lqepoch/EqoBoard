@@ -191,10 +191,85 @@ jobs:
             ${{ runner.temp }}/native-format-proposal/
           if-no-files-found: warn
           retention-days: 7
+  windows-runtime:
+    name: Native Windows runtime and local launch
+    needs: lock
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      # npm's fixed public Git dependency may normalize to SSH. Use anonymous
+      # HTTPS without introducing an SSH key or mutating the runner's Git config.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: url.https://github.com/.insteadOf
+      GIT_CONFIG_VALUE_0: ssh://git@github.com/
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.3
+          cache: npm
+          cache-dependency-path: |
+            apps/eqoboard-web/package-lock.json
+            tools/futu-runtime/package-lock.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: 3.12.15
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # toolchain 1.99.0
+        with:
+          toolchain: 1.99.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: native-windows-release
+      - name: Install exact Windows dependency graphs
+        shell: pwsh
+        run: |
+          npm ci --prefix apps/eqoboard-web --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm ci --prefix tools/futu-runtime --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node --test tools/futu-subscriptions.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Build Windows Gateway
+        run: cargo build --locked --release -p eqo-gateway
+      - name: Build Windows standalone Web
+        working-directory: apps/eqoboard-web
+        run: npm run build
+      - name: Package immutable local-evaluation runtime
+        shell: pwsh
+        run: tools/ci/package-native-windows.ps1 -OutputPath "$env:RUNNER_TEMP/native-windows" -CandidateSha $env:NATIVE_CANDIDATE_SHA
+      - name: Install Windows browser
+        working-directory: apps/eqoboard-web
+        run: npx playwright install chromium
+      - name: Validate packaged local startup and identity boundary
+        shell: pwsh
+        run: tools/ci/smoke-native-windows.ps1 -PackagePath "$env:RUNNER_TEMP/native-windows/runtime" -CandidateSha $env:NATIVE_CANDIDATE_SHA
+      - name: Preserve verified Windows runtime
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-windows-${{ env.NATIVE_CANDIDATE_SHA }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/native-windows/eqoboard-windows-x64.zip
+            ${{ runner.temp }}/native-windows/ARCHIVE_SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve Windows smoke failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-windows-failure-${{ env.NATIVE_CANDIDATE_SHA }}-${{ github.run_id }}
+          path: |
+            apps/eqoboard-web/test-results/local/
+            ${{ runner.temp }}/native-local-smoke/data/native-local/*.log
+          if-no-files-found: warn
+          retention-days: 7
   gate:
     name: Native web validation gate
     if: always()
-    needs: [lock, validate]
+    needs: [lock, validate, windows-runtime]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -202,4 +277,5 @@ jobs:
         env:
           LOCK_RESULT: ${{ needs.lock.result }}
           VALIDATION_RESULT: ${{ needs.validate.result }}
-        run: test "$LOCK_RESULT" = success && test "$VALIDATION_RESULT" = success
+          WINDOWS_RESULT: ${{ needs.windows-runtime.result }}
+        run: test "$LOCK_RESULT" = success && test "$VALIDATION_RESULT" = success && test "$WINDOWS_RESULT" = success
