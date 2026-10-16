@@ -138,12 +138,9 @@ export function StockTapeWidget({ host, instance, inputs }: StockTapeWidgetProps
               <span className={tapeStyles.size}>
                 {row.size === null ? "unknown" : SIZE_FORMAT.format(row.size)}
               </span>
-              <span
-                aria-label={TICK_LABEL[row.direction]}
-                className={tapeStyles.tick}
-                title={TICK_LABEL[row.direction]}
-              >
-                {TICK_GLYPH[row.direction]}
+              <span className={tapeStyles.tick} title={TICK_LABEL[row.direction]}>
+                <span aria-hidden="true">{TICK_GLYPH[row.direction]}</span>
+                <span className="eq-visually-hidden">{TICK_LABEL[row.direction]}</span>
               </span>
             </li>
           ))}

@@ -402,15 +402,15 @@
   box-shadow: inset 2px 0 0 var(--eq-accent);
 }
 
-.eq-primary-nav__link[aria-current="page"] .eq-nav-icon {
-  color: var(--eq-accent);
-}
-
 .eq-nav-icon {
   display: inline-grid;
   flex: 0 0 18px;
   place-items: center;
   color: currentColor;
+}
+
+.eq-primary-nav__link[aria-current="page"] .eq-nav-icon {
+  color: var(--eq-accent);
 }
 
 .eq-theme-icon,
