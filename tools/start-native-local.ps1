@@ -494,7 +494,7 @@ try {
     }
     $futuHost = Get-EnvValue $values 'FUTU_OPEND_HOST' '127.0.0.1'
     if ($futuHost -cne '127.0.0.1') { Fail 'Futu OpenD must use the IPv4 loopback address.' }
-    $futuPortText = Get-EnvValue $values 'FUTU_OPEND_WEBSOCKET_PORT' '33333'
+    $futuPortText = Get-EnvValue $values 'FUTU_OPEND_WEBSOCKET_PORT' '12345'
     $futuPort = 0
     if (-not [int]::TryParse($futuPortText, [ref]$futuPort) -or $futuPort -lt 1 -or $futuPort -gt 65535) {
         Fail 'The Futu OpenD WebSocket port is invalid.'
