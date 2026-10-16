@@ -23,6 +23,15 @@ export type MarketLeaseSender = (
   keepalive?: boolean,
 ) => Promise<unknown>;
 
+export type MarketStockLeaseCapacity = Readonly<{
+  limit: number;
+  fixedSymbols: readonly string[];
+}>;
+
+export type StockCapacityLoadResult =
+  | Readonly<{ status: "available"; capacity: MarketStockLeaseCapacity }>
+  | Readonly<{ status: "unavailable"; reason: "failed" | "invalid" | "timeout" | "cancelled" }>;
+
 type ConsumerTargets = Readonly<{ stocks: readonly string[]; options: readonly string[] }>;
 type LeaseState = {
   generation: number;
@@ -32,6 +41,10 @@ type LeaseState = {
   failedKey: string | null;
   controller: AbortController | null;
 };
+
+type StockCapacityState =
+  | Readonly<{ status: "unknown" | "pending" | "unavailable" }>
+  | Readonly<{ status: "available"; capacity: MarketStockLeaseCapacity }>;
 
 function validSymbols(value: readonly string[], feed: LeaseKind): readonly string[] {
   const seen = new Set<string>();
@@ -84,6 +97,84 @@ function isAckRecord(value: unknown): value is Record<string, unknown> {
     return hasOnlyEnumerableDataProperties(value);
   } catch {
     return false;
+  }
+}
+
+export function decodeMarketStockLeaseCapacity(value: unknown): MarketStockLeaseCapacity | null {
+  if (!isAckRecord(value)) return null;
+  const limit = value.max_stock_subscriptions;
+  const fixedSymbols = value.stock_symbols;
+  if (
+    !Number.isSafeInteger(limit) ||
+    (limit as number) < 1 ||
+    (limit as number) > MARKET_STOCK_LEASE_LIMIT ||
+    !Array.isArray(fixedSymbols) ||
+    fixedSymbols.length > (limit as number)
+  )
+    return null;
+  const seen = new Set<string>();
+  for (const symbol of fixedSymbols) {
+    if (typeof symbol !== "string" || symbol !== symbol.trim() || !TICKER.test(symbol)) return null;
+    if (seen.has(symbol)) return null;
+    seen.add(symbol);
+  }
+  return Object.freeze({
+    limit: limit as number,
+    fixedSymbols: Object.freeze([...seen]),
+  });
+}
+
+export async function loadMarketStockLeaseCapacity(
+  read: (signal: AbortSignal) => Promise<unknown>,
+  parentSignal: AbortSignal,
+  timeoutMs = 5_000,
+): Promise<StockCapacityLoadResult> {
+  if (parentSignal.aborted) return { status: "unavailable", reason: "cancelled" };
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let deadlineElapsed = false;
+  let removeParentAbort: () => void = () => {};
+  const cancelled = new Promise<StockCapacityLoadResult>((resolve) => {
+    const onAbort = () => {
+      controller.abort();
+      resolve({ status: "unavailable", reason: "cancelled" });
+    };
+    parentSignal.addEventListener("abort", onAbort, { once: true });
+    removeParentAbort = () => parentSignal.removeEventListener("abort", onAbort);
+    if (parentSignal.aborted) onAbort();
+  });
+  const deadline = new Promise<StockCapacityLoadResult>((resolve) => {
+    timeout = setTimeout(() => {
+      deadlineElapsed = true;
+      resolve({ status: "unavailable", reason: "timeout" });
+      controller.abort();
+    }, timeoutMs);
+  });
+  const loaded = Promise.resolve()
+    .then(() => read(controller.signal))
+    .then<StockCapacityLoadResult, StockCapacityLoadResult>(
+      (value) => {
+        if (deadlineElapsed) return { status: "unavailable", reason: "timeout" };
+        const capacity = decodeMarketStockLeaseCapacity(value);
+        return capacity
+          ? { status: "available", capacity }
+          : { status: "unavailable", reason: "invalid" };
+      },
+      () =>
+        deadlineElapsed
+          ? { status: "unavailable", reason: "timeout" }
+          : {
+              status: "unavailable",
+              reason: parentSignal.aborted ? "cancelled" : "failed",
+            },
+    );
+
+  try {
+    return await Promise.race([loaded, deadline, cancelled]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    removeParentAbort();
+    controller.abort();
   }
 }
 
@@ -147,6 +238,7 @@ export class MarketLeaseCoordinator {
   #started = false;
   #disposed = false;
   #runToken = 0;
+  #stockCapacity: StockCapacityState = Object.freeze({ status: "unknown" });
 
   constructor(store: MarketStore, send: MarketLeaseSender) {
     this.#store = store;
@@ -163,6 +255,7 @@ export class MarketLeaseCoordinator {
     this.#states.options.sentKey = null;
     this.#states.stocks.failedKey = null;
     this.#states.options.failedKey = null;
+    this.#publishTargets("stocks");
     this.#timer = setInterval(() => {
       void this.#reconcile("stocks", true);
       void this.#reconcile("options", true);
@@ -175,6 +268,7 @@ export class MarketLeaseCoordinator {
     const previous = this.#consumers.get(instanceId) ?? { stocks: [], options: [] };
     const safe = validSymbols(symbols, feed);
     this.#consumers.set(instanceId, Object.freeze({ ...previous, [feed]: safe }));
+    this.#publishTargets(feed);
     this.#schedule();
   }
 
@@ -188,6 +282,60 @@ export class MarketLeaseCoordinator {
       if (next.stocks.length === 0 && next.options.length === 0) this.#consumers.delete(instanceId);
       else this.#consumers.set(instanceId, next);
     }
+    if (feed) this.#publishTargets(feed);
+    else {
+      this.#publishTargets("stocks");
+      this.#publishTargets("options");
+    }
+    this.#schedule();
+  }
+
+  setStockCapacityPending(): void {
+    this.#stockCapacity = Object.freeze({ status: "pending" });
+    this.#states.stocks.sentKey = null;
+    this.#states.stocks.failedKey = null;
+    this.#store.setStockLeaseCapacity("pending");
+    this.#publishTargets("stocks");
+    this.#schedule();
+  }
+
+  gatewayInstanceChanged(): void {
+    this.#runToken += 1;
+    for (const state of Object.values(this.#states)) {
+      state.controller?.abort();
+      state.controller = null;
+      state.inFlight = false;
+      state.sentKey = null;
+      state.failedKey = null;
+    }
+    this.#stockCapacity = Object.freeze({ status: "pending" });
+    this.#store.setStockLeaseCapacity("pending");
+    this.#publishTargets("stocks");
+    this.#publishTargets("options");
+    this.#schedule();
+  }
+
+  setStockCapacityFromStatus(value: unknown): boolean {
+    const capacity = decodeMarketStockLeaseCapacity(value);
+    if (!capacity) {
+      this.setStockCapacityUnavailable();
+      return false;
+    }
+    this.setStockCapacity(capacity);
+    return true;
+  }
+
+  setStockCapacity(capacity: MarketStockLeaseCapacity): void {
+    this.#stockCapacity = Object.freeze({ status: "available", capacity });
+    this.#store.setStockLeaseCapacity("available", capacity.limit, capacity.fixedSymbols);
+    this.#publishTargets("stocks");
+    this.#schedule();
+  }
+
+  setStockCapacityUnavailable(): void {
+    this.#stockCapacity = Object.freeze({ status: "unavailable" });
+    this.#store.setStockLeaseCapacity("unavailable");
+    this.#publishTargets("stocks");
     this.#schedule();
   }
 
@@ -231,20 +379,51 @@ export class MarketLeaseCoordinator {
     }, 50);
   }
 
+  #selectedTargets(feed: LeaseKind, requested: readonly string[]): readonly string[] {
+    const limit = feed === "stocks" ? MARKET_STOCK_LEASE_LIMIT : MARKET_OPTION_LEASE_LIMIT;
+    if (feed === "options") return Object.freeze(requested.slice(0, limit));
+    if (this.#stockCapacity.status !== "available") return Object.freeze([]);
+    const { capacity } = this.#stockCapacity;
+    const requestedSet = new Set(requested);
+    const fixedRequested = capacity.fixedSymbols.filter((symbol) => requestedSet.has(symbol));
+    const fixedSet = new Set(capacity.fixedSymbols);
+    const extras = requested.filter((symbol) => !fixedSet.has(symbol));
+    const selectedLimit = Math.max(0, Math.min(capacity.limit, limit) - capacity.fixedSymbols.length);
+    return Object.freeze([...fixedRequested, ...extras.slice(0, selectedLimit)]);
+  }
+
+  #publishTargets(feed: LeaseKind): void {
+    const requested = aggregate(this.#consumers, feed);
+    const selected = this.#selectedTargets(feed, requested);
+    this.#store.setLeaseTargets(
+      feed,
+      requested.length,
+      selected.length,
+      key(selected),
+      selected,
+    );
+  }
+
   async #reconcile(feed: LeaseKind, renewal: boolean): Promise<void> {
     const state = this.#states[feed];
     if (!state.consumerId || this.#disposed || !this.#started) return;
     const requested = aggregate(this.#consumers, feed);
-    const limit = feed === "stocks" ? MARKET_STOCK_LEASE_LIMIT : MARKET_OPTION_LEASE_LIMIT;
-    const selected = Object.freeze(requested.slice(0, limit));
+    const selected = this.#selectedTargets(feed, requested);
     const desiredKey = key(selected);
-    this.#store.setLeaseTargets(feed, requested.length, selected.length, desiredKey);
+    this.#store.setLeaseTargets(feed, requested.length, selected.length, desiredKey, selected);
+    if (feed === "stocks" && this.#stockCapacity.status !== "available") {
+      if (requested.length > 0 && this.#stockCapacity.status === "unavailable")
+        this.#store.setLeaseError(feed, state.generation, desiredKey);
+      return;
+    }
     if (requested.length === 0 && state.sentKey === null) return;
     if (!renewal && (state.sentKey === desiredKey || state.failedKey === desiredKey)) return;
     if (state.inFlight) return;
 
     state.inFlight = true;
-    state.controller = new AbortController();
+    const controller = new AbortController();
+    const runToken = this.#runToken;
+    state.controller = controller;
     const generation = feed === "options" ? ++state.generation : state.generation;
     try {
       const input: StockLeaseInput | OptionsLeaseInput =
@@ -255,23 +434,38 @@ export class MarketLeaseCoordinator {
               generation: Math.max(1, generation),
               symbols: selected,
             };
-      const ack = await this.#send(feed, input, state.controller.signal);
-      if (this.#disposed) return;
+      const ack = await this.#send(feed, input, controller.signal);
+      if (
+        this.#disposed ||
+        runToken !== this.#runToken ||
+        state.controller !== controller
+      )
+        return;
       const activeCount = acknowledgedActiveCount(feed, generation, ack);
       if (activeCount === null) throw new Error("invalid-lease-ack");
       state.sentKey = desiredKey;
       state.failedKey = null;
       this.#store.setLeaseAck(feed, generation, activeCount, ack, desiredKey);
     } catch {
-      if (!this.#disposed && !state.controller.signal.aborted) {
+      if (
+        !this.#disposed &&
+        runToken === this.#runToken &&
+        state.controller === controller &&
+        !controller.signal.aborted
+      ) {
         state.failedKey = desiredKey;
         this.#store.setLeaseError(feed, generation, desiredKey);
       }
     } finally {
-      state.inFlight = false;
-      state.controller = null;
-      if (!this.#disposed && key(aggregate(this.#consumers, feed).slice(0, limit)) !== desiredKey)
-        this.#schedule();
+      if (state.controller === controller) {
+        state.inFlight = false;
+        state.controller = null;
+        if (
+          !this.#disposed &&
+          key(this.#selectedTargets(feed, aggregate(this.#consumers, feed))) !== desiredKey
+        )
+          this.#schedule();
+      }
     }
   }
 

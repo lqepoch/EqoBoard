@@ -665,6 +665,22 @@ function createGatewayServer() {
       return;
     }
 
+    if (url.pathname === "/api/v1/status") {
+      return sendJson(
+        response,
+        200,
+        fixtureEnvelope({
+          status: "unavailable",
+          reason: "no market provider is connected to the CI fixture",
+          max_stock_subscriptions: 32,
+          stock_symbols: ["QQQ", "SPY"],
+          max_option_subscriptions: 16,
+          execution_enabled: false,
+          feeds: { stocks: "unknown", options: "unknown" },
+        }),
+      );
+    }
+
     if (route.method === "POST") {
       const body = await readGatewayBody(request);
       if (!body || typeof body !== "object" || Array.isArray(body))
@@ -676,6 +692,29 @@ function createGatewayServer() {
           fixtureEnvelope({
             status: "unavailable",
             reason: "no broker or order preview provider is connected to the CI fixture",
+          }),
+        );
+      }
+      if (url.pathname === "/api/v1/subscriptions/stocks") {
+        if (
+          !Array.isArray(body.symbols) ||
+          body.symbols.some(
+            (symbol) => typeof symbol !== "string" || !/^[A-Z][A-Z0-9.-]{0,11}$/u.test(symbol),
+          )
+        ) {
+          return sendJson(response, 400, { error: "invalid_fixture_symbols" });
+        }
+        const active = new Set(["QQQ", "SPY", ...body.symbols]).size;
+        if (active > 32) return sendJson(response, 429, { error: "fixture_capacity_exceeded" });
+        return sendJson(
+          response,
+          200,
+          fixtureEnvelope({
+            active,
+            max: 32,
+            expires_in_seconds: 90,
+            // Synthetic lease acceptance is not provider subscription confirmation.
+            membership_verification: "unverified",
           }),
         );
       }

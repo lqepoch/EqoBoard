@@ -1007,7 +1007,8 @@
       },
       "files": [
         "apps/eqoboard-web/e2e/market-tape-rendering.spec.ts",
-        "apps/eqoboard-web/widgets/implementations/options/tape.test.ts"
+        "apps/eqoboard-web/widgets/implementations/options/tape.test.ts",
+        "apps/eqoboard-web/widgets/implementations/market/hooks.test.ts"
       ]
     }
   ],

@@ -10,7 +10,11 @@ import {
 } from "../../../features/market/market-contracts";
 import type { OptionChainResponse, QuoteResponse } from "../../../features/market/market-contracts";
 import { useMarketLease } from "../../../features/data/MarketDataHost";
-import type { MarketHostSnapshot } from "../../../stores/market/market-store";
+import type {
+  MarketHostSnapshot,
+  MarketLeaseSnapshot,
+  MarketStockLeaseCapacity,
+} from "../../../stores/market/market-store";
 import type { WidgetHostContext } from "../../../widgets/sdk/contracts";
 import type { WidgetNoActionMap } from "../../../widgets/sdk/actions";
 import type { WidgetOperationDefinition, WidgetOperationMap } from "../../../widgets/sdk/data";
@@ -31,6 +35,7 @@ export type ReadState<T> =
   | Readonly<{ status: "idle" | "loading" }>
   | Readonly<{ status: "error"; detail: string }>
   | Readonly<{ status: "unsupported"; detail: string }>
+  | Readonly<{ status: "partial"; detail: string; value: T }>
   | Readonly<{ status: "ready"; value: T }>;
 
 export function useMarketSnapshot(host: Pick<MarketWidgetHost, "market">): MarketHostSnapshot {
@@ -44,28 +49,117 @@ export function useMarketSnapshot(host: Pick<MarketWidgetHost, "market">): Marke
 
 type AvailableQuoteResponse = Extract<QuoteResponse, Readonly<{ status: "available" }>>;
 
+export type StockQuoteReadPlan =
+  | Readonly<{ status: "wait"; detail: string }>
+  | Readonly<{ status: "error" | "unsupported"; detail: string }>
+  | Readonly<{
+      status: "read";
+      symbols: readonly string[];
+      omittedSymbols: readonly string[];
+    }>;
+
+export function planStockQuoteRead(
+  symbols: readonly string[],
+  stockLeaseRequired: boolean,
+  lease: MarketLeaseSnapshot,
+  capacity: MarketStockLeaseCapacity,
+): StockQuoteReadPlan {
+  if (!stockLeaseRequired)
+    return { status: "read", symbols: Object.freeze([...symbols]), omittedSymbols: Object.freeze([]) };
+  if (capacity.status === "unknown" || capacity.status === "pending")
+    return { status: "wait", detail: "Waiting for Gateway stock subscription capacity." };
+  if (capacity.status === "unavailable")
+    return {
+      status: "unsupported",
+      detail: "Gateway stock subscription capacity is unavailable; quote reads are withheld.",
+    };
+  if (lease.coverage === "error")
+    return {
+      status: "error",
+      detail: "The stock lease was not acknowledged; quote reads are withheld.",
+    };
+  if (
+    (lease.coverage !== "complete" && lease.coverage !== "partial") ||
+    lease.acknowledgedAt === null
+  )
+    return { status: "wait", detail: "Waiting for the stock lease acknowledgement." };
+
+  const selected = new Set(lease.selectedSymbols);
+  const selectedSymbols = Object.freeze(symbols.filter((symbol) => selected.has(symbol)));
+  const omittedSymbols = Object.freeze(symbols.filter((symbol) => !selected.has(symbol)));
+  if (selectedSymbols.length === 0)
+    return {
+      status: "unsupported",
+      detail: `No requested symbols are in the acknowledged stock lease (${symbols.length} unavailable).`,
+    };
+  return { status: "read", symbols: selectedSymbols, omittedSymbols };
+}
+
+function readStockLeaseState(host: Pick<MarketWidgetHost, "market">): Readonly<{
+  lease: MarketLeaseSnapshot;
+  capacity: MarketStockLeaseCapacity;
+}> {
+  const snapshot = host.market.getSnapshot();
+  return { lease: snapshot.leases.stocks, capacity: snapshot.stockLeaseCapacity };
+}
+
+function useStockLeaseState(host: Pick<MarketWidgetHost, "market">) {
+  const [state, setState] = useState(() => readStockLeaseState(host));
+  useEffect(() => {
+    let current = readStockLeaseState(host);
+    setState(current);
+    return host.market.subscribe(() => {
+      const next = readStockLeaseState(host);
+      if (next.lease === current.lease && next.capacity === current.capacity) return;
+      current = next;
+      setState(next);
+    });
+  }, [host.market]);
+  return state;
+}
+
 export function useQuoteSnapshots(
   host: QuoteWidgetHost,
   symbols: readonly string[],
+  stockLeaseRequired = false,
 ): ReadState<AvailableQuoteResponse> {
   const safeSymbols = useMemo(
     () => [...new Set(symbols.filter(isCanonicalTicker))].slice(0, 50),
     [symbols],
   );
   const [state, setState] = useState<ReadState<AvailableQuoteResponse>>({ status: "idle" });
+  const stockLease = useStockLeaseState(host);
 
   useEffect(() => {
     if (safeSymbols.length === 0) {
       setState({ status: "idle" });
       return undefined;
     }
+    const readPlan = planStockQuoteRead(
+      safeSymbols,
+      stockLeaseRequired,
+      stockLease.lease,
+      stockLease.capacity,
+    );
+    if (readPlan.status !== "read") {
+      setState(
+        readPlan.status === "wait"
+          ? { status: "loading" }
+          : { status: readPlan.status, detail: readPlan.detail },
+      );
+      return undefined;
+    }
     return host.refresh.observe(
       "market.quotes",
-      { symbols: safeSymbols },
+      { symbols: readPlan.symbols },
       { refreshIntervalMs: 30_000 },
       (scheduled) => {
         if (scheduled.status === "pending") {
-          setState((current) => (current.status === "ready" ? current : { status: "loading" }));
+          setState((current) =>
+            current.status === "ready" || current.status === "partial"
+              ? current
+              : { status: "loading" },
+          );
           return;
         }
         if (scheduled.status === "error") {
@@ -90,11 +184,25 @@ export function useQuoteSnapshots(
             detail: `Provider response source is not supported for display (${decoded.evidence.sourceLabel ?? decoded.evidence.source ?? "unknown"}).`,
           });
         } else {
-          setState({ status: "ready", value: decoded });
+          setState(
+            readPlan.omittedSymbols.length > 0
+              ? {
+                  status: "partial",
+                  value: decoded,
+                  detail: `${readPlan.symbols.length} of ${safeSymbols.length} symbols are within the acknowledged stock lease; ${readPlan.omittedSymbols.length} remain unavailable because of the active subscription capacity.`,
+                }
+              : { status: "ready", value: decoded },
+          );
         }
       },
     );
-  }, [host.refresh, safeSymbols]);
+  }, [
+    host.refresh,
+    safeSymbols,
+    stockLeaseRequired,
+    stockLease.lease,
+    stockLease.capacity,
+  ]);
 
   return state;
 }
@@ -126,10 +234,13 @@ export function useOptionsResource(
       feedFreshness: snapshot.feeds.options.freshness,
       transportState: snapshot.transportState,
       lease: snapshot.leases.options,
+      stockLease: snapshot.leases.stocks,
     };
   });
   const valid = isCanonicalTicker(symbol) && /^\d{4}-\d{2}-\d{2}$/u.test(expiry);
   const underlyingPrice = snapshotPrice;
+  const stockLeaseSymbols = useMemo(() => (valid ? [symbol] : []), [symbol, valid]);
+  const stockLeaseRequired = useMarketLease(instanceId, "stocks", stockLeaseSymbols, host.lifecycle);
 
   useEffect(() => {
     const sync = () => {
@@ -139,10 +250,12 @@ export function useOptionsResource(
           feedFreshness: snapshot.feeds.options.freshness,
           transportState: snapshot.transportState,
           lease: snapshot.leases.options,
+          stockLease: snapshot.leases.stocks,
         };
         return current.feedFreshness === next.feedFreshness &&
           current.transportState === next.transportState &&
-          current.lease === next.lease
+          current.lease === next.lease &&
+          current.stockLease === next.stockLease
           ? current
           : next;
       });
@@ -164,6 +277,30 @@ export function useOptionsResource(
     setUnderlyingEvidence(
       "Checking the bounded same-origin quote snapshot for a verified Alpaca SIP feed.",
     );
+    if (stockLeaseRequired) {
+      if (streamView.stockLease.coverage === "error") {
+        setUnderlyingEvidence(
+          "The underlying stock lease was not acknowledged; no quote read was issued.",
+        );
+        return undefined;
+      }
+      if (
+        (streamView.stockLease.coverage !== "complete" &&
+          streamView.stockLease.coverage !== "partial") ||
+        streamView.stockLease.acknowledgedAt === null
+      ) {
+        setUnderlyingEvidence(
+          "Waiting for the underlying stock lease acknowledgement before reading a quote.",
+        );
+        return undefined;
+      }
+      if (!streamView.stockLease.selectedSymbols.includes(symbol)) {
+        setUnderlyingEvidence(
+          `Underlying symbol is outside the acknowledged stock lease (${streamView.stockLease.omittedCount} symbol(s) omitted); no quote read was issued.`,
+        );
+        return undefined;
+      }
+    }
     return host.refresh.observe(
       "market.quotes",
       { symbols: [symbol] },
@@ -210,7 +347,7 @@ export function useOptionsResource(
         }
       },
     );
-  }, [host.refresh, symbol, valid]);
+  }, [host.refresh, symbol, valid, stockLeaseRequired, streamView.stockLease]);
 
   useEffect(() => {
     if (!valid) {
@@ -276,8 +413,6 @@ export function useOptionsResource(
     );
   }, [state, underlyingPrice]);
 
-  const stockLeaseSymbols = useMemo(() => (valid ? [symbol] : []), [symbol, valid]);
-  useMarketLease(instanceId, "stocks", stockLeaseSymbols, host.lifecycle);
   useMarketLease(instanceId, "options", selectedLeaseSymbols, host.lifecycle);
 
   return Object.freeze({
@@ -293,12 +428,14 @@ export function useOptionsResource(
 
 export function resourceStateFromRead<T>(
   state: ReadState<T>,
-): "loading" | "ready" | "error" | "unsupported" | "unavailable" {
+): "loading" | "ready" | "partial" | "error" | "unsupported" | "unavailable" {
   switch (state.status) {
     case "loading":
       return "loading";
     case "ready":
       return "ready";
+    case "partial":
+      return "partial";
     case "error":
       return "error";
     case "unsupported":

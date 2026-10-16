@@ -337,7 +337,9 @@ type QuoteViewProps = Readonly<{
 
 function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps) {
   const requested = useMemo(() => [...new Set(symbols)].slice(0, 50), [symbols]);
-  const response = useQuoteSnapshots(host, requested);
+  const leaseSymbols = useMemo(() => symbols.slice(0, 1_000), [symbols]);
+  const stockLeaseRequired = useMarketLease(instanceId, "stocks", leaseSymbols, host.lifecycle);
+  const response = useQuoteSnapshots(host, requested, stockLeaseRequired);
   const [rows, setRows] = useState<StockGridRow[]>(() => requested.map(emptyRow));
   const apiRef = useRef<GridApi<StockGridRow> | null>(null);
   const rowsRef = useRef(new Map(requested.map((symbol) => [symbol, emptyRow(symbol)])));
@@ -348,9 +350,6 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
     connectionEpoch: null,
   });
   const columns = useMemo(() => [...COLUMN_DEFS], []);
-  const leaseSymbols = useMemo(() => symbols.slice(0, 1_000), [symbols]);
-
-  useMarketLease(instanceId, "stocks", leaseSymbols, host.lifecycle);
 
   useEffect(() => {
     const next = requested.map(emptyRow);
@@ -363,7 +362,7 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
   }, [requested]);
 
   useEffect(() => {
-    if (response.status !== "ready") return;
+    if (response.status !== "ready" && response.status !== "partial") return;
     const source = sourceFeed(response.value.evidence.source, response.value.evidence.feed);
     const evidence = response.value.evidence.asOf
       ? `${source} · as_of ${response.value.evidence.asOf}`
@@ -422,8 +421,8 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
   }, [host.market, requested]);
 
   const dataState =
-    response.status === "ready"
-      ? "ready"
+    response.status === "ready" || response.status === "partial"
+      ? response.status
       : response.status === "unsupported"
         ? "unsupported"
         : response.status === "error"
@@ -434,9 +433,11 @@ function QuoteTable({ title, symbols, host, instanceId, testId }: QuoteViewProps
   const dataDetail =
     response.status === "error" || response.status === "unsupported"
       ? response.detail
-      : response.status === "ready"
-        ? `${requested.length} symbol(s) · ${sourceFeed(response.value.evidence.source, response.value.evidence.feed)} · as_of ${response.value.evidence.asOf ?? "unknown"}; snapshot and stream values remain separate.`
-        : "Waiting for the bounded same-origin snapshot read.";
+      : response.status === "partial"
+        ? response.detail
+        : response.status === "ready"
+          ? `${requested.length} symbol(s) · ${sourceFeed(response.value.evidence.source, response.value.evidence.feed)} · as_of ${response.value.evidence.asOf ?? "unknown"}; snapshot and stream values remain separate.`
+          : "Waiting for the bounded same-origin snapshot read.";
 
   return (
     <section className={styles.marketWidget} data-testid={testId} aria-label={title}>

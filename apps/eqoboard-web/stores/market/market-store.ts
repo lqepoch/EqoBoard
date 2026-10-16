@@ -28,8 +28,15 @@ export type MarketLeaseSnapshot = Readonly<{
   membershipVerification: "unverified";
   requestedCount: number;
   selectedCount: number;
+  selectedSymbols: readonly string[];
   leasedCount: number;
   omittedCount: number;
+}>;
+
+export type MarketStockLeaseCapacity = Readonly<{
+  status: "unknown" | "pending" | "available" | "unavailable";
+  limit: number | null;
+  fixedSymbols: readonly string[];
 }>;
 
 export type MarketHostSnapshot = Readonly<{
@@ -39,6 +46,7 @@ export type MarketHostSnapshot = Readonly<{
   gatewayInstanceId: string | null;
   lastSequence: number | null;
   lastEventAt: number | null;
+  stockLeaseCapacity: MarketStockLeaseCapacity;
   feeds: Readonly<Record<MarketFeedName, MarketFeedSnapshot>>;
   leases: Readonly<Record<MarketFeedName, MarketLeaseSnapshot>>;
   stockQuotes: Readonly<Record<string, GatewayMarketRecord>>;
@@ -85,8 +93,17 @@ function emptyLease(): MarketLeaseSnapshot {
     membershipVerification: "unverified",
     requestedCount: 0,
     selectedCount: 0,
+    selectedSymbols: Object.freeze([]),
     leasedCount: 0,
     omittedCount: 0,
+  });
+}
+
+function emptyStockLeaseCapacity(): MarketStockLeaseCapacity {
+  return Object.freeze({
+    status: "unknown",
+    limit: null,
+    fixedSymbols: Object.freeze([]),
   });
 }
 
@@ -98,6 +115,7 @@ function emptySnapshot(): MarketHostSnapshot {
     gatewayInstanceId: null,
     lastSequence: null,
     lastEventAt: null,
+    stockLeaseCapacity: emptyStockLeaseCapacity(),
     feeds: Object.freeze({ stocks: emptyFeed(), options: emptyFeed() }),
     leases: Object.freeze({ stocks: emptyLease(), options: emptyLease() }),
     stockQuotes: Object.freeze({}),
@@ -303,6 +321,7 @@ export class MarketStore {
     requestedCount: number,
     selectedCount: number,
     targetKey: string,
+    selectedSymbols: readonly string[] = [],
   ): void {
     const current = this.#snapshot.leases[feed];
     const targetChanged = this.#leaseTargetKeys[feed] !== targetKey;
@@ -319,6 +338,7 @@ export class MarketStore {
         : {}),
       requestedCount,
       selectedCount,
+      selectedSymbols: Object.freeze([...selectedSymbols]),
       omittedCount: Math.max(0, requestedCount - selectedCount),
     });
     const acknowledgedCoverage =
@@ -334,6 +354,22 @@ export class MarketStore {
         coverage: acknowledgedCoverage,
       }),
     );
+  }
+
+  setStockLeaseCapacity(
+    status: MarketStockLeaseCapacity["status"],
+    limit: number | null = null,
+    fixedSymbols: readonly string[] = [],
+  ): void {
+    const valid = status === "available" && Number.isSafeInteger(limit) && (limit as number) > 0;
+    this.#commit({
+      ...this.#snapshot,
+      stockLeaseCapacity: Object.freeze({
+        status: valid ? "available" : status === "available" ? "unavailable" : status,
+        limit: valid ? (limit as number) : null,
+        fixedSymbols: Object.freeze(valid ? [...fixedSymbols] : []),
+      }),
+    });
   }
 
   setLeaseAck(
@@ -398,9 +434,10 @@ export class MarketStore {
     for (const event of parsed) {
       const instanceId = event.gateway_instance_id as string;
       const sequence = event.local_sequence as number;
-      if (next.gatewayInstanceId !== null && next.gatewayInstanceId !== instanceId) {
+      if (next.gatewayInstanceId !== instanceId) {
         const transportState = next.transportState;
         const transportError = next.transportError;
+        this.#leaseTargetKeys = { stocks: null, options: null };
         next = { ...emptySnapshot(), revision: next.revision, transportState, transportError };
       }
       if (

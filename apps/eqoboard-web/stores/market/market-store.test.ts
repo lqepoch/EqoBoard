@@ -159,6 +159,17 @@ describe("native market store", () => {
     store.acceptBatch([quote({ connection_epoch: 2, local_sequence: 3 })]);
     expect(store.getSnapshot().stockQuotes.SPY?.connection_epoch).toBe(2);
     expect(store.getSnapshot().optionTrades).toHaveLength(1);
+    const selectedSymbols = ["QQQ", "SPY", "AAPL"];
+    const targetKey = JSON.stringify(selectedSymbols);
+    store.setStockLeaseCapacity("available", 32, ["QQQ", "SPY"]);
+    store.setLeaseTargets("stocks", 3, 3, targetKey, selectedSymbols);
+    store.setLeaseAck(
+      "stocks",
+      0,
+      3,
+      { active: 3, max: 32, expires_in_seconds: 90 },
+      targetKey,
+    );
 
     store.acceptBatch([
       quote({ gateway_instance_id: "gateway-b", local_sequence: 1, connection_epoch: 1 }),
@@ -168,6 +179,12 @@ describe("native market store", () => {
     expect(snapshot.lastSequence).toBe(1);
     expect(snapshot.optionTrades).toHaveLength(0);
     expect(snapshot.stockQuotes.SPY?.gateway_instance_id).toBe("gateway-b");
+    expect(snapshot.stockLeaseCapacity.status).toBe("unknown");
+    expect(snapshot.leases.stocks).toMatchObject({
+      coverage: "unknown",
+      selectedSymbols: [],
+      acknowledgedAt: null,
+    });
   });
 
   it("fences stale lease acknowledgements and reports cap omissions", () => {
@@ -232,6 +249,36 @@ describe("native market store", () => {
     expect(lease.coverage).toBe("pending");
     expect(lease.requestedCount).toBe(1);
     expect(lease.selectedCount).toBe(1);
+  });
+
+  it("preserves the Gateway stock capacity and the exact centrally selected symbols", () => {
+    const store = new MarketStore(() => 5_000);
+    const selectedSymbols = Object.freeze(["QQQ", "SPY", "AAPL"]);
+    const targetKey = JSON.stringify(selectedSymbols);
+
+    store.setStockLeaseCapacity("pending");
+    store.setLeaseTargets("stocks", 50, selectedSymbols.length, targetKey, selectedSymbols);
+    store.setStockLeaseCapacity("available", 32, ["QQQ", "SPY"]);
+    store.setLeaseAck(
+      "stocks",
+      0,
+      5,
+      { active: 5, max: 32, expires_in_seconds: 90 },
+      targetKey,
+    );
+
+    expect(store.getSnapshot().stockLeaseCapacity).toEqual({
+      status: "available",
+      limit: 32,
+      fixedSymbols: ["QQQ", "SPY"],
+    });
+    expect(store.getSnapshot().leases.stocks).toMatchObject({
+      requestedCount: 50,
+      selectedCount: 3,
+      selectedSymbols: ["QQQ", "SPY", "AAPL"],
+      omittedCount: 47,
+      coverage: "partial",
+    });
   });
 
   it("resets raw market observations when the identity partition changes", () => {

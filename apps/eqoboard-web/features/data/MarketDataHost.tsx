@@ -31,6 +31,7 @@ import { attachMarketEventStream } from "./market-stream";
 import { createNativeRefreshScheduler, type RefreshScope } from "./refresh-scheduler";
 import { createNativeDataReadClient, readNativeJsonResponse } from "./read-client";
 import {
+  loadMarketStockLeaseCapacity,
   MarketLeaseCoordinator,
   type OptionsLeaseInput,
   type StockLeaseInput,
@@ -81,6 +82,9 @@ class MarketDataRuntime {
   #pendingRuntimeReset = false;
   #backgroundCleanup: (() => void) | null = null;
   #freshnessTimer: ReturnType<typeof setInterval> | null = null;
+  #stockCapacityController: AbortController | null = null;
+  #stockCapacityRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  #stockInstanceCleanup: (() => void) | null = null;
   #started = false;
 
   constructor(auth: AuthUiSnapshot) {
@@ -136,6 +140,17 @@ class MarketDataRuntime {
       this.#pendingIdentityReset = false;
       this.#pendingRuntimeReset = false;
     }
+    if (isTerminalMarketRuntime(this.#auth) && hasPermission(this.#auth, "market:subscribe")) {
+      let gatewayInstanceId = this.store.getSnapshot().gatewayInstanceId;
+      this.#stockInstanceCleanup = this.store.subscribe(() => {
+        const nextInstanceId = this.store.getSnapshot().gatewayInstanceId;
+        if (nextInstanceId === gatewayInstanceId) return;
+        gatewayInstanceId = nextInstanceId;
+        this.leaseCoordinator.gatewayInstanceChanged();
+        this.#readStockCapacity(0);
+      });
+      this.#readStockCapacity(0);
+    }
     this.#backgroundCleanup = startMarketHostBackgroundServices(this.#auth, {
       store: this.store,
       attachStream: () => attachMarketEventStream(this.store),
@@ -152,8 +167,56 @@ class MarketDataRuntime {
     this.#started = false;
     this.#backgroundCleanup?.();
     this.#backgroundCleanup = null;
+    this.#stockInstanceCleanup?.();
+    this.#stockInstanceCleanup = null;
+    this.#stockCapacityController?.abort();
+    this.#stockCapacityController = null;
+    if (this.#stockCapacityRetryTimer) clearTimeout(this.#stockCapacityRetryTimer);
+    this.#stockCapacityRetryTimer = null;
     if (this.#freshnessTimer) clearInterval(this.#freshnessTimer);
     this.#freshnessTimer = null;
+  }
+
+  #readStockCapacity(retry: 0 | 1): void {
+    if (!this.#started) return;
+    if (this.#stockCapacityRetryTimer) clearTimeout(this.#stockCapacityRetryTimer);
+    this.#stockCapacityRetryTimer = null;
+    this.#stockCapacityController?.abort();
+    this.leaseCoordinator.setStockCapacityPending();
+
+    const controller = new AbortController();
+    this.#stockCapacityController = controller;
+    void loadMarketStockLeaseCapacity(
+      (signal) => this.data.read("market.status", {}, { signal }),
+      controller.signal,
+      5_000,
+    )
+      .then((result) => {
+        if (this.#stockCapacityController !== controller || !this.#started) return;
+        if (result.status === "available") {
+          this.leaseCoordinator.setStockCapacity(result.capacity);
+          return;
+        }
+        if (result.reason === "cancelled") return;
+        this.leaseCoordinator.setStockCapacityUnavailable();
+        this.#scheduleStockCapacityRetry(retry);
+      })
+      .catch(() => {
+        if (this.#stockCapacityController !== controller || !this.#started) return;
+        this.leaseCoordinator.setStockCapacityUnavailable();
+        this.#scheduleStockCapacityRetry(retry);
+      })
+      .finally(() => {
+        if (this.#stockCapacityController === controller) this.#stockCapacityController = null;
+      });
+  }
+
+  #scheduleStockCapacityRetry(retry: 0 | 1): void {
+    if (retry !== 0 || !this.#started || this.#stockCapacityRetryTimer) return;
+    this.#stockCapacityRetryTimer = setTimeout(() => {
+      this.#stockCapacityRetryTimer = null;
+      this.#readStockCapacity(1);
+    }, 5_000);
   }
 
   async #sendLease(
@@ -286,7 +349,7 @@ export function useMarketLease(
   feed: "stocks" | "options",
   symbols: readonly string[],
   lifecycle: WidgetLifecycle,
-): void {
+): boolean {
   const { leaseCoordinator, canSubscribe } = useMarketDataHost();
   useEffect(() => {
     const sync = () => {
@@ -303,4 +366,5 @@ export function useMarketLease(
       leaseCoordinator.removeConsumer(instanceId, feed);
     };
   }, [leaseCoordinator, canSubscribe, instanceId, feed, symbols, lifecycle]);
+  return canSubscribe;
 }
