@@ -241,9 +241,8 @@ describe("workspace migration store acceptance", () => {
     expect(store.getState().document?.activeWorkspaceId).toBe(secondWorkspaceId);
     expect(store.getState().selectTab(secondWorkspaceId, otherTabId)).toBe(true);
     expect(
-      store
-        .getState()
-        .document?.workspaces.find((workspace) => workspace.id === secondWorkspaceId)?.activeTabId,
+      store.getState().document?.workspaces.find((workspace) => workspace.id === secondWorkspaceId)
+        ?.activeTabId,
     ).toBe(otherTabId);
     expect(store.getState()).toMatchObject({ dirty: false, syncStatus: "saved", revision: "0" });
     expect(repository.save).not.toHaveBeenCalled();

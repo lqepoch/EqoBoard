@@ -182,12 +182,18 @@ describe("native market response adapters", () => {
       snapshots: [snapshot],
     };
     expect(
-      decodeQuoteResponse({ ...response, snapshots: [{ ...snapshot, source_label: "Alpaca SIP" }] }),
+      decodeQuoteResponse({
+        ...response,
+        snapshots: [{ ...snapshot, source_label: "Alpaca SIP" }],
+      }),
     ).toBeNull();
     expect(
       decodeQuoteResponse({
         ...response,
-        snapshots: Array.from({ length: 33 }, (_, i) => ({ ...snapshot, symbol: `S${i}` })),
+        snapshots: Array.from({ length: 33 }, (_, index) => ({
+          ...snapshot,
+          symbol: `S${index}`,
+        })),
       }),
     ).toBeNull();
   });

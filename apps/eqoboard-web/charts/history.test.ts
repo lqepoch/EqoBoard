@@ -153,7 +153,11 @@ describe("chart history pagination and viewport", () => {
     if (!first.accepted) return;
     expect(first.snapshot.bars.map((bar) => Number(bar.time))).toEqual([0, 10, 20, 30]);
 
-    const second = mergePagedHistoryHead(first.snapshot, secondRefresh, secondRefresh.projection.bars);
+    const second = mergePagedHistoryHead(
+      first.snapshot,
+      secondRefresh,
+      secondRefresh.projection.bars,
+    );
     expect(second.accepted).toBe(true);
     if (!second.accepted) return;
     expect(second.snapshot.cursorPages).toBe(cursorPages);
@@ -161,8 +165,14 @@ describe("chart history pagination and viewport", () => {
   });
 
   it("rejects mixed effective resolutions for head and older pages", () => {
-    const head = { response: { effectiveResolution: "1m" }, projection: { bars: bars([10, 20]) } };
-    const older = { response: { effectiveResolution: "1d" }, projection: { bars: bars([1]) } };
+    const head = {
+      response: { effectiveResolution: "1m" },
+      projection: { bars: bars([10, 20]) },
+    };
+    const older = {
+      response: { effectiveResolution: "1d" },
+      projection: { bars: bars([1]) },
+    };
     const result = mergePagedHistoryHead(
       { cursorPages: [head], latestHead: head, bars: bars([10, 20]) },
       older,
@@ -171,9 +181,8 @@ describe("chart history pagination and viewport", () => {
 
     expect(result.accepted).toBe(false);
     expect(historyPageMatchesResolution([head], older)).toBe(false);
-    expect(historyPageMatchesResolution([head], { response: { effectiveResolution: "1m" } })).toBe(
-      true,
-    );
+    const matching = { ...head, response: { effectiveResolution: "1m" } };
+    expect(historyPageMatchesResolution([head], matching)).toBe(true);
   });
 
   it("rejects a response captured before the active selection generation", () => {

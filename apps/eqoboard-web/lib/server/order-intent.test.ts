@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isOrderPreviewResponse, parseVerticalPreviewIntent } from "./order-intent";
 
 const intent = {
@@ -16,6 +16,12 @@ const intent = {
 };
 
 describe("vertical preview boundary", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("accepts only a valid future standard vertical and preserves the exact intent", () => {
     const parsed = parseVerticalPreviewIntent(intent);
     expect(parsed.ok).toBe(true);
@@ -48,5 +54,12 @@ describe("vertical preview boundary", () => {
     };
     expect(isOrderPreviewResponse({ execution_enabled: false, preview }, parsed.value)).toBe(true);
     expect(isOrderPreviewResponse({ execution_enabled: true, preview }, parsed.value)).toBe(false);
+  });
+
+  it("rejects the same contract on or after its UTC expiration date", () => {
+    vi.setSystemTime(new Date("2026-10-16T00:00:00Z"));
+    expect(parseVerticalPreviewIntent(intent).ok).toBe(false);
+    vi.setSystemTime(new Date("2026-10-17T00:00:00Z"));
+    expect(parseVerticalPreviewIntent(intent).ok).toBe(false);
   });
 });
