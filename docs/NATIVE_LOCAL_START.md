@@ -93,6 +93,8 @@ MDP 源项目采用 MIT；包内保留其 `LICENSE` 和依赖 `NOTICE.txt`，不
 固定 MDP 包含失败分段续页修复：近期 Futu 失败页仍保留缺口，若存在旧计划段则提供
 `Load older bars` 的续页，继续读取原计划的 Alpaca 历史；不替换失败分段的来源。
 空首屏不代表所有旧历史均不可用，所有页读取后仍须保留失败段的 partial/unknown。
+历史首读、刷新与显式续页共用 Widget 的现有读取预算；过早续页会显示限流及等待秒数，
+待该时间后可再次点击，不绕过宿主预算或自动重试 Provider 请求。
 Web 仅收到自身签名/会话与必要配置；Futu key 只给 Gateway/SDK，显式启用的 Alpaca
 只读历史 key 只给 MDP。启用 Core Bars 时按 Gateway→MDP→Web 启动，端口分别为
 8080、8088、3000，均实际绑定 `127.0.0.1`；已有端口或未知进程占用时拒绝覆盖。

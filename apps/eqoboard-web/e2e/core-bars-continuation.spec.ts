@@ -106,6 +106,7 @@ test("@component synthetic Core Bars continuation renders older rows without era
   const servedRequests: CoreBarsPageRequest[] = [];
   const externalBrowserRequests: string[] = [];
   const allowedOrigins = new Set([origin, "http://native-mock-oidc:4450"]);
+  await page.clock.install();
 
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -182,6 +183,18 @@ test("@component synthetic Core Bars continuation renders older rows without era
     );
     const loadOlder = chart.getByTestId("native-chart-load-older");
     await expect(loadOlder).toBeEnabled();
+
+    // The head and explicit cursor read share the unchanged host rate budget.
+    // Verify the rejection, then advance only the synthetic browser clock by
+    // the displayed retry delay; never retry or weaken a failed transport read.
+    await loadOlder.click();
+    const retryNotice = chart.getByRole("alert");
+    await expect(retryNotice).toContainText("Older history is rate limited.");
+    expect(servedRequests).toHaveLength(1);
+    const retryDelay = (await retryNotice.innerText()).match(/Try again in (\d+) seconds\./u);
+    expect(retryDelay).not.toBeNull();
+    if (!retryDelay) throw new Error("Expected the host budget retry delay.");
+    await page.clock.fastForward(Number(retryDelay[1]) * 1_000);
 
     const olderRead = page.waitForResponse((response) => {
       const url = new URL(response.url());
