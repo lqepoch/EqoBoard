@@ -410,7 +410,7 @@
       const p = d !== null && prev ? (d / prev) * 100 : null;
       const cls = upDown(d);
       const pinned = PINNED.includes(sym);
-      const row = h("div", { class: `wrow${sym === state.current ? " active" : ""}`, "data-sym": sym }, [
+      const row = h("div", { class: `wrow${sym === state.current ? " active" : ""}`, "data-sym": sym, tabindex: "0" }, [
         h("div", {}, [
           h("div", { class: "wname" }, [sym, pinned ? h("span", { class: "tag" }, "常驻逐笔") : ""]),
           h("div", { class: "wcode" }, `US.${sym}`),
@@ -421,7 +421,10 @@
       if (!pinned) row.append(h("button", { class: "wdel", type: "button", "aria-label": `移除 ${sym}`, title: "移除" }, "×"));
       return row;
     });
+    // The list re-renders every few seconds; keep keyboard focus on the same row across it.
+    const focused = document.activeElement?.closest?.(".wrow")?.dataset.sym ?? null;
     $("watchList").replaceChildren(...rows);
+    if (focused) $("watchList").querySelector(`.wrow[data-sym="${focused}"]`)?.focus({ preventScroll: true });
     $("watchCount").textContent = `${state.watch.length} 只`;
   }
 
@@ -534,6 +537,7 @@
         ]),
       );
     }
+    if (!rows.length) rows.push(h("div", { class: "tape-empty" }, "暂无逐笔成交"));
     $("tapeRows").replaceChildren(...rows);
     $("tapeCount").textContent = `${trades.length} 笔`;
   }
@@ -550,8 +554,9 @@
   function renderDepth() {
     const d = state.depth;
     if (!d) {
-      $("depthBid").replaceChildren(h("div", { class: "subtle" }, "等待富途摆盘…"));
-      $("depthAsk").replaceChildren();
+      // Keep the 10 rows per side as dashes so the ladder does not jump in height when Futu data arrives.
+      $("depthBid").replaceChildren(...Array.from({ length: 10 }, () => levelRow({}, "bid", 1)));
+      $("depthAsk").replaceChildren(...Array.from({ length: 10 }, () => levelRow({}, "ask", 1)));
       for (const id of ["bboBidPx", "bboBidSz", "bboAskPx", "bboAskSz", "bbBuyPct", "bbSellPct"]) setText(id, "—");
       $("bbBuy").style.width = "50%";
       $("bbSell").style.width = "50%";
@@ -843,6 +848,14 @@
       return;
     }
     setCurrent(sym);
+  });
+  // Rows are focusable; Enter or Space selects the symbol, as a click does.
+  $("watchList").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest(".wrow");
+    if (!row || event.target !== row) return;
+    event.preventDefault();
+    setCurrent(row.dataset.sym);
   });
   $("addForm").addEventListener("submit", (event) => {
     event.preventDefault();

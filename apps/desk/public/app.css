@@ -39,17 +39,22 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .r { text-align: right; }
 .c { text-align: center; }
 
-/* shell: fills the viewport; only the columns scroll */
+/* shell: a 16:9 stage, as large as the window allows (letterboxed on other ratios).
+   Columns are percentages of the stage, so the layout scales with the window. */
+body { display: grid; place-items: center; }
 .app {
   display: grid;
+  width: min(100%, calc((100vh - 16px) * 16 / 9));
+  aspect-ratio: 16 / 9;
   grid-template-rows: 42px minmax(0, 1fr) 22px;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
-  height: 100%;
-  min-height: 620px;
+  grid-template-columns: minmax(220px, 20%) minmax(0, 1fr) minmax(280px, 22%);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
   background: var(--bg);
+}
+@supports (height: 100dvh) {
+  .app { width: min(100%, calc((100dvh - 16px) * 16 / 9)); }
 }
 .topbar {
   grid-column: 1 / -1;
@@ -87,7 +92,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   background: var(--panel); border-right: 1px solid var(--line);
 }
-.watch-cols, .wrow { display: grid; grid-template-columns: minmax(0, 1fr) 82px 70px; align-items: center; gap: 8px; padding: 0 12px; }
+.watch-cols, .wrow { display: grid; grid-template-columns: minmax(0, 1fr) 64px 60px; align-items: center; gap: 6px; padding: 0 10px; }
 .watch-cols { height: 24px; color: var(--subtle); font-size: 11px; border-bottom: 1px solid var(--line); }
 .watch-cols span:not(:first-child), .wrow > div:not(:first-child) { text-align: right; }
 .watch-list { flex: 1 1 0; min-height: 0; overflow: auto; }
@@ -102,7 +107,10 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
   position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; display: none;
   place-items: center; font-size: 11px; color: var(--subtle);
 }
-.wrow:hover .wdel { display: grid; }
+.wrow:hover .wdel, .wrow:focus-visible .wdel, .wrow:focus-within .wdel { display: grid; }
+.wrow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* touch screens have no hover, so the remove control stays visible there */
+@media (hover: none) { .wdel { display: grid; } }
 .tag {
   display: inline-grid; place-items: center; height: 14px; padding: 0 4px; margin-left: 6px;
   border-radius: 3px; font: 600 9px/1 var(--sans); color: var(--blue); background: var(--blue-soft); vertical-align: 1px;
@@ -150,7 +158,8 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
   padding: 10px 14px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--line);
   color: var(--muted); max-width: 70%; text-align: center;
 }
-.foot { padding: 4px 12px; color: var(--subtle); font-size: 10.5px; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* flex-shrink 0: on short windows the chart shrinks, the source and window note must not */
+.foot { flex: 0 0 auto; padding: 4px 12px; color: var(--subtle); font-size: 10.5px; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* options */
 .expiries { display: flex; gap: 6px; padding: 8px 10px; overflow-x: auto; border-bottom: 1px solid var(--line); }
@@ -196,7 +205,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 }
 
 /* right column */
-.side { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); border-left: 1px solid var(--line); }
+.side { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); }
 .side-head { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); }
 .side-name { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side-px { font: 650 24px/1.1 var(--mono); font-variant-numeric: tabular-nums; margin-top: 4px; }
@@ -219,6 +228,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 }
 .tape { flex: 1 1 0; min-height: 120px; overflow: auto; }
 .trow { height: 20px; font: 500 11.5px var(--mono); font-variant-numeric: tabular-nums; }
+.tape-empty { padding: 8px 12px; color: var(--subtle); font-size: 11px; }
 .trow > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trow .t { color: var(--subtle); }
 .trow .p { font-weight: 600; text-align: right; }
@@ -263,20 +273,32 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
   color: var(--subtle); font-size: 10.5px; white-space: nowrap; overflow: hidden;
 }
 
+/* narrow stage: the tape columns tighten so the price column keeps its width */
 @media (max-width: 1280px) {
-  .app { grid-template-columns: 240px minmax(0, 1fr) 320px; }
   .search { width: 220px; }
   .tape-head, .trow { grid-template-columns: 92px minmax(0, 1fr) 64px 28px; font-size: 11px; column-gap: 6px; }
 }
-@media (max-width: 1040px) {
-  .app { grid-template-columns: minmax(0, 1fr) 320px; }
-  .watch { display: none; }
-}
-@media (max-width: 760px) {
-  body { overflow: auto; }
-  .app { height: auto; min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+/* Portrait or small screens: no fixed stage. The watchlist becomes a horizontal strip above the chart. */
+@media (max-width: 760px), (max-aspect-ratio: 5/4) {
+  body { display: block; overflow: auto; }
+  .app { width: auto; aspect-ratio: auto; height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .topbar { flex-wrap: wrap; height: auto; padding: 6px 12px; gap: 6px; }
+  .watch { border-right: 0; border-bottom: 1px solid var(--line); }
+  .watch-cols, .add-row { display: none; }
+  .watch-list { flex: 0 0 auto; display: flex; overflow-x: auto; overflow-y: hidden; }
+  /* right padding leaves room for the always-visible remove control on touch screens */
+  .wrow { flex: 0 0 156px; min-height: 52px; grid-template-columns: minmax(0, 1fr) auto; padding: 6px 20px 6px 10px; border-bottom: 0; border-right: 1px solid var(--line); }
+  .wrow > div:first-child { grid-row: 1 / span 2; }
+  .wrow > div:nth-child(2) { grid-column: 2; grid-row: 1; }
+  .wrow > div:nth-child(3) { grid-column: 2; grid-row: 2; }
   .side { border-left: 0; border-top: 1px solid var(--line); }
   .center { min-height: 480px; }
+  .toolbar { flex-wrap: nowrap; overflow-x: auto; }
   .pill.muted { display: none; }
   .search { width: 170px; }
+}
+@media (max-width: 560px) {
+  .clock { display: none; }
+  .search { width: 140px; }
+  .tb-right .pill { font-size: 10.5px; }
 }
