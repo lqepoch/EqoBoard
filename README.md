@@ -1,7 +1,16 @@
 # EqoBoard
 
-Windows 本机启动原生候选见 [运行说明](docs/NATIVE_LOCAL_START.md)：使用 GitHub
-Actions 预编译包，根目录 ignored `.env`，受控 loopback 身份；不本地构建或启用交易。
+## 当前三条终端路径（2026-10-17）
+
+| 应用 | 当前作用 | 部署与长期状态 |
+| --- | --- | --- |
+| `apps/eqoboard-web` | **自主研发的目标主终端**：Next.js/BFF、Workspace/Widget SDK、共享 MarketDataHost、Core TS 协议、MDP Core Bars | PR #64–#66 已合并；Actions Windows 运行包可供受控本机评估，完整功能/许可/来源/恢复验收前不接管默认生产入口 |
+| `apps/openterminal` | 保留的 OpenTerminal 应用及独立研究 BFF | **仍为默认 `compose.yaml` 终端**，用于兼容、对照与回滚；OpenBB 可选模块继续独立隔离 |
+| `apps/desk` | PR #67/#68 本机股票/期权行情台；直接访问 Futu OpenD、Alpaca IEX/indicative、Yahoo 摘要 | **仅 loopback 只读本机工具**，拥有独立临时缓存/订阅路径，不成为 MDP/Quant/Engine 正式行情、归档、订单或账户权威 |
+
+九仓长期模块所有权由 [platform-ops 九仓目标架构](https://github.com/lqepoch/platform-ops/blob/main/docs/NINE-REPOSITORY-ARCHITECTURE.md) 维护；仓内源代码、实际 Compose/运行包、固定依赖和测试收据各自作为当前行为依据。跨仓源代码复用使用明确的发布契约和固定 SHA，源依赖不直接使某仓获得新权限。三条终端均没有生产下单权威，Paper/Live effective execution 保持 disabled。历史参见 [功能迁移清单](docs/migration/NATIVE_FEATURE_STATUS.md)。
+
+Windows 本机启动原生候选见 [运行说明](docs/NATIVE_LOCAL_START.md)：可使用 GitHub Actions 预编译包与受控 loopback 身份；根目录 `.env` 为 ignored 私有配置。本地构建/测试须遵循 Agent、安全及验收边界，不能替代精确提交的 CI、生产许可和交易授权。
 
 可二次开发的美股股票 + 期权终端。默认主 UI 复用 **OpenTerminal** 的 MIT Workspace/Widget/Chart 体系；期权链使用 **AG Grid Community**；生产美股/期权数据路径通过 Rust Gateway 请求 Alpaca **SIP/OPRA**。可选 OpenBB Lite 研究工作台由独立 Research BFF 和受控入口提供，不替代主终端。
 
