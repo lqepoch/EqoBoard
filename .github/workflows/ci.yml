@@ -87,6 +87,11 @@ jobs:
           npm ci --prefix tools/futu-runtime --ignore-scripts --no-audit --no-fund
           node --test tools/futu-subscriptions.test.mjs
           node --import ./apps/openterminal/node_modules/tsx/dist/loader.mjs --test tools/local-access.test.ts
+      - name: Validate local desk configuration without market credentials
+        working-directory: .
+        run: |
+          node --check apps/desk/src/config.mjs
+          node --test apps/desk/src/config.test.mjs
       - name: Test client cancellation during BFF authorization
         run: node --test web/lib/client-abort.test.mjs
       - run: npx tsc --noEmit -p web/tsconfig.json

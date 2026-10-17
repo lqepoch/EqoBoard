@@ -1,5 +1,15 @@
 # EqoBoard 架构
 
+## 当前运行入口与未来边界（2026-10-17）
+
+| 路径 | 当前行为 | 生产/目标限制 |
+| --- | --- | --- |
+| `apps/eqoboard-web` | 自主 Next.js/BFF、市场 Widget、受控 MarketDataHost；Core 合约 + MDP Core Bars | **目标主终端**；截至 PR #68 尚未默认上线或完成全部原生迁移 |
+| `apps/openterminal` | 现行默认 Compose Web + 旧研究服务，经 Rust Gateway 读取行情 | **兼容/回滚基线**；保留已许可原件与旧数据，避免强制切换 |
+| `apps/desk` | loopback Node HTTP + 直接 Futu/Alpaca/Yahoo 读取、独立 1 秒/分钟 bars 缓存 | **本机工具例外**；不接入正式策略/Engine、不充当全仓来源和订阅权威 |
+
+下面的 OpenTerminal 图描述的是**旧默认 Compose 部署**，并未包含 Native Web 或独立 Desk。Native 正式目标为 `browser → native BFF → MDP/Quant/Engine scoped read`，当前市场流在兼容期仍经过 Gateway；`trading-core` 以库/序列化形式被消费，不是网络转发跳点。Desk 的混合来源 bars 缺少可独立证明的逐行授权/来源与完整性元数据，不作为 MDP 的 curated 或 Engine 的风控输入。Native 的用户手动组合/流水是本地持久视图，与券商账户及 Engine 真实持仓/执行账本隔离。更多单一 owner 与迁移门禁以 [platform-ops 九仓目标架构](https://github.com/lqepoch/platform-ops/blob/main/docs/NINE-REPOSITORY-ARCHITECTURE.md) 为准。
+
 ## 运行平面
 
 ```
