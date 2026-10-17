@@ -18,3 +18,5 @@ Run local tests with: node --test packages/pine-script-plugin/tests/*.test.mjs
 IMPORTANT: sandbox assertions and tests are not OS isolation. No app may execute untrusted Pine within the Next server/browser/MDP/OMS. Full implementation awaits license approval, OS process isolation, authenticated BFF and chart integration. See docs/PINE_SCRIPT_PLUGIN.md and issue #72.
 
 TradingView Community Script publication permissions, author attribution and any MPL-2.0 code terms require validation before ingestion. Don't scrape protected or invite-only scripts.
+
+The current plot normalizer supports only simple lines and zero-baseline histograms, and passes through price/indicator pane intent. Other plot styles and drawing objects fail explicitly. This foundation does not yet render either style into the main EqoBoard chart.
