@@ -19,7 +19,7 @@ description: 维护 apps/desk 本地股票与期权行情台：富途 OpenD 报�
 3. 改数据语义（周期、聚合、缓存、标注）时，同时更新 `apps/desk/AGENTS.md` 与 `docs/MARKET_SOURCES.md`。
 4. 语法检查：`node --check` 检查 `src/*.mjs` 与 `public/app.js`，使用 Node 22.23.3；服务端配置每次修改必须运行 `npm test`（`node --test src/*.test.mjs`）并通过 GitHub `EqoBoard CI` 的 desk 独立配置测试。Futu/DESK TCP 端口显式空串或非法值启动前 fail closed，不得回退成端口 0。
 5. 启动或重启：`DESK_PORT=3000 <node.exe> --env-file-if-exists=../../.env src/server.mjs`（在 `apps/desk` 下），只绑定 `127.0.0.1`。应用不读取 `.env` 文件，只读进程环境变量。
-6. 核对接口（见 `apps/desk/AGENTS.md`"检查清单"），再核对页面数值。截图在该面板上可能被缩放，不能只凭截图判断布局。改动界面时，在 1024×768（桌面）与 390×844（手机）下核对：外壳为 16:9 舞台、自选列可见（手机为顶部卡片条）、右侧面板超出时列内滚动。
+6. 核对接口（见 `apps/desk/AGENTS.md`"检查清单"），再核对页面数值。改动连接或订阅时，另外核对：`/api/status` 的 `futu.state` 与 `reason` 在 OpenD 未启动时为 `reconnecting` 且次数递增；未配置 Alpaca 时 `/api/bars?tf=1m` 为 200 且 `localOnly=true`，`tf=5m` 为 503；`/api/status` 不包含 WebSocket 密钥。截图在该面板上可能被缩放，不能只凭截图判断布局。改动界面时，在 1024×768（桌面）与 390×844（手机）下核对：外壳为 16:9 舞台、自选列可见（手机为顶部卡片条）、右侧面板超出时列内滚动。
 7. 汇报时区分"已验证的真实数据"与"缺口"，缺失数值显示 `—`，不得用模拟值填充。
 
 ## 禁止

@@ -21,6 +21,9 @@ const IDLE_MS = 3 * 60_000;
 // Futu refuses to cancel a subscription within a minute of making it.
 const MIN_SUB_MS = 60_000;
 export const IDLE_CHECK_MS = 60_000;
+// Re-dial backoff after a failed connection: 2 s, 4 s, 8 s, 16 s, then 30 s.
+const RETRY_BASE_MS = 2_000;
+const RETRY_MAX_MS = 30_000;
 const TRADE_BUFFER = 300;
 const HISTORY_GAP_MS = 600;
 
@@ -71,6 +74,9 @@ export class FutuFeed extends EventEmitter {
     this.log = log;
     this.connected = false;
     this.loginError = null;
+    // Transport state for the page: idle, connecting, connected, reconnecting or login_rejected.
+    // The SDK reconnects by itself after a dropped socket; `attempts` counts those failed reconnects.
+    this.link = { state: 'idle', attempts: 0, lastError: null, since: Date.now() };
     this.quota = null;
     this.subs = new Map();
     // symbol -> last ms at which a watchlist or stream request asked for it.
@@ -89,16 +95,60 @@ export class FutuFeed extends EventEmitter {
   }
 
   start() {
+    this.stopped = false;
+    this.#setLink('connecting', null, 0);
+    this.#connect();
+  }
+
+  // The futu-api socket does not always close after a refused connection, so the SDK's own reconnect
+  // never runs. A watchdog therefore re-dials until login succeeds, with a capped backoff.
+  #connect() {
+    const endpoint = `${this.cfg.host}:${this.cfg.port}`;
     this.sdk.start(this.cfg.host, this.cfg.port, this.cfg.ssl, this.cfg.key);
+    const socket = this.sdk.websock;
+    if (socket) {
+      socket.onerror = () => {
+        if (!this.connected) this.#setLink(this.link.state, `OpenD 无响应或拒绝连接（${endpoint}）`);
+      };
+      socket.onclose = () => {
+        if (this.link.state === 'login_rejected' || this.stopped) return;
+        this.connected = false;
+        this.#setLink('reconnecting', this.link.lastError ?? `OpenD 连接已断开（${endpoint}）`, this.link.attempts);
+        // A drop after login also needs the watchdog: the SDK's own reconnect is not guaranteed to succeed.
+        this.#scheduleRetry();
+      };
+    }
+    this.#scheduleRetry();
+  }
+
+  #scheduleRetry() {
+    clearTimeout(this.retryTimer);
+    const delay = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.min(this.link.attempts, 4));
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (this.connected || this.stopped || this.link.state === 'login_rejected') return;
+      const endpoint = `${this.cfg.host}:${this.cfg.port}`;
+      this.#setLink('reconnecting', this.link.lastError ?? `OpenD 未响应（${endpoint}）`, this.link.attempts + 1);
+      this.#connect();
+    }, delay);
+    this.retryTimer.unref?.();
   }
 
   stop() {
+    this.stopped = true;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     this.sdk.stop();
   }
 
   status() {
     return {
       connected: this.connected,
+      state: this.link.state,
+      reason: this.link.lastError,
+      attempts: this.link.attempts,
+      since: new Date(this.link.since).toISOString(),
+      endpoint: `${this.cfg.host}:${this.cfg.port}`,
       error: this.loginError,
       quota: this.quota,
       pinned: PINNED,
@@ -107,10 +157,21 @@ export class FutuFeed extends EventEmitter {
     };
   }
 
+  #setLink(state, lastError, attempts = this.link.attempts) {
+    const changed = state !== this.link.state || lastError !== this.link.lastError || attempts !== this.link.attempts;
+    this.link = { state, attempts, lastError, since: changed ? Date.now() : this.link.since };
+    if (changed) this.emit('status', this.status());
+  }
+
   #onLogin(ok) {
     this.connected = Boolean(ok);
     this.loginError = ok ? null : 'futu_login_rejected';
-    this.emit('status', this.status());
+    clearTimeout(this.retryTimer);
+    if (ok) {
+      this.#setLink('connected', null, 0);
+    } else {
+      this.#setLink('login_rejected', 'OpenD 登录被拒绝，请检查 OpenD 的 WebSocket 密钥与端口');
+    }
     if (ok) {
       this.subs.clear();
       this.watch([]).catch((err) => this.log('pinned subscription failed', err.message));

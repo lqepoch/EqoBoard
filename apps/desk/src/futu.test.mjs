@@ -116,3 +116,90 @@ test('a released symbol subscribes again when it is asked for', async () => {
   assert.ok(subscribed(feed).includes('AAPL'));
   assert.equal(calls.at(-1).isSubOrUnSub, true);
 });
+
+function linkFeed() {
+  const sdk = {
+    websock: {},
+    startCalls: 0,
+    start() {
+      this.startCalls += 1;
+    },
+    stop() {},
+    Sub: async () => ({ retType: 0 }),
+    GetSubInfo: async () => ({ retType: 0, s2c: { totalUsedQuota: 0, remainQuota: 100 } }),
+  };
+  const feed = new FutuFeed({ host: '127.0.0.1', port: 12345, ssl: false, key: '', log: () => {}, sdk });
+  return { feed, sdk };
+}
+
+test('connection state moves from connecting to reconnecting to connected, with the reason', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { feed, sdk } = linkFeed();
+  feed.start();
+  assert.equal(feed.status().state, 'connecting');
+  sdk.websock.onerror();
+  sdk.websock.onclose();
+  let status = feed.status();
+  assert.equal(status.state, 'reconnecting');
+  assert.equal(status.attempts, 0);
+  assert.match(status.reason, /127\.0\.0\.1:12345/);
+  t.mock.timers.tick(2_000);
+  assert.equal(sdk.startCalls, 2, 'the watchdog re-dials after the first backoff');
+  assert.equal(feed.status().attempts, 1);
+  sdk.onlogin(true);
+  status = feed.status();
+  assert.equal(status.state, 'connected');
+  assert.equal(status.attempts, 0);
+  assert.equal(status.reason, null);
+  t.mock.timers.tick(60_000);
+  assert.equal(sdk.startCalls, 2, 'no re-dial once connected');
+});
+
+test('the re-dial backoff doubles and is capped', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { feed, sdk } = linkFeed();
+  feed.start();
+  const waits = [];
+  for (let i = 0; i < 6; i += 1) {
+    const before = sdk.startCalls;
+    let elapsed = 0;
+    while (sdk.startCalls === before && elapsed < 60_000) {
+      t.mock.timers.tick(1_000);
+      elapsed += 1_000;
+    }
+    waits.push(elapsed);
+  }
+  assert.deepEqual(waits, [2_000, 4_000, 8_000, 16_000, 30_000, 30_000]);
+  feed.stop();
+});
+
+test('a drop after login is re-dialled by the watchdog as well', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { feed, sdk } = linkFeed();
+  feed.start();
+  sdk.onlogin(true);
+  sdk.websock.onclose();
+  assert.equal(feed.status().state, 'reconnecting');
+  assert.equal(feed.status().connected, false);
+  t.mock.timers.tick(2_000);
+  assert.equal(sdk.startCalls, 2);
+  feed.stop();
+});
+
+test('a rejected login is not overwritten by the close that follows it', () => {
+  const { feed, sdk } = linkFeed();
+  feed.start();
+  sdk.onlogin(false, 'bad key');
+  sdk.websock.onclose();
+  const status = feed.status();
+  assert.equal(status.state, 'login_rejected');
+  assert.match(status.reason, /密钥/);
+  assert.equal(status.connected, false);
+});
+
+test('status exposes the endpoint but never the websocket key', () => {
+  const sdk = { websock: {}, start() {}, Sub: async () => ({}), GetSubInfo: async () => ({}) };
+  const feed = new FutuFeed({ host: '127.0.0.1', port: 12345, ssl: false, key: 'secret-key', log: () => {}, sdk });
+  assert.equal(JSON.stringify(feed.status()).includes('secret-key'), false);
+  assert.equal(feed.status().endpoint, '127.0.0.1:12345');
+});
