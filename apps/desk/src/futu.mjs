@@ -15,6 +15,12 @@ export const PINNED = Object.freeze(['QQQ', 'SPY']);
 const SUB_TYPES = Object.freeze([1, 2, 4]);
 const EXTRA_CAPACITY = 30;
 const QUOTA = 100;
+// A non-pinned symbol is released once nobody has asked for it for IDLE_MS: no open trade stream and no
+// watchlist poll (the page polls every 3 s, so a symbol still on the watchlist stays alive).
+const IDLE_MS = 3 * 60_000;
+// Futu refuses to cancel a subscription within a minute of making it.
+const MIN_SUB_MS = 60_000;
+export const IDLE_CHECK_MS = 60_000;
 const TRADE_BUFFER = 300;
 const HISTORY_GAP_MS = 600;
 
@@ -59,7 +65,7 @@ function basicRow(row) {
 }
 
 export class FutuFeed extends EventEmitter {
-  constructor({ host, port, ssl, key, log }) {
+  constructor({ host, port, ssl, key, log, sdk }) {
     super();
     this.cfg = { host, port, ssl, key };
     this.log = log;
@@ -67,13 +73,17 @@ export class FutuFeed extends EventEmitter {
     this.loginError = null;
     this.quota = null;
     this.subs = new Map();
+    // symbol -> last ms at which a watchlist or stream request asked for it.
+    this.lastAsked = new Map();
+    // symbol -> number of open trade streams holding it.
+    this.holds = new Map();
     this.trades = new Map();
     this.depth = new Map();
     this.quotes = new Map();
     this.seq = 0;
     this.priceFilter = new PriceFilter();
     this.lastHistoryAt = 0;
-    this.sdk = new SDK();
+    this.sdk = sdk ?? new SDK();
     this.sdk.onlogin = (ok) => this.#onLogin(ok);
     this.sdk.onPush = (cmd, res) => this.#onPush(cmd, res);
   }
@@ -189,7 +199,7 @@ export class FutuFeed extends EventEmitter {
         securityList: [{ market: MARKET_US, code: symbol }],
         subTypeList: SUB_TYPES,
         isSubOrUnSub: on,
-        isRegOrUnRegPush: true,
+        isRegOrUnRegPush: on,
         isFirstPush: false,
       },
     });
@@ -199,6 +209,8 @@ export class FutuFeed extends EventEmitter {
   /** Ensures QQQ and SPY plus the requested symbols are subscribed. */
   async watch(symbols) {
     if (!this.connected) throw new Error('futu_disconnected');
+    const now = Date.now();
+    for (const symbol of symbols) this.lastAsked.set(symbol, now);
     const extraCurrent = [...this.subs.keys()].filter((s) => !PINNED.includes(s)).length;
     const extraAdded = symbols.filter((s) => !PINNED.includes(s) && !this.subs.has(s)).length;
     if (extraCurrent + extraAdded > EXTRA_CAPACITY) throw new Error('stock_buffer_full');
@@ -213,6 +225,67 @@ export class FutuFeed extends EventEmitter {
       this.subs.set(symbol, { since: Date.now() });
     }
     return [...this.subs.keys()];
+  }
+
+  /**
+   * Marks non-pinned symbols as in use by one open trade stream. The returned function releases the hold.
+   * Held symbols are never released by releaseIdle().
+   */
+  hold(symbols) {
+    const names = symbols.filter((s) => !PINNED.includes(s));
+    for (const s of names) this.holds.set(s, (this.holds.get(s) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      for (const s of names) {
+        const left = (this.holds.get(s) ?? 1) - 1;
+        if (left > 0) this.holds.set(s, left);
+        else this.holds.delete(s);
+      }
+    };
+  }
+
+  /**
+   * Cancels subscriptions that nobody has asked for lately. Pinned symbols, held symbols, symbols asked
+   * for within IDLE_MS, and symbols subscribed less than MIN_SUB_MS ago are kept.
+   * Returns the symbols that were released.
+   */
+  async releaseIdle(now = Date.now()) {
+    if (!this.connected) return [];
+    const released = [];
+    for (const [symbol, sub] of this.subs) {
+      if (PINNED.includes(symbol) || this.holds.has(symbol)) continue;
+      const askedAt = this.lastAsked.get(symbol) ?? 0;
+      if (now - askedAt < IDLE_MS) continue;
+      if (now - sub.since < MIN_SUB_MS) continue;
+      try {
+        await this.#sub(symbol, false);
+      } catch (err) {
+        this.log('unsubscribe failed', symbol, err.message);
+        continue;
+      }
+      // A stream or watchlist request that arrived while the cancel was in flight saw the symbol as
+      // subscribed and skipped it. Restore the subscription rather than leave the request without data.
+      if (this.holds.has(symbol) || (this.lastAsked.get(symbol) ?? 0) !== askedAt) {
+        try {
+          await this.#sub(symbol, true);
+          this.subs.set(symbol, { since: Date.now() });
+        } catch (err) {
+          this.subs.delete(symbol);
+          this.log('resubscribe failed', symbol, err.message);
+        }
+        continue;
+      }
+      this.subs.delete(symbol);
+      this.lastAsked.delete(symbol);
+      this.trades.delete(symbol);
+      this.depth.delete(symbol);
+      this.quotes.delete(symbol);
+      this.priceFilter.forget(symbol);
+      released.push(symbol);
+    }
+    return released;
   }
 
   async snapshot(symbols) {

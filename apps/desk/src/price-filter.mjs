@@ -10,6 +10,11 @@ const CONFIRM = 5;
 export class PriceFilter {
   #state = new Map();
 
+  /** Drops the state of a symbol whose subscription was released. */
+  forget(symbol) {
+    this.#state.delete(symbol);
+  }
+
   /** True when this trade may move the price of its symbol. Must be called in trade order. */
   judge(symbol, trade) {
     if (trade.tickType !== 'Automatch') return false;

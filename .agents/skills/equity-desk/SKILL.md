@@ -29,4 +29,5 @@ description: 维护 apps/desk 本地股票与期权行情台：富途 OpenD 报�
 - 把富途的成交方向字段翻译成"主动买/卖"。
 - 把 IV、希腊字母等 Alpaca 不提供的字段显示为 0 或猜测值。
 - 把 5 秒、10 秒直接从逐笔聚合；它们必须由 1 秒线推导。
+- 让非置顶标的的富途订阅永久占用名额；必须经 `releaseIdle` 的生命周期（自选轮询或逐笔连接保活，空闲 3 分钟后取消）。
 - 让非连续竞价成交（零股 OddLot、均价 AvgPrice、附条件 Contingent 等）移动 K 线价格；只有通过跳价守护（`src/price-filter.mjs`）的 Automatch 成交移动价格。
