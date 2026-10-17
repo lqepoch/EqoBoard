@@ -28,4 +28,6 @@ jobs:
           node --check packages/pine-script-plugin/src/contract.mjs
           node --check packages/pine-script-plugin/src/runtime.mjs
           node --check packages/pine-script-plugin/src/pinets-adapter.mjs
+          node --check packages/pine-script-plugin/src/isolated-worker.mjs
+          node --check packages/pine-script-plugin/src/worker-child.mjs
           node --test packages/pine-script-plugin/tests/*.test.mjs
