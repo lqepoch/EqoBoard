@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.mjs';
-import { FutuFeed, PINNED } from './futu.mjs';
+import { FutuFeed, PINNED, IDLE_CHECK_MS } from './futu.mjs';
 import { AlpacaOptions } from './alpaca.mjs';
 import { quoteHeader } from './yahoo.mjs';
 import { loadBars, TIMEFRAMES } from './bars.mjs';
@@ -49,6 +49,15 @@ const ALLOWED_HOSTS = new Set([`127.0.0.1:${cfg.port}`, `localhost:${cfg.port}`]
 futu.on('status', (s) => log('futu', s.connected ? 'connected' : `not connected (${s.error ?? 'pending'})`));
 futu.on('trade', (t) => cache.add(t.symbol, t));
 futu.start();
+// Releases subscriptions that nobody has asked for lately (see FutuFeed.releaseIdle).
+setInterval(() => {
+  futu.releaseIdle().then(
+    (symbols) => {
+      if (symbols.length) log('released idle subscriptions', symbols.join(','));
+    },
+    (err) => log('idle release failed', err.message),
+  );
+}, IDLE_CHECK_MS).unref();
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {
   const payload = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -133,6 +142,8 @@ function streamRoute(req, res, url) {
     'X-Accel-Buffering': 'no',
   });
   const wanted = new Set(list);
+  // An open stream keeps its symbols subscribed until the client disconnects.
+  const release = futu.hold(list);
   const write = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   const onTrade = (t) => wanted.has(t.symbol) && write('trade', t);
   const onDepth = (d) => wanted.has(d.symbol) && write('depth', d);
@@ -161,6 +172,7 @@ function streamRoute(req, res, url) {
     futu.off('depth', onDepth);
     futu.off('quote', onQuote);
     futu.off('status', onStatus);
+    release();
   });
 }
 
