@@ -46,3 +46,23 @@ Community Script reuse requires source/author/URL/license/consent/SHA provenance
 Rollback is removal of script feature from the native chart and termination of sandbox workers, retaining encrypted tenant scripts and audit per retention policy. Existing chart data and legacy deployment must remain operable. Paper/Live remains disabled.
 
 The initial adapter recognizes PineTS simple line and zero-baseline histogram plot metadata, preserving overlay/indicator pane identity. Other styles (including shape, linebr, columns, drawing objects), offset, nonzero histogram base and show_last are rejected with UNSUPPORTED_PLOT_STYLE rather than silently converted into a line. This does not supply renderer integration or official visual parity.
+
+
+## Isolated worker harness (#74, phase B slice)
+
+Implemented in `packages/pine-script-plugin/src/isolated-worker.mjs` and `src/worker-child.mjs`:
+
+- The worker is a separate Node process started with `--permission` (filesystem reads limited to the package and the pinned engine file, no filesystem writes, no child processes) and an empty environment (`PATH` empty, `NODE_ENV=production`). It has no broker, provider or service credentials.
+- The engine is an explicitly configured module pinned by SHA-256. A digest mismatch stops before evaluation. No engine is configured by default, so the worker fails closed with `ENGINE_UNAVAILABLE`.
+- Admission requires an explicit attestation (`DEV_HARNESS_ATTESTATION` in this release). Without it the worker refuses to start with `SANDBOX_NOT_ATTESTED`. The development value exists only for local tests.
+- Per-tenant concurrency quota (`QUOTA_EXCEEDED`). Request and response sizes are bounded.
+- Timeout, output overrun and process death kill the whole process group with SIGKILL and reap it. The reported pid is no longer alive afterwards.
+
+Tested with fixture engines (not Pine engines): timeout kill, heap exhaustion, output overrun, denied child process creation, denied writes outside the worker, unbounded recursion, missing engine identifier, digest mismatch, quota, and environment scrubbing.
+
+Not done, and required before any production enablement:
+
+- Node's permission model does not restrict the network. Egress must be blocked by an OS-level sandbox (for example a container with no network and a read-only root filesystem, or macOS sandbox profiles), then attested through the production attestation path. The harness does not prove that by itself.
+- No real Pine engine is vendored or executed. PineTS (AGPL-3.0 or commercial) and PyneCore remain pending legal approval.
+- Container and seccomp hardening, cgroup CPU and memory limits, restart and replay tests, and the tenant-facing authorization path are not implemented here.
+- Native chart integration (#75) and the TradingView compatibility matrix (#76) are not started.

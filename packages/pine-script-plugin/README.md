@@ -20,3 +20,8 @@ IMPORTANT: sandbox assertions and tests are not OS isolation. No app may execute
 TradingView Community Script publication permissions, author attribution and any MPL-2.0 code terms require validation before ingestion. Don't scrape protected or invite-only scripts.
 
 The current plot normalizer supports only simple lines and zero-baseline histograms, and passes through price/indicator pane intent. Other plot styles and drawing objects fail explicitly. This foundation does not yet render either style into the main EqoBoard chart.
+
+
+## Isolated worker harness (#74 slice)
+
+`runIsolatedPineIndicator` runs one read-only indicator in a separate `--permission` process with an empty environment, a pinned engine digest, bounded request and response sizes, a per-tenant concurrency quota, and hard timeout kill. It fails closed without an attested sandbox or a pinned engine. Node's permission model does not block network egress; production requires an attested OS sandbox. See docs/PINE_SCRIPT_PLUGIN.md.
