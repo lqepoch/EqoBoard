@@ -99,6 +99,25 @@ export function normalizePinePlots(raw, bars) {
       !Array.isArray(descriptor.data) || descriptor.data.length > PINE_LIMITS.pointsPerPlot) {
       fail("INVALID_OUTPUT", "The engine returned an invalid plot descriptor.");
     }
+    const options = descriptor.options;
+    if (options !== undefined && !record(options)) {
+      fail("INVALID_OUTPUT", "Pine plot metadata must be a plain object.");
+    }
+    const style = options?.style ?? "style_line";
+    if (style !== "style_line" && style !== "style_histogram") {
+      fail("UNSUPPORTED_PLOT_STYLE", "Plot style or drawing output has no verified renderer.");
+    }
+    if ((options?.offset !== undefined && options.offset !== 0) ||
+        (options?.histbase !== undefined && options.histbase !== 0) ||
+        (options?.show_last !== undefined && options.show_last !== null)) {
+      fail("UNSUPPORTED_PLOT_STYLE", "Plot offset, nonzero baseline or show_last is not rendered.");
+    }
+    if (options?.overlay !== undefined && typeof options.overlay !== "boolean") {
+      fail("INVALID_OUTPUT", "Plot overlay must be boolean.");
+    }
+    const kind = style === "style_histogram" ? "histogram" : "line";
+    const pane = options?.overlay === true ? "price" :
+      options?.overlay === false ? "indicator" : "unknown";
     let prior = -1;
     const points = [];
     for (const point of descriptor.data) {
@@ -115,7 +134,7 @@ export function normalizePinePlots(raw, bars) {
       }
       points.push(Object.freeze({ time: time / 1_000, value: point.value }));
     }
-    normalized.push(Object.freeze({ id: title, title, kind: "line", points: Object.freeze(points) }));
+    normalized.push(Object.freeze({ id: title, title, kind, pane, points: Object.freeze(points) }));
   }
   return Object.freeze(normalized);
 }
