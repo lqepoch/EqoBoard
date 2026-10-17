@@ -308,3 +308,14 @@ test('history request interval is bounded and unsupported timeframes never reach
   await assert.rejects(f.history.bars({ ...baseRange, timeframe: '3Min' }), /UNSUPPORTED_PROVIDER_CAPABILITY/);
   assert.equal(f.calls.length, count);
 });
+
+test('releasing a symbol also unregisters its push; subscribing registers it', async () => {
+  const f = fixture(); const flags = [];
+  const subscribe = f.sdk.Sub;
+  f.sdk.Sub = async req => { flags.push([req.c2s.isSubOrUnSub, req.c2s.isRegOrUnRegPush]); return subscribe({ c2s: req.c2s }); };
+  let now = 0; const p = new StockSubscriptions(f.sdk, { capacity: 1, now: () => now });
+  await p.update(['AAPL']); now = 60_000; await p.update(['MSFT']);
+  const releases = flags.filter(([sub]) => sub === false);
+  assert.deepEqual(releases, [[false, false]]);
+  assert.ok(flags.filter(([sub]) => sub === true).every(([, push]) => push === true));
+});

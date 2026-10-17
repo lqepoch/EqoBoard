@@ -38,7 +38,7 @@ export class StockSubscriptions {
         if (!candidate) throw new Error('quota_waiting_for_release');
         const [old] = candidate;
         this.check(await this.sdk.Sub({ c2s: { securityList: [{ market: 11, code: old }],
-          subTypeList: STOCK_TYPES, isSubOrUnSub: false, isRegOrUnRegPush: true } }));
+          subTypeList: STOCK_TYPES, isSubOrUnSub: false, isRegOrUnRegPush: false } }));
         this.entries.delete(old);
         info = await this.sdk.GetSubInfo({ c2s: { isReqAllConn: true } });
         this.check(info);
