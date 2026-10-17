@@ -6,7 +6,7 @@ export type PineSourceEvidence = Readonly<{
   feed?: string; delay?: string;
 }>;
 export type NormalizedPinePlot = Readonly<{
-  id: string; title: string; kind: "line"; points: readonly Readonly<{time: number;value: number}>[];
+  id: string; title: string; kind: "line" | "histogram"; pane: "price" | "indicator" | "unknown"; points: readonly Readonly<{time: number;value: number}>[];
 }>;
 export declare const PINE_LIMITS: Readonly<{sourceBytes:number;bars:number;plots:number;pointsPerPlot:number;titleLength:number}>;
 export declare class PinePluginError extends Error { readonly code: string; constructor(code:string,message:string); }
