@@ -84,3 +84,27 @@ test("invalid output rejects whole result",async()=>{
     engine:{id:"bad",async evaluate(){return {plots:{X:{data:[{time:123,value:5}]}}};}},
   }),{code:"INVALID_OUTPUT"});
 });
+test("PineTS supported histogram and pane identity are preserved",()=>{
+  const b=normalizePineBars(bars);
+  const output=normalizePinePlots({
+    histogram:{options:{style:"style_histogram",overlay:false,histbase:0},data:[
+      {time:b[0].openTime,value:3},{time:b[1].openTime,value:-2},
+    ]},
+    close:{options:{style:"style_line",overlay:true},data:[{time:b[2].openTime,value:110}]},
+  },b);
+  assert.equal(output[0].kind,"histogram");
+  assert.equal(output[0].pane,"indicator");
+  assert.equal(output[1].kind,"line");
+  assert.equal(output[1].pane,"price");
+});
+test("unsupported PineTS drawing/styles and offsets are refused, never drawn as lines",()=>{
+  const b=normalizePineBars(bars);
+  for(const options of [
+    {style:"shape"},{style:"drawing_line"},
+    {style:"style_linebr"},{style:"style_columns"},
+    {style:"style_line",offset:1},{style:"style_histogram",histbase:50},
+    {style:"style_line",show_last:3},
+  ]) {
+    fails(()=>normalizePinePlots({plot:{options,data:[{time:b[0].openTime,value:1}]}},b),"UNSUPPORTED_PLOT_STYLE");
+  }
+});
