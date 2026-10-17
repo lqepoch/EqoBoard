@@ -36,3 +36,11 @@
 - 本机 Core Bars 需显式 `EQO_LOCAL_CORE_BARS=true`、精确 `http://127.0.0.1:8088` 与独立 MDP terminal signer；Web 不持 MDP research verifier 或 Provider key。MDP 只读服务持自身 verifier pair；`EQO_LOCAL_ALPACA_HISTORY=true` 才把已配置的 Alpaca key/secret交给 MDP 只读历史客户端，不启用 Paper/Live。可信日历必须成对固定文件和 SHA，不能部署 CI 合成日历；Windows 不启用 Linux-only Parquet cache。
 - `.agents/skills/native-terminal/SKILL.md` 适用于新终端；旧 OpenTerminal/OpenBB Skill仅用于历史参考或明确的可选旧模块维护，不能覆盖本迁移目标与旧源码保护。
 - 用户明确要求本机启动时，可按 `docs/NATIVE_LOCAL_START.md` 运行 Actions 构建并校验的 Windows standalone/Gateway 产物；本机可以直接 build、运行 Next dev、使用 Docker 并跑测试（用户要求）；也可继续只运行 Actions 产物。凭据仅存 ignored `.env`，按服务白名单分流；本机免登录必须严格 loopback，生产默认仍 OIDC。
+
+
+## Pine Script extension (2026-10-17)
+
+- The independent packages/pine-script-plugin is a read-only script/plots protocol foundation. See issue #72, docs/PINE_SCRIPT_PLUGIN.md and .agents/skills/pine-script-engine/SKILL.md.
+- PineTS is AGPL-3.0-only OR separately commercially licensed. Legal approval, exact dependency pin and reviewed isolated runtime are required prior to installing/bundling it.
+- User-provided script code must not execute inside Native Next, browser host, Gateway, MDP, Quant or Engine trusted runtime. Dedicated no-egress worker and tenant security are prerequisites; Paper and Live remain disabled.
+- Preserve existing Lightweight Charts and single authoritative MDP chart routing. This package has no market provider or brokerage permissions and must not change old OpenTerminal/Desk.
