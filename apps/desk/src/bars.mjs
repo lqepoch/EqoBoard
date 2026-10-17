@@ -26,15 +26,19 @@ export function aggregate(bars, secs) {
   return out;
 }
 
-/** Minute history: Alpaca for everything older than the local window, local Futu bars for the window. */
+/**
+ * Minute history: Alpaca for everything older than the local window, local Futu bars for the window.
+ * Without Alpaca credentials only the local window is available; the caller labels that case.
+ */
 async function minuteBars(ctx, symbol, limit, nowMs) {
+  const local = ctx.cache.bars(symbol, 60, 60);
+  if (!ctx.alpaca.configured) return { bars: local.slice(-limit), localOnly: true };
   const cutoff = Math.floor((nowMs - LOCAL_MINUTE_MS) / 60_000) * 60;
   const history = await ctx.alpaca.history(symbol, '1m');
-  const local = ctx.cache.bars(symbol, 60, 60);
   const localStart = local.length ? local[0].t : Infinity;
   const older = history.filter((b) => b.t < cutoff);
   const gap = history.filter((b) => b.t >= cutoff && b.t < localStart);
-  return [...older, ...gap, ...local].slice(-limit);
+  return { bars: [...older, ...gap, ...local].slice(-limit), localOnly: false };
 }
 
 /**
@@ -50,10 +54,14 @@ export async function loadBars(ctx, symbol, tf, limit, nowMs = Date.now()) {
     };
   }
   if (tf === '1m') {
+    const { bars, localOnly } = await minuteBars(ctx, symbol, limit, nowMs);
     return {
       tf,
-      source: 'Alpaca 历史 · 最近 20 分钟为富途逐笔本地聚合',
-      bars: await minuteBars(ctx, symbol, limit, nowMs),
+      localOnly,
+      source: localOnly
+        ? '富途逐笔本地聚合 · 仅最近 20 分钟（未配置 Alpaca 历史）'
+        : 'Alpaca 历史 · 最近 20 分钟为富途逐笔本地聚合',
+      bars,
     };
   }
   if (DERIVED[tf]) {

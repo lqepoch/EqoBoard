@@ -98,6 +98,11 @@
           <button class="fbtn" type="button" data-side="call">看涨</button>
           <button class="fbtn" type="button" data-side="put">看跌</button>
         </div>
+        <div class="seg" id="optMoney" role="group" aria-label="价内价外">
+          <button class="fbtn on" type="button" data-money="all">全部价位</button>
+          <button class="fbtn" type="button" data-money="itm">价内</button>
+          <button class="fbtn" type="button" data-money="otm">价外</button>
+        </div>
         <span class="opt-note" id="optNote"></span>
       </div>
       <div class="opt-wrap">
@@ -114,6 +119,7 @@
       <div class="side-name" id="sideName">—</div>
       <div class="side-px" id="sidePx">—</div>
       <div class="side-status" id="sideStatus">—</div>
+      <div class="side-sub" id="sideSub" aria-live="polite">订阅：等待富途确认</div>
     </div>
     <div class="stats-head">摘要 · yfinance</div>
     <div class="stats">

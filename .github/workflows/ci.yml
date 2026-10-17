@@ -92,6 +92,7 @@ jobs:
         run: |
           node --check apps/desk/src/config.mjs
           node --test apps/desk/src/config.test.mjs
+          node --test apps/desk/src/bars.test.mjs
           npm ci --prefix apps/desk --ignore-scripts --no-audit --no-fund
           node --test apps/desk/src/futu.test.mjs
       - name: Test client cancellation during BFF authorization

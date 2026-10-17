@@ -142,6 +142,11 @@
     optSide: "all",
     chain: null,
     chainFocus: null,
+    // Moneyness filter for the option chain: all, itm (in the money) or otm (out of the money).
+    optMoney: "all",
+    // Subscription confirmation for the current symbol, from the server's 'subscribed' event.
+    subAcked: null,
+    subError: null,
   };
 
   // ---------- chart ----------
@@ -394,7 +399,7 @@
       }
       setBars(state.bars);
       renderFoot();
-      notice(state.bars.length ? "" : seconds ? "本地还没有该窗口的逐笔，从订阅开始累积。" : "没有返回数据。");
+      notice(state.bars.length ? "" : seconds ? "本地还没有该窗口的逐笔，从订阅开始累积。" : body.localOnly ? "最近 20 分钟还没有富途逐笔成交。" : "没有返回数据。");
     } catch (e) {
       notice(errText(e));
     }
@@ -436,8 +441,8 @@
       renderHeader();
       renderSide();
       $("watchCount").textContent = `${state.watch.length} 只 · ${etClock(Date.now())} ET 更新`;
-    } catch (e) {
-      $("stFutu").textContent = `富途：${errText(e)}`;
+    } catch {
+      // The connection line is owned by renderLink (pollStatus and the live status event); a failed quote poll does not override it.
     }
   }
 
@@ -622,8 +627,21 @@
       renderHeader();
       renderSide();
     });
+    es.addEventListener("status", (ev) => {
+      renderLink(data(ev));
+    });
+    es.addEventListener("subscribed", (ev) => {
+      if (state.current !== sym) return;
+      state.subAcked = new Set(data(ev).subscribed ?? []);
+      state.subError = null;
+      renderSub();
+    });
     es.addEventListener("fault", (ev) => {
-      if (state.current === sym) notice(ERR_TEXT[data(ev).code] ?? "订阅失败");
+      if (state.current !== sym) return;
+      const text = ERR_TEXT[data(ev).code] ?? "订阅失败";
+      state.subError = text;
+      renderSub();
+      notice(text);
     });
   }
 
@@ -732,6 +750,14 @@
       byStrike.set(r.strike, entry);
     }
     const strikes = [...byStrike.values()].sort((a, b) => a.strike - b.strike);
+    // Calls are in the money below the spot and puts above it; the ATM strike is in neither group.
+    const moneyKeep = (s) => {
+      if (state.optMoney === "all" || side === "all" || !isNum(spot)) return true;
+      const itm = side === "call" ? s.strike < spot : s.strike > spot;
+      const otm = side === "call" ? s.strike > spot : s.strike < spot;
+      return state.optMoney === "itm" ? itm : otm;
+    };
+    const shown = strikes.filter(moneyKeep);
     const sum = (type, key) => rows.filter((r) => r.type === type).reduce((s, r) => s + (isNum(r[key]) ? r[key] : 0), 0);
     const totals = {
       callVol: sum("call", "volume"),
@@ -769,15 +795,17 @@
     $("optHead").replaceChildren(...headRows(side, totals, atmIv));
     const trs = [];
     let spotShown = false;
-    for (const s of strikes) {
+    for (const s of shown) {
       if (!spotShown && isNum(spot) && s.strike > spot) {
         trs.push(spotRow(spot, prev, width));
         spotShown = true;
       }
       trs.push(strikeRow(s, side, spot, atmStrike));
     }
-    if (!spotShown && isNum(spot) && strikes.length) trs.push(spotRow(spot, prev, width));
-    if (!strikes.length) trs.push(h("tr", {}, [h("td", { class: "empty", colspan: width }, "暂无合约")]));
+    if (!spotShown && isNum(spot) && shown.length) trs.push(spotRow(spot, prev, width));
+    if (!shown.length) {
+      trs.push(h("tr", {}, [h("td", { class: "empty", colspan: width }, strikes.length ? "当前价位筛选下没有合约" : "暂无合约")]));
+    }
     $("optBody").replaceChildren(...trs);
     // Like the Futu chain, open centred on the underlying; re-centre when the symbol or expiry changes.
     const focusKey = `${state.current}|${state.expiry}`;
@@ -786,6 +814,26 @@
     if (spotEl && state.chainFocus !== focusKey && !$("optionsView").hidden) {
       state.chainFocus = focusKey;
       wrap.scrollTop += spotEl.getBoundingClientRect().top - wrap.getBoundingClientRect().top - wrap.clientHeight / 2;
+    }
+  }
+
+  // Subscription state for the current symbol: the server confirms it once Futu accepts the subscription.
+  function renderSub() {
+    const sym = state.current;
+    let text;
+    if (state.subError) text = `订阅未生效：${state.subError}`;
+    else if (!state.subAcked) text = "订阅：等待富途确认";
+    else if (state.subAcked.has(sym)) text = `订阅：已确认（富途共 ${state.subAcked.size} 个标的）`;
+    else text = "订阅：未确认，等待富途";
+    setText("sideSub", text);
+  }
+
+  // Moneyness is defined per side, so it is only usable when the chain shows calls or puts alone.
+  function syncMoneyness() {
+    const usable = state.optSide !== "all";
+    for (const b of document.querySelectorAll("#optMoney .fbtn")) {
+      b.disabled = !usable;
+      b.title = usable ? "" : "选择看涨或看跌后可用";
     }
   }
 
@@ -806,6 +854,9 @@
     state.source = null;
     state.asOfSeq = 0;
     state.chain = null;
+    state.subAcked = null;
+    state.subError = null;
+    renderSub();
     renderWatch();
     renderHeader();
     renderSide();
@@ -899,19 +950,45 @@
     const btn = event.target.closest(".fbtn");
     if (!btn) return;
     state.optSide = btn.dataset.side;
-    for (const b of document.querySelectorAll(".fbtn")) b.classList.toggle("on", b === btn);
+    for (const b of document.querySelectorAll("#optSide .fbtn")) b.classList.toggle("on", b === btn);
+    // Moneyness needs a single side; with both sides shown the filter resets so the buttons match the rows.
+    if (state.optSide === "all") {
+      state.optMoney = "all";
+      for (const b of document.querySelectorAll("#optMoney .fbtn")) b.classList.toggle("on", b.dataset.money === "all");
+    }
+    syncMoneyness();
+    if (state.chain) renderChain(state.chain);
+  });
+  $("optMoney").addEventListener("click", (event) => {
+    const btn = event.target.closest(".fbtn");
+    if (!btn || btn.disabled) return;
+    state.optMoney = btn.dataset.money;
+    for (const b of document.querySelectorAll("#optMoney .fbtn")) b.classList.toggle("on", b === btn);
     if (state.chain) renderChain(state.chain);
   });
 
   // ---------- timers ----------
+  // The SDK reports connection changes on the live stream; this poll covers the page before any stream opens.
+  const LINK_TEXT = { idle: "未启动", connecting: "连接中", connected: "已连接", reconnecting: "重连中", login_rejected: "登录被拒绝" };
+  function renderLink(f) {
+    const state = f.connected ? "connected" : (f.state ?? "idle");
+    const pill = $("futuPill");
+    if (f.connected) {
+      pill.textContent = `富途 · 已连接${f.quota ? ` · 剩余额度 ${f.quota.remain}` : ""}`;
+    } else if (state === "reconnecting") {
+      pill.textContent = `富途 · 重连中（第 ${f.attempts} 次）`;
+    } else {
+      pill.textContent = `富途 · ${LINK_TEXT[state] ?? "未连接"}`;
+    }
+    pill.className = `pill ${f.connected ? "ok" : "bad"}`;
+    const reason = !f.connected && f.reason ? ` · ${f.reason}` : "";
+    setText("stFutu", f.connected ? "富途 OpenD：已连接" : `富途 OpenD：${LINK_TEXT[state] ?? "未连接"}${reason}`);
+  }
+
   async function pollStatus() {
     try {
       const s = await api("/api/status");
-      const f = s.futu;
-      const pill = $("futuPill");
-      pill.textContent = f.connected ? `富途 · 已连接${f.quota ? ` · 剩余额度 ${f.quota.remain}` : ""}` : `富途 · ${f.error ?? "未连接"}`;
-      pill.className = `pill ${f.connected ? "ok" : "bad"}`;
-      setText("stFutu", f.connected ? "富途 OpenD：已连接" : `富途 OpenD：${f.error ?? "未连接"}`);
+      renderLink(s.futu);
     } catch {
       setText("futuPill", "富途 · 状态不可用");
       $("futuPill").className = "pill bad";
@@ -936,6 +1013,8 @@
   renderSide();
   renderTape();
   renderDepth();
+  syncMoneyness();
+  renderSub();
   setCurrent(state.current);
   pollWatch();
   setInterval(pollWatch, 3000);
