@@ -44,3 +44,5 @@ Cache keys must include engine digest, source hash, input arguments, symbol/time
 Community Script reuse requires source/author/URL/license/consent/SHA provenance. No automatic downloading of protected/invite-only TradingView source. Per-author legal terms and TradingView publication conditions apply.
 
 Rollback is removal of script feature from the native chart and termination of sandbox workers, retaining encrypted tenant scripts and audit per retention policy. Existing chart data and legacy deployment must remain operable. Paper/Live remains disabled.
+
+The initial adapter recognizes PineTS simple line and zero-baseline histogram plot metadata, preserving overlay/indicator pane identity. Other styles (including shape, linebr, columns, drawing objects), offset, nonzero histogram base and show_last are rejected with UNSUPPORTED_PLOT_STYLE rather than silently converted into a line. This does not supply renderer integration or official visual parity.
