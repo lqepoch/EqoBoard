@@ -46,7 +46,7 @@ const persist = () => {
 setInterval(persist, 30_000).unref();
 const ALLOWED_HOSTS = new Set([`127.0.0.1:${cfg.port}`, `localhost:${cfg.port}`]);
 
-futu.on('status', (s) => log('futu', s.connected ? 'connected' : `not connected (${s.error ?? 'pending'})`));
+futu.on('status', (s) => log('futu', s.state, s.attempts ? `attempt ${s.attempts}` : '', s.reason ?? ''));
 futu.on('trade', (t) => cache.add(t.symbol, t));
 futu.start();
 // Releases subscriptions that nobody has asked for lately (see FutuFeed.releaseIdle).
@@ -126,10 +126,19 @@ async function barsRoute(res, url) {
   const max = seconds ? 3600 : 1500;
   const requested = Number(url.searchParams.get('limit') ?? (seconds ? 600 : 1000));
   const limit = Number.isSafeInteger(requested) ? Math.min(Math.max(requested, 1), max) : 600;
-  if (!seconds && !alpacaBars.configured) return fail(res, 503, 'alpaca_unconfigured');
+  // 1m works without Alpaca: it then shows only the local Futu window (see bars.mjs).
+  if (!seconds && tf !== '1m' && !alpacaBars.configured) return fail(res, 503, 'alpaca_unconfigured');
   const value = await loadBars(ctx, symbol, tf, limit);
   // asOfSeq: trades with a higher Futu sequence arrived after this response was built and must be applied client-side.
-  return send(res, 200, { symbol, tf, source: value.source, adjustment: 'raw', asOfSeq: futu.seq, bars: value.bars });
+  return send(res, 200, {
+    symbol,
+    tf,
+    source: value.source,
+    localOnly: value.localOnly === true,
+    adjustment: 'raw',
+    asOfSeq: futu.seq,
+    bars: value.bars,
+  });
 }
 
 function streamRoute(req, res, url) {
