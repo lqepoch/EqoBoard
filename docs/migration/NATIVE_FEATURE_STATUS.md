@@ -1,5 +1,9 @@
 # Native implementation and acceptance status
 
+## 2026-10-17 PR #67 / #68 补充
+
+EqoBoard main 的 PR #67 添加了独立 `apps/desk` 本地行情台并扩展 Native 深色 UI/Stock Tape；PR #68 只优化 Desk 16:9 布局与自选列表交互（四个文件），**没有**改变 Native Web、OpenTerminal、Rust Gateway、MDP 或执行引擎的服务端与交易权限。Desk 直接使用 Futu/Alpaca/Yahoo，既有 Core Bars/MarketDataHost 来源治理与它隔离。Desk 的 IEX 历史与本机 Futu 分钟 bars 为混合展示，不能视为可信、完整、逐笔可重放的 MDP 数据集。旧 OpenTerminal 继续默认部署；Native 仍是目标主终端候选。完整九仓 owner 路由见 [platform-ops 九仓目标架构](https://github.com/lqepoch/platform-ops/blob/main/docs/NINE-REPOSITORY-ARCHITECTURE.md)。
+
 ## Source integration and local runtime follow-up, 2026-10-16
 
 PR64 merged as `32bfc58124809bd3e37ac0069fd917e6be576e64` after exact-head
